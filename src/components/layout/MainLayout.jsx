@@ -1,0 +1,301 @@
+"use client";
+
+import { useState } from "react";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../../contexts/AuthContext";
+import { motion } from "framer-motion";
+import Swal from "sweetalert2";
+
+const navLinks = [
+  { to: "/", label: "Dashboard", roles: ["sourcer", "purchaser", "admin"] },
+  { to: "/sourcing/orders", label: "Sourcing Orders", roles: ["sourcer"] },
+  { to: "/requests/pending", label: "Pending", roles: ["purchaser"] },
+  { to: "/requests/my", label: "Assigned to Me", roles: ["purchaser"] },
+  { to: "/admin/users", label: "Users", roles: ["admin"] },
+  { to: "/admin/products", label: "Products", roles: ["admin"] },
+  {
+    to: "/external/orders",
+    label: "External Orders",
+    roles: ["admin", "sourcer", "purchaser"],
+  },
+  {
+    to: "/platforms",
+    label: "Platforms",
+    roles: ["admin"],
+  },
+];
+
+const MainLayout = () => {
+  const { user, logout } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const handleNavClick = (to) => {
+    if (location.pathname === to) {
+      navigate("/reload", { replace: true });
+      setTimeout(() => navigate(to), 0);
+    } else {
+      navigate(to);
+    }
+    setIsMobileMenuOpen(false);
+  };
+
+  const handleLogout = async () => {
+    const result = await Swal.fire({
+      title: "Are you sure?",
+      text: "You will be logged out of the application.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#1e3a8a",
+      cancelButtonColor: "#6b7280",
+      confirmButtonText: "Yes, logout!",
+      cancelButtonText: "Cancel",
+      reverseButtons: true,
+      customClass: {
+        popup: "rounded-lg",
+        confirmButton: "rounded-md",
+        cancelButton: "rounded-md",
+      },
+    });
+    if (result.isConfirmed) {
+      logout();
+    }
+  };
+
+  const displayName = user
+    ? [user.firstName, user.lastName].filter(Boolean).join(" ") ||
+      user.name ||
+      user.email?.split("@")[0]
+    : "Guest";
+
+  const filteredNavLinks = navLinks.filter(
+    (link) => user && user.role && link.roles.includes(user.role)
+  );
+
+  return (
+    <div className="min-h-screen bg-[#f4f6fa] overflow-x-hidden">
+      {/* Mobile Sidebar Overlay */}
+      {isMobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-black/80 z-[999] lg:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Mobile Sidebar */}
+      <div
+        className={`fixed top-0 right-0 z-[999] h-full w-80 bg-white shadow-xl transform transition-transform duration-300 ease-in-out lg:hidden ${
+          isMobileMenuOpen ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
+        <div className="flex flex-col h-full">
+          {/* Mobile Sidebar Header */}
+          <div
+            style={{
+              background: "linear-gradient(90deg, #1e3a8a, #2563eb)",
+              padding: "1.5rem",
+              color: "#fff",
+            }}
+          >
+            <div className="flex justify-between items-center">
+              <div>
+                {/* <h2 className="text-lg font-semibold">Menu</h2> */}
+                <p className="text-sm opacity-90">Welcome,</p>
+                <p className="text-lg font-semibold">{displayName}</p>
+              </div>
+              <button
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="text-white bg-blue-600 p-2 rounded-md shadow-lg hover:shadow-white"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Mobile Navigation Links */}
+          <div className="flex-1 overflow-y-auto p-4">
+            <nav className="space-y-2">
+              {filteredNavLinks.map((link) => {
+                const isActive = location.pathname === link.to;
+                return (
+                  <motion.div
+                    key={link.to}
+                    whileHover={{ scale: 1.02 }}
+                    transition={{ type: "spring", stiffness: 300 }}
+                    onClick={() => handleNavClick(link.to)}
+                    className={`w-full p-4 rounded-lg cursor-pointer transition-all duration-300 ${
+                      isActive
+                        ? "bg-blue-100 border-l-4 border-blue-600 font-semibold text-blue-800"
+                        : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                    }`}
+                  >
+                    {link.label}
+                  </motion.div>
+                );
+              })}
+            </nav>
+          </div>
+
+          {/* Mobile Logout Button */}
+          {user && (
+            <div className="border-t p-4">
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => {
+                  handleLogout();
+                  setIsMobileMenuOpen(false);
+                }}
+                className="w-full bg-red-50 text-red-600 border border-red-200 rounded-lg p-3 font-semibold hover:bg-red-100 transition-colors duration-200 flex items-center justify-center gap-2"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                  />
+                </svg>
+                Logout
+              </motion.button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <motion.header
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        style={{
+          background: "linear-gradient(90deg, #1e3a8a, #2563eb)",
+          padding: "1.5rem 1rem",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          color: "#fff",
+          borderBottomLeftRadius: "1.5rem",
+          borderBottomRightRadius: "1.5rem",
+          backdropFilter: "blur(10px)",
+          position: "sticky",
+          top: 0,
+          zIndex: 100,
+        }}
+        className="sm:px-6 md:px-10"
+      >
+        <img
+          src="/logo.png"
+          alt="Logo"
+          className="w-32 sm:w-40 md:w-44 object-contain cursor-pointer"
+          onClick={() => handleNavClick("/")}
+        />
+
+        {/* Desktop Navigation - Hidden on mobile */}
+        <nav className="hidden lg:flex gap-6">
+          {filteredNavLinks.map((link) => {
+            const isActive = location.pathname === link.to;
+            return (
+              <motion.div
+                key={link.to}
+                whileHover={{ scale: 1.07 }}
+                transition={{ type: "spring", stiffness: 300 }}
+                onClick={() => handleNavClick(link.to)}
+                style={{
+                  cursor: "pointer",
+                  paddingBottom: "5px",
+                  fontWeight: isActive ? 700 : 500,
+                  borderBottom: isActive
+                    ? "3px solid white"
+                    : "3px solid transparent",
+                  transition: "all 0.3s ease",
+                  fontSize: "1rem",
+                }}
+              >
+                {link.label}
+              </motion.div>
+            );
+          })}
+        </nav>
+
+        <motion.div
+          initial={{ opacity: 0, x: 10 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.3 }}
+          className="flex items-center gap-2 sm:gap-4"
+        >
+          {/* Welcome message - Hidden on small screens */}
+          <span className="hidden sm:block text-sm md:text-base">
+            Welcome, <strong>{displayName}</strong>
+          </span>
+
+          {/* Desktop Logout Button - Hidden on mobile */}
+          {user && (
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              whileHover={{ scale: 1.05 }}
+              onClick={handleLogout}
+              className="hidden lg:block"
+              style={{
+                background: "#ffffff",
+                color: "#1e3a8a",
+                border: "none",
+                borderRadius: "8px",
+                padding: "0.5rem 1.2rem",
+                cursor: "pointer",
+                fontWeight: 600,
+                boxShadow: "0 2px 6px rgba(0,0,0,0.12)",
+                transition: "background 0.3s ease",
+              }}
+            >
+              Logout
+            </motion.button>
+          )}
+
+          {/* Mobile Menu Button */}
+          <button
+            onClick={() => setIsMobileMenuOpen(true)}
+            className="lg:hidden text-white bg-blue-600 p-2 rounded-md transition-colors duration-200 shadow-lg hover:shadow-white"
+          >
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 6h16M4 12h16M4 18h16"
+              />
+            </svg>
+          </button>
+        </motion.div>
+      </motion.header>
+
+      <main className="p-4 sm:p-6 transition-all duration-300 ease-in-out">
+        <Outlet />
+      </main>
+    </div>
+  );
+};
+
+export default MainLayout;

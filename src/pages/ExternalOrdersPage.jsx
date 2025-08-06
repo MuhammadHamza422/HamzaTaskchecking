@@ -1,0 +1,424 @@
+// src/pages/ExternalOrdersPage.jsx
+import React, { useState, useEffect } from "react";
+import { Typography, notification } from "antd";
+import { motion } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
+import apiClient from "../api/client";
+
+// Import components
+import OrderFilters from "../components/external-orders/OrderFilters";
+import OrderTable from "../components/external-orders/OrderTable";
+import OrderDetailsDrawer from "../components/external-orders/OrderDetailsDrawer";
+import OrderEditModal from "../components/external-orders/OrderEditModal";
+import PlatformTabs, {
+  PLATFORM_CONFIG,
+} from "../components/external-orders/PlatformTabs";
+import Swal from "sweetalert2";
+import { getPlatformConfig } from "../config/platforms";
+
+const { Text, Title } = Typography;
+
+const showRefreshSuccessToast = () => {
+  Swal.fire({
+    icon: "success",
+    title: "Orders Refreshed",
+    text: "Latest orders have been fetched successfully.",
+    toast: true,
+    position: "top-end",
+    showConfirmButton: false,
+    timer: 3000,
+    timerProgressBar: true,
+    background: "#10b981",
+    color: "#fff",
+    customClass: {
+      popup: "rounded-lg",
+    },
+  });
+};
+
+const showErrorToast = (message) => {
+  Swal.fire({
+    icon: "error",
+    title: "Failed to refresh orders",
+    text: message,
+    toast: true,
+    position: "top-end",
+    showConfirmButton: false,
+    timer: 4000,
+    timerProgressBar: true,
+    background: "#ef4444",
+    color: "#fff",
+    customClass: {
+      popup: "rounded-lg",
+    },
+  });
+};
+
+export default function ExternalOrdersPage() {
+  // Get initial active tab from localStorage or default to woocommerce
+  const getInitialActiveTab = () => {
+    const savedTab = localStorage.getItem("externalOrdersActiveTab");
+    return savedTab && PLATFORM_CONFIG[savedTab] ? savedTab : "woocommerce";
+  };
+
+  // State management
+  const [activeTab, setActiveTab] = useState(getInitialActiveTab);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(30);
+  const [open, setOpen] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editingOrder, setEditingOrder] = useState(null);
+
+  // Filter state
+  const [filters, setFilters] = useState({
+    search: "",
+    dateRange: null,
+    wc_status: null,
+    status: null,
+  });
+
+  // Save active tab to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem("externalOrdersActiveTab", activeTab);
+  }, [activeTab]);
+
+  const fetchOrders = async ({ queryKey }) => {
+    const [_, tab, page, limit, search, dateRange, wcStatus, status] = queryKey;
+    const config = getPlatformConfig(tab);
+
+    if (tab === "woocommerce") {
+      const params = new URLSearchParams({
+        limit: limit.toString(),
+        page: page.toString(),
+      });
+
+      // Add all filters to API
+      if (search) {
+        params.append("search", search);
+      }
+      if (wcStatus) {
+        params.append("wc_status", wcStatus);
+      }
+      if (status) {
+        params.append("status", status);
+      }
+      if (dateRange && dateRange.length === 2) {
+        params.append("start_date", dateRange[0].format("YYYY-MM-DD"));
+        params.append("end_date", dateRange[1].format("YYYY-MM-DD"));
+      }
+      const response = await apiClient.get(`${config.api}?${params}`);
+      return response.data;
+    } else if (tab === "walmart") {
+      const params = new URLSearchParams({
+        limit: limit.toString(),
+        page: page.toString(),
+      });
+
+      // Add all filters to API for Walmart
+      if (search) {
+        params.append("search", search);
+      }
+      if (wcStatus) {
+        params.append("wm_status", wcStatus); // Use wm_status for Walmart
+      }
+      if (status) {
+        params.append("status", status);
+      }
+      if (dateRange && dateRange.length === 2) {
+        params.append("start_date", dateRange[0].format("YYYY-MM-DD"));
+        params.append("end_date", dateRange[1].format("YYYY-MM-DD"));
+      }
+      const response = await apiClient.get(`${config.api}?${params}`);
+      return response.data;
+    } else {
+      return {
+        success: true,
+        totalOrders: 0,
+        page: page,
+        perPage: limit,
+        orders: [],
+        message: `${config.label} orders will be available soon`,
+      };
+    }
+  };
+
+  // Fetch latest orders (refresh functionality)
+  const fetchLatestOrders = async () => {
+    const config = getPlatformConfig(activeTab);
+
+    try {
+      setIsRefreshing(true);
+      const response = await apiClient.get(config.refreshApi);
+      showRefreshSuccessToast();
+      refetch();
+    } catch (error) {
+      console.error("Error fetching latest orders:", error);
+      showErrorToast(
+        error.response?.data?.message || "Failed to refresh orders"
+      );
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  // Fetch order details
+  const fetchOrderDetails = async (orderId) => {
+    if (!orderId) return null;
+    const config = getPlatformConfig(activeTab);
+    const response = await apiClient.get(`${config.detailsApi}/${orderId}`);
+    return response.data;
+  };
+
+  const {
+    data: ordersData,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: [
+      "externalOrders",
+      activeTab,
+      currentPage,
+      pageSize,
+      filters.search,
+      filters.dateRange,
+      filters.wc_status,
+      filters.status,
+    ],
+    queryFn: fetchOrders,
+    keepPreviousData: true,
+    refetchInterval: getPlatformConfig(activeTab).refetchInterval,
+    refetchIntervalInBackground: true,
+    staleTime: getPlatformConfig(activeTab).staleTime,
+  });
+
+  // Order details query
+  const {
+    data: orderDetails,
+    isLoading: orderDetailsLoading,
+    error: orderDetailsError,
+  } = useQuery({
+    queryKey: ["orderDetails", selectedOrder?.orderId],
+    queryFn: () => fetchOrderDetails(selectedOrder?.orderId),
+    enabled: !!selectedOrder?.orderId && open,
+  });
+
+  // Handle tab change
+  const handleTabChange = (key) => {
+    setActiveTab(key);
+    setCurrentPage(1);
+  };
+
+  // Handle pagination change
+  const handlePageChange = (page, size) => {
+    setCurrentPage(page);
+    setPageSize(size);
+  };
+
+  // Handle drawer open
+  const handleDrawerOpen = (order) => {
+    setSelectedOrder(order);
+    setOpen(true);
+  };
+
+  // Handle drawer close
+  const handleDrawerClose = () => {
+    setOpen(false);
+    setSelectedOrder(null);
+  };
+
+  // Handle edit modal open
+  const handleEditClick = (order) => {
+    setEditingOrder(order);
+    setEditModalVisible(true);
+  };
+
+  // Handle edit modal close
+  const handleEditModalClose = () => {
+    setEditModalVisible(false);
+    setEditingOrder(null);
+  };
+
+  // Handle edit success
+  const handleEditSuccess = () => {
+    refetch();
+  };
+
+  // Handle filters change
+  const handleFiltersChange = (newFilters, resetPagination = false) => {
+    setFilters(newFilters);
+    if (resetPagination) {
+      setCurrentPage(1);
+    }
+  };
+
+  // Handle filters reset
+  const handleFiltersReset = () => {
+    setFilters({
+      search: "",
+      dateRange: null,
+      wc_status: null,
+      status: null,
+    });
+    setCurrentPage(1);
+  };
+
+  const getFilteredOrders = () => {
+    if (!ordersData?.orders) return [];
+
+    let filteredOrders = [...ordersData.orders];
+
+    // Filter by search (order ID)
+    if (filters.search) {
+      filteredOrders = filteredOrders.filter((order) =>
+        order.orderId
+          ?.toString()
+          .toLowerCase()
+          .includes(filters.search.toLowerCase())
+      );
+    }
+
+    // Filter by date range
+    if (filters.dateRange && filters.dateRange.length === 2) {
+      const startDate = new Date(filters.dateRange[0]);
+      startDate.setHours(0, 0, 0, 0);
+      const endDate = new Date(filters.dateRange[1]);
+      endDate.setHours(23, 59, 59, 999);
+
+      filteredOrders = filteredOrders.filter((order) => {
+        const orderDate = new Date(order.createdAt);
+        return orderDate >= startDate && orderDate <= endDate;
+      });
+    }
+
+    return filteredOrders;
+  };
+
+  const filteredOrders = getFilteredOrders();
+  const totalFilteredOrders = filteredOrders.length;
+
+  // Error handling
+  useEffect(() => {
+    if (error) {
+      notification.error({
+        message: "Failed to load orders",
+        description: error.message,
+      });
+    }
+  }, [error]);
+
+  useEffect(() => {
+    if (orderDetailsError) {
+      notification.error({
+        message: "Failed to load order details",
+        description: orderDetailsError.message,
+      });
+    }
+  }, [orderDetailsError]);
+
+  const renderTabContent = () => {
+    return (
+      <div className="mt-2 md:mt-6">
+        {/* Order Table */}
+        <OrderTable
+          orders={filteredOrders}
+          loading={isLoading}
+          currentPage={currentPage}
+          pageSize={pageSize}
+          totalOrders={ordersData?.totalOrders || totalFilteredOrders}
+          onPageChange={handlePageChange}
+          onRowClick={handleDrawerOpen}
+          showPagination={true}
+          onEditClick={handleEditClick}
+        />
+      </div>
+    );
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="bg-gray-50 min-h-screen"
+    >
+      <div className="max-w-[1550px] mx-auto relative">
+        {/* overlay */}
+        {isRefreshing && (
+          <div className="absolute inset-0 bg-white bg-opacity-50 z-50 pointer-events-auto cursor-not-allowed" />
+        )}
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex sm:flex-row flex-col justify-between items-start max-md:gap-4">
+            <div>
+              <Title level={2} className="text-gray-900 mb-2">
+                External Orders
+              </Title>
+              <Text className="text-gray-600">
+                Manage orders from different e-commerce platforms
+              </Text>
+      </div>
+            <button
+              onClick={fetchLatestOrders}
+              disabled={isLoading || isRefreshing}
+              className="sm:w-auto w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200 shadow-sm"
+            >
+              <svg
+                className={`w-4 h-4 ${
+                  isLoading || isRefreshing ? "animate-spin" : ""
+                }`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+              {isLoading || isRefreshing ? "Refreshing..." : "Refresh Orders"}
+            </button>
+          </div>
+        </div>
+        {/* Filters */}
+        <OrderFilters
+          filters={filters}
+          onFiltersChange={handleFiltersChange}
+          onReset={handleFiltersReset}
+        />
+
+        {/* Platform Tabs */}
+        <div>
+          <PlatformTabs activeTab={activeTab} onTabChange={handleTabChange}>
+            {renderTabContent()}
+          </PlatformTabs>
+        </div>
+
+        {/* Order Details Drawer */}
+        <OrderDetailsDrawer
+          open={open}
+          onClose={handleDrawerClose}
+          selectedOrder={selectedOrder}
+          orderDetails={orderDetails}
+          orderDetailsLoading={orderDetailsLoading}
+          activeTab={activeTab}
+          tabConfig={getPlatformConfig(activeTab)}
+          refetch={refetch}
+        />
+
+        {/* Order Edit Modal */}
+        <OrderEditModal
+          visible={editModalVisible}
+          onCancel={handleEditModalClose}
+          order={editingOrder}
+          activeTab={activeTab}
+          onSuccess={handleEditSuccess}
+        />
+    </div>
+    </motion.div>
+  );
+}
