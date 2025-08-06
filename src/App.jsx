@@ -19,6 +19,7 @@ import ExternalOrdersPage from "./pages/ExternalOrdersPage";
 import ProtectedRoute from "./components/common/ProtectedRoute";
 import "./styles/main.css";
 import PlatformsPage from "./pages/platforms/Platforms";
+import KitsPage from "./pages/KitsPage";
 
 function App() {
   return (
@@ -44,6 +45,8 @@ function App() {
         <Route path="admin/products" element={<AdminProductsPage />} />
         <Route path="/external/orders" element={<ExternalOrdersPage />} />
         <Route path="/platforms" element={<PlatformsPage />} />
+        <Route path="/kits" element={<KitsPage />} />
+
       </Route>
       {/* Catch all route - redirect to dashboard if logged in, login if not */}
       <Route path="*" element={<CatchAllRoute />} />
