@@ -272,9 +272,20 @@ export default function OrderDetailsDrawer({
         selectedProducts[0]?.pro_title || "Product"
       } - ${timestamp}`;
 
+      // Get the SKU for Walmart orders
+      let productIdToSend = selectedLineItemId;
+      if (activeTab === "walmart") {
+        const order = orderDetails?.order?.order;
+        const lineItem = order?.orderLines?.orderLine?.find(
+          (line) => (line.lineNumber || line.orderLineId) === selectedLineItemId
+        );
+        // Use SKU for Walmart instead of line item ID
+        productIdToSend = lineItem?.item?.sku || selectedLineItemId;
+      }
+
       const payload = {
         plateform_id: selectedPlatformId,
-        productId: selectedLineItemId,
+        productId: productIdToSend,
         orderId: selectedOrder?.orderId || "",
         product_title: uniqueProductTitle,
         skus: selectedProducts.map((product) => ({
@@ -284,6 +295,7 @@ export default function OrderDetailsDrawer({
         })),
       };
       console.log("selectedLineItemId", selectedLineItemId);
+      console.log("productIdToSend", productIdToSend);
       console.log("payload", payload);
       const response = await apiClient.post("/api/v1/kit/add", payload);
       console.log("response", response?.data);
@@ -369,6 +381,30 @@ export default function OrderDetailsDrawer({
       );
       console.log(
         "totalSalePriceOfSelectedProducts",
+        totalSalePriceOfSelectedProducts
+      );
+      if (totalSalePriceOfSelectedProducts > 0) {
+        return (lineItemTotal / totalSalePriceOfSelectedProducts) * price;
+      }
+    } else if (activeTab === "walmart") {
+      const order = orderDetails?.order?.order;
+      const lineItem = order?.orderLines?.orderLine?.find(
+        (line) => (line.lineNumber || line.orderLineId) === selectedLineItemId
+      );
+      
+      // Get the product charge amount from Walmart order
+      const productCharge = lineItem?.charges?.charge?.find(
+        (charge) => charge?.chargeType === "PRODUCT"
+      );
+      const lineItemTotal = productCharge?.chargeAmount?.amount || 0;
+      console.log("Walmart lineItemTotal", lineItemTotal);
+
+      const totalSalePriceOfSelectedProducts = selectedProducts.reduce(
+        (acc, product) => acc + (product.sale_price || 0) * product.quantity,
+        0
+      );
+      console.log(
+        "Walmart totalSalePriceOfSelectedProducts",
         totalSalePriceOfSelectedProducts
       );
       if (totalSalePriceOfSelectedProducts > 0) {
@@ -576,7 +612,7 @@ export default function OrderDetailsDrawer({
                             setAddProductModalVisible(true);
                           }}
                         >
-                          Add Product
+                          Add Track
                         </button>
                       );
                     }
@@ -772,21 +808,24 @@ export default function OrderDetailsDrawer({
                 className="flex items-center justify-between p-3 bg-gray-50 rounded"
               >
                 <div className="flex-1">
-                  <div className="font-medium text-gray-900">
+                  <p className="text-sm text-gray-600">
+                    {line?.item?.productId}
+                  </p>
+                  <p className="font-medium text-gray-900">
                     {line?.item?.productName}
-                  </div>
-                  <div className="text-sm text-gray-600">
+                  </p>
+                  <p className="text-sm text-gray-600">
                     SKU: {line?.item?.sku} | Condition: {line?.item?.condition}
-                  </div>
-                  <div className="text-sm text-gray-600">
+                  </p>
+                  <p className="text-sm text-gray-600">
                     Qty: {line?.orderLineQuantity?.amount}{" "}
                     {line?.orderLineQuantity?.unitOfMeasurement}
-                  </div>
+                  </p>
                 </div>
                 <div className="text-right">
                   {/* Check if this specific line item has mapped products */}
                   {(() => {
-                    const lineItemId = line?.orderLineId || line?.id;
+                    const lineItemId = line?.lineNumber || line?.orderLineId || line?.id;
                     const hasMappedProducts =
                       selectedOrder?.mapped_products &&
                       selectedOrder.mapped_products.includes(
@@ -799,9 +838,17 @@ export default function OrderDetailsDrawer({
                           <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
                             Mapped
                           </span>
-                          <span className="text-xs text-gray-500">
-                            (1 product)
-                          </span>
+                          <button
+                            className="text-sm text-blue-600 p-1.5 rounded-md bg-blue-100 hover:bg-blue-200 transition-colors"
+                            onClick={async () => {
+                              setSelectedLineItemId(lineItemId);
+                              setAddProductModalVisible(true);
+                              // Fetch existing mapped products for editing
+                              await fetchExistingMappedProducts(lineItemId);
+                            }}
+                          >
+                            Edit
+                          </button>
                         </div>
                       );
                     } else {
@@ -810,10 +857,11 @@ export default function OrderDetailsDrawer({
                           className="text-sm text-gray-600 p-1.5 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
                           onClick={() => {
                             setSelectedLineItemId(lineItemId);
+                            setSelectedProducts([]); // Clear any existing products
                             setAddProductModalVisible(true);
                           }}
                         >
-                          Add Product
+                          Add Track
                         </button>
                       );
                     }
@@ -947,9 +995,9 @@ export default function OrderDetailsDrawer({
               onClick={handleSubmit}
               loading={isSubmitting}
               disabled={selectedProducts.length === 0}
-              className="bg-green-600 hover:bg-green-700 border-green-600"
+              className="bg-green-600 border-green-600"
             >
-              {isSubmitting ? "Adding..." : "Add Products"}
+              {isSubmitting ? "Saving..." : "Save"}
             </Button>
           </div>
         }
@@ -975,7 +1023,7 @@ export default function OrderDetailsDrawer({
           {/* Platform Selection Dropdown */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Select Platform
+              Platform
             </label>
             <Select
               placeholder="Select Platform"
@@ -984,10 +1032,12 @@ export default function OrderDetailsDrawer({
               loading={platformsLoading}
               style={{ width: "100%" }}
               size="large"
+              disabled={true}
+              className="text-black"
             >
               {platforms.map((platform) => (
                 <Option key={platform._id} value={platform._id}>
-                  {platform.plt_name} (ID: {platform.plt_id})
+                  {platform.plt_name}
                 </Option>
               ))}
             </Select>
