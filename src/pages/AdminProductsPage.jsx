@@ -11,6 +11,9 @@ import {
   Tag,
   Space,
   Spin,
+  Select,
+  Row,
+  Col,
 } from "antd";
 import { debounce } from "lodash";
 import { motion } from "framer-motion";
@@ -22,6 +25,10 @@ import { importCSV } from "../api/products";
 
 const { Search } = Input;
 const { Title, Text } = Typography;
+const { Option } = Select;
+
+const typeOptions = ["CON", "HAN", "GAM", "ACC"];
+const brandOptions = ["NIN", "SNY", "MSF", "SEG","RET","COL","ATR","INT","SNV","NEC"];
 
 const AdminProductsPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
@@ -30,22 +37,28 @@ const AdminProductsPage = () => {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
 
+  // Filter states
+  const [filters, setFilters] = useState({
+    type: null,
+    brand: null,
+  });
+
   // Responsive breakpoint
   const isMobile = useMediaQuery({ maxWidth: 768 });
 
   // Fetch products with TanStack Query
   const fetchProducts = async ({ queryKey }) => {
     const [_, page, limit, searchQuery] = queryKey;
-    
+
     const params = new URLSearchParams({
       page: page.toString(),
       limit: limit.toString(),
     });
-    
+
     if (searchQuery) {
-      params.append('search', searchQuery);
+      params.append("search", searchQuery);
     }
-    
+
     const response = await apiClient.get(`/api/v1/products/all?${params}`);
     return response.data;
   };
@@ -61,6 +74,46 @@ const AdminProductsPage = () => {
     keepPreviousData: true,
   });
 
+  // Filter products based on current filters
+  const getFilteredProducts = () => {
+    if (!productsData?.products) return [];
+
+    let filteredProducts = [...productsData.products];
+
+    // Filter by type
+    if (filters.type) {
+      filteredProducts = filteredProducts.filter(
+        (product) => product.type_code === filters.type
+      );
+    }
+
+    // Filter by brand
+    if (filters.brand) {
+      filteredProducts = filteredProducts.filter(
+        (product) => product.brnd_code === filters.brand
+      );
+    }
+
+    return filteredProducts;
+  };
+
+  const filteredProducts = getFilteredProducts();
+
+  // Use server-side pagination when no filters are applied
+  const hasActiveFilters = filters.type || filters.brand;
+  
+  // When filters are active, paginate the filtered results on frontend
+  const getPaginatedFilteredProducts = () => {
+    if (!hasActiveFilters) return productsData?.products || [];
+    
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    return filteredProducts.slice(startIndex, endIndex);
+  };
+
+  const displayProducts = getPaginatedFilteredProducts();
+  const totalProducts = hasActiveFilters ? filteredProducts.length : (productsData?.totalProducts || 0);
+
   // Debounced search
   const debouncedSearch = useCallback(
     debounce((value) => {
@@ -75,6 +128,24 @@ const AdminProductsPage = () => {
     debouncedSearch(e.target.value);
   };
 
+  // Handle filter changes
+  const handleFilterChange = (filterType, value) => {
+    setFilters(prev => ({
+      ...prev,
+      [filterType]: value
+    }));
+    setCurrentPage(1);
+  };
+
+  // Handle filter reset
+  const handleFilterReset = () => {
+    setFilters({
+      type: null,
+      brand: null,
+    });
+    setCurrentPage(1);
+  };
+
   // Handle pagination change
   const handlePageChange = (page, size) => {
     setCurrentPage(page);
@@ -84,14 +155,14 @@ const AdminProductsPage = () => {
   // Handle CSV file upload
   const handleCSVUpload = async (event) => {
     const file = event.target.files[0];
-    
+
     if (!file) {
       return;
     }
 
     // Validate file type
-    if (!file.name.toLowerCase().endsWith('.csv')) {
-      message.error('Please select a CSV file');
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      message.error("Please select a CSV file");
       return;
     }
 
@@ -102,45 +173,47 @@ const AdminProductsPage = () => {
       console.log("result", result);
       // Show success message
       Swal.fire({
-        icon: 'success',
-        title: 'CSV Import Successful!',
-        text: result.message || 'Products have been imported successfully',
+        icon: "success",
+        title: "CSV Import Successful!",
+        text: result.message || "Products have been imported successfully",
         toast: true,
-        position: 'top-end',
+        position: "top-end",
         showConfirmButton: false,
         timer: 3000,
         timerProgressBar: true,
-        background: '#10b981',
-        color: '#fff',
+        background: "#10b981",
+        color: "#fff",
         customClass: {
-          popup: 'rounded-lg',
+          popup: "rounded-lg",
         },
       });
 
       // Refresh the product list
       refetch();
-
     } catch (error) {
       Swal.fire({
-        icon: 'error',
-        title: 'Import Failed',
-        text: error.response?.data?.message || error.message || 'Failed to import CSV file',
+        icon: "error",
+        title: "Import Failed",
+        text:
+          error.response?.data?.message ||
+          error.message ||
+          "Failed to import CSV file",
         toast: true,
-        position: 'top-end',
+        position: "top-end",
         showConfirmButton: false,
         timer: 4000,
         timerProgressBar: true,
-        background: '#ef4444',
-        color: '#fff',
+        background: "#ef4444",
+        color: "#fff",
         customClass: {
-          popup: 'rounded-lg',
+          popup: "rounded-lg",
         },
       });
     } finally {
       setUploading(false);
       // Reset file input
       if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+        fileInputRef.current.value = "";
       }
     }
   };
@@ -173,20 +246,30 @@ const AdminProductsPage = () => {
 
   const columns = [
     {
+      title: "Product Title",
+      dataIndex: "pro_title",
+      key: "pro_title",
+      sorter: (a, b) => a?.pro_title?.localeCompare(b?.pro_title),
+      render: (text) => (
+        <span
+          title={text}
+          className="text-base font-semibold text-gray-900 line-clamp-2"
+        >
+          {text}
+        </span>
+      ),
+      width: 300,
+    },
+    {
       title: "SKU",
       dataIndex: "sku",
       key: "sku",
       sorter: (a, b) => a?.sku?.localeCompare(b?.sku),
       render: (text) => (
-        <span className="font-semibold text-gray-900">{text}</span>
+        <span title={text} className="text-gray-600 text-sm">
+          {text}
+        </span>
       ),
-    },
-    {
-      title: "Product Title",
-      dataIndex: "pro_title",
-      key: "pro_title",
-      sorter: (a, b) => a?.pro_title?.localeCompare(b?.pro_title),
-      render: (text) => <span className="text-gray-700">{text}</span>,
     },
     {
       title: "Type",
@@ -209,16 +292,6 @@ const AdminProductsPage = () => {
       dataIndex: "model_code",
       key: "model_code",
       render: (text) => <span className="text-gray-600">{text}</span>,
-    },
-    {
-      title: "Regular Price",
-      dataIndex: "regular_price",
-      key: "regular_price",
-      render: (price) => (
-        <span className="text-gray-500 line-through">
-          ${parseFloat(price)?.toFixed(2)}
-        </span>
-      ),
     },
     {
       title: "Sale Price",
@@ -248,29 +321,13 @@ const AdminProductsPage = () => {
         </span>
       ),
     },
-    {
-      title: "Storable",
-      dataIndex: "is_storable",
-      key: "is_storable",
-      render: (isStorable) => (
-        <span
-          className={`px-2 py-1 rounded text-xs font-medium ${
-            isStorable
-              ? "bg-green-100 text-green-800"
-              : "bg-red-100 text-red-800"
-          }`}
-        >
-          {isStorable ? "Yes" : "No"}
-        </span>
-      ),
-    },
   ];
 
   // Mobile Product Card Component
   const ProductCard = ({ product }) => (
     <Card
       className="mb-4 shadow-sm hover:shadow-md transition-shadow"
-      bodyStyle={{ padding: '16px' }}
+      bodyStyle={{ padding: "16px" }}
     >
       <div className="space-y-3">
         {/* Header */}
@@ -291,11 +348,15 @@ const AdminProductsPage = () => {
         {/* Details Grid */}
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
-            <Text type="secondary" className="block text-xs">Brand</Text>
+            <Text type="secondary" className="block text-xs">
+              Brand
+            </Text>
             <Text className="text-gray-700">{product?.brnd_code}</Text>
           </div>
           <div>
-            <Text type="secondary" className="block text-xs">Model</Text>
+            <Text type="secondary" className="block text-xs">
+              Model
+            </Text>
             <Text className="text-gray-700">{product?.model_code}</Text>
           </div>
         </div>
@@ -351,13 +412,13 @@ const AdminProductsPage = () => {
             Manage Master Products
           </Title>
           <motion.div whileHover={{ scale: 1.05 }}>
-            <Button 
-              type="primary" 
+            <Button
+              type="primary"
               onClick={handleImportCSVClick}
               loading={uploading}
               className="bg-green-600 hover:bg-green-700 border-green-600 w-full md:w-auto"
             >
-              {uploading ? 'Uploading...' : 'Import CSV'}
+              {uploading ? "Uploading..." : "Import CSV"}
             </Button>
           </motion.div>
         </div>
@@ -372,6 +433,96 @@ const AdminProductsPage = () => {
         </div>
       </div>
 
+      {/* Filters Section */}
+      <div className="bg-white rounded-lg p-4 mb-4 shadow-sm border border-gray-200">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
+          <Title level={4} style={{ margin: 0 }} className="text-gray-700">
+            Filters
+          </Title>
+          <Button 
+            onClick={handleFilterReset}
+            size="small"
+            className="text-gray-600 hover:text-gray-800"
+          >
+            Reset Filters
+          </Button>
+        </div>
+        
+        <Row gutter={[16, 16]}>
+          <Col xs={24} sm={12} md={8} lg={6}>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Type
+              </label>
+              <Select
+                placeholder="Select Type"
+                value={filters.type}
+                onChange={(value) => handleFilterChange('type', value)}
+                allowClear
+                className="w-full"
+                size="large"
+              >
+                {typeOptions.map((type) => (
+                  <Option key={type} value={type}>
+                    {type}
+                  </Option>
+                ))}
+              </Select>
+            </div>
+          </Col>
+          
+          <Col xs={24} sm={12} md={8} lg={6}>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Brand
+              </label>
+              <Select
+                placeholder="Select Brand"
+                value={filters.brand}
+                onChange={(value) => handleFilterChange('brand', value)}
+                allowClear
+                className="w-full"
+                size="large"
+              >
+                {brandOptions.map((brand) => (
+                  <Option key={brand} value={brand}>
+                    {brand}
+                  </Option>
+                ))}
+              </Select>
+            </div>
+          </Col>
+        </Row>
+
+        {/* Active Filters Display */}
+        {(filters.type || filters.brand) && (
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="flex flex-wrap gap-2">
+              {filters.type && (
+                <Tag 
+                  color="blue" 
+                  closable 
+                  onClose={() => handleFilterChange('type', null)}
+                  className="text-sm"
+                >
+                  Type: {filters.type}
+                </Tag>
+              )}
+              {filters.brand && (
+                <Tag 
+                  color="green" 
+                  closable 
+                  onClose={() => handleFilterChange('brand', null)}
+                  className="text-sm"
+                >
+                  Brand: {filters.brand}
+                </Tag>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="bg-white rounded-lg">
         {isMobile ? (
           // Mobile Cards View
@@ -380,9 +531,9 @@ const AdminProductsPage = () => {
               <div className="flex justify-center items-center h-64">
                 <Spin size="large" />
               </div>
-            ) : productsData?.products?.length > 0 ? (
+            ) : displayProducts.length > 0 ? (
               <div className="space-y-4">
-                {productsData?.products?.map((product) => (
+                {displayProducts.map((product) => (
                   <ProductCard key={product?._id} product={product} />
                 ))}
               </div>
@@ -396,7 +547,7 @@ const AdminProductsPage = () => {
         ) : (
           // Desktop Table View
           <Table
-            dataSource={productsData?.products || []}
+            dataSource={displayProducts}
             columns={columns}
             rowKey="_id"
             loading={isLoading}
@@ -418,13 +569,20 @@ const AdminProductsPage = () => {
           <div className="flex justify-center mt-6 p-4">
             <Pagination
               current={currentPage}
-              total={productsData?.totalProducts || 0}
+              total={totalProducts}
               pageSize={pageSize}
               showSizeChanger={!isMobile}
               showQuickJumper={!isMobile}
-              showTotal={!isMobile ? (total, range) =>
-                `${range[0]}-${range[1]} of ${total} products`
-              : undefined}
+              showTotal={
+                !isMobile
+                  ? (total, range) => {
+                      if (hasActiveFilters) {
+                        return `${range[0]}-${range[1]} of ${total} filtered products`;
+                      }
+                      return `${range[0]}-${range[1]} of ${total} products`;
+                    }
+                  : undefined
+              }
               onChange={handlePageChange}
               onShowSizeChange={handlePageChange}
               size={isMobile ? "small" : "default"}
@@ -440,7 +598,7 @@ const AdminProductsPage = () => {
         type="file"
         accept=".csv"
         onChange={handleCSVUpload}
-        style={{ display: 'none' }}
+        style={{ display: "none" }}
       />
     </motion.div>
   );

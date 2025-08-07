@@ -1,6 +1,6 @@
-// src/pages/ExternalOrdersPage.jsx
+// src/pages/ProcessedOrdersPage.jsx
 import React, { useState, useEffect } from "react";
-import { Typography, notification } from "antd";
+import { Typography, notification, Button, message } from "antd";
 import { motion } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import apiClient from "../api/client";
@@ -8,7 +8,7 @@ import apiClient from "../api/client";
 // Import components
 import OrderFilters from "../components/external-orders/OrderFilters";
 import OrderTable from "../components/external-orders/OrderTable";
-import OrderDetailsDrawer from "../components/external-orders/OrderDetailsDrawer";
+import ProcessedOrderDetailsDrawer from "../components/external-orders/ProcessedOrderDetailsDrawer";
 import OrderEditModal from "../components/external-orders/OrderEditModal";
 import PlatformTabs, {
   PLATFORM_CONFIG,
@@ -22,7 +22,7 @@ const showRefreshSuccessToast = () => {
   Swal.fire({
     icon: "success",
     title: "Orders Refreshed",
-    text: "Latest orders have been fetched successfully.",
+    text: "Latest processed orders have been fetched successfully.",
     toast: true,
     position: "top-end",
     showConfirmButton: false,
@@ -54,10 +54,10 @@ const showErrorToast = (message) => {
   });
 };
 
-export default function ExternalOrdersPage() {
+export default function ProcessedOrdersPage() {
   // Get initial active tab from localStorage or default to woocommerce
   const getInitialActiveTab = () => {
-    const savedTab = localStorage.getItem("externalOrdersActiveTab");
+    const savedTab = localStorage.getItem("processedOrdersActiveTab");
     return savedTab && PLATFORM_CONFIG[savedTab] ? savedTab : "woocommerce";
   };
 
@@ -73,28 +73,60 @@ export default function ExternalOrdersPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editingOrder, setEditingOrder] = useState(null);
+  const [selectedOrders, setSelectedOrders] = useState([]);
+  const [selectAll, setSelectAll] = useState(false);
 
   // Filter state
   const [filters, setFilters] = useState({
     search: "",
     dateRange: null,
     wc_status: null,
-    status: null,
+    status: "processed", // Always filter for processed orders
   });
 
   // Save active tab to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem("externalOrdersActiveTab", activeTab);
+    localStorage.setItem("processedOrdersActiveTab", activeTab);
   }, [activeTab]);
 
-  const fetchOrders = async ({ queryKey }) => {
-    const [_, tab, page, limit, search, dateRange, wcStatus, status] = queryKey;
+  // Auto-refetch processed orders when page becomes visible
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        // Page became visible, refetch processed orders
+        refetch();
+      }
+    };
+
+    const handleFocus = () => {
+      // Window gained focus, refetch processed orders
+      refetch();
+    };
+
+    // Listen for visibility change
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Listen for window focus
+    window.addEventListener("focus", handleFocus);
+
+    // Also refetch when component mounts
+    refetch();
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [activeTab]); // Re-run when activeTab changes
+
+  const fetchProcessedOrders = async ({ queryKey }) => {
+    const [_, tab, page, limit, search, dateRange, wcStatus] = queryKey;
     const config = getPlatformConfig(tab);
 
     if (tab === "woocommerce") {
       const params = new URLSearchParams({
         limit: limit.toString(),
         page: page.toString(),
+        status: "processed", // Always fetch processed orders
       });
 
       // Add all filters to API
@@ -103,9 +135,6 @@ export default function ExternalOrdersPage() {
       }
       if (wcStatus) {
         params.append("wc_status", wcStatus);
-      }
-      if (status) {
-        params.append("status", status);
       }
       if (dateRange && dateRange.length === 2) {
         params.append("start_date", dateRange[0].format("YYYY-MM-DD"));
@@ -117,6 +146,7 @@ export default function ExternalOrdersPage() {
       const params = new URLSearchParams({
         limit: limit.toString(),
         page: page.toString(),
+        status: "processed", // Always fetch processed orders
       });
 
       // Add all filters to API for Walmart
@@ -125,9 +155,6 @@ export default function ExternalOrdersPage() {
       }
       if (wcStatus) {
         params.append("wm_status", wcStatus); // Use wm_status for Walmart
-      }
-      if (status) {
-        params.append("status", status);
       }
       if (dateRange && dateRange.length === 2) {
         params.append("start_date", dateRange[0].format("YYYY-MM-DD"));
@@ -142,7 +169,7 @@ export default function ExternalOrdersPage() {
         page: page,
         perPage: limit,
         orders: [],
-        message: `${config.label} orders will be available soon`,
+        message: `${config.label} processed orders will be available soon`,
       };
     }
   };
@@ -181,20 +208,21 @@ export default function ExternalOrdersPage() {
     refetch,
   } = useQuery({
     queryKey: [
-      "externalOrders",
+      "processedOrders",
       activeTab,
       currentPage,
       pageSize,
       filters.search,
       filters.dateRange,
       filters.wc_status,
-      filters.status,
     ],
-    queryFn: fetchOrders,
+    queryFn: fetchProcessedOrders,
     keepPreviousData: true,
-    refetchInterval: getPlatformConfig(activeTab).refetchInterval,
+    refetchInterval: 30 * 1000, // Refetch every 30 seconds
     refetchIntervalInBackground: true,
-    staleTime: getPlatformConfig(activeTab).staleTime,
+    staleTime: 10 * 1000, // Consider data stale after 10 seconds
+    refetchOnWindowFocus: true, // Refetch when window gains focus
+    refetchOnMount: true, // Always refetch when component mounts
   });
 
   // Order details query
@@ -204,7 +232,7 @@ export default function ExternalOrdersPage() {
     error: orderDetailsError,
     refetch: refetchOrderDetails,
   } = useQuery({
-    queryKey: ["orderDetails", selectedOrder?.orderId],
+    queryKey: ["processedOrderDetails", selectedOrder?.orderId],
     queryFn: () => fetchOrderDetails(selectedOrder?.orderId),
     enabled: !!selectedOrder?.orderId && open,
   });
@@ -213,12 +241,16 @@ export default function ExternalOrdersPage() {
   const handleTabChange = (key) => {
     setActiveTab(key);
     setCurrentPage(1);
+    setSelectedOrders([]);
+    setSelectAll(false);
   };
 
   // Handle pagination change
   const handlePageChange = (page, size) => {
     setCurrentPage(page);
     setPageSize(size);
+    setSelectedOrders([]);
+    setSelectAll(false);
   };
 
   // Handle drawer open
@@ -248,38 +280,26 @@ export default function ExternalOrdersPage() {
   // Handle edit success
   const handleEditSuccess = () => {
     refetch();
-    
-    // Invalidate processed orders cache to ensure it updates immediately
-    queryClient.invalidateQueries({
-      queryKey: ["processedOrders"],
-    });
   };
 
-  // Handle product mapping success
-  const handleProductMappingSuccess = (newMappedId) => {
-    // Refetch both orders and order details
-    refetch();
-    refetchOrderDetails();
-
-    // Update the selectedOrder state with the new kit_products immediately
-    if (selectedOrder && newMappedId) {
-      setSelectedOrder((prevOrder) => {
-        if (!prevOrder) return prevOrder;
-        const kit_products = prevOrder.kit_products || [];
-        if (!kit_products.includes(newMappedId.toString())) {
-          return {
-            ...prevOrder,
-            kit_products: [...kit_products, newMappedId.toString()],
-          };
-        }
-        return prevOrder;
-      });
+  // Handle bulk selection
+  const handleSelectAll = (checked) => {
+    setSelectAll(checked);
+    if (checked) {
+      const allOrderIds = filteredOrders.map((order) => order._id);
+      setSelectedOrders(allOrderIds);
+    } else {
+      setSelectedOrders([]);
     }
+  };
 
-    // Invalidate processed orders cache to ensure it updates immediately
-    queryClient.invalidateQueries({
-      queryKey: ["processedOrders"],
-    });
+  // Handle individual order selection
+  const handleOrderSelect = (orderId, checked) => {
+    if (checked) {
+      setSelectedOrders((prev) => [...prev, orderId]);
+    } else {
+      setSelectedOrders((prev) => prev.filter((id) => id !== orderId));
+    }
   };
 
   // Handle filters change
@@ -288,6 +308,8 @@ export default function ExternalOrdersPage() {
     if (resetPagination) {
       setCurrentPage(1);
     }
+    setSelectedOrders([]);
+    setSelectAll(false);
   };
 
   // Handle filters reset
@@ -296,9 +318,11 @@ export default function ExternalOrdersPage() {
       search: "",
       dateRange: null,
       wc_status: null,
-      status: null,
+      status: "processed",
     });
     setCurrentPage(1);
+    setSelectedOrders([]);
+    setSelectAll(false);
   };
 
   const getFilteredOrders = () => {
@@ -335,11 +359,23 @@ export default function ExternalOrdersPage() {
   const filteredOrders = getFilteredOrders();
   const totalFilteredOrders = filteredOrders.length;
 
+  // Update select all state when orders change
+  useEffect(() => {
+    if (
+      filteredOrders.length > 0 &&
+      selectedOrders.length === filteredOrders.length
+    ) {
+      setSelectAll(true);
+    } else {
+      setSelectAll(false);
+    }
+  }, [selectedOrders, filteredOrders]);
+
   // Error handling
   useEffect(() => {
     if (error) {
       notification.error({
-        message: "Failed to load orders",
+        message: "Failed to load processed orders",
         description: error.message,
       });
     }
@@ -357,6 +393,27 @@ export default function ExternalOrdersPage() {
   const renderTabContent = () => {
     return (
       <div className="mt-2 md:mt-6">
+        {/* Bulk Actions */}
+        {selectedOrders.length > 0 && (
+          <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-blue-800">
+                  {selectedOrders.length} order(s) selected
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="small"
+                  className="bg-green-600 hover:bg-green-700 border-green-600 text-white"
+                >
+                  Move to shipStation
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Order Table */}
         <OrderTable
           orders={filteredOrders}
@@ -369,6 +426,11 @@ export default function ExternalOrdersPage() {
           showPagination={true}
           onEditClick={handleEditClick}
           activeTab={activeTab}
+          showCheckboxes={true}
+          selectedOrders={selectedOrders}
+          onOrderSelect={handleOrderSelect}
+          selectAll={selectAll}
+          onSelectAll={handleSelectAll}
         />
       </div>
     );
@@ -391,10 +453,11 @@ export default function ExternalOrdersPage() {
           <div className="flex sm:flex-row flex-col justify-between items-start max-md:gap-4">
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold text-black mb-2">
-                Pending Orders
+                Processed Orders
               </h1>
               <p className="text-gray-600">
-                Manage pending orders from different e-commerce platforms
+                View and manage processed orders from different e-commerce
+                platforms
               </p>
             </div>
             <button
@@ -436,7 +499,7 @@ export default function ExternalOrdersPage() {
         </div>
 
         {/* Order Details Drawer */}
-        <OrderDetailsDrawer
+        <ProcessedOrderDetailsDrawer
           open={open}
           onClose={handleDrawerClose}
           selectedOrder={selectedOrder}
@@ -446,7 +509,6 @@ export default function ExternalOrdersPage() {
           tabConfig={getPlatformConfig(activeTab)}
           refetch={refetch}
           refetchOrderDetails={refetchOrderDetails}
-          onProductMappingSuccess={handleProductMappingSuccess}
         />
 
         {/* Order Edit Modal */}

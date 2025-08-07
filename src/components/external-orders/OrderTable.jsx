@@ -8,6 +8,7 @@ import {
   Button,
   Tooltip,
   Popover,
+  Checkbox,
 } from "antd";
 import { useMediaQuery } from "react-responsive";
 
@@ -21,6 +22,12 @@ export default function OrderTable({
   onRowClick,
   onEditClick,
   showPagination = true,
+  activeTab = "woocommerce", // Add activeTab prop
+  showCheckboxes = false, // Add checkbox support
+  selectedOrders = [], // Selected order IDs
+  onOrderSelect = null, // Handle individual order selection
+  selectAll = false, // Select all state
+  onSelectAll = null, // Handle select all
 }) {
   const isMobile = useMediaQuery({ maxWidth: 768 });
   const isTablet = useMediaQuery({ minWidth: 769, maxWidth: 1024 });
@@ -45,135 +52,38 @@ export default function OrderTable({
     return <span className="text-sm text-gray-600">{formatted}</span>;
   };
 
-  // Component to render all kits in tooltip/popover
-  const AllKitsContent = ({ kits }) => (
-    <div className="max-w-xs h-full overflow-y-auto hide-scrollbar">
-      <div className="space-y-3">
-        {kits?.map((kit, kitIndex) => {
-          const skus = kit?.skus || [];
-          return (
-            <div
-              key={`all-kit-${kitIndex}`}
-              className="border-b border-gray-100 pb-2 last:border-b-0"
-            >
-              <div className="text-xs text-gray-600 mb-1 font-medium">
-                Kit {kitIndex + 1}: {kit?.kit_id || "N/A"}
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {skus.length > 0 ? (
-                  skus.map((sku, skuIndex) => (
-                    <Tag
-                      key={`all-sku-${kitIndex}-${skuIndex}`}
-                      size="small"
-                      className="text-xs bg-blue-50 border-blue-200"
-                    >
-                      {sku}
-                    </Tag>
-                  ))
-                ) : (
-                  <span className="text-gray-400 text-xs">No SKUs</span>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+  // Platform-specific column configurations
+  const getColumns = () => {
+    // Add checkbox column if enabled
+    const checkboxColumn = showCheckboxes ? [
+      {
+        title: (
+          <Checkbox
+            checked={selectAll}
+            onChange={(e) => onSelectAll && onSelectAll(e.target.checked)}
+            disabled={!orders || orders.length === 0}
+          />
+        ),
+        dataIndex: "checkbox",
+        key: "checkbox",
+        width: 50,
+        render: (_, record) => (
+          <Checkbox
+            checked={selectedOrders.includes(record._id)}
+            onChange={(e) => onOrderSelect && onOrderSelect(record._id, e.target.checked)}
+            onClick={(e) => e.stopPropagation()}
+          />
+        ),
+      }
+    ] : [];
 
-  const columns = [
+    const baseColumns = [
     {
       title: "Order ID",
       dataIndex: "orderId",
       key: "orderId",
       render: (text) => (
         <span className="font-semibold text-gray-900">{text}</span>
-      ),
-    },
-    {
-      title: "Order Key",
-      dataIndex: "order_key",
-      key: "order_key",
-      render: (text, record) => (
-        <span className="text-sm text-gray-600 font-mono">
-          {text || record?.customerOrderId || "N/A"}
-        </span>
-      ),
-    },
-    {
-      title: "WC Status",
-      dataIndex: "wc_status",
-      key: "wc_status",
-      render: (status, record) => {
-        // Handle both wc_status and wm_status
-        const actualStatus = status || record?.wm_status;
-        let color = "default";
-        if (actualStatus === "processing" || actualStatus === "Acknowledged")
-          color = "blue";
-        else if (actualStatus === "completed" || actualStatus === "Shipped")
-          color = "green";
-        else if (actualStatus === "pending") color = "orange";
-        else if (actualStatus === "failed" || actualStatus === "Cancelled")
-          color = "red";
-        else if (actualStatus === "cancelled") color = "red";
-        else if (actualStatus === "refunded") color = "purple";
-        else if (actualStatus === "on-hold") color = "orange";
-
-        return (
-          <Tag color={color} className="capitalize">
-            {actualStatus || "N/A"}
-          </Tag>
-        );
-      },
-    },
-    {
-      title: "Status",
-      dataIndex: "status",
-      key: "status",
-      render: (status) => {
-        let color = "default";
-        if (status === "processed") color = "green";
-        else if (status === "unprocessed") color = "orange";
-
-        return (
-          <Tag color={color} className="capitalize">
-            {status || "N/A"}
-          </Tag>
-        );
-      },
-    },
-    // {
-    //   title: "Kits",
-    //   dataIndex: "maped_status",
-    //   key: "maped_status",
-    //   render: (maped_status) => {
-    //     let displayText = "N/A";
-    //     if (maped_status === true) displayText = "Mapped";
-    //     else if (maped_status === false) displayText = "Unmapped";
-
-    //     return (
-    //       <span className="text-sm text-gray-600 font-mono">{displayText}</span>
-    //     );
-    //   },
-    // },
-    {
-      title: "Tracking",
-      dataIndex: "tracking_number",
-      key: "tracking_number",
-      render: (tracking) => (
-        <span className={tracking ? "text-green-600" : "text-gray-400"}>
-          {tracking || "No tracking"}
-        </span>
-      ),
-    },
-    {
-      title: "App ID",
-      dataIndex: "app_id",
-      key: "app_id",
-      render: (app_id) => (
-        <span className={app_id ? "text-green-600" : "text-gray-400"}>
-          {app_id || "No app ID"}
-        </span>
       ),
     },
     {
@@ -210,8 +120,390 @@ export default function OrderTable({
     },
   ];
 
-  // Mobile card component
+    // WooCommerce specific columns
+    if (activeTab === "woocommerce") {
+      return [
+        ...checkboxColumn,
+        ...baseColumns.slice(0, 1), // Order ID
+        {
+          title: "Order Key",
+          dataIndex: "order_key",
+          key: "order_key",
+          render: (text) => (
+            <span className="text-sm text-gray-600 font-mono">
+              {text || "N/A"}
+            </span>
+          ),
+        },
+        {
+          title: "WC Status",
+          dataIndex: "wc_status",
+          key: "wc_status",
+          render: (status) => {
+            let color = "default";
+            if (status === "processing") color = "blue";
+            else if (status === "completed") color = "green";
+            else if (status === "pending") color = "orange";
+            else if (status === "failed") color = "red";
+            else if (status === "cancelled") color = "red";
+            else if (status === "refunded") color = "purple";
+            else if (status === "on-hold") color = "orange";
+
+            return (
+              <Tag color={color} className="capitalize">
+                {status || "N/A"}
+              </Tag>
+            );
+          },
+        },
+        {
+          title: "Status",
+          dataIndex: "status",
+          key: "status",
+          render: (status) => {
+            let color = "default";
+            if (status === "processed") color = "green";
+            else if (status === "unprocessed") color = "orange";
+
+            return (
+              <Tag color={color} className="capitalize">
+                {status || "N/A"}
+              </Tag>
+            );
+          },
+        },
+        {
+          title: "Tracking",
+          dataIndex: "tracking_number",
+          key: "tracking_number",
+          render: (tracking) => (
+            <span className={tracking ? "text-green-600" : "text-gray-400"}>
+              {tracking || "No tracking"}
+            </span>
+          ),
+        },
+        {
+          title: "App ID",
+          dataIndex: "app_id",
+          key: "app_id",
+          render: (app_id) => (
+            <span className={app_id ? "text-green-600" : "text-gray-400"}>
+              {app_id || "No app ID"}
+            </span>
+          ),
+        },
+        ...baseColumns.slice(1), // Created At and Actions
+      ];
+    }
+
+    // Walmart specific columns
+    if (activeTab === "walmart") {
+      return [
+        ...checkboxColumn,
+        ...baseColumns.slice(0, 1), // Order ID
+        {
+          title: "Customer Order ID",
+          dataIndex: "customerOrderId",
+          key: "customerOrderId",
+          render: (text) => (
+            <span className="text-sm text-gray-600 font-mono">
+              {text || "N/A"}
+            </span>
+          ),
+        },
+        {
+          title: "WM Status",
+          dataIndex: "wm_status",
+          key: "wm_status",
+          render: (status) => {
+            let color = "default";
+            if (status === "Acknowledged") color = "blue";
+            else if (status === "Shipped") color = "green";
+            else if (status === "Pending") color = "orange";
+            else if (status === "Cancelled") color = "red";
+            else if (status === "Delivered") color = "green";
+
+            return (
+              <Tag color={color} className="capitalize">
+                {status || "N/A"}
+              </Tag>
+            );
+          },
+        },
+        {
+          title: "Status",
+          dataIndex: "status",
+          key: "status",
+          render: (status) => {
+            let color = "default";
+            if (status === "processed") color = "green";
+            else if (status === "unprocessed") color = "orange";
+
+            return (
+              <Tag color={color} className="capitalize">
+                {status || "N/A"}
+              </Tag>
+            );
+          },
+        },
+        {
+          title: "Tracking",
+          dataIndex: "tracking_number",
+          key: "tracking_number",
+          render: (tracking) => (
+            <span className={tracking ? "text-green-600" : "text-gray-400"}>
+              {tracking || "No tracking"}
+            </span>
+          ),
+        },
+        {
+          title: "App ID",
+          dataIndex: "app_id",
+          key: "app_id",
+          render: (app_id) => (
+            <span className={app_id ? "text-green-600" : "text-gray-400"}>
+              {app_id || "No app ID"}
+            </span>
+          ),
+        },
+        ...baseColumns.slice(1), // Created At and Actions
+      ];
+    }
+
+    // Shopify specific columns (placeholder for future)
+    if (activeTab === "shopify") {
+      return [
+        ...checkboxColumn,
+        ...baseColumns.slice(0, 1), // Order ID
+        {
+          title: "Shopify Order ID",
+          dataIndex: "shopifyOrderId",
+          key: "shopifyOrderId",
+          render: (text) => (
+            <span className="text-sm text-gray-600 font-mono">
+              {text || "N/A"}
+            </span>
+          ),
+        },
+        {
+          title: "SF Status",
+          dataIndex: "sf_status",
+          key: "sf_status",
+          render: (status) => {
+            let color = "default";
+            if (status === "open") color = "blue";
+            else if (status === "closed") color = "green";
+            else if (status === "cancelled") color = "red";
+
+            return (
+              <Tag color={color} className="capitalize">
+                {status || "N/A"}
+              </Tag>
+            );
+          },
+        },
+        {
+          title: "Status",
+          dataIndex: "status",
+          key: "status",
+          render: (status) => {
+            let color = "default";
+            if (status === "processed") color = "green";
+            else if (status === "unprocessed") color = "orange";
+
+            return (
+              <Tag color={color} className="capitalize">
+                {status || "N/A"}
+              </Tag>
+            );
+          },
+        },
+        {
+          title: "Tracking",
+          dataIndex: "tracking_number",
+          key: "tracking_number",
+          render: (tracking) => (
+            <span className={tracking ? "text-green-600" : "text-gray-400"}>
+              {tracking || "No tracking"}
+            </span>
+          ),
+        },
+        {
+          title: "App ID",
+          dataIndex: "app_id",
+          key: "app_id",
+          render: (app_id) => (
+            <span className={app_id ? "text-green-600" : "text-gray-400"}>
+              {app_id || "No app ID"}
+            </span>
+          ),
+        },
+        ...baseColumns.slice(1), // Created At and Actions
+      ];
+    }
+
+    // Amazon specific columns (placeholder for future)
+    if (activeTab === "amazon") {
+      return [
+        ...checkboxColumn,
+        ...baseColumns.slice(0, 1), // Order ID
+        {
+          title: "Amazon Order ID",
+          dataIndex: "amazonOrderId",
+          key: "amazonOrderId",
+          render: (text) => (
+            <span className="text-sm text-gray-600 font-mono">
+              {text || "N/A"}
+            </span>
+          ),
+        },
+        {
+          title: "AM Status",
+          dataIndex: "am_status",
+          key: "am_status",
+          render: (status) => {
+            let color = "default";
+            if (status === "Pending") color = "orange";
+            else if (status === "Shipped") color = "green";
+            else if (status === "Delivered") color = "green";
+            else if (status === "Cancelled") color = "red";
+
+            return (
+              <Tag color={color} className="capitalize">
+                {status || "N/A"}
+              </Tag>
+            );
+          },
+        },
+        {
+          title: "Status",
+          dataIndex: "status",
+          key: "status",
+          render: (status) => {
+            let color = "default";
+            if (status === "processed") color = "green";
+            else if (status === "unprocessed") color = "orange";
+
+            return (
+              <Tag color={color} className="capitalize">
+                {status || "N/A"}
+              </Tag>
+            );
+          },
+        },
+        {
+          title: "Tracking",
+          dataIndex: "tracking_number",
+          key: "tracking_number",
+          render: (tracking) => (
+            <span className={tracking ? "text-green-600" : "text-gray-400"}>
+              {tracking || "No tracking"}
+            </span>
+          ),
+        },
+        {
+          title: "App ID",
+          dataIndex: "app_id",
+          key: "app_id",
+          render: (app_id) => (
+            <span className={app_id ? "text-green-600" : "text-gray-400"}>
+              {app_id || "No app ID"}
+            </span>
+          ),
+        },
+        ...baseColumns.slice(1), // Created At and Actions
+      ];
+    }
+
+    // Default fallback
+    return [...checkboxColumn, ...baseColumns];
+  };
+
+  // Platform-specific mobile card component
   const MobileOrderCard = ({ order }) => {
+    const getStatusTag = () => {
+      if (activeTab === "woocommerce") {
+        const status = order?.wc_status;
+        let color = "default";
+        if (status === "processing") color = "blue";
+        else if (status === "completed") color = "green";
+        else if (status === "pending") color = "orange";
+        else if (status === "failed") color = "red";
+        else if (status === "cancelled") color = "red";
+        else if (status === "refunded") color = "purple";
+        else if (status === "on-hold") color = "orange";
+
+        return (
+          <Tag color={color} className="capitalize text-xs">
+            WC: {status || "N/A"}
+          </Tag>
+        );
+      }
+
+      if (activeTab === "walmart") {
+        const status = order?.wm_status;
+        let color = "default";
+        if (status === "Acknowledged") color = "blue";
+        else if (status === "Shipped") color = "green";
+        else if (status === "Pending") color = "orange";
+        else if (status === "Cancelled") color = "red";
+        else if (status === "Delivered") color = "green";
+
+        return (
+          <Tag color={color} className="capitalize text-xs">
+            WM: {status || "N/A"}
+          </Tag>
+        );
+      }
+
+      if (activeTab === "shopify") {
+        const status = order?.sf_status;
+        let color = "default";
+        if (status === "open") color = "blue";
+        else if (status === "closed") color = "green";
+        else if (status === "cancelled") color = "red";
+
+        return (
+          <Tag color={color} className="capitalize text-xs">
+            SF: {status || "N/A"}
+          </Tag>
+        );
+      }
+
+      if (activeTab === "amazon") {
+        const status = order?.am_status;
+        let color = "default";
+        if (status === "Pending") color = "orange";
+        else if (status === "Shipped") color = "green";
+        else if (status === "Delivered") color = "green";
+        else if (status === "Cancelled") color = "red";
+
+        return (
+          <Tag color={color} className="capitalize text-xs">
+            AM: {status || "N/A"}
+          </Tag>
+        );
+      }
+
+      return null;
+    };
+
+    const getOrderKey = () => {
+      if (activeTab === "woocommerce") {
+        return order?.order_key || "N/A";
+      }
+      if (activeTab === "walmart") {
+        return order?.customerOrderId || "N/A";
+      }
+      if (activeTab === "shopify") {
+        return order?.shopifyOrderId || "N/A";
+      }
+      if (activeTab === "amazon") {
+        return order?.amazonOrderId || "N/A";
+      }
+      return "N/A";
+    };
+
     return (
       <div
         className="relative cursor-pointer hover:shadow-md transition-shadow rounded-lg text-sm text-black p-0 bg-white mb-4 border border-[#f0f0f0]"
@@ -220,44 +512,29 @@ export default function OrderTable({
         <div className="space-y-3 p-4">
           {/* Header */}
           <div className="flex justify-between items-start">
-            <div>
-              <div className="font-semibold text-lg text-gray-900">
-                Order #{order?.orderId}
-              </div>
-              <div className="text-sm text-gray-500 font-mono">
-                {order?.order_key}
+            <div className="flex items-start gap-3 flex-1">
+              {/* Checkbox for mobile */}
+              {showCheckboxes && (
+                <Checkbox
+                  checked={selectedOrders.includes(order._id)}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    onOrderSelect && onOrderSelect(order._id, e.target.checked);
+                  }}
+                  className="mt-1"
+                />
+              )}
+              <div>
+                <div className="font-semibold text-lg text-gray-900">
+                  Order #{order?.orderId}
+                </div>
+                <div className="text-sm text-gray-500 font-mono">
+                  {getOrderKey()}
+                </div>
               </div>
             </div>
             <div className="flex flex-col gap-1">
-              <Tag
-                color={
-                  order?.wc_status === "processing" ||
-                  order?.wm_status === "Acknowledged"
-                    ? "blue"
-                    : order?.wc_status === "completed" ||
-                      order?.wm_status === "Shipped"
-                    ? "green"
-                    : order?.wc_status === "pending"
-                    ? "orange"
-                    : order?.wc_status === "failed" ||
-                      order?.wm_status === "Cancelled"
-                    ? "red"
-                    : order?.wc_status === "cancelled"
-                    ? "red"
-                    : order?.wc_status === "refunded"
-                    ? "purple"
-                    : order?.wc_status === "on-hold"
-                    ? "orange"
-                    : "default"
-                }
-                className="capitalize text-xs"
-              >
-                {order?.wc_status
-                  ? `WC: ${order.wc_status}`
-                  : order?.wm_status
-                  ? `WM: ${order.wm_status}`
-                  : "Status: N/A"}
-              </Tag>
+              {getStatusTag()}
               <Tag
                 color={
                   order?.status === "processed"
@@ -272,61 +549,6 @@ export default function OrderTable({
               </Tag>
             </div>
           </div>
-
-          {/* Kits Section */}
-          {/* <div>
-            <div className="text-sm font-medium text-gray-700 mb-2">Kits</div>
-            {!Array.isArray(order?.kits) || order.kits.length === 0 ? (
-              <span className="text-gray-400 text-sm">No kits</span>
-            ) : (
-              <div className="space-y-2">
-                {order.kits.slice(0, 2).map((kit, kitIndex) => {
-                  return (
-                    <div
-                      key={`kit-${kitIndex}`}
-                      className="bg-gray-50 p-2 rounded"
-                    >
-                      <div className="text-xs text-gray-600 mb-1">
-                        Kit ID: {kit?.kit_id || "N/A"}
-                      </div>
-                    </div>
-                  );
-                })}
-                {order.kits.length > 2 && (
-                  <Popover
-                    content={<AllKitsContent kits={order.kits} />}
-                    title={`All ${order.kits.length} Kits`}
-                    trigger="click"
-                    placement="top"
-                    overlayClassName="kits-popover"
-                  >
-                    <div
-                      className="text-xs text-blue-600 text-center py-1 px-2 bg-blue-50 rounded cursor-pointer hover:bg-blue-100 transition-colors"
-                      onClick={(e) => e.stopPropagation()} // Prevent card click
-                    >
-                      +{order.kits.length - 2} more kits (tap to view)
-                    </div>
-                  </Popover>
-                )}
-                {order.kits.length <= 2 && order.kits.length > 0 && (
-                  <Popover
-                    content={<AllKitsContent kits={order.kits} />}
-                    title={`All ${order.kits.length} Kits`}
-                    trigger="click"
-                    placement="top"
-                    overlayClassName="kits-popover"
-                  >
-                    <div
-                      className="text-xs text-blue-600 text-center py-1 px-2 bg-blue-50 rounded cursor-pointer hover:bg-blue-100 transition-colors"
-                      onClick={(e) => e.stopPropagation()} // Prevent card click
-                    >
-                      View all SKUs (tap to view)
-                    </div>
-                  </Popover>
-                )}
-              </div>
-            )}
-          </div> */}
 
           {/* Footer */}
           <div className="flex justify-between items-center pt-2 border-t border-gray-100">
@@ -390,6 +612,8 @@ export default function OrderTable({
       />
     );
   }
+
+  const columns = getColumns();
 
   // Mobile layout
   if (isMobile) {

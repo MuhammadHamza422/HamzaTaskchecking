@@ -71,3 +71,70 @@ h1 {
 .ant-table-wrapper .ant-table-tbody > tr > td {
   padding: 6px 16px !important;
 }
+
+/* Kits table responsive styles */
+.kits-table .ant-table-thead > tr > th {
+  background-color: #f8fafc !important;
+  font-weight: 600 !important;
+  color: #374151 !important;
+  border-bottom: 2px solid #e5e7eb !important;
+}
+
+.kits-table .ant-table-tbody > tr:hover > td {
+  background-color: #f3f4f6 !important;
+}
+
+.kits-table .ant-table-tbody > tr > td {
+  border-bottom: 1px solid #f3f4f6 !important;
+}
+
+/* Responsive table styles */
+@media (max-width: 768px) {
+  .kits-table .ant-table-thead > tr > th,
+  .kits-table .ant-table-tbody > tr > td {
+    padding: 8px 12px !important;
+    font-size: 12px !important;
+  }
+  
+  .kits-table .ant-table-thead > tr > th {
+    font-size: 11px !important;
+  }
+}
+
+/* Line clamp utility */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Dashboard specific styles */
+.dashboard-card {
+  transition: all 0.3s ease;
+}
+
+.dashboard-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* Custom color variables for Ant Design */
+:root {
+  --ant-color-blue-6: #1890ff;
+  --ant-color-green-6: #52c41a;
+  --ant-color-purple-6: #722ed1;
+  --ant-color-orange-6: #fa8c16;
+  --ant-color-indigo-6: #6366f1;
+}
+
+/* Responsive dashboard adjustments */
+@media (max-width: 768px) {
+  .dashboard-card .ant-statistic-title {
+    font-size: 12px !important;
+  }
+  
+  .dashboard-card .ant-statistic-content {
+    font-size: 20px !important;
+  }
+}

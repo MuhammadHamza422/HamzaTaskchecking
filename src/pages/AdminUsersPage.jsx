@@ -325,32 +325,50 @@ const AdminUsersPage = () => {
   };
 
   const columns = [
-    { title: "ID", dataIndex: "id", key: "id", sorter: (a, b) => a.id - b.id },
     {
       title: "First Name",
       dataIndex: "first_name",
       key: "first_name",
       sorter: (a, b) => a.first_name.localeCompare(b.first_name),
+      render: (text) => (
+        <p title={text} className="text-sm text-gray-900 capitalize">
+          {text}
+        </p>
+      ),
+      width: 130,
     },
     {
       title: "Last Name",
       dataIndex: "last_name",
       key: "last_name",
       sorter: (a, b) => a.last_name.localeCompare(b.last_name),
+      render: (text) => (
+        <p title={text} className="text-sm text-gray-900 capitalize">
+          {text}
+        </p>
+      ),
+      width: 130,
     },
     {
       title: "Email",
       dataIndex: "email",
       key: "email",
       sorter: (a, b) => a.email.localeCompare(b.email),
+      render: (text) => (
+        <p title={text} className="text-sm text-gray-900">
+          {text}
+        </p>
+      ),
+      width: 220,
     },
     {
       title: "Role",
       dataIndex: "role",
       key: "role",
       render: (role) => (
-        <Tag color={roleColors[role]}>{role.toUpperCase()}</Tag>
+          <Tag title={role} color={roleColors[role]}>{role.toUpperCase()}</Tag>
       ),
+      width: 100,
     },
     {
       title: "Active",
@@ -361,6 +379,7 @@ const AdminUsersPage = () => {
           {active ? "Active" : "Inactive"}
         </Tag>
       ),
+      width: 80,
     },
     {
       title: "Actions",
@@ -390,6 +409,7 @@ const AdminUsersPage = () => {
           </Space>
         );
       },
+      width: 150,
     },
   ];
 
@@ -429,8 +449,6 @@ const AdminUsersPage = () => {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      style={{ padding: "2rem" }}
-      className="tailwind-test"
     >
         <Card
           style={{
@@ -459,20 +477,16 @@ const AdminUsersPage = () => {
           </div>
         </Card>
 
-        <Card
-          style={{
-            borderRadius: "12px",
-            boxShadow: "0 4px 14px rgba(0,0,0,0.05)",
-          }}
-        >
+        <div className="rounded-lg shadow-[0 4px 14px rgba(0,0,0,0.05)] overflow-x-auto">
           <Table
             dataSource={users}
             columns={columns}
             rowKey="id"
             loading={loading}
             pagination={{ pageSize: 10 }}
+            scroll={{ x: 1200 }}
           />
-        </Card>
+        </div>
 
       <Modal className="max-h-[95vh] overflow-y-auto"
         title={
