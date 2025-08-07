@@ -14,12 +14,14 @@ import RequestDetailPage from "./pages/RequestDetailPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
 import AdminProductsPage from "./pages/AdminProductsPage";
 import ExternalOrdersPage from "./pages/ExternalOrdersPage";
+import ProcessedOrdersPage from "./pages/ProcessedOrdersPage";
 
 // Common Components and Styles
 import ProtectedRoute from "./components/common/ProtectedRoute";
 import "./styles/main.css";
 import PlatformsPage from "./pages/platforms/Platforms";
 import KitsPage from "./pages/KitsPage";
+
 
 function App() {
   return (
@@ -43,9 +45,10 @@ function App() {
         <Route path="requests/:sourcingId" element={<RequestDetailPage />} />
         <Route path="admin/users" element={<AdminUsersPage />} />
         <Route path="admin/products" element={<AdminProductsPage />} />
-        <Route path="/external/orders" element={<ExternalOrdersPage />} />
-        <Route path="/platforms" element={<PlatformsPage />} />
-        <Route path="/kits" element={<KitsPage />} />
+        <Route path="external/orders/pending" element={<ExternalOrdersPage />} />
+        <Route path="external/orders/processed" element={<ProcessedOrdersPage />} />
+        <Route path="platforms" element={<PlatformsPage />} />
+        <Route path="kits" element={<KitsPage />} />
 
       </Route>
       {/* Catch all route - redirect to dashboard if logged in, login if not */}

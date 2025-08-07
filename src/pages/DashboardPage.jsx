@@ -16,6 +16,7 @@ import {
   Tooltip,
   Legend,
 } from "chart.js";
+import DashboardHome from "../components/DashboardHome";
 
 ChartJS.register(
   CategoryScale,
@@ -50,55 +51,7 @@ const DashboardPage = () => {
     case "purchaser":
       return <PurchaserDashboardPage />;
     case "admin": {
-      const data = {
-        labels: ["Users", "Products"],
-        datasets: [
-          {
-            label: "Total Count",
-            data: [userCount, productCount],
-            backgroundColor: ["#3f51b5", "#fa8c16"],
-            borderRadius: 6,
-          },
-        ],
-      };
-
-      const options = {
-        responsive: true,
-        plugins: {
-          legend: { display: false },
-          title: { display: false },
-        },
-        scales: {
-          y: { beginAtZero: true, ticks: { stepSize: 1 } },
-        },
-      };
-
-      return (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          style={{
-            padding: "2rem",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-          }}
-        >
-          <Title level={3}>Admin Dashboard</Title>
-          <Card
-            style={{
-              width: "100%",
-              maxWidth: 500,
-              padding: "1rem",
-              borderRadius: "12px",
-              boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
-            }}
-          >
-            <Bar data={data} options={options} />
-          </Card>
-        </motion.div>
-      );
+      return <DashboardHome />;
     }
     default:
       return (

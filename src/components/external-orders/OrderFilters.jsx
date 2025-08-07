@@ -28,7 +28,7 @@ const wcorderStatus = [
   "refunded",
 ];
 
-const statusOptions = ["processed", "unprocessed"];
+const statusOptions = ["partially processed", "processed", "unprocessed"];
 
 export default function OrderFilters({ filters, onFiltersChange, onReset }) {
   const [searchValue, setSearchValue] = useState(filters.search);

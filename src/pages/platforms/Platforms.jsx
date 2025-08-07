@@ -401,7 +401,7 @@ export default function PlatformsPage() {
                 </h2>
                 <button
                   onClick={closeModal}
-                  className="p-2 text-white hover:text-black hover:bg-black/10 rounded-lg transition-all duration-200"
+                  className="p-2 text-white bg-black hover:text-black hover:bg-black/10 rounded-lg transition-all duration-200"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -511,7 +511,7 @@ export default function PlatformsPage() {
                       className={`flex-1 py-3 px-4 rounded-xl font-semibold transition-all duration-300 ${
                         loading
                           ? "bg-yellow-400/40 text-black/60 cursor-not-allowed"
-                          : "bg-blue-500 text-white hover:bg-blue-600 shadow-lg hover:shadow-blue-300/25"
+                          : "bg-black text-white hover:bg-black/80 shadow-lg hover:shadow-black/25"
                       }`}
                     >
                       {loading ? (

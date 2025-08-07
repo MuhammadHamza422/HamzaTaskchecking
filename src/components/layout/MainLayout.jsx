@@ -14,13 +14,29 @@ const navLinks = [
   { to: "/admin/users", label: "Users", roles: ["admin"] },
   { to: "/admin/products", label: "Products", roles: ["admin"] },
   {
-    to: "/external/orders",
-    label: "External Orders",
+    label: "Orders",
+    isDropdown: true,
     roles: ["admin", "sourcer", "purchaser"],
+    children: [
+      {
+        to: "/external/orders/pending",
+        label: "Pending Orders",
+        default: true,
+      },
+      {
+        to: "/external/orders/processed",
+        label: "Processed Orders",
+      },
+    ],
   },
   {
     to: "/platforms",
     label: "Platforms",
+    roles: ["admin"],
+  },
+  {
+    to: "/kits",
+    label: "Kits",
     roles: ["admin"],
   },
 ];
@@ -129,22 +145,49 @@ const MainLayout = () => {
           <div className="flex-1 overflow-y-auto p-4">
             <nav className="space-y-2">
               {filteredNavLinks.map((link) => {
-                const isActive = location.pathname === link.to;
-                return (
-                  <motion.div
-                    key={link.to}
-                    whileHover={{ scale: 1.02 }}
-                    transition={{ type: "spring", stiffness: 300 }}
-                    onClick={() => handleNavClick(link.to)}
-                    className={`w-full p-4 rounded-lg cursor-pointer transition-all duration-300 ${
-                      isActive
-                        ? "bg-blue-100 border-l-4 border-blue-600 font-semibold text-blue-800"
-                        : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
-                    }`}
-                  >
-                    {link.label}
-                  </motion.div>
-                );
+                if (link.isDropdown) {
+                  // Orders dropdown for mobile
+                  return (
+                    <div key={link.label} className="mb-2">
+                      <div className="font-semibold text-gray-700 mb-1">{link.label}</div>
+                      <div className="flex flex-col gap-1">
+                        {link.children.map((child) => {
+                          const isActive = location.pathname === child.to;
+                          return (
+                            <div
+                              key={child.to}
+                              onClick={() => handleNavClick(child.to)}
+                              className={`w-full p-3 rounded-lg cursor-pointer transition-all duration-300 ${
+                                isActive
+                                  ? "bg-blue-100 border-l-4 border-blue-600 font-semibold text-blue-800"
+                                  : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                              }`}
+                            >
+                              {child.label}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                } else {
+                  const isActive = location.pathname === link.to;
+                  return (
+                    <motion.div
+                      key={link.to}
+                      whileHover={{ scale: 1.02 }}
+                      transition={{ type: "spring", stiffness: 300 }}
+                      onClick={() => handleNavClick(link.to)}
+                      className={`w-full p-4 rounded-lg cursor-pointer transition-all duration-300 ${
+                        isActive
+                          ? "bg-blue-100 border-l-4 border-blue-600 font-semibold text-blue-800"
+                          : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                      }`}
+                    >
+                      {link.label}
+                    </motion.div>
+                  );
+                }
               })}
             </nav>
           </div>
@@ -211,27 +254,60 @@ const MainLayout = () => {
         {/* Desktop Navigation - Hidden on mobile */}
         <nav className="hidden lg:flex gap-6">
           {filteredNavLinks.map((link) => {
-            const isActive = location.pathname === link.to;
-            return (
-              <motion.div
-                key={link.to}
-                whileHover={{ scale: 1.07 }}
-                transition={{ type: "spring", stiffness: 300 }}
-                onClick={() => handleNavClick(link.to)}
-                style={{
-                  cursor: "pointer",
-                  paddingBottom: "5px",
-                  fontWeight: isActive ? 700 : 500,
-                  borderBottom: isActive
-                    ? "3px solid white"
-                    : "3px solid transparent",
-                  transition: "all 0.3s ease",
-                  fontSize: "1rem",
-                }}
-              >
-                {link.label}
-              </motion.div>
-            );
+            if (link.isDropdown) {
+              // Orders dropdown
+              const isAnyActive = link.children.some((child) => location.pathname === child.to);
+              return (
+                <div key={link.label} className="relative group">
+                  <button
+                    className={`flex items-center gap-1 transition-colors duration-200 ${
+                      isAnyActive ? "font-bold text-blue-100 border-b-2 border-white" : "text-white hover:text-blue-200"
+                    }`}
+                  >
+                    {link.label}
+                    <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                  </button>
+                  <div className="absolute left-0 mt-2 w-48 bg-white rounded-lg shadow-lg z-50 opacity-0 group-hover:opacity-100 group-hover:visible invisible transition-all duration-200">
+                    {link.children.map((child) => {
+                      const isActive = location.pathname === child.to;
+                      return (
+                        <div
+                          key={child.to}
+                          onClick={() => handleNavClick(child.to)}
+                          className={`px-4 py-2 cursor-pointer rounded-md transition-colors duration-200 ${
+                            isActive ? "bg-blue-100 text-blue-800 font-semibold" : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                          }`}
+                        >
+                          {child.label}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            } else {
+              const isActive = location.pathname === link.to;
+              return (
+                <motion.div
+                  key={link.to}
+                  whileHover={{ scale: 1.07 }}
+                  transition={{ type: "spring", stiffness: 300 }}
+                  onClick={() => handleNavClick(link.to)}
+                  style={{
+                    cursor: "pointer",
+                    paddingBottom: "5px",
+                    fontWeight: isActive ? 700 : 500,
+                    borderBottom: isActive
+                      ? "3px solid white"
+                      : "3px solid transparent",
+                    transition: "all 0.3s ease",
+                    fontSize: "1rem",
+                  }}
+                >
+                  {link.label}
+                </motion.div>
+              );
+            }
           })}
         </nav>
 
