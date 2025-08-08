@@ -21,6 +21,8 @@ import ProtectedRoute from "./components/common/ProtectedRoute";
 import "./styles/main.css";
 import PlatformsPage from "./pages/platforms/Platforms";
 import KitsPage from "./pages/KitsPage";
+import MergedProductsPage from "./pages/MergedProductsPage";
+import UserActivityPage from "./pages/UserActivityPage";
 
 
 function App() {
@@ -49,7 +51,8 @@ function App() {
         <Route path="external/orders/processed" element={<ProcessedOrdersPage />} />
         <Route path="platforms" element={<PlatformsPage />} />
         <Route path="kits" element={<KitsPage />} />
-
+        <Route path="merged-products" element={<MergedProductsPage />} />
+        <Route path="admin/user-activity" element={<UserActivityPage />} />
       </Route>
       {/* Catch all route - redirect to dashboard if logged in, login if not */}
       <Route path="*" element={<CatchAllRoute />} />
