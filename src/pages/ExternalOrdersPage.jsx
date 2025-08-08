@@ -1,11 +1,9 @@
-// src/pages/ExternalOrdersPage.jsx
 import React, { useState, useEffect } from "react";
 import { Typography, notification } from "antd";
 import { motion } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import apiClient from "../api/client";
 
-// Import components
 import OrderFilters from "../components/external-orders/OrderFilters";
 import OrderTable from "../components/external-orders/OrderTable";
 import OrderDetailsDrawer from "../components/external-orders/OrderDetailsDrawer";

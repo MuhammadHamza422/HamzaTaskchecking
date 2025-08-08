@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Drawer,
   Typography,
@@ -27,6 +27,12 @@ export default function OrderDetailsDrawer({
 }) {
   const [addProductModalVisible, setAddProductModalVisible] = useState(false);
   const [selectedLineItemId, setSelectedLineItemId] = useState("");
+  const [localKitProducts, setLocalKitProducts] = useState([]);
+
+  // Reset local optimistic kit state when switching orders
+  useEffect(() => {
+    setLocalKitProducts([]);
+  }, [selectedOrder?._id, selectedOrder?.orderId]);
 
   // Handle add product
   const handleAddProduct = (lineItemId) => {
@@ -48,7 +54,16 @@ export default function OrderDetailsDrawer({
 
   // Handle modal success
   const handleModalSuccess = (newMappedId) => {
-    // Use the new success handler that updates the selectedOrder state
+    // Optimistically add to mapped list for instant UI feedback
+    if (newMappedId) {
+      setLocalKitProducts((prev) => {
+        const next = new Set(prev.map(String));
+        next.add(String(newMappedId));
+        return Array.from(next);
+      });
+    }
+
+    // Update upstream state and refetch as before
     onProductMappingSuccess(newMappedId);
     refetchOrderDetails();
   };
@@ -106,6 +121,7 @@ export default function OrderDetailsDrawer({
                 onEditProduct={handleEditProduct}
                 refetchOrderDetails={refetchOrderDetails}
                 onProductMappingSuccess={onProductMappingSuccess}
+                localKitProducts={localKitProducts}
               />
             )}
             {activeTab === "walmart" && (
