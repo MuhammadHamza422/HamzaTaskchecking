@@ -13,6 +13,7 @@ export default function WooCommerceDetails({
 }) {
   const [selectedItems, setSelectedItems] = useState([]);
   const [isMerging, setIsMerging] = useState(false);
+  const [localMergedIds, setLocalMergedIds] = useState([]);
 
   // Helper function to format date
   const formatDate = (dateString) => {
@@ -382,6 +383,13 @@ export default function WooCommerceDetails({
         // Clear selection
         setSelectedItems([]);
 
+        // Optimistically mark merged items locally for immediate UI update
+        setLocalMergedIds((prev) => {
+          const next = new Set(prev.map((i) => i?.toString()));
+          selectedItems.forEach((id) => next.add(id?.toString()));
+          return Array.from(next);
+        });
+
         // Refresh order details
         if (refetchOrderDetails) {
           refetchOrderDetails();
@@ -422,6 +430,19 @@ export default function WooCommerceDetails({
     order?.line_items
       ?.filter((item) => selectedItems.includes(item?.product_id || item?.id))
       ?.reduce((sum, item) => sum + parseFloat(item.total || 0), 0) || 0;
+
+  // Merged products helpers
+  const mergedLineItemIds = new Set([
+    ...(Array.isArray(selectedOrder?.merged_products)
+      ? selectedOrder.merged_products.map((id) => id?.toString())
+      : []),
+    ...localMergedIds.map((id) => id?.toString()),
+  ]);
+  const mergedLineItems = Array.isArray(order?.line_items)
+    ? order.line_items.filter((item) =>
+        mergedLineItemIds.has((item?.product_id || item?.id)?.toString())
+      )
+    : [];
 
   return (
     <div className="space-y-6">
@@ -551,6 +572,27 @@ export default function WooCommerceDetails({
 
       {/* Order Items */}
       <Card size="small" title="Order Items" className="border-orange-200">
+        {/* Merged summary (only when merged_products exists and has ids) */}
+        {mergedLineItems.length > 0 && (
+          <div className="mb-3 p-3 rounded-lg bg-purple-50 border border-purple-200">
+            <div className="text-sm font-medium text-purple-800">Merged Status</div>
+            <div className="text-xs text-purple-700 mt-1">
+              {mergedLineItems.length} item{mergedLineItems.length > 1 ? "s" : ""} merged in this order
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {mergedLineItems.map((it) => (
+                <span
+                  key={it?.id || it?.product_id}
+                  className="text-xs px-2 py-1 rounded bg-white border border-purple-200 text-purple-800"
+                  title={(it?.name || "").toString()}
+                >
+                  {(it?.name || "").toString().slice(0, 40)}{(it?.name || "").length > 40 ? "…" : ""}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Merge Button */}
         {selectedItems.length > 0 && (
           <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
@@ -658,15 +700,20 @@ export default function WooCommerceDetails({
                   {/* Check if this specific line item has mapped products */}
                   {(() => {
                     const lineItemId = item?.product_id || item?.id;
+                    const idStr = lineItemId?.toString();
+                    const isMerged = mergedLineItemIds.has(idStr);
                     const hasMappedProducts =
                       selectedOrder?.kit_products &&
-                      selectedOrder.kit_products.includes(
-                        lineItemId?.toString()
-                      );
+                      selectedOrder.kit_products.includes(idStr);
 
                     if (hasMappedProducts) {
                       return (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap justify-end">
+                          {isMerged && (
+                            <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-medium">
+                              Merged
+                            </span>
+                          )}
                           <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
                             Mapped
                           </span>
@@ -680,12 +727,19 @@ export default function WooCommerceDetails({
                       );
                     } else {
                       return (
-                        <button
-                          className="text-sm text-gray-600 p-1.5 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
-                          onClick={() => onAddProduct(lineItemId)}
-                        >
-                          Add Picking
-                        </button>
+                        <div className="flex items-center gap-2 flex-wrap justify-end">
+                          {isMerged && (
+                            <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-medium">
+                              Merged
+                            </span>
+                          )}
+                          <button
+                            className="text-sm text-gray-600 p-1.5 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
+                            onClick={() => onAddProduct(lineItemId)}
+                          >
+                            Add Picking
+                          </button>
+                        </div>
                       );
                     }
                   })()}
