@@ -1,12 +1,5 @@
 import React, { useState, useEffect } from "react";
-import {
-  Modal,
-  Input,
-  Select,
-  Button,
-  Spin,
-  Space,
-} from "antd";
+import { Modal, Input, Select, Button, Spin, Space } from "antd";
 import {
   SearchOutlined,
   CheckOutlined,
@@ -36,6 +29,7 @@ export default function AddProductModal({
   const [selectedPlatformId, setSelectedPlatformId] = useState("");
   const [platforms, setPlatforms] = useState([]);
   const [platformsLoading, setPlatformsLoading] = useState(false);
+  const [mergedProducts, setMergedProducts] = useState([]);
 
   // Fetch platforms for the modal
   const fetchPlatforms = async () => {
@@ -96,6 +90,22 @@ export default function AddProductModal({
     }
   };
 
+  // Fetch merged products for the order (used to compute base total for merged items)
+  const fetchMergedProducts = async () => {
+    try {
+      if (!selectedOrder?.orderId) return;
+      const res = await apiClient.get(
+        `/api/v1/products/mapped/product/${selectedOrder.orderId}`
+      );
+      setMergedProducts(
+        Array.isArray(res.data?.product) ? res.data.product : []
+      );
+    } catch (err) {
+      // Not fatal for the modal; just log
+      console.error("Error fetching merged products:", err);
+    }
+  };
+
   // Fetch products for the modal
   const fetchProducts = async ({ queryKey }) => {
     const [_, search] = queryKey;
@@ -121,8 +131,10 @@ export default function AddProductModal({
         );
         productIdToSend = lineItem?.item?.sku || productId;
       }
-      
-      const response = await apiClient.get(`/api/v1/kit/details/${productIdToSend}`);
+
+      const response = await apiClient.get(
+        `/api/v1/kit/details/${productIdToSend}`
+      );
       if (response.data.success) {
         const mappedProducts =
           response.data.kit?.skus?.map((sku) => ({
@@ -182,15 +194,34 @@ export default function AddProductModal({
     setSelectedPlatformId(platformId);
   };
 
+  // Helper: get base total for the current line (supports merged products)
+  const getWooCommerceLineTotal = () => {
+    const order = orderDetails?.order;
+    const lineItem = order?.line_items?.find(
+      (item) => (item.product_id || item.id) === selectedLineItemId
+    );
+    let lineItemTotal = parseFloat(lineItem?.total || 0);
+    if (
+      !lineItemTotal &&
+      Array.isArray(mergedProducts) &&
+      mergedProducts.length > 0
+    ) {
+      const idStr = String(selectedLineItemId || "");
+      const foundMerged = mergedProducts.find((mp) =>
+        (mp?.productIds || []).map(String).includes(idStr)
+      );
+      if (foundMerged) {
+        lineItemTotal = parseFloat(foundMerged.price || 0);
+      }
+    }
+    return lineItemTotal;
+  };
+
   const handlePrice = (sale_price) => {
     const price = sale_price || 0;
 
     if (activeTab === "woocommerce") {
-      const order = orderDetails?.order;
-      const lineItem = order?.line_items?.find(
-        (item) => (item.product_id || item.id) === selectedLineItemId
-      );
-      const lineItemTotal = lineItem?.total || 0;
+      const lineItemTotal = getWooCommerceLineTotal();
 
       const totalSalePriceOfSelectedProducts = selectedProducts.reduce(
         (acc, product) => acc + (product.sale_price || 0) * product.quantity,
@@ -204,7 +235,7 @@ export default function AddProductModal({
       const lineItem = order?.orderLines?.orderLine?.find(
         (line) => (line.lineNumber || line.orderLineId) === selectedLineItemId
       );
-      
+
       const productCharge = lineItem?.charges?.charge?.find(
         (charge) => charge?.chargeType === "PRODUCT"
       );
@@ -298,13 +329,15 @@ export default function AddProductModal({
 
       // Get the total number of line items/orders in the order
       let orderQty = "1"; // Default value
-      
+
       if (activeTab === "woocommerce") {
         // Count total line items in WooCommerce order
         orderQty = orderDetails?.order?.line_items?.length?.toString() || "1";
       } else if (activeTab === "walmart") {
         // Count total order lines in Walmart order
-        orderQty = orderDetails?.order?.order?.orderLines?.orderLine?.length?.toString() || "1";
+        orderQty =
+          orderDetails?.order?.order?.orderLines?.orderLine?.length?.toString() ||
+          "1";
       }
       console.log("orderQty", orderQty);
 
@@ -321,7 +354,6 @@ export default function AddProductModal({
         orderQty: orderQty,
       };
       console.log("payload", payload);
-
 
       const response = await apiClient.post("/api/v1/kit/add", payload);
       console.log("response", response);
@@ -384,20 +416,24 @@ export default function AddProductModal({
   useEffect(() => {
     if (visible) {
       fetchPlatforms();
+      fetchMergedProducts();
       if (selectedLineItemId) {
         // Check if this line item already has mapped products
         let productIdToCheck = selectedLineItemId;
-        
+
         // For Walmart, we need to check using the SKU since that's what's stored in mapped_products
         if (activeTab === "walmart") {
           const order = orderDetails?.order?.order;
           const lineItem = order?.orderLines?.orderLine?.find(
-            (line) => (line.lineNumber || line.orderLineId) === selectedLineItemId
+            (line) =>
+              (line.lineNumber || line.orderLineId) === selectedLineItemId
           );
           productIdToCheck = lineItem?.item?.sku || selectedLineItemId;
         }
-        
-        const isEditing = selectedOrder?.kit_products?.includes(productIdToCheck?.toString());
+
+        const isEditing = selectedOrder?.kit_products?.includes(
+          productIdToCheck?.toString()
+        );
         if (isEditing) {
           fetchExistingMappedProducts(selectedLineItemId);
         }
@@ -431,15 +467,9 @@ export default function AddProductModal({
       <div className="space-y-4">
         {/* Platform ID Display */}
         <div className="bg-blue-50 p-3 rounded-lg">
-          <div className="text-sm font-medium text-blue-800">
-            Platform ID:{" "}
-            <span className="font-mono">
-              {selectedOrder?.plateform_id || "N/A"}
-            </span>
-          </div>
-          <div className="text-xs text-blue-600 mt-1">
+          <p className="text-xs text-blue-600 mt-1">
             Order ID: {selectedOrder?.orderId}
-          </div>
+          </p>
         </div>
 
         {/* Platform Selection Dropdown */}

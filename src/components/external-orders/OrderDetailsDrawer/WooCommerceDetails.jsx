@@ -10,6 +10,7 @@ export default function WooCommerceDetails({
   onEditProduct,
   refetchOrderDetails,
   onProductMappingSuccess,
+  localKitProducts = [],
 }) {
   const [selectedItems, setSelectedItems] = useState([]);
   const [isMerging, setIsMerging] = useState(false);
@@ -23,7 +24,9 @@ export default function WooCommerceDetails({
       const mergedRes = await apiClient.get(
         `/api/v1/products/mapped/product/${selectedOrder.orderId}`
       );
-      setMergedProducts(Array.isArray(mergedRes.data?.product) ? mergedRes.data.product : []);
+      setMergedProducts(
+        Array.isArray(mergedRes.data?.product) ? mergedRes.data.product : []
+      );
     } catch (err) {
       console.error("Failed to fetch merged products", err);
     }
@@ -166,24 +169,56 @@ export default function WooCommerceDetails({
     // First, identify the main product (the one with the most descriptive name)
     let maxLength = 0;
     let mainProduct = null;
-    
+
     // Keywords that indicate this is a main product
     const mainProductKeywords = [
-      'console', 'system', 'game', 'controller', 'adapter', 'accessory', 
-      'nintendo', 'sony', 'microsoft', 'sega', 'playstation', 'xbox', 'switch', 'wii', 'gamecube', 'genesis', 'dreamcast',
-      'zelda', 'mario', 'pokemon', 'metroid', 'donkey kong', 'kirby', 'star fox', 'fire emblem',
-      'final fantasy', 'resident evil', 'metal gear', 'grand theft auto', 'call of duty', 'fifa', 'madden',
-      'gamecube game', 'nintendo game', 'playstation game', 'xbox game', 'sega game'
+      "console",
+      "system",
+      "game",
+      "controller",
+      "adapter",
+      "accessory",
+      "nintendo",
+      "sony",
+      "microsoft",
+      "sega",
+      "playstation",
+      "xbox",
+      "switch",
+      "wii",
+      "gamecube",
+      "genesis",
+      "dreamcast",
+      "zelda",
+      "mario",
+      "pokemon",
+      "metroid",
+      "donkey kong",
+      "kirby",
+      "star fox",
+      "fire emblem",
+      "final fantasy",
+      "resident evil",
+      "metal gear",
+      "grand theft auto",
+      "call of duty",
+      "fifa",
+      "madden",
+      "gamecube game",
+      "nintendo game",
+      "playstation game",
+      "xbox game",
+      "sega game",
     ];
-    
+
     itemsToMerge.forEach((item) => {
       const itemName = item.name.toLowerCase();
-      
+
       // Check if this item contains main product keywords
-      const hasMainProductKeywords = mainProductKeywords.some(keyword => 
+      const hasMainProductKeywords = mainProductKeywords.some((keyword) =>
         itemName.includes(keyword)
       );
-      
+
       // If this item has main product keywords, prioritize it
       if (hasMainProductKeywords && !mainProduct) {
         mainProduct = item;
@@ -194,21 +229,25 @@ export default function WooCommerceDetails({
         mainProduct = item;
       }
     });
-    
+
     // If still no main product found, use the first item
     if (!mainProduct && itemsToMerge.length > 0) {
       mainProduct = itemsToMerge[0];
     }
-    
+
     console.log(`Main product identified: "${mainProduct?.name}"`);
     console.log(`Total items to process: ${itemsToMerge.length}`);
 
     // Process each item to extract specific attributes
     itemsToMerge.forEach((item) => {
       const itemName = item.name.toLowerCase().trim();
-      
-      console.log(`Processing item: "${item.name}" (${item === mainProduct ? 'MAIN PRODUCT' : 'ATTRIBUTE'})`);
-      
+
+      console.log(
+        `Processing item: "${item.name}" (${
+          item === mainProduct ? "MAIN PRODUCT" : "ATTRIBUTE"
+        })`
+      );
+
       // Skip if this is the main product (we'll process it separately)
       if (item === mainProduct) {
         console.log(`Skipping main product: "${item.name}"`);
@@ -245,7 +284,9 @@ export default function WooCommerceDetails({
         for (const conditionPattern of conditionPatterns) {
           if (conditionPattern.pattern.test(itemName)) {
             conditionCode = conditionPattern.code;
-            console.log(`Detected condition: "${item.name}" -> ${conditionCode}`);
+            console.log(
+              `Detected condition: "${item.name}" -> ${conditionCode}`
+            );
             break;
           }
         }
@@ -256,12 +297,14 @@ export default function WooCommerceDetails({
     if (mainProduct) {
       const mainName = mainProduct.name.toLowerCase();
       console.log(`Processing main product: "${mainProduct.name}"`);
-      
+
       // Check for brand patterns
       for (const brandPattern of brandPatterns) {
         if (brandPattern.pattern.test(mainName)) {
           brandCode = brandPattern.code;
-          console.log(`Detected brand from main product: "${mainProduct.name}" -> ${brandCode}`);
+          console.log(
+            `Detected brand from main product: "${mainProduct.name}" -> ${brandCode}`
+          );
           break;
         }
       }
@@ -270,7 +313,9 @@ export default function WooCommerceDetails({
       for (const typePattern of typePatterns) {
         if (typePattern.pattern.test(mainName)) {
           typeCode = typePattern.code;
-          console.log(`Detected type from main product: "${mainProduct.name}" -> ${typeCode}`);
+          console.log(
+            `Detected type from main product: "${mainProduct.name}" -> ${typeCode}`
+          );
           break;
         }
       }
@@ -279,7 +324,9 @@ export default function WooCommerceDetails({
       for (const conditionPattern of conditionPatterns) {
         if (conditionPattern.pattern.test(mainName)) {
           conditionCode = conditionPattern.code;
-          console.log(`Detected condition from main product: "${mainProduct.name}" -> ${conditionCode}`);
+          console.log(
+            `Detected condition from main product: "${mainProduct.name}" -> ${conditionCode}`
+          );
           break;
         }
       }
@@ -306,7 +353,9 @@ export default function WooCommerceDetails({
           const match = mainName.match(modelPattern);
           if (match) {
             modelCode = match[1].toUpperCase();
-            console.log(`Detected model from main product: "${mainProduct.name}" -> ${modelCode}`);
+            console.log(
+              `Detected model from main product: "${mainProduct.name}" -> ${modelCode}`
+            );
             break;
           }
         }
@@ -354,7 +403,10 @@ export default function WooCommerceDetails({
       // Extract attributes from product names
       const extractedAttributes = extractProductAttributes(itemsToMerge);
 
-      console.log("Items to merge:", itemsToMerge.map(item => item.name));
+      console.log(
+        "Items to merge:",
+        itemsToMerge.map((item) => item.name)
+      );
       console.log("Extracted attributes:", extractedAttributes);
 
       // Calculate combined data
@@ -382,7 +434,9 @@ export default function WooCommerceDetails({
           .toFixed(2),
         order_Id: selectedOrder?.orderId,
         plateformId: selectedOrder?.plateform_id || "N/A",
-        productIds: itemsToMerge.map((item) => String(item.product_id || item.id)), // <-- array of strings
+        productIds: itemsToMerge.map((item) =>
+          String(item.product_id || item.id)
+        ), // <-- array of strings
       };
 
       console.log("combinedData", combinedData);
@@ -628,19 +682,65 @@ export default function WooCommerceDetails({
         {/* Show merged products from order.merged_products_data if present */}
         {Array.isArray(mergedProducts) && mergedProducts.length > 0 && (
           <div className="mb-4">
-            <div className="text-sm font-semibold text-purple-700 mb-2">Merged Product(s)</div>
+            <div className="text-sm font-semibold text-purple-700 mb-2">
+              Merged Product(s)
+            </div>
             <div className="space-y-2">
-              {mergedProducts.map((mp) => (
-                <div key={mp._id} className="flex justify-between items-center p-3 rounded border-2 border-purple-200 bg-purple-50">
-                  <div>
-                    <div className="font-bold text-purple-900">{mp.pro_title}</div>
-                    <div className="text-xs text-gray-700">SKU: {mp.sku}</div>
+              {mergedProducts.map((mp) => {
+                const actionId = String(mp?.productIds?.[0] || mp?.wc_id || "");
+                const hasMappedProducts =
+                  !!actionId &&
+                  ((Array.isArray(selectedOrder?.kit_products) &&
+                    selectedOrder.kit_products.includes(actionId)) ||
+                    (Array.isArray(localKitProducts) &&
+                      localKitProducts.includes(actionId)));
+                return (
+                  <div
+                    key={mp._id}
+                    className="flex justify-between items-center p-3 rounded border-2 border-purple-200 bg-purple-50"
+                  >
+                    <div>
+                      <div className="font-bold text-purple-900">
+                        {mp.pro_title}
+                      </div>
+                      <div className="text-xs text-gray-700">SKU: {mp.sku}</div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-right ml-2">
+                        <div className="font-semibold text-purple-900">
+                          ${mp.price}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <p className="px-2 py-1 bg-purple-200 text-purple-800 rounded text-xs font-medium">
+                          Merged
+                        </p>
+                        {hasMappedProducts && (
+                          <p className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
+                            Mapped
+                          </p>
+                        )}
+                        {actionId &&
+                          (hasMappedProducts ? (
+                            <button
+                              className="text-sm text-blue-600 p-1.5 rounded-md bg-blue-100 hover:bg-blue-200 transition-colors"
+                              onClick={() => onEditProduct(actionId)}
+                            >
+                              Edit
+                            </button>
+                          ) : (
+                            <button
+                              className="text-sm text-gray-600 p-1.5 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
+                              onClick={() => onAddProduct(actionId)}
+                            >
+                              Add Products
+                            </button>
+                          ))}
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <div className="font-semibold text-purple-900">${mp.price}</div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -667,7 +767,7 @@ export default function WooCommerceDetails({
                 {isMerging ? "Merging..." : "Merge Selected Items"}
               </Button>
             </div>
-            
+
             {/* Attribute Preview */}
             {selectedItems.length >= 2 && (
               <div className="mt-3 pt-3 border-t border-blue-200">
@@ -678,27 +778,34 @@ export default function WooCommerceDetails({
                   const itemsToMerge = order?.line_items?.filter((item) =>
                     selectedItems.includes(item?.product_id || item?.id)
                   );
-                  const extractedAttributes = extractProductAttributes(itemsToMerge);
-                  
+                  const extractedAttributes =
+                    extractProductAttributes(itemsToMerge);
+
                   return (
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
                       <div className="bg-white p-2 rounded border">
-                        <span className="text-gray-500">Storage:</span> {extractedAttributes.storageCode}
+                        <span className="text-gray-500">Storage:</span>{" "}
+                        {extractedAttributes.storageCode}
                       </div>
                       <div className="bg-white p-2 rounded border">
-                        <span className="text-gray-500">Color:</span> {extractedAttributes.colorCode}
+                        <span className="text-gray-500">Color:</span>{" "}
+                        {extractedAttributes.colorCode}
                       </div>
                       <div className="bg-white p-2 rounded border">
-                        <span className="text-gray-500">Brand:</span> {extractedAttributes.brandCode}
+                        <span className="text-gray-500">Brand:</span>{" "}
+                        {extractedAttributes.brandCode}
                       </div>
                       <div className="bg-white p-2 rounded border">
-                        <span className="text-gray-500">Type:</span> {extractedAttributes.typeCode}
+                        <span className="text-gray-500">Type:</span>{" "}
+                        {extractedAttributes.typeCode}
                       </div>
                       <div className="bg-white p-2 rounded border">
-                        <span className="text-gray-500">Model:</span> {extractedAttributes.modelCode}
+                        <span className="text-gray-500">Model:</span>{" "}
+                        {extractedAttributes.modelCode}
                       </div>
                       <div className="bg-white p-2 rounded border">
-                        <span className="text-gray-500">Condition:</span> {extractedAttributes.conditionCode}
+                        <span className="text-gray-500">Condition:</span>{" "}
+                        {extractedAttributes.conditionCode}
                       </div>
                     </div>
                   );
@@ -709,9 +816,13 @@ export default function WooCommerceDetails({
         )}
 
         <div className="space-y-3">
-          {(Array.isArray(order?.line_items) ? order.line_items.filter(
-            (item) => !hiddenLineItemIds.has(String(item?.product_id || item?.id))
-          ) : []).map((item) => {
+          {(Array.isArray(order?.line_items)
+            ? order.line_items.filter(
+                (item) =>
+                  !hiddenLineItemIds.has(String(item?.product_id || item?.id))
+              )
+            : []
+          ).map((item) => {
             const itemId = item?.product_id || item?.id;
             const isSelected = selectedItems.includes(itemId);
 
@@ -840,4 +951,3 @@ export default function WooCommerceDetails({
     </div>
   );
 }
-
