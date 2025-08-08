@@ -125,16 +125,7 @@ export default function OrderTable({
       return [
         ...checkboxColumn,
         ...baseColumns.slice(0, 1), // Order ID
-        {
-          title: "Order Key",
-          dataIndex: "order_key",
-          key: "order_key",
-          render: (text) => (
-            <span className="text-sm text-gray-600 font-mono">
-              {text || "N/A"}
-            </span>
-          ),
-        },
+       
         {
           title: "WC Status",
           dataIndex: "wc_status",
@@ -524,11 +515,11 @@ export default function OrderTable({
                   className="mt-1"
                 />
               )}
-              <div>
-                <div className="font-semibold text-lg text-gray-900">
-                  Order #{order?.orderId}
-                </div>
-                <div className="text-sm text-gray-500 font-mono">
+            <div>
+              <div className="font-semibold text-lg text-gray-900">
+                Order #{order?.orderId}
+              </div>
+              <div className="text-sm text-gray-500 font-mono">
                   {getOrderKey()}
                 </div>
               </div>

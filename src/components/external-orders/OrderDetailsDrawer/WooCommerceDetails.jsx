@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Card, Row, Col, Tag, Button, Checkbox, message } from "antd";
 import apiClient from "../../../api/client";
 import Swal from "sweetalert2";
@@ -14,6 +14,36 @@ export default function WooCommerceDetails({
   const [selectedItems, setSelectedItems] = useState([]);
   const [isMerging, setIsMerging] = useState(false);
   const [localMergedIds, setLocalMergedIds] = useState([]);
+  const [mergedProducts, setMergedProducts] = useState([]);
+
+  // Load merged products for this order
+  const loadMergedProducts = async () => {
+    if (!selectedOrder?.orderId) return;
+    try {
+      const mergedRes = await apiClient.get(
+        `/api/v1/products/mapped/product/${selectedOrder.orderId}`
+      );
+      setMergedProducts(Array.isArray(mergedRes.data?.product) ? mergedRes.data.product : []);
+    } catch (err) {
+      console.error("Failed to fetch merged products", err);
+    }
+  };
+
+  useEffect(() => {
+    loadMergedProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedOrder?.orderId]);
+
+  // Compute hidden line item ids from merged productIds
+  const hiddenLineItemIds = useMemo(() => {
+    const set = new Set();
+    if (Array.isArray(mergedProducts)) {
+      mergedProducts.forEach((mp) => {
+        (mp?.productIds || []).forEach((id) => set.add(String(id)));
+      });
+    }
+    return set;
+  }, [mergedProducts]);
 
   // Helper function to format date
   const formatDate = (dateString) => {
@@ -352,6 +382,7 @@ export default function WooCommerceDetails({
           .toFixed(2),
         order_Id: selectedOrder?.orderId,
         plateformId: selectedOrder?.plateform_id || "N/A",
+        productIds: itemsToMerge.map((item) => String(item.product_id || item.id)), // <-- array of strings
       };
 
       console.log("combinedData", combinedData);
@@ -383,6 +414,9 @@ export default function WooCommerceDetails({
         // Clear selection
         setSelectedItems([]);
 
+        // Refresh merged products list (frontend-only removal is derived from merged productIds)
+        await loadMergedProducts();
+
         // Optimistically mark merged items locally for immediate UI update
         setLocalMergedIds((prev) => {
           const next = new Set(prev.map((i) => i?.toString()));
@@ -391,9 +425,7 @@ export default function WooCommerceDetails({
         });
 
         // Refresh order details
-        if (refetchOrderDetails) {
-          refetchOrderDetails();
-        }
+        if (refetchOrderDetails) refetchOrderDetails();
         if (onProductMappingSuccess) {
           onProductMappingSuccess();
         }
@@ -573,7 +605,7 @@ export default function WooCommerceDetails({
       {/* Order Items */}
       <Card size="small" title="Order Items" className="border-orange-200">
         {/* Merged summary (only when merged_products exists and has ids) */}
-        {mergedLineItems.length > 0 && (
+        {/* {mergedLineItems.length > 0 && (
           <div className="mb-3 p-3 rounded-lg bg-purple-50 border border-purple-200">
             <div className="text-sm font-medium text-purple-800">Merged Status</div>
             <div className="text-xs text-purple-700 mt-1">
@@ -588,6 +620,26 @@ export default function WooCommerceDetails({
                 >
                   {(it?.name || "").toString().slice(0, 40)}{(it?.name || "").length > 40 ? "…" : ""}
                 </span>
+              ))}
+            </div>
+          </div>
+        )} */}
+
+        {/* Show merged products from order.merged_products_data if present */}
+        {Array.isArray(mergedProducts) && mergedProducts.length > 0 && (
+          <div className="mb-4">
+            <div className="text-sm font-semibold text-purple-700 mb-2">Merged Product(s)</div>
+            <div className="space-y-2">
+              {mergedProducts.map((mp) => (
+                <div key={mp._id} className="flex justify-between items-center p-3 rounded border-2 border-purple-200 bg-purple-50">
+                  <div>
+                    <div className="font-bold text-purple-900">{mp.pro_title}</div>
+                    <div className="text-xs text-gray-700">SKU: {mp.sku}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-semibold text-purple-900">${mp.price}</div>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
@@ -657,7 +709,9 @@ export default function WooCommerceDetails({
         )}
 
         <div className="space-y-3">
-          {order?.line_items?.map((item) => {
+          {(Array.isArray(order?.line_items) ? order.line_items.filter(
+            (item) => !hiddenLineItemIds.has(String(item?.product_id || item?.id))
+          ) : []).map((item) => {
             const itemId = item?.product_id || item?.id;
             const isSelected = selectedItems.includes(itemId);
 
@@ -770,10 +824,10 @@ export default function WooCommerceDetails({
               .value.map((note, i) => (
                 <div key={i} className="p-2 bg-yellow-50 rounded text-sm">
                   <div className="flex justify-between items-start">
-                    <div className="text-gray-700">{note?.note}</div>
-                    <div className="text-xs text-gray-500">
+                    <p className="text-gray-700 max-w-[80%]">{note?.note}</p>
+                    <p className="text-xs text-gray-500">
                       {new Date(note?.date_created_gmt).toLocaleString()}
-                    </div>
+                    </p>
                   </div>
                   <div className="text-xs text-gray-500 mt-1">
                     By: {note?.author}
