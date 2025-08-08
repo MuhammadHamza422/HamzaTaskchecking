@@ -11,8 +11,38 @@ const navLinks = [
   { to: "/sourcing/orders", label: "Sourcing Orders", roles: ["sourcer"] },
   { to: "/requests/pending", label: "Pending", roles: ["purchaser"] },
   { to: "/requests/my", label: "Assigned to Me", roles: ["purchaser"] },
-  { to: "/admin/users", label: "Users", roles: ["admin"] },
-  { to: "/admin/products", label: "Products", roles: ["admin"] },
+  {
+    label: "Users",
+    isDropdown: true,
+    roles: ["admin"],
+    children: [
+      {
+        to: "/admin/users",
+        label: "Users",
+        default: true,
+      },
+      {
+        to: "/admin/user-activity",
+        label: "User Activity",
+      },
+    ],
+  },
+  {
+    label: "Products",
+    isDropdown: true,
+    roles: ["admin"],
+    children: [
+      {
+        to: "/admin/products",
+        label: "Products",
+        default: true,
+      },
+      {
+        to: "/merged-products",
+        label: "Merged Products",
+      },
+    ],
+  },
   {
     label: "Orders",
     isDropdown: true,
