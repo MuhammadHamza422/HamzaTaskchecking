@@ -1,11 +1,9 @@
-// src/pages/ProcessedOrdersPage.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Typography, notification, Button, message } from "antd";
 import { motion } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import apiClient from "../api/client";
 
-// Import components
 import OrderFilters from "../components/external-orders/OrderFilters";
 import OrderTable from "../components/external-orders/OrderTable";
 import ProcessedOrderDetailsDrawer from "../components/external-orders/ProcessedOrderDetailsDrawer";
@@ -283,7 +281,9 @@ export default function ProcessedOrdersPage() {
   const handleSelectAll = (checked) => {
     setSelectAll(checked);
     if (checked) {
-      const allOrderIds = filteredOrders.map((order) => order._id);
+      const allOrderIds = filteredOrders
+        .filter((order) => !order?.shipStation_OrderId)
+        .map((order) => order._id);
       setSelectedOrders(allOrderIds);
     } else {
       setSelectedOrders([]);
@@ -322,39 +322,28 @@ export default function ProcessedOrdersPage() {
     setSelectAll(false);
   };
 
-  // Compute filtered orders early so effects below can use it safely
-  const getFilteredOrders = () => {
+  // Compute filtered orders with stable identity
+  const filteredOrders = useMemo(() => {
     if (!ordersData?.orders) return [];
-
-    let filtered = [...ordersData.orders];
-
-    // Filter by search (order ID)
+    let filtered = ordersData.orders;
     if (filters.search) {
+      const q = String(filters.search).toLowerCase();
       filtered = filtered.filter((order) =>
-        order.orderId
-          ?.toString()
-          .toLowerCase()
-          .includes(filters.search.toLowerCase())
+        order.orderId?.toString().toLowerCase().includes(q)
       );
     }
-
-    // Filter by date range
     if (filters.dateRange && filters.dateRange.length === 2) {
       const startDate = new Date(filters.dateRange[0]);
       startDate.setHours(0, 0, 0, 0);
       const endDate = new Date(filters.dateRange[1]);
       endDate.setHours(23, 59, 59, 999);
-
       filtered = filtered.filter((order) => {
         const orderDate = new Date(order.createdAt);
         return orderDate >= startDate && orderDate <= endDate;
       });
     }
-
     return filtered;
-  };
-
-  const filteredOrders = getFilteredOrders();
+  }, [ordersData?.orders, filters.search, filters.dateRange]);
   const totalFilteredOrders = filteredOrders.length;
 
   // Fetch kits immediately when orders are selected (single or bulk) and log results
@@ -756,14 +745,30 @@ export default function ProcessedOrdersPage() {
   // Update select all state when orders change
   useEffect(() => {
     if (
-      filteredOrders.length > 0 &&
-      selectedOrders.length === filteredOrders.length
+      filteredOrders.filter((o) => !o?.shipStation_OrderId).length > 0 &&
+      selectedOrders.length ===
+        filteredOrders.filter((o) => !o?.shipStation_OrderId).length
     ) {
       setSelectAll(true);
     } else {
       setSelectAll(false);
     }
   }, [selectedOrders, filteredOrders]);
+
+  // Ensure no disabled (ShipStation) orders remain selected when data updates
+  useEffect(() => {
+    setSelectedOrders((prev) => {
+      const allowedIds = new Set(
+        filteredOrders.filter((o) => !o?.shipStation_OrderId).map((o) => o._id)
+      );
+      const next = prev.filter((id) => allowedIds.has(id));
+      if (next.length !== prev.length) return next;
+      for (let i = 0; i < next.length; i += 1) {
+        if (next[i] !== prev[i]) return next;
+      }
+      return prev;
+    });
+  }, [filteredOrders]);
 
   // Error handling
   useEffect(() => {
