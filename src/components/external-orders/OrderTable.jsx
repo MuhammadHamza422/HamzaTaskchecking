@@ -32,6 +32,9 @@ export default function OrderTable({
 }) {
   const isMobile = useMediaQuery({ maxWidth: 768 });
   const isTablet = useMediaQuery({ minWidth: 769, maxWidth: 1024 });
+  const orderStatus = orders[0]?.status
+
+  console.log("orders", orders);
 
   // Helper function to format date
   const formatDate = (createdAt) => {
@@ -142,7 +145,6 @@ export default function OrderTable({
       return [
         ...checkboxColumn,
         ...baseColumns.slice(0, 1), // Order ID
-
         {
           title: "WC Status",
           dataIndex: "wc_status",
@@ -156,7 +158,6 @@ export default function OrderTable({
             else if (status === "cancelled") color = "red";
             else if (status === "refunded") color = "purple";
             else if (status === "on-hold") color = "orange";
-
             return (
               <Tag color={color} className="capitalize">
                 {status || "N/A"}
@@ -172,7 +173,6 @@ export default function OrderTable({
             let color = "default";
             if (status === "processed") color = "green";
             else if (status === "unprocessed") color = "orange";
-
             return (
               <Tag color={color} className="capitalize">
                 {status || "N/A"}
@@ -180,32 +180,36 @@ export default function OrderTable({
             );
           },
         },
-        {
-          title: "SS Status",
-          dataIndex: "shipStation_order_status",
-          key: "shipStation_order_status",
-          width: 150,
-          render: (status, record) =>
-            record?.shipStation_OrderId ? (
-              <Tag color={status ? "blue" : "default"} className="capitalize">
-                {status || "N/A"}
-              </Tag>
-            ) : (
-              <span className="text-gray-400">—</span>
-            ),
-        },
-        {
-          title: "SS Order ID",
-          dataIndex: "shipStation_OrderId",
-          key: "shipStation_OrderId",
-          width: 80,
-          render: (id, record) =>
-            record?.shipStation_OrderId ? (
-              <span className="text-gray-900">{id}</span>
-            ) : (
-              <span className="text-gray-400">—</span>
-            ),
-        },
+        ...(orderStatus === "processed"
+          ? [
+              {
+                title: "SS Status",
+                dataIndex: "shipStation_order_status",
+                key: "shipStation_order_status",
+                width: 150,
+                render: (status, record) =>
+                  record?.shipStation_OrderId ? (
+                    <Tag color={status ? "blue" : "default"} className="capitalize">
+                      {status || "N/A"}
+                    </Tag>
+                  ) : (
+                    <span className="text-gray-400">—</span>
+                  ),
+              },
+              {
+                title: "SS Order ID",
+                dataIndex: "shipStation_OrderId",
+                key: "shipStation_OrderId",
+                width: 80,
+                render: (id, record) =>
+                  record?.shipStation_OrderId ? (
+                    <span className="text-gray-900">{id}</span>
+                  ) : (
+                    <span className="text-gray-400">—</span>
+                  ),
+              },
+            ]
+          : []),
         {
           title: "Tracking",
           dataIndex: "tracking_number",
@@ -268,6 +272,8 @@ export default function OrderTable({
             );
           },
         },
+         ...(orderStatus === "processed"
+          ? [
         {
           title: "SS Status",
           dataIndex: "shipStation_order_status",
@@ -293,7 +299,8 @@ export default function OrderTable({
             ) : (
               <span className="text-gray-400">—</span>
             ),
-        },
+        },   ]
+          : []),
         {
           title: "Status",
           dataIndex: "status",
