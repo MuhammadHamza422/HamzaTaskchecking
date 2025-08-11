@@ -11,6 +11,7 @@ import {
   Checkbox,
 } from "antd";
 import { useMediaQuery } from "react-responsive";
+import { CloseCircleOutlined } from "@ant-design/icons";
 
 export default function OrderTable({
   orders,
@@ -35,7 +36,7 @@ export default function OrderTable({
   // Helper function to format date
   const formatDate = (createdAt) => {
     if (!createdAt) {
-      return <span className="text-sm text-gray-400">—</span>;
+      return <span className="text-sm whitespace-nowrap text-gray-400">—</span>;
     }
 
     const date = new Date(createdAt);
@@ -55,77 +56,93 @@ export default function OrderTable({
   // Platform-specific column configurations
   const getColumns = () => {
     // Add checkbox column if enabled
-    const checkboxColumn = showCheckboxes ? [
-      {
-        title: (
-          <Checkbox
-            checked={selectAll}
-            onChange={(e) => onSelectAll && onSelectAll(e.target.checked)}
-            disabled={!orders || orders.length === 0}
-          />
-        ),
-        dataIndex: "checkbox",
-        key: "checkbox",
-        width: 50,
-        render: (_, record) => (
-          <Checkbox
-            checked={selectedOrders.includes(record._id)}
-            onChange={(e) => onOrderSelect && onOrderSelect(record._id, e.target.checked)}
-            onClick={(e) => e.stopPropagation()}
-          />
-        ),
-      }
-    ] : [];
+    const checkboxColumn = showCheckboxes
+      ? [
+          {
+            title: (
+              <Checkbox
+                checked={selectAll}
+                onChange={(e) => onSelectAll && onSelectAll(e.target.checked)}
+                disabled={!orders || orders.length === 0}
+              />
+            ),
+            dataIndex: "checkbox",
+            key: "checkbox",
+            width: 50,
+            render: (_, record) => {
+              const isDisabled = !!record?.shipStation_OrderId;
+              return (
+                <div className="flex items-center justify-center">
+                  {isDisabled ? (
+                    <CloseCircleOutlined className="text-red-400" />
+                  ) : (
+                    <Checkbox
+                      checked={selectedOrders.includes(record?._id)}
+                      disabled={isDisabled}
+                      onChange={(e) =>
+                        onOrderSelect &&
+                        onOrderSelect(record?._id, e.target.checked)
+                      }
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  )}
+                </div>
+              );
+            },
+          },
+        ]
+      : [];
 
     const baseColumns = [
-    {
-      title: "Order ID",
-      dataIndex: "orderId",
-      key: "orderId",
-      render: (text) => (
-        <span className="font-semibold text-gray-900">{text}</span>
-      ),
-    },
-    {
-      title: "Created At",
-      dataIndex: "createdAt",
-      key: "createdAt",
-      render: formatDate,
-    },
-    {
-      title: "Actions",
-      dataIndex: "actions",
-      key: "actions",
-      render: (_, record) => (
-        <div className="flex items-center gap-2">
-          <Button
-            type="link"
-            onClick={(e) => {
-              e.stopPropagation();
-              onEditClick(record);
-            }}
-            className="text-blue-600 hover:text-blue-800"
-          >
-            Edit
-          </Button>
-          <Button
-            type="link"
-            onClick={() => onRowClick(record)}
-            className="text-green-600 hover:text-green-800"
-          >
-            View
-          </Button>
-        </div>
-      ),
-    },
-  ];
+      {
+        title: "Order ID",
+        dataIndex: "orderId",
+        key: "orderId",
+        render: (text) => (
+          <span className="font-semibold text-gray-900">{text}</span>
+        ),
+      },
+      {
+        title: "Created At",
+        dataIndex: "createdAt",
+        key: "createdAt",
+        render: formatDate,
+      },
+      {
+        title: "Actions",
+        dataIndex: "actions",
+        key: "actions",
+        render: (_, record) => (
+          <div className="flex items-center gap-2">
+            <Button
+              type="link"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditClick(record);
+              }}
+              className="text-blue-600 hover:text-blue-800"
+            >
+              Edit
+            </Button>
+            <Button
+              type="link"
+              onClick={() => onRowClick(record)}
+              className="text-green-600 hover:text-green-800"
+            >
+              View
+            </Button>
+          </div>
+        ),
+        fixed: "right",
+      },
+    ];
 
     // WooCommerce specific columns
     if (activeTab === "woocommerce") {
       return [
         ...checkboxColumn,
         ...baseColumns.slice(0, 1), // Order ID
-       
+
         {
           title: "WC Status",
           dataIndex: "wc_status",
@@ -164,11 +181,39 @@ export default function OrderTable({
           },
         },
         {
+          title: "SS Status",
+          dataIndex: "shipStation_order_status",
+          key: "shipStation_order_status",
+          render: (status, record) =>
+            record?.shipStation_OrderId ? (
+              <Tag color={status ? "blue" : "default"} className="capitalize">
+                {status || "N/A"}
+              </Tag>
+            ) : (
+              <span className="text-gray-400">—</span>
+            ),
+        },
+        {
+          title: "SS Order ID",
+          dataIndex: "shipStation_OrderId",
+          key: "shipStation_OrderId",
+          render: (id, record) =>
+            record?.shipStation_OrderId ? (
+              <span className="text-gray-900">{id}</span>
+            ) : (
+              <span className="text-gray-400">—</span>
+            ),
+        },
+        {
           title: "Tracking",
           dataIndex: "tracking_number",
           key: "tracking_number",
           render: (tracking) => (
-            <span className={tracking ? "text-green-600" : "text-gray-400"}>
+            <span
+              className={`whitespace-nowrap ${
+                tracking ? "text-green-600" : "text-gray-400"
+              } `}
+            >
               {tracking || "No tracking"}
             </span>
           ),
@@ -222,6 +267,30 @@ export default function OrderTable({
           },
         },
         {
+          title: "SS Status",
+          dataIndex: "shipStation_order_status",
+          key: "shipStation_order_status",
+          render: (status, record) =>
+            record?.shipStation_OrderId ? (
+              <Tag color={status ? "blue" : "default"} className="capitalize">
+                {status || "N/A"}
+              </Tag>
+            ) : (
+              <span className="text-gray-400">—</span>
+            ),
+        },
+        {
+          title: "SS Order ID",
+          dataIndex: "shipStation_OrderId",
+          key: "shipStation_OrderId",
+          render: (id, record) =>
+            record?.shipStation_OrderId ? (
+              <span className="text-gray-900">{id}</span>
+            ) : (
+              <span className="text-gray-400">—</span>
+            ),
+        },
+        {
           title: "Status",
           dataIndex: "status",
           key: "status",
@@ -242,7 +311,11 @@ export default function OrderTable({
           dataIndex: "tracking_number",
           key: "tracking_number",
           render: (tracking) => (
-            <span className={tracking ? "text-green-600" : "text-gray-400"}>
+            <span
+              className={`whitespace-nowrap ${
+                tracking ? "text-green-600" : "text-gray-400"
+              } `}
+            >
               {tracking || "No tracking"}
             </span>
           ),
@@ -506,20 +579,26 @@ export default function OrderTable({
             <div className="flex items-start gap-3 flex-1">
               {/* Checkbox for mobile */}
               {showCheckboxes && (
-                <Checkbox
-                  checked={selectedOrders.includes(order._id)}
-                  onChange={(e) => {
-                    e.stopPropagation();
-                    onOrderSelect && onOrderSelect(order._id, e.target.checked);
-                  }}
-                  className="mt-1"
-                />
+                <div className="mt-1">
+                  {order?.shipStation_OrderId ? (
+                    <CloseCircleOutlined className="text-red-400" />
+                  ) : (
+                    <Checkbox
+                      checked={selectedOrders.includes(order._id)}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        onOrderSelect &&
+                          onOrderSelect(order._id, e.target.checked);
+                      }}
+                    />
+                  )}
+                </div>
               )}
-            <div>
-              <div className="font-semibold text-lg text-gray-900">
-                Order #{order?.orderId}
-              </div>
-              <div className="text-sm text-gray-500 font-mono">
+              <div>
+                <div className="font-semibold text-lg text-gray-900">
+                  Order #{order?.orderId}
+                </div>
+                <div className="text-sm text-gray-500 font-mono">
                   {getOrderKey()}
                 </div>
               </div>
@@ -543,7 +622,7 @@ export default function OrderTable({
 
           {/* Footer */}
           <div className="flex justify-between items-center pt-2 border-t border-gray-100">
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-gray-600 whitespace-nowrap">
               {formatDate(order?.createdAt)}
             </div>
             <div className="flex gap-2">
@@ -646,8 +725,11 @@ export default function OrderTable({
         rowKey="_id"
         pagination={false}
         size={isTablet ? "small" : "middle"}
-        className="bg-white rounded-lg shadow-sm"
+        className="bg-white rounded-lg shadow-sm overflow-x-auto overflow-y-auto"
         scroll={{ x: isTablet ? 800 : undefined }}
+        rowClassName={(record) =>
+          record?.shipStation_OrderId ? "opacity-60" : ""
+        }
         onRow={(record) => ({
           onClick: () => onRowClick(record),
           className: "cursor-pointer hover:bg-gray-50 transition-colors",
