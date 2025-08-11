@@ -322,35 +322,6 @@ export default function KitsPage() {
                   </div>
                 </div>
               </Card>
-
-              {/* Customer Details */}
-              {selectedKit?.user && (
-              <Card
-                size="small"
-                title="Customer Details"
-                className="border-gray-200"
-              >
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="font-semibold text-gray-700">
-                      Customer Name:
-                    </span>
-                    <span className="font-mono text-sm">
-                      {selectedKit?.user?.firstName} {selectedKit?.user?.lastName}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-semibold text-gray-700">
-                      Customer Email:
-                    </span>
-                    <span className="font-mono text-sm">
-                      {selectedKit?.user?.email}
-                    </span>
-                  </div>
-                  </div>
-                </Card>
-              )}
-
               {/* Kit Information */}
               <Card
                 size="small"
@@ -378,6 +349,15 @@ export default function KitsPage() {
                     </span>
                     <span className="text-sm">
                       {selectedKit?.plateform_id?.plt_name}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-semibold text-gray-700">
+                      Created By:
+                    </span>
+                    <span className="text-sm">
+                      {selectedKit?.user?.firstName}{" "}
+                      {selectedKit?.user?.lastName}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -460,9 +440,11 @@ export default function KitsPage() {
                           <span className="font-semibold text-gray-700">
                             Model:
                           </span>
-                          <p className="text-gray-900">{sku?.pId?.model_code}</p>
+                          <p className="text-gray-900">
+                            {sku?.pId?.model_code}
+                          </p>
                         </div>
-    <div>
+                        <div>
                           <span className="font-semibold text-gray-700">
                             Storage:
                           </span>
@@ -478,8 +460,7 @@ export default function KitsPage() {
             </div>
           )}
         </Drawer>
-    </div>
+      </div>
     </motion.div>
   );
 }
-

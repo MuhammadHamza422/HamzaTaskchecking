@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Drawer,
   Typography,
@@ -9,6 +9,7 @@ import {
 
 import ProcessedWooCommerceDetails from "./ProcessedWooCommerceDetails";
 import ProcessedWalmartDetails from "./ProcessedWalmartDetails";
+import AddProductModal from "./OrderDetailsDrawer/AddProductModal";
 
 const { Text, Title } = Typography;
 
@@ -23,6 +24,30 @@ export default function ProcessedOrderDetailsDrawer({
   refetch,
   refetchOrderDetails,
 }) {
+  const [addProductModalVisible, setAddProductModalVisible] = useState(false);
+  const [selectedLineItemId, setSelectedLineItemId] = useState("");
+
+  const handleAddProduct = (lineItemId) => {
+    setSelectedLineItemId(lineItemId);
+    setAddProductModalVisible(true);
+  };
+
+  const handleEditProduct = (lineItemId) => {
+    setSelectedLineItemId(lineItemId);
+    setAddProductModalVisible(true);
+  };
+
+  const handleModalClose = () => {
+    setAddProductModalVisible(false);
+    setSelectedLineItemId("");
+  };
+
+  const handleModalSuccess = () => {
+    // Refresh lists/details so UI reflects changes immediately
+    refetch?.();
+    refetchOrderDetails?.();
+    handleModalClose();
+  };
   if (orderDetailsLoading) {
     return (
       <Drawer
@@ -44,7 +69,8 @@ export default function ProcessedOrderDetailsDrawer({
   }
 
   return (
-    <Drawer
+    <>
+      <Drawer
       width={700}
       open={open}
       onClose={onClose}
@@ -71,12 +97,16 @@ export default function ProcessedOrderDetailsDrawer({
             <ProcessedWooCommerceDetails
               order={orderDetails?.order}
               selectedOrder={selectedOrder}
+              onAddProduct={handleAddProduct}
+              onEditProduct={handleEditProduct}
             />
           )}
           {activeTab === "walmart" && (
             <ProcessedWalmartDetails
               order={orderDetails?.order?.order}
               selectedOrder={selectedOrder}
+              onAddProduct={handleAddProduct}
+              onEditProduct={handleEditProduct}
             />
           )}
         </div>
@@ -85,6 +115,18 @@ export default function ProcessedOrderDetailsDrawer({
           No order details available
         </div>
       )}
-    </Drawer>
+      </Drawer>
+
+      {/* Add/Edit Product Modal */}
+      <AddProductModal
+        visible={addProductModalVisible}
+        onCancel={handleModalClose}
+        selectedOrder={selectedOrder}
+        activeTab={activeTab}
+        orderDetails={orderDetails}
+        selectedLineItemId={selectedLineItemId}
+        onSuccess={handleModalSuccess}
+      />
+    </>
   );
 }

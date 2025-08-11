@@ -20,7 +20,7 @@ export const PLATFORM_CONFIG = {
     key: "walmart",
     label: "Walmart",
     api: "/api/v1/orders/wm/orders/db",
-    refreshApi: "/api/v1/orders/wm/orders",
+    refreshApi: "/api/v1/orders/wm/orders/all",
     updateApi: "/api/v1/orders/wm/order/update",
     detailsApi: "/api/v1/orders/wm/details",
     color: "green",

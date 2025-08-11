@@ -4,6 +4,8 @@ import { Card, Row, Col, Tag } from "antd";
 export default function ProcessedWooCommerceDetails({
   order,
   selectedOrder,
+  onAddProduct = () => {},
+  onEditProduct = () => {},
 }) {
   // Helper function to format date
   const formatDate = (dateString) => {
@@ -144,7 +146,11 @@ export default function ProcessedWooCommerceDetails({
         <div className="space-y-3">
           {order?.line_items?.map((item) => {
             const itemId = item?.product_id || item?.id;
-            
+            const idStr = itemId?.toString();
+            const hasMappedProducts =
+              selectedOrder?.kit_products &&
+              selectedOrder.kit_products.includes(idStr);
+
             return (
               <div
                 key={item?.id}
@@ -170,37 +176,43 @@ export default function ProcessedWooCommerceDetails({
                 </div>
 
                 <div className="text-right">
-                  {/* Check if this specific line item has mapped products */}
-                  {(() => {
-                    const lineItemId = item?.product_id || item?.id;
-                    const hasMappedProducts =
-                      selectedOrder?.kit_products &&
-                      selectedOrder.kit_products.includes(
-                        lineItemId?.toString()
-                      );
-
-                    if (hasMappedProducts) {
-                      return (
-                        <div className="flex items-center gap-2">
-                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
-                            Mapped
-                          </span>
-                        </div>
-                      );
-                    } else {
-                      return (
-                        <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs font-medium">
-                          Not Mapped
-                        </span>
-                      );
-                    }
-                  })()}
-                  <div className="font-semibold text-gray-900">
-                    ${item?.total}
-                  </div>
-                  <div className="text-sm text-gray-600">
-                    ${item?.price} each
-                  </div>
+                  {/* Mapped/Action buttons */}
+                  {hasMappedProducts ? (
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                      <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
+                        Mapped
+                      </span>
+                      <button
+                        type="button"
+                        className="text-sm text-blue-600 p-1.5 rounded-md bg-blue-100 hover:bg-blue-200 transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEditProduct(itemId);
+                          console.log("edit clicked")
+                        }}
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                      <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs font-medium">
+                        Not Mapped
+                      </span>
+                      <button
+                        type="button"
+                        className="text-sm text-gray-600 p-1.5 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onAddProduct(itemId);
+                        }}
+                      >
+                        Add Picking
+                      </button>
+                    </div>
+                  )}
+                  <div className="font-semibold text-gray-900">${item?.total}</div>
+                  <div className="text-sm text-gray-600">${item?.price} each</div>
                 </div>
               </div>
             );
@@ -221,7 +233,7 @@ export default function ProcessedWooCommerceDetails({
               .find((m) => m.key === "_aftership_order_notes")
               .value.map((note, i) => (
                 <div key={i} className="p-2 bg-yellow-50 rounded text-sm">
-                  <div className="flex justify-between items-start">
+                  <div className="flex justify-between items-start overflow-x-auto hide-scrollbar">
                     <div className="text-gray-700">{note?.note}</div>
                     <div className="text-xs text-gray-500">
                       {new Date(note?.date_created_gmt).toLocaleString()}
