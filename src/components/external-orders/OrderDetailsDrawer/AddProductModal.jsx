@@ -331,8 +331,16 @@ export default function AddProductModal({
       let orderQty = "1"; // Default value
 
       if (activeTab === "woocommerce") {
-        // Count total line items in WooCommerce order
-        orderQty = orderDetails?.order?.line_items?.length?.toString() || "1";
+        // If this line belongs to a merged product, set orderQty to merged set size for the first POST
+        const idStr = String(selectedLineItemId || "");
+        const merged = (mergedProducts || []).find((mp) =>
+          (mp?.productIds || []).map(String).includes(idStr)
+        );
+        if (merged) {
+          orderQty = String((merged.productIds || []).length || 1);
+        } else {
+          orderQty = orderDetails?.order?.line_items?.length?.toString() || "1";
+        }
       } else if (activeTab === "walmart") {
         // Count total order lines in Walmart order
         orderQty =
@@ -375,6 +383,36 @@ export default function AddProductModal({
         });
 
         onSuccess(productIdToSend);
+        // Auto-link same kit to remaining merged product ids so backend marks all mapped
+        try {
+          if (activeTab === "woocommerce" && Array.isArray(mergedProducts) && mergedProducts.length > 0) {
+            const selIdStr = String(selectedLineItemId);
+            const merged = mergedProducts.find((mp) => (mp?.productIds || []).map(String).includes(selIdStr));
+            if (merged) {
+              const remainingIds = (merged.productIds || [])
+                .map(String)
+                .filter((id) => id !== String(productIdToSend));
+              for (const otherId of remainingIds) {
+                const extraPayload = {
+                  ...payload,
+                  productId: otherId,
+                  orderQty: "1",
+                };
+                try {
+                  const linkRes = await apiClient.post("/api/v1/kit/add", extraPayload);
+                  if (linkRes?.data?.success) {
+                    onSuccess(otherId);
+                  }
+                } catch (linkErr) {
+                  console.error("Failed to link kit to merged id", otherId, linkErr);
+                }
+              }
+            }
+          }
+        } catch (mergeLinkErr) {
+          console.error("Merged linking pass failed", mergeLinkErr);
+        }
+
         handleModalClose();
       } else {
         throw new Error(response?.data?.message || "Failed to add products");

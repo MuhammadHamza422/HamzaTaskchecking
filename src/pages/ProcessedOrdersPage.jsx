@@ -16,8 +16,6 @@ import PlatformTabs, {
 import Swal from "sweetalert2";
 import { getPlatformConfig } from "../config/platforms";
 
-const { Text, Title } = Typography;
-
 const showRefreshSuccessToast = () => {
   Swal.fire({
     icon: "success",
@@ -61,9 +59,6 @@ export default function ProcessedOrdersPage() {
     return savedTab && PLATFORM_CONFIG[savedTab] ? savedTab : "woocommerce";
   };
 
-  // Get query client for cache invalidation
-  const queryClient = useQueryClient();
-
   // State management
   const [activeTab, setActiveTab] = useState(getInitialActiveTab);
   const [currentPage, setCurrentPage] = useState(1);
@@ -75,6 +70,8 @@ export default function ProcessedOrdersPage() {
   const [editingOrder, setEditingOrder] = useState(null);
   const [selectedOrders, setSelectedOrders] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
+  const [isMovingToShipStation, setIsMovingToShipStation] = useState(false);
+  const [kitsByOrderId, setKitsByOrderId] = useState({});
 
   // Filter state
   const [filters, setFilters] = useState({
@@ -325,14 +322,15 @@ export default function ProcessedOrdersPage() {
     setSelectAll(false);
   };
 
+  // Compute filtered orders early so effects below can use it safely
   const getFilteredOrders = () => {
     if (!ordersData?.orders) return [];
 
-    let filteredOrders = [...ordersData.orders];
+    let filtered = [...ordersData.orders];
 
     // Filter by search (order ID)
     if (filters.search) {
-      filteredOrders = filteredOrders.filter((order) =>
+      filtered = filtered.filter((order) =>
         order.orderId
           ?.toString()
           .toLowerCase()
@@ -347,17 +345,413 @@ export default function ProcessedOrdersPage() {
       const endDate = new Date(filters.dateRange[1]);
       endDate.setHours(23, 59, 59, 999);
 
-      filteredOrders = filteredOrders.filter((order) => {
+      filtered = filtered.filter((order) => {
         const orderDate = new Date(order.createdAt);
         return orderDate >= startDate && orderDate <= endDate;
       });
     }
 
-    return filteredOrders;
+    return filtered;
   };
 
   const filteredOrders = getFilteredOrders();
   const totalFilteredOrders = filteredOrders.length;
+
+  // Fetch kits immediately when orders are selected (single or bulk) and log results
+  useEffect(() => {
+    const fetchKitsForSelection = async () => {
+      if (!Array.isArray(selectedOrders) || selectedOrders.length === 0) return;
+      for (const id of selectedOrders) {
+        try {
+          const ord = filteredOrders.find((o) => o._id === id);
+          const orderId = ord?.orderId;
+          if (!orderId) continue;
+          if (kitsByOrderId[orderId]) {
+            console.log(
+              "Kits already cached for selected order",
+              orderId,
+              kitsByOrderId[orderId]
+            );
+            continue;
+          }
+          console.log("Fetching kits for selected order", orderId);
+          const res = await apiClient.get(`/api/v1/kit/order/kits/${orderId}`);
+          console.log("Kits fetched for selected order", orderId, res?.data);
+          setKitsByOrderId((prev) => ({ ...prev, [orderId]: res?.data }));
+        } catch (e) {
+          console.error("Error fetching kits for selected order", e);
+        }
+      }
+    };
+    fetchKitsForSelection();
+  }, [selectedOrders, filteredOrders, kitsByOrderId]);
+
+  // Helper to normalize country to 2-letter ISO code for ShipStation
+  const normalizeCountryCode = (value) => {
+    if (!value) return null;
+    const upper = String(value).trim().toUpperCase();
+    const map = {
+      US: "US",
+      USA: "US",
+      "UNITED STATES": "US",
+      "UNITED STATES OF AMERICA": "US",
+      CA: "CA",
+      CAN: "CA",
+      CANADA: "CA",
+      MX: "MX",
+      MEX: "MX",
+      MEXICO: "MX",
+    };
+    if (map[upper]) return map[upper];
+    if (upper.length === 2) return upper;
+    return null;
+  };
+
+  // Format date to ISO 8601 acceptable by ShipStation
+  const formatDateForShipStation = (value) => {
+    try {
+      if (!value) return new Date().toISOString();
+      let d;
+      if (typeof value === "number") {
+        d = new Date(value);
+      } else if (typeof value === "string") {
+        const hasZone = /Z|[+-]\d{2}:\d{2}$/.test(value);
+        d = new Date(hasZone ? value : `${value}Z`);
+      } else if (value instanceof Date) {
+        d = value;
+      } else {
+        d = new Date(value);
+      }
+      if (isNaN(d.getTime())) return new Date().toISOString();
+      return d.toISOString();
+    } catch {
+      return new Date().toISOString();
+    }
+  };
+
+  // Build ShipStation order payload for WooCommerce
+  const buildShipStationOrderFromWoo = ({ kits, details, tableOrder }) => {
+    const wc = details?.order || details; // safety
+    const kitsArray = Array.isArray(kits?.allKits) ? kits.allKits : [];
+
+    const items = [];
+    const productTitles = [];
+    for (const kit of kitsArray) {
+      if (kit?.product_title) {
+        productTitles.push(kit.product_title);
+      }
+      for (const sku of kit?.skus || []) {
+        items.push({
+          // lineItemKey: sku?._id || kit?.kit_id || kit?.productId,
+          sku: sku?.pId?.sku,
+          name: sku?.pId?.pro_title,
+          imageUrl: null,
+          quantity: Number(sku?.quantity),
+          unitPrice: Number(sku?.price),
+          taxAmount: null,
+          shippingAmount: null,
+          productId: Number(sku?.pId?.uid) || undefined,
+        });
+      }
+    }
+
+    const orderDate = formatDateForShipStation(
+      wc?.date_created || tableOrder?.createdAt || new Date()
+    );
+    const billing = wc?.billing || {};
+    const shipping = wc?.shipping || {};
+    // Get shipping service from shipping lines
+    const shippingService = wc?.shipping_lines?.[0]?.method_id || null;
+
+    const advancedOptions = {};
+    if (productTitles[0]) advancedOptions.customField1 = productTitles[0];
+    if (productTitles[1]) advancedOptions.customField2 = productTitles[1];
+    if (productTitles[2]) advancedOptions.customField3 = productTitles[2];
+
+    return {
+      orderNumber: String(tableOrder?.orderId || wc?.id || wc?.number || ""),
+      orderKey: String(tableOrder?._id || wc?.id || wc?.number || ""),
+      orderDate: orderDate,
+      orderStatus: "awaiting_shipment",
+      customerId: Number(wc?.customer_id) || undefined,
+      customerUsername: billing?.first_name || billing?.email || undefined,
+      customerEmail: billing?.email || undefined,
+      billTo: {
+        name:
+          [billing?.first_name, billing?.last_name].filter(Boolean).join(" ") ||
+          null,
+        company: billing?.company || null,
+        street1: billing?.address_1 || null,
+        street2: billing?.address_2 || null,
+        street3: null,
+        city: billing?.city || null,
+        state: billing?.state || null,
+        postalCode: billing?.postcode || null,
+        country: normalizeCountryCode(billing?.country) || null,
+        phone: billing?.phone || null,
+        residential: null,
+      },
+      shipTo: {
+        name:
+          [shipping?.first_name, shipping?.last_name]
+            .filter(Boolean)
+            .join(" ") || null,
+        company: shipping?.company || null,
+        street1: shipping?.address_1 || null,
+        street2: shipping?.address_2 || null,
+        street3: null,
+        city: shipping?.city || null,
+        state: shipping?.state || null,
+        postalCode: shipping?.postcode || null,
+        country: normalizeCountryCode(shipping?.country) || null,
+        phone: shipping?.phone || null,
+        residential: true,
+      },
+      items,
+      requestedShippingService: shippingService,
+      amountPaid: Number(wc?.total) || undefined,
+      taxAmount: Number(wc?.total_tax) || undefined,
+      shippingAmount: Number(wc?.shipping_total) || undefined,
+      gift: Boolean(wc?.cart_hash) || false,
+      paymentMethod:
+        wc?.payment_method_title || wc?.payment_method || undefined,
+      advancedOptions,
+    };
+  };
+
+  // Build ShipStation order payload for Walmart
+  const buildShipStationOrderFromWalmart = ({ kits, details, tableOrder }) => {
+    const wm = details?.order?.order || details?.order || details || {};
+    const kitsArray = Array.isArray(kits?.allKits) ? kits.allKits : [];
+
+    const items = [];
+    const productTitles = [];
+    for (const kit of kitsArray) {
+      if (kit?.product_title) {
+        productTitles.push(kit?.product_title);
+      }
+      for (const sku of kit?.skus || []) {
+        items.push({
+          // lineItemKey: sku?._id || kit?.kit_id || kit?.productId,
+          sku: sku?.pId?.sku || String(sku?.pId?._id || ""),
+          name: sku?.pId?.pro_title || "Product",
+          imageUrl: null,
+          quantity: Number(sku?.quantity || 1),
+          unitPrice: Number(sku?.price || sku?.pId?.sale_price || 0),
+          taxAmount: null,
+          shippingAmount: null,
+          productId: Number(sku?.pId?.uid) || undefined,
+        });
+      }
+    }
+
+    const orderDate = formatDateForShipStation(
+      typeof wm?.orderDate === "number" ? wm.orderDate : tableOrder?.createdAt || new Date()
+    );
+    const addr = wm?.shippingInfo?.postalAddress || {};
+
+    // Get shipping service from shipping lines
+    const shippingService = wm?.shippingInfo?.carrierMethodName || null;
+
+    const advancedOptions = {};
+    if (productTitles[0]) advancedOptions.customField1 = productTitles[0];
+    if (productTitles[1]) advancedOptions.customField2 = productTitles[1];
+    if (productTitles[2]) advancedOptions.customField3 = productTitles[2];
+
+    return {
+      orderNumber: String(tableOrder?.orderId),
+      orderKey: String(
+        tableOrder?._id || wm?.purchaseOrderId || wm?.customerOrderId || ""
+      ),
+      orderDate: orderDate,
+      orderStatus: "awaiting_shipment",
+      customerId: wm?.customerOrderId,
+      customerUsername: wm?.customerEmailId || undefined,
+      customerEmail: wm?.customerEmailId || undefined,
+      billTo: {
+        name: addr?.name || null,
+        company: null,
+        street1: addr?.address1 || null,
+        street2: addr?.address2 || null,
+        street3: null,
+        city: addr?.city || null,
+        state: addr?.state || null,
+        postalCode: addr?.postalCode || null,
+        country: normalizeCountryCode(addr?.country) || null,
+        phone: wm?.shippingInfo?.phone || null,
+        residential: null,
+      },
+      shipTo: {
+        name: addr?.name || null,
+        company: null,
+        street1: addr?.address1 || null,
+        street2: addr?.address2 || null,
+        street3: null,
+        city: addr?.city || null,
+        state: addr?.state || null,
+        postalCode: addr?.postalCode || null,
+        country: normalizeCountryCode(addr?.country) || null,
+        phone: wm?.shippingInfo?.phone || null,
+        residential: true,
+      },
+      items,
+      requestedShippingService: shippingService,
+      amountPaid: undefined,
+      taxAmount: undefined,
+      shippingAmount: undefined,
+      gift: false,
+      paymentMethod: undefined,
+      advancedOptions,
+    };
+  };
+
+  const handleMoveToShipStation = async () => {
+    try {
+      const ordersToProcess = selectedOrders.length > 0 ? selectedOrders : [];
+      if (ordersToProcess.length === 0) {
+        message.warning("Please select at least one order.");
+        return;
+      }
+      setIsMovingToShipStation(true);
+
+      // Build a map of platformId (as string) => orders
+      const idToOrder = new Map(filteredOrders.map((o) => [o._id, o]));
+      const platformToOrders = new Map();
+      for (const id of ordersToProcess) {
+        const ord = idToOrder.get(id);
+        if (!ord) continue;
+        const rawPid = ord?.plateform_id ?? ord?.platform_id ?? "";
+        const pid =
+          typeof rawPid === "object"
+            ? rawPid?._id
+              ? String(rawPid._id)
+              : String(rawPid)
+            : String(rawPid);
+        if (!pid) continue;
+        if (!platformToOrders.has(pid)) platformToOrders.set(pid, []);
+        platformToOrders.get(pid).push(ord);
+      }
+
+      const config = getPlatformConfig(activeTab);
+
+      for (const [platformId, orders] of platformToOrders.entries()) {
+        if (!platformId) {
+          console.warn(
+            "Skipping ShipStation post due to missing platformId for orders",
+            orders?.map((o) => o?.orderId)
+          );
+          continue;
+        }
+        // Fetch kits and details for each order in parallel
+        const results = await Promise.all(
+          orders.map(async (ord) => {
+            let kitsData = kitsByOrderId[ord?.orderId];
+            if (kitsData) {
+              console.log("Using cached kits for move", ord?.orderId, kitsData);
+            } else {
+              console.log("Fetching kits for move", ord?.orderId);
+              const kitsRes = await apiClient.get(
+                `/api/v1/kit/order/kits/${ord?.orderId}`
+              );
+              console.log("Kits Data", kitsRes?.data);
+              kitsData = kitsRes?.data;
+            }
+            const detailsRes = await apiClient.get(
+              `${config.detailsApi}/${ord?.orderId}`
+            );
+            console.log("Details", detailsRes?.data);
+            return { ord, kits: kitsData, details: detailsRes?.data };
+          })
+        );
+
+        // Build orderData list
+        let orderData = results
+          .map(({ ord, kits, details }) => {
+            if (activeTab === "woocommerce") {
+              return buildShipStationOrderFromWoo({
+                kits,
+                details,
+                tableOrder: ord,
+              });
+            } else if (activeTab === "walmart") {
+              return buildShipStationOrderFromWalmart({
+                kits,
+                details,
+                tableOrder: ord,
+              });
+            }
+            return null;
+          })
+          .filter(Boolean);
+
+        // Ensure we don't send orders without items
+        orderData = orderData.filter(
+          (od) => Array.isArray(od?.items) && od.items.length > 0
+        );
+
+        const payload = { plateformId: String(platformId), orderData };
+        console.log("Posting ShipStation payload", payload);
+
+        // POST to ShipStation API for this platform group
+        await apiClient.post(
+          `/api/v1/shipstation/create/shipstation/order`,
+          payload
+        );
+      }
+
+      Swal.fire({
+        icon: "success",
+        title: "Moved to ShipStation",
+        text: `Successfully sent ${ordersToProcess.length} order(s) to ShipStation`,
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+        background: "#10b981",
+        color: "#fff",
+        customClass: { popup: "rounded-lg" },
+      });
+      console.log("Items Moved to ShipStation for", ordersToProcess);
+      // Refresh and clear selections
+      setSelectedOrders([]);
+      setSelectAll(false);
+      await refetch();
+    } catch (err) {
+      console.error("Move to ShipStation failed", err);
+      if (err?.response?.data) {
+        console.error(
+          "ShipStation create order error response:",
+          err.response.data
+        );
+      }
+      Swal.fire({
+        icon: "error",
+        title: "Failed to Move",
+        text:
+          err?.response?.data?.error ||
+          err?.response?.data?.message ||
+          err?.message ||
+          "Move to ShipStation failed",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 4000,
+        timerProgressBar: true,
+        background: "#ef4444",
+        color: "#fff",
+        customClass: { popup: "rounded-lg" },
+      });
+      console.error(
+        err?.response?.data?.error ||
+          err?.response?.data?.message ||
+          err?.message ||
+          "Move to ShipStation failed"
+      );
+    } finally {
+      setIsMovingToShipStation(false);
+    }
+  };
 
   // Update select all state when orders change
   useEffect(() => {
@@ -406,6 +800,9 @@ export default function ProcessedOrdersPage() {
                 <Button
                   size="small"
                   className="bg-green-600 hover:bg-green-700 border-green-600 text-white"
+                  loading={isMovingToShipStation}
+                  disabled={isMovingToShipStation}
+                  onClick={handleMoveToShipStation}
                 >
                   Move to shipStation
                 </Button>

@@ -144,6 +144,15 @@ export default function WooCommerceDetails({
       { pattern: /handheld/i, code: "HAN" },
       { pattern: /game/i, code: "GAM" },
       { pattern: /accessory|controller|adapter/i, code: "ACC" },
+      // Accessories: cases, protectors, chargers, cables, etc.
+      { pattern: /case|cover|protector|screen\s*protector|pouch|bag|sleeve/i, code: "ACC" },
+      { pattern: /memory\s*card|sd\s*card|micro\s*sd/i, code: "ACC" },
+      { pattern: /dock|stand|grip|mount|bracket/i, code: "ACC" },
+      { pattern: /charger|charging|cable|wire|usb|power\s*adapter/i, code: "ACC" },
+      { pattern: /battery|pack|cell/i, code: "ACC" },
+      { pattern: /stylus|pen/i, code: "ACC" },
+      { pattern: /film|glass\s*protector|tempered\s*glass/i, code: "ACC" },
+      { pattern: /headset|headphones|earbuds|earphones|mic|microphone/i, code: "ACC" },
     ];
 
     // Common condition patterns
@@ -164,6 +173,13 @@ export default function WooCommerceDetails({
       { pattern: /missing\s*manual/i, code: "MM" },
       { pattern: /missing\s*box/i, code: "MB" },
       { pattern: /missing\s*inserts/i, code: "MI" },
+      // Additional real-world marketplace phrases
+      { pattern: /brand\s*new/i, code: "N" },
+      { pattern: /new\s*sealed/i, code: "S" },
+      { pattern: /pre[-\s]*owned|preowned/i, code: "U" },
+      { pattern: /open[-\s]*box/i, code: "U" },
+      { pattern: /like\s*new/i, code: "N" },
+      { pattern: /very\s*good/i, code: "G" },
     ];
 
     // First, identify the main product (the one with the most descriptive name)
@@ -410,13 +426,15 @@ export default function WooCommerceDetails({
       console.log("Extracted attributes:", extractedAttributes);
 
       // Calculate combined data
+      const productIdsList = itemsToMerge.map((item) => String(item.product_id || item.id));
+      const skuString = itemsToMerge
+        .map((item) => item.sku)
+        .filter(Boolean)
+        .join("_") || productIdsList.join("_");
       const combinedData = {
         wc_id: itemsToMerge[0]?.product_id || itemsToMerge[0]?.id,
         pro_title: itemsToMerge.map((item) => item.name).join(" + "),
-        sku: itemsToMerge
-          .map((item) => item.sku)
-          .filter(Boolean)
-          .join("_"),
+        sku: skuString,
         type_code: extractedAttributes.typeCode,
         brnd_code: extractedAttributes.brandCode,
         model_code: extractedAttributes.modelCode,
@@ -434,9 +452,7 @@ export default function WooCommerceDetails({
           .toFixed(2),
         order_Id: selectedOrder?.orderId,
         plateformId: selectedOrder?.plateform_id || "N/A",
-        productIds: itemsToMerge.map((item) =>
-          String(item.product_id || item.id)
-        ), // <-- array of strings
+        productIds: productIdsList, // <-- array of strings
       };
 
       console.log("combinedData", combinedData);
@@ -691,7 +707,7 @@ export default function WooCommerceDetails({
                 const hasMappedProducts =
                   !!actionId &&
                   ((Array.isArray(selectedOrder?.kit_products) &&
-                    selectedOrder.kit_products.includes(actionId)) ||
+                    selectedOrder?.kit_products.includes(actionId)) ||
                     (Array.isArray(localKitProducts) &&
                       localKitProducts.includes(actionId)));
                 return (
@@ -701,14 +717,14 @@ export default function WooCommerceDetails({
                   >
                     <div>
                       <div className="font-bold text-purple-900">
-                        {mp.pro_title}
+                        {mp?.pro_title}
                       </div>
-                      <div className="text-xs text-gray-700">SKU: {mp.sku}</div>
+                      <div className="text-xs text-gray-700">SKU: {mp?.sku}</div>
                     </div>
                     <div className="space-y-1">
                       <div className="text-right ml-2">
                         <div className="font-semibold text-purple-900">
-                          ${mp.price}
+                          ${mp?.price}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -730,10 +746,10 @@ export default function WooCommerceDetails({
                             </button>
                           ) : (
                             <button
-                              className="text-sm text-gray-600 p-1.5 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
+                              className="text-sm whitespace-nowrap text-gray-600 p-1.5 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
                               onClick={() => onAddProduct(actionId)}
                             >
-                              Add Products
+                              Add Picking
                             </button>
                           ))}
                       </div>
@@ -934,7 +950,7 @@ export default function WooCommerceDetails({
               .find((m) => m.key === "_aftership_order_notes")
               .value.map((note, i) => (
                 <div key={i} className="p-2 bg-yellow-50 rounded text-sm">
-                  <div className="flex justify-between items-start">
+                  <div className="flex justify-between items-start overflow-x-auto hide-scrollbar">
                     <p className="text-gray-700 max-w-[80%]">{note?.note}</p>
                     <p className="text-xs text-gray-500">
                       {new Date(note?.date_created_gmt).toLocaleString()}

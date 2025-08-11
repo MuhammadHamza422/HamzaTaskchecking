@@ -86,9 +86,9 @@ const MergedProductsPage = () => {
         dataIndex: "pro_title",
         key: "pro_title",
         width: 400,
-        render: (text) => (
-          <span title={text} className="text-base max-sm:whitespace-nowrap font-semibold text-gray-900">
-            {text}
+        render: (_, row) => (
+          <span title={row?.pro_title} className="text-base max-sm:whitespace-nowrap font-semibold text-gray-900">
+            {row?.pro_title}
           </span>
         ),
       },
@@ -97,15 +97,15 @@ const MergedProductsPage = () => {
         dataIndex: "sku",
         key: "sku",
         width: 220,
-        render: (text) => <span className="text-gray-700">{text}</span>,
+        render: (_, row) => <span className="text-gray-700"> {row?.sku}</span>,
       },
       {
         title: "Type",
         dataIndex: "type_code",
         key: "type_code",
         width: 100,
-        render: (text) => (
-          <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">{text}</span>
+        render: (_,row) => (
+          <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">{row?.type_code}</span>
         ),
       },
       {
@@ -113,21 +113,21 @@ const MergedProductsPage = () => {
         dataIndex: "model_code",
         key: "model_code",
         width: 120,
-        render: (text) => <span className="text-gray-700">{text}</span>,
+        render: (_,row) => <span className="text-gray-700">{row?.model_code}</span>,
       },
       {
         title: "Storage",
         dataIndex: "storage_code",
         key: "storage_code",
         width: 120,
-        render: (text) => <span className="text-gray-700">{text}</span>,
+        render: (_,row) => <span className="text-gray-700">{row?.storage_code}</span>,
       },
       {
         title: "Color",
         dataIndex: "color_code",
         key: "color_code",
         width: 100,
-        render: (text) => <span className="text-gray-700">{text}</span>,
+        render: (_,row) => <span className="text-gray-700">{row?.color_code}</span>,
       },
      
       {
@@ -136,7 +136,7 @@ const MergedProductsPage = () => {
         width: 200,
         render: (_, row) => (
           <div className="leading-tight">
-            <div className="text-sm font-semibold text-green-600">{formatMoney(row.sale_price)}</div>
+            <div className="text-sm font-semibold text-green-600">{formatMoney(row?.sale_price)}</div>
           </div>
         ),
       },

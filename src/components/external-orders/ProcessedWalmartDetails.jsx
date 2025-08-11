@@ -4,6 +4,8 @@ import { Card, Row, Col, Tag } from "antd";
 export default function ProcessedWalmartDetails({
   order,
   selectedOrder,
+  onAddProduct = () => {},
+  onEditProduct = () => {},
 }) {
   // Helper function to format timestamp
   const formatTimestamp = (timestamp) => {
@@ -145,28 +147,47 @@ export default function ProcessedWalmartDetails({
               <div className="text-right">
                 {/* Check if this specific line item has mapped products */}
                 {(() => {
-                  // For Walmart, we need to check using the SKU since that's what's stored in kits
                   const lineItemId = line?.lineNumber || line?.orderLineId || line?.id;
                   const skuForMapping = line?.item?.sku || lineItemId;
                   const hasMappedProducts =
                     selectedOrder?.kit_products &&
-                    selectedOrder.kit_products.includes(
-                      skuForMapping?.toString()
-                    );
+                    selectedOrder.kit_products.includes(skuForMapping?.toString());
 
                   if (hasMappedProducts) {
                     return (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap justify-end">
                         <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
                           Mapped
                         </span>
+                        <button
+                          type="button"
+                          className="text-sm text-blue-600 p-1.5 rounded-md bg-blue-100 hover:bg-blue-200 transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEditProduct(lineItemId);
+                          }}
+                        >
+                          Edit
+                        </button>
                       </div>
                     );
                   } else {
                     return (
-                      <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs font-medium">
-                        Not Mapped
-                      </span>
+                      <div className="flex items-center gap-2 flex-wrap justify-end">
+                        <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs font-medium">
+                          Not Mapped
+                        </span>
+                        <button
+                          type="button"
+                          className="text-sm text-gray-600 p-1.5 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAddProduct(lineItemId);
+                          }}
+                        >
+                          Add Picking
+                        </button>
+                      </div>
                     );
                   }
                 })()}

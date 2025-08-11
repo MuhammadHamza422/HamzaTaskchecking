@@ -10,6 +10,7 @@ import {
 import AddProductModal from "./AddProductModal";
 import WooCommerceDetails from "./WooCommerceDetails";
 import WalmartDetails from "./WalmartDetails";
+import ProcessedWooCommerceDetails from "../ProcessedWooCommerceDetails";
 
 const { Text, Title } = Typography;
 
@@ -114,15 +115,24 @@ export default function OrderDetailsDrawer({
           <div className="space-y-6">
             {/* Platform-specific content */}
             {activeTab === "woocommerce" && (
-              <WooCommerceDetails
-                order={orderDetails?.order}
-                selectedOrder={selectedOrder}
-                onAddProduct={handleAddProduct}
-                onEditProduct={handleEditProduct}
-                refetchOrderDetails={refetchOrderDetails}
-                onProductMappingSuccess={onProductMappingSuccess}
-                localKitProducts={localKitProducts}
-              />
+              selectedOrder?.status === "processed" ? (
+                <ProcessedWooCommerceDetails
+                  order={orderDetails?.order}
+                  selectedOrder={selectedOrder}
+                  onAddProduct={handleAddProduct}
+                  onEditProduct={handleEditProduct}
+                />
+              ) : (
+                <WooCommerceDetails
+                  order={orderDetails?.order}
+                  selectedOrder={selectedOrder}
+                  onAddProduct={handleAddProduct}
+                  onEditProduct={handleEditProduct}
+                  refetchOrderDetails={refetchOrderDetails}
+                  onProductMappingSuccess={onProductMappingSuccess}
+                  localKitProducts={localKitProducts}
+                />
+              )
             )}
             {activeTab === "walmart" && (
               <WalmartDetails
