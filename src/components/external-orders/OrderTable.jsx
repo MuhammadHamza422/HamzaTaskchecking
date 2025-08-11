@@ -184,6 +184,7 @@ export default function OrderTable({
           title: "SS Status",
           dataIndex: "shipStation_order_status",
           key: "shipStation_order_status",
+          width: 150,
           render: (status, record) =>
             record?.shipStation_OrderId ? (
               <Tag color={status ? "blue" : "default"} className="capitalize">
@@ -197,6 +198,7 @@ export default function OrderTable({
           title: "SS Order ID",
           dataIndex: "shipStation_OrderId",
           key: "shipStation_OrderId",
+          width: 80,
           render: (id, record) =>
             record?.shipStation_OrderId ? (
               <span className="text-gray-900">{id}</span>
@@ -270,6 +272,7 @@ export default function OrderTable({
           title: "SS Status",
           dataIndex: "shipStation_order_status",
           key: "shipStation_order_status",
+          width: 150,
           render: (status, record) =>
             record?.shipStation_OrderId ? (
               <Tag color={status ? "blue" : "default"} className="capitalize">
@@ -283,6 +286,7 @@ export default function OrderTable({
           title: "SS Order ID",
           dataIndex: "shipStation_OrderId",
           key: "shipStation_OrderId",
+          width: 80,
           render: (id, record) =>
             record?.shipStation_OrderId ? (
               <span className="text-gray-900">{id}</span>
@@ -576,7 +580,7 @@ export default function OrderTable({
         <div className="space-y-3 p-4">
           {/* Header */}
           <div className="flex justify-between items-start">
-            <div className="flex items-start gap-3 flex-1">
+            <div className="flex items-start gap-3 flex-1 overflow-y-auto shidden">
               {/* Checkbox for mobile */}
               {showCheckboxes && (
                 <div className="mt-1">
