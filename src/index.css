@@ -138,3 +138,8 @@ h1 {
     font-size: 20px !important;
   }
 }
+
+/* 
+.space-y-6 > :not([hidden]) ~ :not([hidden]) {
+  margin: 0 !important;
+} */
