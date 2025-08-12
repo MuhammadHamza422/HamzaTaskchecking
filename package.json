@@ -10,19 +10,25 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@reduxjs/toolkit": "^2.3.0",
     "@tanstack/react-query": "^5.83.0",
     "antd": "^5.26.6",
     "axios": "^1.11.0",
     "chart.js": "^4.5.0",
     "framer-motion": "^12.23.9",
+    "html2canvas-pro": "^1.5.11",
+    "jspdf": "^2.5.2",
     "lodash": "^4.17.21",
     "lucide-react": "^0.536.0",
     "react": "^19.1.0",
     "react-chartjs-2": "^5.3.0",
     "react-dom": "^19.1.0",
+    "react-icons": "^5.5.0",
+    "react-redux": "^9.2.0",
     "react-responsive": "^10.0.1",
     "react-router-dom": "^7.7.0",
     "recharts": "^3.1.0",
+    "redux-persist": "^6.0.0",
     "sweetalert2": "^11.22.2"
   },
   "devDependencies": {

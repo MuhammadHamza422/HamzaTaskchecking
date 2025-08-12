@@ -23,6 +23,15 @@ import PlatformsPage from "./pages/platforms/Platforms";
 import KitsPage from "./pages/KitsPage";
 import MergedProductsPage from "./pages/MergedProductsPage";
 import UserActivityPage from "./pages/UserActivityPage";
+import Inventory from "./pages/Inventory";
+import InventoryLayout from "./pages/inventory/Layout";
+import Warehouses from "./pages/inventory/Warehouses";
+import Zones from "./pages/inventory/Zones";
+import Locations from "./pages/inventory/Locations";
+import InventoryList from "./pages/inventory/InventoryList";
+import Products from "./pages/inventory/Products";
+import UploadProducts from "./pages/inventory/UploadProducts";
+import Scan from "./pages/inventory/Scan";
 
 
 function App() {
@@ -53,6 +62,16 @@ function App() {
         <Route path="kits" element={<KitsPage />} />
         <Route path="merged-products" element={<MergedProductsPage />} />
         <Route path="admin/user-activity" element={<UserActivityPage />} />
+        <Route path="inventory" element={<InventoryLayout />}>
+          <Route index element={<Inventory />} />
+          <Route path="warehouses" element={<Warehouses />} />
+          <Route path="zones" element={<Zones />} />
+          <Route path="locations" element={<Locations />} />
+          <Route path="inventory" element={<InventoryList />} />
+          <Route path="products" element={<Products />} />
+          <Route path="products/upload" element={<UploadProducts />} />
+          <Route path="scan" element={<Scan />} />
+        </Route>
       </Route>
       {/* Catch all route - redirect to dashboard if logged in, login if not */}
       <Route path="*" element={<CatchAllRoute />} />

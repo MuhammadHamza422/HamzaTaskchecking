@@ -1,5 +1,16 @@
 import React from "react";
-import { Users, Package, ShoppingCart, Store, Gift, DollarSign, Calendar, TrendingUp } from 'lucide-react';
+import {
+  Users,
+  Package,
+  ShoppingCart,
+  Store,
+  Gift,
+  DollarSign,
+  Calendar,
+  TrendingUp,
+  Boxes,
+} from "lucide-react";
+import { Link } from "react-router-dom";
 
 export default function DashboardHome() {
   const staticDashboardData = {
@@ -105,108 +116,121 @@ export default function DashboardHome() {
         </div>
       </div>
 
-      {/* Main Metrics Cards */}
-      <>
-        <div className="mb-8">
-          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
-            Overview Metrics
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-            {metricCards.map((card, index) => (
-              <div
-                key={index}
-                className="bg-white rounded-lg shadow-sm p-6 border border-gray-100"
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <div className="text-2xl">{card.icon}</div>
-                  <TrendingUp className="text-gray-400" />
-                </div>
-                <div>
-                  <div className="text-gray-600 font-medium text-sm mb-2">
-                    {card.title}
-                  </div>
-                  <div className={`text-3xl font-bold ${card.colorClass}`}>
-                    {card.value.toLocaleString()}
-                    <span className="text-lg font-normal text-gray-500 ml-1">
-                      {card.suffix}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+      <div className="mb-8">
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
+          Inventory
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <Link
+            to="/inventory"
+            className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col items-center justify-center hover:shadow-lg hover:-translate-y-1 transition-all duration-300 cursor-pointer group"
+          >
+            <Package className="text-blue-500 w-12 h-12 mb-4 group-hover:text-blue-600 transition-colors" />
+            <span className="text-gray-800 font-semibold text-xl">Inventory</span>
+          </Link>
         </div>
+      </div>
 
-        {/* Platform Orders */}
-        <div className="mb-8">
-          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
-            Platform Orders
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {platformCards.map((card, index) => (
-              <div
-                key={index}
-                className="bg-white rounded-lg shadow-sm p-5 border border-gray-100"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-xl">{card.icon}</div>
-                  <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                    {card.platform}
+      {/* Main Metrics Cards */}
+      <div className="mb-8">
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
+          Overview Metrics
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+          {metricCards.map((card, index) => (
+            <div
+              key={index}
+              className="bg-white rounded-lg shadow-sm p-6 border border-gray-100"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="text-2xl">{card.icon}</div>
+                <TrendingUp className="text-gray-400" />
+              </div>
+              <div>
+                <div className="text-gray-600 font-medium text-sm mb-2">
+                  {card.title}
+                </div>
+                <div className={`text-3xl font-bold ${card.colorClass}`}>
+                  {card.value.toLocaleString()}
+                  <span className="text-lg font-normal text-gray-500 ml-1">
+                    {card.suffix}
                   </span>
                 </div>
-                <div>
-                  <div className="text-gray-600 text-sm font-medium mb-2">
-                    {card.title}
-                  </div>
-                  <div className={`text-2xl font-bold ${card.colorClass}`}>
-                    {card.value.toLocaleString()}
-                    <span className="text-base font-normal text-gray-500 ml-1">
-                      orders
-                    </span>
-                  </div>
-                </div>
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
+      </div>
 
-        {/* Additional Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-100">
-            <div className="flex items-center justify-between">
+      {/* Platform Orders */}
+      <div className="mb-8">
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
+          Platform Orders
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {platformCards.map((card, index) => (
+            <div
+              key={index}
+              className="bg-white rounded-lg shadow-sm p-5 border border-gray-100"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-xl">{card.icon}</div>
+                <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                  {card.platform}
+                </span>
+              </div>
               <div>
-                <div className="text-gray-600 text-sm">Monthly Orders</div>
-                <div className="text-2xl font-bold text-blue-600 mt-1">
-                  {staticDashboardData.monthlyOrders.toLocaleString() || 0}
+                <div className="text-gray-600 text-sm font-medium mb-2">
+                  {card.title}
+                </div>
+                <div className={`text-2xl font-bold ${card.colorClass}`}>
+                  {card.value.toLocaleString()}
+                  <span className="text-base font-normal text-gray-500 ml-1">
+                    orders
+                  </span>
                 </div>
               </div>
-              <Calendar className="text-3xl text-blue-200" />
             </div>
-          </div>
-          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-gray-600 text-sm">Yearly Orders</div>
-                <div className="text-2xl font-bold text-green-600 mt-1">
-                  {staticDashboardData.yearlyOrders.toLocaleString() || 0}
-                </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Additional Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-gray-600 text-sm">Monthly Orders</div>
+              <div className="text-2xl font-bold text-blue-600 mt-1">
+                {staticDashboardData.monthlyOrders.toLocaleString() || 0}
               </div>
-              <TrendingUp className="text-3xl text-green-200" />
             </div>
-          </div>
-          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-gray-600 text-sm">Total Revenue</div>
-                <div className="text-2xl font-bold text-purple-600 mt-1">
-                  ${staticDashboardData.totalRevenue.toLocaleString() || 0}
-                </div>
-              </div>
-              <DollarSign className="text-3xl text-purple-200" />
-            </div>
+            <Calendar className="text-3xl text-blue-200" />
           </div>
         </div>
-      </>
+        <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-gray-600 text-sm">Yearly Orders</div>
+              <div className="text-2xl font-bold text-green-600 mt-1">
+                {staticDashboardData.yearlyOrders.toLocaleString() || 0}
+              </div>
+            </div>
+            <TrendingUp className="text-3xl text-green-200" />
+          </div>
+        </div>
+        <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-gray-600 text-sm">Total Revenue</div>
+              <div className="text-2xl font-bold text-purple-600 mt-1">
+                ${staticDashboardData.totalRevenue.toLocaleString() || 0}
+              </div>
+            </div>
+            <DollarSign className="text-3xl text-purple-200" />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
