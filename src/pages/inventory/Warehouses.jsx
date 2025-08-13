@@ -529,7 +529,7 @@ export default function Warehouses() {
 
           {/* RIGHT: Zones of selected warehouse */}
           <section className="rounded-xl border border-zinc-200 bg-white">
-            <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-zinc-200 px-4 py-3 gap-y-2">
               <h2 className="text-base font-semibold">
                 {selectedWarehouseId
                   ? `Zones — ${
@@ -538,15 +538,13 @@ export default function Warehouses() {
                     }`
                   : "Zones"}
               </h2>
-              <div className="flex items-center gap-2">
                 <button
                   onClick={openNewZn}
                   disabled={!selectedWarehouseId}
-                  className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-sm text-white disabled:opacity-50 hover:enabled:bg-green-700"
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-sm text-white disabled:opacity-50 hover:enabled:bg-green-700"
                 >
                   <FiPlus /> New Zone
                 </button>
-              </div>
             </div>
 
             <div className="p-4">

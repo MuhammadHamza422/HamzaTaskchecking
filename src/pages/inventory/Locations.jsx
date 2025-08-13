@@ -21,6 +21,8 @@ import {
 import { setSelectedZoneId } from "../../store/appSlice.js";
 import html2canvas from "html2canvas-pro";
 import jsPDF from "jspdf";
+import Swal from "sweetalert2";
+import { QRCodeSVG } from "qrcode.react";
 
 export default function Locations() {
   const navigate = useNavigate();
@@ -143,12 +145,42 @@ export default function Locations() {
     },
   });
 
+  const handleDelete = (id) => {
+    Swal.fire({
+      title: "Are you sure?",
+      text: "This location will be permanently deleted.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+      confirmButtonText: "Yes, delete it!",
+      cancelButtonText: "Cancel",
+    }).then((result) => {
+      if (result.isConfirmed) {
+        deleteMut.mutate(id);
+      }
+    });
+  };
+
   const deleteMut = useMutation({
     mutationFn: (id) => deleteLocation(id),
-    onSuccess: () =>
+    onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["locations", warehouseId, zoneId],
-      }),
+      });
+
+      Swal.fire({
+        toast: true,
+        position: "top-end",
+        icon: "success",
+        title: "Location deleted successfully",
+        showConfirmButton: false,
+        timer: 2000,
+        timerProgressBar: true,
+        background: "#ef4444",
+        color: "#fff",
+      });
+    },
   });
 
   const toggleSelected = (id) => {
@@ -163,114 +195,29 @@ export default function Locations() {
   const openPrint = () => setPrintOpen(true);
   const closePrint = () => setPrintOpen(false);
 
-  // Most robust approach - forces image loading and conversion
   const generatePDF = async () => {
     const node = printRef.current;
     if (!node) return;
 
     try {
       setDownloading(true);
-
-      // Convert all QR images to base64 data URLs
-      const convertImagesToDataUrl = async () => {
-        const images = node.querySelectorAll("img");
-        const promises = Array.from(images).map(async (img) => {
-          try {
-            // Create a canvas to convert the image
-            const canvas = document.createElement("canvas");
-            const ctx = canvas.getContext("2d");
-
-            // Create a new image to ensure it's loaded
-            const newImg = new Image();
-            newImg.crossOrigin = "anonymous";
-
-            await new Promise((resolve, reject) => {
-              newImg.onload = resolve;
-              newImg.onerror = reject;
-              newImg.src = img.src;
-            });
-
-            // Set canvas size to match image
-            canvas.width = newImg.naturalWidth || 200;
-            canvas.height = newImg.naturalHeight || 200;
-
-            // Draw image to canvas
-            ctx.fillStyle = "white";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(newImg, 0, 0);
-
-            // Convert to data URL and update the original img
-            const dataUrl = canvas.toDataURL("image/png", 1.0);
-            img.src = dataUrl;
-
-            return dataUrl;
-          } catch (error) {
-            console.error("Error converting image:", error);
-            return null;
-          }
-        });
-
-        return Promise.all(promises);
-      };
-
-      // Convert all images to data URLs
-      await convertImagesToDataUrl();
-
-      // Wait a bit more for DOM to update
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // Now generate the canvas with all images as data URLs
-      const canvas = await html2canvas(node, {
+      await generatePDFFromNode({
+        node,
+        fileName: "locations_labels.pdf",
         scale: 2,
-        useCORS: true,
-        allowTaint: true, // Allow since we converted to data URLs
-        imageTimeout: 0, // No timeout needed since images are data URLs
-        backgroundColor: "#ffffff",
-        logging: false,
-        onclone: (clonedDoc) => {
-          // Ensure all images maintain their data URL sources
-          const clonedImages = clonedDoc.querySelectorAll("img");
-          const originalImages = node.querySelectorAll("img");
-
-          clonedImages.forEach((clonedImg, index) => {
-            if (originalImages[index]) {
-              clonedImg.src = originalImages[index].src;
-            }
-          });
+        html2canvas,
+        jsPDF,
+        onProgress: ({ downloading, warning, error }) => {
+          setDownloading(Boolean(downloading));
+          if (warning) console.warn(warning);
+          if (error) console.error(error);
         },
-        removeContainer: true,
       });
-
-      const imgData = canvas.toDataURL("image/png", 1.0);
-      const pdf = new jsPDF("p", "mm", "a4");
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pageWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      // Add to PDF with pagination
-      let currentHeight = 0;
-      let pageNumber = 0;
-
-      while (currentHeight < imgHeight) {
-        if (pageNumber > 0) {
-          pdf.addPage();
-        }
-
-        const remainingHeight = imgHeight - currentHeight;
-        const heightToAdd = Math.min(remainingHeight, pageHeight);
-
-        pdf.addImage(imgData, "PNG", 0, -currentHeight, imgWidth, imgHeight);
-
-        currentHeight += pageHeight;
-        pageNumber++;
-      }
-
-      pdf.save("locations_labels.pdf");
     } catch (err) {
-      console.error("Error generating PDF", err);
-      alert(
-        "Failed to generate PDF. Please check your internet connection and try again."
+      Swal.fire(
+        "Error",
+        "Failed to generate PDF. Check console for details.",
+        "error"
       );
     } finally {
       setDownloading(false);
@@ -345,7 +292,7 @@ export default function Locations() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 lg:px-8 py-6 space-y-6">
+    <div className="max-w-7xl mx-auto p-2 space-y-6">
       <div className="flex items-center justify-between">
         {/* Breadcrumb */}
         <nav className="text-sm text-gray-600 flex flex-wrap items-center gap-2">
@@ -442,12 +389,16 @@ export default function Locations() {
                       (l) => selectedIds.size === 0 || selectedIds.has(l.id)
                     )
                     .map((loc) => (
-                      <div key={loc.id} className="border border-black flex items-center">
+                      <div
+                        key={loc.id}
+                        className="border border-black flex items-center"
+                      >
                         <div className="flex items-center justify-center w-[200px] h-[200px]">
-                          <img
-                            src={loc.qrcode}
-                            alt="QR"
-                            className="w-full h-full object-contain"
+                          <QRCodeSVG
+                            value={String(loc.code || "")}
+                            size={200}
+                            level="M"
+                            includeMargin
                           />
                         </div>
                         <div className="border-l border-black text-black flex-1 h-full">
@@ -489,7 +440,7 @@ export default function Locations() {
       )}
 
       {/* Locations Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {isLoading && (
           <p className="col-span-full text-center text-gray-500">Loading…</p>
         )}
@@ -518,12 +469,11 @@ export default function Locations() {
                   {loc?.type}
                 </span>
                 <div className="flex items-center justify-center">
-                  <img
-                    src={loc?.qrcode}
-                    alt={`QR for ${loc?.code}`}
-                    loading="lazy"
-                    onError={(e) => (e.currentTarget.style.display = "none")}
-                    className="mt-4 self-center w-32 h-32 object-contain"
+                  <QRCodeSVG
+                    value={String(loc?.code || "")}
+                    size={128}
+                    level="M"
+                    includeMargin
                   />
                 </div>
               </div>
@@ -559,10 +509,7 @@ export default function Locations() {
                   <FiEdit2 />
                 </button>
                 <button
-                  onClick={() => {
-                    if (confirm("Delete this location?"))
-                      deleteMut.mutate(loc.id);
-                  }}
+                  onClick={() => handleDelete(loc.id)}
                   className="rounded p-2 text-red-600 hover:bg-red-50"
                   title="Delete"
                 >
@@ -808,4 +755,180 @@ export default function Locations() {
       )}
     </div>
   );
+}
+
+// src/utils/generatePdf.js
+// Usage: import { generatePDFFromNode } from '../utils/generatePdf'
+// Then call generatePDFFromNode({ node, fileName, scale, html2canvas, jsPDF, onProgress })
+
+export async function generatePDFFromNode({
+  node,
+  fileName = "locations_labels.pdf",
+  scale = 2,
+  html2canvas,
+  jsPDF,
+  onProgress = () => {},
+}) {
+  if (!node) throw new Error("No DOM node provided");
+  if (!html2canvas) throw new Error("html2canvas instance required");
+  if (!jsPDF) throw new Error("jsPDF constructor required");
+
+  const notify = (payload) => {
+    try {
+      onProgress(payload);
+    } catch (e) {
+      // ignore callback errors
+    }
+  };
+
+  notify({ downloading: true });
+
+  // Try to fetch image as blob then convert to data URL (works when server allows CORS)
+  async function fetchImageAsDataUrl(src) {
+    if (!src) return null;
+    if (src.startsWith("data:")) return src;
+
+    // First attempt: fetch -> blob -> dataURL (requires CORS on image host)
+    try {
+      const resp = await fetch(src, { mode: "cors" });
+      if (!resp.ok) throw new Error("fetch failed");
+      const blob = await resp.blob();
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (fetchErr) {
+      // Fallback: try load via HTMLImageElement with crossOrigin and draw to canvas
+      try {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        return await new Promise((resolve, reject) => {
+          img.onload = () => {
+            try {
+              const canvas = document.createElement("canvas");
+              canvas.width = img.naturalWidth || 200;
+              canvas.height = img.naturalHeight || 200;
+              const ctx = canvas.getContext("2d");
+              ctx.fillStyle = "#ffffff";
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+              ctx.drawImage(img, 0, 0);
+              const dataUrl = canvas.toDataURL("image/png", 1.0);
+              resolve(dataUrl);
+            } catch (drawErr) {
+              reject(drawErr);
+            }
+          };
+          img.onerror = (e) => reject(e);
+          img.src = src;
+        });
+      } catch (imgErr) {
+        console.warn("Both fetch and image fallback failed for:", src, imgErr);
+        return null;
+      }
+    }
+  }
+
+  // Convert images inside `node` to inline data URLs (best-effort)
+  async function convertImagesToDataUrl(nodeEl) {
+    const images = Array.from(nodeEl.querySelectorAll("img"));
+    const results = await Promise.all(
+      images.map(async (img) => {
+        const originalSrc = img.src || "";
+        try {
+          if (/^data:/.test(originalSrc)) return originalSrc;
+          const dataUrl = await fetchImageAsDataUrl(originalSrc);
+          if (dataUrl) {
+            // replace in DOM so html2canvas will capture it
+            img.src = dataUrl;
+            return dataUrl;
+          } else {
+            console.warn("Could not inline image:", originalSrc);
+            return null;
+          }
+        } catch (err) {
+          console.warn("Error converting image:", originalSrc, err);
+          return null;
+        }
+      })
+    );
+
+    return results;
+  }
+
+  try {
+    // 1) Convert images to data URLs (best-effort). This fixes cross-origin missing images when successful.
+    const convResults = await convertImagesToDataUrl(node);
+    const failedCount = convResults.filter((r) => r === null).length;
+    if (failedCount > 0) {
+      notify({
+        downloading: true,
+        warning: `${failedCount} image(s) could not be inlined — likely a CORS issue on the image host.`,
+      });
+    }
+
+    // Allow DOM to update after we changed image src attributes
+    await new Promise((r) => setTimeout(r, 300));
+
+    // 2) Render node to canvas
+    const canvas = await html2canvas(node, {
+      scale,
+      useCORS: true,
+      allowTaint: false,
+      backgroundColor: "#ffffff",
+      logging: false,
+      imageTimeout: 0,
+      removeContainer: true,
+      onclone: (clonedDoc) => {
+        const clonedImages = clonedDoc.querySelectorAll("img");
+        const originalImages = node.querySelectorAll("img");
+        clonedImages.forEach((cImg, i) => {
+          if (originalImages[i]) cImg.src = originalImages[i].src;
+        });
+      },
+    });
+
+    // 3) Convert canvas to PNG data
+    const imgData = canvas.toDataURL("image/png", 1.0);
+
+    // 4) Build PDF and paginate
+    const pdf = new jsPDF("p", "mm", "a4");
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+
+    // Calculate image rendered size in mm
+    const imgWidth = pageWidth;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+    if (imgHeight <= pageHeight) {
+      // Single page
+      pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
+      pdf.save(fileName);
+      notify({ downloading: false });
+      return { success: true };
+    }
+
+    // Multi-page: draw same big image and offset it on each page
+    let remaining = imgHeight;
+    let position = 0;
+    let page = 0;
+
+    while (remaining > 0) {
+      if (page > 0) pdf.addPage();
+      // draw full image shifted up by 'position' mm so the proper slice shows
+      pdf.addImage(imgData, "PNG", 0, -position, imgWidth, imgHeight);
+      position += pageHeight;
+      remaining -= pageHeight;
+      page++;
+    }
+
+    pdf.save(fileName);
+    notify({ downloading: false });
+    return { success: true };
+  } catch (err) {
+    console.error("generatePDFFromNode error:", err);
+    notify({ downloading: false, error: err.message || String(err) });
+    throw err;
+  }
 }

@@ -96,3 +96,37 @@ export async function deleteLocation(locationId) {
   );
   return data;
 }
+
+// PRODUCTS
+// GET /api/v1/inventry/product/all?page=&limit=&search=
+export async function getProducts({ page = 1, limit = 30, search = "" } = {}) {
+  const params = new URLSearchParams();
+  params.set("page", String(page));
+  params.set("limit", String(limit));
+  if (search) params.set("search", String(search));
+  const { data } = await apiClient.get(`/api/v1/products/all?${params.toString()}`);
+  return data;
+}
+
+// DELETE /api/v1/inventry/product/delete/:id
+export async function deleteProduct(id) {
+  const { data } = await apiClient.delete(`/api/v1/inventry/product/delete/${id}`);
+  return data;
+}
+
+// INVENTORY
+export async function getInventory({ page = 1, limit = 30, search = "" } = {}) {
+  const params = new URLSearchParams();
+  params.set("page", String(page));
+  params.set("limit", String(limit));
+  if (search) params.set("search", String(search));
+  const { data } = await apiClient.get(`/api/v1/inventry/all?${params.toString()}`);
+  return data;
+}
+
+// PATCH /api/v1/inventry/quantity/:inventoryId
+export async function updateInventoryQuantity(inventoryId, quantity) {
+  const body = { quantity: String(quantity) };
+  const { data } = await apiClient.patch(`/api/v1/inventry/quantity/${inventoryId}`, body);
+  return data;
+}
