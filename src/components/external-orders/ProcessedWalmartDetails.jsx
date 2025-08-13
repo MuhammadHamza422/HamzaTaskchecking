@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Card, Row, Col, Tag } from "antd";
+import apiClient from "../../api/client";
 
 export default function ProcessedWalmartDetails({
   order,
@@ -7,6 +8,39 @@ export default function ProcessedWalmartDetails({
   onAddProduct = () => {},
   onEditProduct = () => {},
 }) {
+  const [mergedProducts, setMergedProducts] = useState([]);
+
+  // Load merged products for this order
+  const loadMergedProducts = async () => {
+    if (!selectedOrder?.orderId) return;
+    try {
+      const mergedRes = await apiClient.get(
+        `/api/v1/products/mapped/product/${selectedOrder.orderId}`
+      );
+      setMergedProducts(
+        Array.isArray(mergedRes.data?.product) ? mergedRes.data.product : []
+      );
+    } catch (err) {
+      console.error("Failed to fetch merged products", err);
+    }
+  };
+
+  useEffect(() => {
+    loadMergedProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedOrder?.orderId]);
+
+  // Compute hidden line item ids from merged productIds
+  const hiddenLineItemIds = useMemo(() => {
+    const set = new Set();
+    if (Array.isArray(mergedProducts)) {
+      mergedProducts.forEach((mp) => {
+        (mp?.productIds || []).forEach((id) => set.add(String(id)));
+      });
+    }
+    return set;
+  }, [mergedProducts]);
+
   // Helper function to format timestamp
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return "—";
@@ -123,8 +157,76 @@ export default function ProcessedWalmartDetails({
 
       {/* Order Items */}
       <Card size="small" title="Order Items" className="border-orange-200">
+        {/* Show merged products first */}
+        {mergedProducts.length > 0 && (
+          <div className="mb-4 p-3 bg-purple-50 rounded-lg border border-purple-200">
+            <div className="flex items-center gap-2 mb-3">
+              <Tag color="purple" className="font-medium">
+                Merged Products
+              </Tag>
+              <span className="text-sm text-gray-600">
+                {mergedProducts.length} merged product{mergedProducts.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <div className="space-y-2">
+              {mergedProducts.map((mergedProduct, index) => {
+                const firstProductId = mergedProduct?.productIds?.[0];
+                const firstProduct = order?.orderLines?.orderLine?.find(
+                  (line) => String(line?.lineNumber || line?.orderLineId || line?.id) === String(firstProductId)
+                );
+
+                return (
+                  <div
+                    key={index}
+                    className="flex justify-between p-3 bg-white rounded border border-purple-200"
+                  >
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-900">
+                        {mergedProduct?.productName || firstProduct?.item?.productName || "Merged Product"}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        SKU: {mergedProduct?.sku || firstProduct?.item?.sku || "N/A"} | Qty: {mergedProduct?.quantity || firstProduct?.orderLineQuantity?.amount || 1}
+                      </div>
+                      <div className="text-xs text-purple-600 mt-1">
+                        Contains {mergedProduct?.productIds?.length || 0} product{mergedProduct?.productIds?.length !== 1 ? 's' : ''}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="flex items-center gap-2 flex-wrap justify-end">
+                        <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-medium">
+                          Merged
+                        </span>
+                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
+                          Mapped
+                        </span>
+                        <button
+                          type="button"
+                          className="text-sm text-blue-600 p-1.5 rounded-md bg-blue-100 hover:bg-blue-200 transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEditProduct(firstProductId);
+                          }}
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Show individual unmapped products */}
         <div className="space-y-3">
-          {order?.orderLines?.orderLine?.map((line, i) => (
+          {(Array.isArray(order?.orderLines?.orderLine)
+            ? order.orderLines.orderLine.filter(
+                (line) =>
+                  !hiddenLineItemIds.has(String(line?.lineNumber || line?.orderLineId || line?.id))
+              )
+            : []
+          ).map((line, i) => (
             <div
               key={i}
               className="flex items-center justify-between p-3 bg-gray-50 rounded"
