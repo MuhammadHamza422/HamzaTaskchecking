@@ -6,7 +6,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { motion } from "framer-motion";
 import Swal from "sweetalert2";
 
-const navLinks = [
+  const navLinks = [
   { to: "/", label: "Dashboard", roles: ["sourcer", "purchaser", "admin"] },
   { to: "/sourcing/orders", label: "Sourcing Orders", roles: ["sourcer"] },
   { to: "/requests/pending", label: "Pending", roles: ["purchaser"] },
@@ -33,12 +33,12 @@ const navLinks = [
     roles: ["admin"],
     children: [
       {
-        to: "/admin/products",
+        to: "orders/admin/products",
         label: "Products",
         default: true,
       },
       {
-        to: "/merged-products",
+        to: "orders/merged-products",
         label: "Merged Products",
       },
     ],
@@ -49,23 +49,23 @@ const navLinks = [
     roles: ["admin", "sourcer", "purchaser"],
     children: [
       {
-        to: "/external/orders/pending",
+        to: "orders/external/orders/pending",
         label: "Pending Orders",
         default: true,
       },
       {
-        to: "/external/orders/processed",
+        to: "orders/external/orders/processed",
         label: "Processed Orders",
       },
     ],
   },
   {
-    to: "/platforms",
+    to: "orders/platforms",
     label: "Platforms",
     roles: ["admin"],
   },
   {
-    to: "/kits",
+    to: "orders/kits",
     label: "Kits",
     roles: ["admin"],
   },
@@ -76,6 +76,10 @@ const MainLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const pathName = location.pathname;
+
+  console.log("pathName", pathName);
+
 
   const handleNavClick = (to) => {
     if (location.pathname === to) {
@@ -86,6 +90,21 @@ const MainLayout = () => {
     }
     setIsMobileMenuOpen(false);
   };
+
+
+
+
+const filteredLinks =
+  pathName.startsWith("/admin")
+    ? navLinks.filter(link => ["Users", "Dashboard"].includes(link.label))
+    : pathName.startsWith("/orders")
+    ? navLinks.filter(link =>
+        ["Dashboard", "Products", "Orders", "Platforms", "Kits"].includes(link.label)
+      )
+    : pathName === "/" || pathName.startsWith("/inventory")
+    ? navLinks.filter(link => link.label === "Dashboard")
+    : navLinks.filter(link => link.roles?.includes(user.role));
+
 
   const handleLogout = async () => {
     const result = await Swal.fire({
@@ -115,9 +134,9 @@ const MainLayout = () => {
       user.email?.split("@")[0]
     : "Guest";
 
-  const filteredNavLinks = navLinks.filter(
-    (link) => user && user.role && link.roles.includes(user.role)
-  );
+  // const filteredNavLinks = navLinks.filter(
+  //   (link) => user && user.role && link.roles.includes(user.role)
+  // );
 
   return (
     <div className="min-h-screen bg-[#f4f6fa] overflow-x-hidden">
@@ -174,7 +193,7 @@ const MainLayout = () => {
           {/* Mobile Navigation Links */}
           <div className="flex-1 overflow-y-auto p-4">
             <nav className="space-y-2">
-              {filteredNavLinks.map((link) => {
+              {filteredLinks.map((link) => {
                 if (link.isDropdown) {
                   // Orders dropdown for mobile
                   return (
@@ -274,6 +293,7 @@ const MainLayout = () => {
         }}
         className="sm:px-6 md:px-10"
       >
+        <div className="flex items-center gap-10">
         <img
           src="/logo.png"
           alt="Logo"
@@ -282,8 +302,8 @@ const MainLayout = () => {
         />
 
         {/* Desktop Navigation - Hidden on mobile */}
-        <nav className="hidden lg:flex gap-6">
-          {filteredNavLinks.map((link) => {
+        <nav className="hidden lg:flex gap-6 mt-4">
+          {filteredLinks.map((link) => {
             if (link.isDropdown) {
               // Orders dropdown
               const isAnyActive = link.children.some((child) => location.pathname === child.to);
@@ -340,6 +360,7 @@ const MainLayout = () => {
             }
           })}
         </nav>
+        </div>
 
         <motion.div
           initial={{ opacity: 0, x: 10 }}

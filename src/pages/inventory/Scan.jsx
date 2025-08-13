@@ -1,11 +1,12 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { ArrowLeft, Camera, Type, Search, Scan, Package, Loader2 } from "lucide-react"
-import apiClient from "../../api/client"
+import { ArrowLeft, Camera, Type, Search, Scan, Package, Loader2, Keyboard } from "lucide-react"
 import InventoryDisplay from "./inventory-display"
+import apiClient from "../../api/client"
 
-export default function ProductSearchPage() {
+
+export default function ScanProduct() {
   const [mode, setMode] = useState("select")
   const [searchQuery, setSearchQuery] = useState("")
   const [isScanning, setIsScanning] = useState(false)
@@ -16,6 +17,10 @@ export default function ProductSearchPage() {
   const [scannedData, setScannedData] = useState("")
   const [cameraError, setCameraError] = useState("")
   const [isCameraReady, setIsCameraReady] = useState(false)
+  const [barcodeBuffer, setBarcodeBuffer] = useState("")
+  const [lastBarcodeTime, setLastBarcodeTime] = useState(0)
+  const [barcodeDetected, setBarcodeDetected] = useState(false)
+
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
   const streamRef = useRef(null)
@@ -23,9 +28,85 @@ export default function ProductSearchPage() {
   const jsQRRef = useRef(null)
   const lastScanTimeRef = useRef(0)
   const scanningActiveRef = useRef(false)
+  const barcodeTimeoutRef = useRef(null)
+  const hiddenInputRef = useRef(null)
 
   console.log("Search Results:", searchResults)
   console.log("Total Inventory:", totalInventory)
+
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      if (mode === "manual" && document.activeElement?.tagName === "INPUT") {
+        return
+      }
+
+      const currentTime = Date.now()
+      const timeDiff = currentTime - lastBarcodeTime
+
+      // If too much time has passed, reset the buffer (new barcode scan)
+      if (timeDiff > 100) {
+        setBarcodeBuffer("")
+      }
+
+      // Add character to buffer
+      if (e.key.length === 1) {
+        setBarcodeBuffer((prev) => prev + e.key)
+        setLastBarcodeTime(currentTime)
+
+        if (barcodeTimeoutRef.current) {
+          clearTimeout(barcodeTimeoutRef.current)
+        }
+
+        barcodeTimeoutRef.current = setTimeout(() => {
+          const finalBarcode = barcodeBuffer + e.key
+          if (finalBarcode.length >= 8) {
+           
+            handleBarcodeDetection(finalBarcode)
+            setBarcodeBuffer("")
+          }
+        }, 50)
+      }
+
+      // Handle Enter key 
+      if (e.key === "Enter" && barcodeBuffer.length >= 8) {
+        e.preventDefault()
+        handleBarcodeDetection(barcodeBuffer)
+        setBarcodeBuffer("")
+      }
+    }
+
+    // Add global keypress listener
+    document.addEventListener("keypress", handleKeyPress)
+
+    return () => {
+      document.removeEventListener("keypress", handleKeyPress)
+      if (barcodeTimeoutRef.current) {
+        clearTimeout(barcodeTimeoutRef.current)
+      }
+    }
+  }, [barcodeBuffer, lastBarcodeTime, mode])
+
+  const handleBarcodeDetection = async (barcode) => {
+    console.log("Barcode detected:", barcode)
+    setBarcodeDetected(true)
+    setScannedData(barcode)
+
+    document.body.style.backgroundColor = "#dcfce7" 
+    setTimeout(() => {
+      document.body.style.backgroundColor = ""
+    }, 300)
+
+  
+    await handleSearch(barcode)
+
+  
+    setTimeout(() => {
+      setBarcodeDetected(false)
+      if (scannedData === barcode) {
+        setScannedData("")
+      }
+    }, 3000)
+  }
 
   const startCamera = async () => {
     try {
@@ -283,6 +364,13 @@ export default function ProductSearchPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <input
+        ref={hiddenInputRef}
+        style={{ position: "absolute", left: "-9999px", opacity: 0 }}
+        tabIndex={-1}
+        aria-hidden="true"
+      />
+
       <div className="bg-white border-b border-slate-200 px-6 py-4 shadow-sm">
         <div className="flex items-center gap-4">
           {mode !== "select" && (
@@ -302,6 +390,16 @@ export default function ProductSearchPage() {
         </div>
       </div>
 
+      {barcodeDetected && (
+        <div className="bg-green-500 text-white px-6 py-3 text-center">
+          <div className="flex items-center justify-center gap-2">
+            <Keyboard className="h-4 w-4" />
+            <span className="font-semibold">Barcode Scanner Detected!</span>
+            <span className="text-green-100">Searching: {scannedData}</span>
+          </div>
+        </div>
+      )}
+
       <div className="p-6">
         {mode === "select" && (
           <div className="space-y-6">
@@ -309,6 +407,21 @@ export default function ProductSearchPage() {
               <h2 className="text-lg font-semibold text-slate-800 font-sans">Choose Search Method</h2>
 
               <div className="grid grid-cols-1 gap-4">
+                <div className="p-4 bg-green-50 border-2 border-green-200 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <Keyboard className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-green-900 font-sans">Barcode Scanner Ready</h3>
+                      <p className="text-sm text-green-700 font-sans">
+                        Physical barcode scanners will auto-search products
+                      </p>
+                    </div>
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                  </div>
+                </div>
+
                 <div
                   className="p-6 bg-white rounded-xl border-2 border-slate-200 hover:border-blue-300 hover:shadow-lg transition-all duration-200 cursor-pointer group"
                   onClick={() => {
@@ -349,9 +462,14 @@ export default function ProductSearchPage() {
             {searchResults.length > 0 && (
               <div className="space-y-4">
                 {scannedData && (
-                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                    <p className="text-sm text-green-700 font-sans">
-                      <span className="font-semibold">Scanned QR Code:</span> {scannedData}
+                  <div
+                    className={`p-3 border rounded-lg ${
+                      barcodeDetected ? "bg-green-50 border-green-200" : "bg-blue-50 border-blue-200"
+                    }`}
+                  >
+                    <p className={`text-sm font-sans ${barcodeDetected ? "text-green-700" : "text-blue-700"}`}>
+                      <span className="font-semibold">{barcodeDetected ? "Scanned Barcode:" : "Scanned QR Code:"}</span>{" "}
+                      {scannedData}
                     </p>
                   </div>
                 )}
@@ -468,8 +586,8 @@ export default function ProductSearchPage() {
               </button>
             </div>
 
-               {/* Scanned Results */}
-              {searchResults.length > 0 && (
+            {/* Scanned Results */}
+            {searchResults.length > 0 && (
               <div className="space-y-4">
                 {scannedData && (
                   <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
@@ -484,7 +602,6 @@ export default function ProductSearchPage() {
             )}
           </div>
         )}
-
 
         {mode === "manual" && (
           <div className="space-y-6">

@@ -54,14 +54,19 @@ function App() {
         <Route path="requests/pending" element={<PurchaserPendingPage />} />
         <Route path="requests/my" element={<PurchaserPage />} />
         <Route path="requests/:sourcingId" element={<RequestDetailPage />} />
+        {/* Admin User Routes */}
         <Route path="admin/users" element={<AdminUsersPage />} />
-        <Route path="admin/products" element={<AdminProductsPage />} />
-        <Route path="external/orders/pending" element={<ExternalOrdersPage />} />
-        <Route path="external/orders/processed" element={<ProcessedOrdersPage />} />
-        <Route path="platforms" element={<PlatformsPage />} />
-        <Route path="kits" element={<KitsPage />} />
-        <Route path="merged-products" element={<MergedProductsPage />} />
         <Route path="admin/user-activity" element={<UserActivityPage />} />
+        {/* Orders Routes */}
+        <Route path="orders/admin/products" element={<AdminProductsPage />} />
+        <Route path="orders/merged-products" element={<MergedProductsPage />} />
+        <Route path="orders/external/orders/pending" element={<ExternalOrdersPage />} />
+        <Route path="orders/external/orders/processed" element={<ProcessedOrdersPage />} />
+        <Route path="orders/platforms" element={<PlatformsPage />} />
+        <Route path="orders/kits" element={<KitsPage />} />
+      
+       
+        {/* Inventory Routes */}
         <Route path="inventory" element={<InventoryLayout />}>
           <Route index element={<Inventory />} />
           <Route path="warehouses" element={<Warehouses />} />
