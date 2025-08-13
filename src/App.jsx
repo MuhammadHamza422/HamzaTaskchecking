@@ -31,7 +31,7 @@ import Locations from "./pages/inventory/Locations";
 import InventoryList from "./pages/inventory/InventoryList";
 import Products from "./pages/inventory/Products";
 import UploadProducts from "./pages/inventory/UploadProducts";
-import Scan from "./pages/inventory/Scan";
+import ScanProduct from "./pages/inventory/Scan";
 
 
 function App() {
@@ -70,7 +70,7 @@ function App() {
           <Route path="inventory" element={<InventoryList />} />
           <Route path="products" element={<Products />} />
           <Route path="products/upload" element={<UploadProducts />} />
-          <Route path="scan" element={<Scan />} />
+          <Route path="scan" element={<ScanProduct />} />
         </Route>
       </Route>
       {/* Catch all route - redirect to dashboard if logged in, login if not */}
