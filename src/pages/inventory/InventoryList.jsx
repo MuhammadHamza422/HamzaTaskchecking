@@ -1,17 +1,21 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FiArrowLeft, FiSearch } from "react-icons/fi";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  createInventory,
   getInventory,
+  getProducts,
   getWarehouse,
   getZonesByWarehouse,
   updateInventoryQuantity,
+  getLocations,
 } from "../../api/warehouse";
 import ProductTableSkeleton from "./components/ProductTableSkeleton";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { setSelectedZoneId } from "../../store/appSlice";
 import { Minus, Plus } from "lucide-react";
+import Swal from "sweetalert2";
 
 export default function InventoryList() {
   const [page, setPage] = useState(1);
@@ -38,6 +42,8 @@ export default function InventoryList() {
       updatedAt: row.updatedAt,
       productTitle: row.productData?.pro_title,
       locationCode: row.locationData?.code,
+      sku: row.productData?.sku,
+      modelCode: row.productData?.model_code,
     }));
     return mapped;
   }, [data]);
@@ -54,47 +60,6 @@ export default function InventoryList() {
       rows,
     }));
   }, [items]);
-
-  const updateQty = useMutation({
-    mutationFn: ({ id, quantity }) => updateInventoryQuantity(id, quantity),
-    onMutate: async ({ id, quantity }) => {
-      await queryClient.cancelQueries({
-        queryKey: ["inventory", page, limit, searchTerm],
-      });
-      const previous = queryClient.getQueryData([
-        "inventory",
-        page,
-        limit,
-        searchTerm,
-      ]);
-      queryClient.setQueryData(
-        ["inventory", page, limit, searchTerm],
-        (old) => {
-          if (!old || !Array.isArray(old.inventry)) return old;
-          return {
-            ...old,
-            inventry: old.inventry.map((it) =>
-              it._id === id ? { ...it, quantity } : it
-            ),
-          };
-        }
-      );
-      return { previous };
-    },
-    onError: (_err, _vars, ctx) => {
-      if (ctx?.previous) {
-        queryClient.setQueryData(
-          ["inventory", page, limit, searchTerm],
-          ctx.previous
-        );
-      }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["inventory", page, limit, searchTerm],
-      });
-    },
-  });
 
   const total = data?.totalInventry || 0;
   const totalPages = Math.max(1, Math.ceil(total / limit));
@@ -121,6 +86,168 @@ export default function InventoryList() {
     return match?.name || "";
   }, [zonesRes, selectedZoneId]);
 
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [activeLocationCode, setActiveLocationCode] = useState("");
+  const [form, setForm] = useState({
+    productId: "",
+    locationId: "",
+    quantity: "",
+    productSearch: "",
+    showProductDropdown: false,
+  });
+  const dropdownRef = useRef(null);
+
+  // New state for adding to new location
+  const [isNewLocationModalOpen, setIsNewLocationModalOpen] = useState(false);
+  const [newLocationForm, setNewLocationForm] = useState({
+    productId: "",
+    locationId: "",
+    quantity: "",
+    productSearch: "",
+    showProductDropdown: false,
+    showLocationDropdown: false,
+    locationSearch: "",
+  });
+  const newLocationDropdownRef = useRef(null);
+  const newProductDropdownRef = useRef(null);
+
+  // Fetch products for dropdown
+  const { data: productsData } = useQuery({
+    queryKey: ["products", 1, 50, ""],
+    queryFn: () => getProducts({ page: 1, limit: 50, search: "" }),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Fetch locations for dropdown
+  const { data: locationsData } = useQuery({
+    queryKey: ["locations"],
+    queryFn: () => getLocations(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Handle click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setForm((prev) => ({ ...prev, showProductDropdown: false }));
+      }
+      if (newLocationDropdownRef.current && !newLocationDropdownRef.current.contains(event.target)) {
+        setNewLocationForm((prev) => ({ ...prev, showLocationDropdown: false }));
+      }
+      if (newProductDropdownRef.current && !newProductDropdownRef.current.contains(event.target)) {
+        setNewLocationForm((prev) => ({ ...prev, showProductDropdown: false }));
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const createInv = useMutation({
+    mutationFn: (body) => createInventory(body),
+    onSuccess: (data, variables) => {
+      setIsCreateOpen(false);
+      setForm({
+        productId: "",
+        locationId: "",
+        quantity: "",
+        productSearch: "",
+        showProductDropdown: false,
+      });
+
+      // Add the new product to local state immediately for instant UI update
+      const newProduct = {
+        _id: data?.inventory?._id || `temp-${Date.now()}`,
+        quantity: Number(variables.quantity),
+        productTitle:
+          productsData?.products?.find((p) => p._id === variables.productId)
+            ?.title ||
+          productsData?.products?.find((p) => p._id === variables.productId)
+            ?.pro_title ||
+          productsData?.products?.find((p) => p._id === variables.productId)
+            ?.name ||
+          productsData?.products?.find((p) => p._id === variables.productId)
+            ?.sku ||
+          productsData?.products?.find((p) => p._id === variables.productId)
+            ?.model_code ||
+          "New Product",
+        locationCode: activeLocationCode,
+      };
+
+      // Force a re-render by updating the query data
+      queryClient.setQueryData(
+        ["inventory", page, limit, searchTerm],
+        (old) => {
+          if (!old) return old;
+          console.log("Updating cache with new product:", newProduct);
+          console.log("Old cache data:", old);
+
+          const updatedInventry = [
+            ...(old.inventry || []),
+            {
+              _id: newProduct._id,
+              quantity: newProduct.quantity,
+              productData: { 
+                pro_title: newProduct.productTitle,
+                sku: productsData?.products?.find((p) => p._id === variables.productId)?.sku || "N/A",
+                model_code: productsData?.products?.find((p) => p._id === variables.productId)?.model_code || "N/A"
+              },
+              locationData: {
+                code: newProduct.locationCode,
+                _id: variables.locationId, // Use the actual locationId from the form
+              },
+            },
+          ];
+
+          console.log("Updated inventry:", updatedInventry);
+
+          return {
+            ...old,
+            inventry: updatedInventry,
+            totalInventry: (old.totalInventry || 0) + 1,
+          };
+        }
+      );
+
+      Swal.fire({
+        icon: "success",
+        title: "Product Added Successfully",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+        background: "#10b981",
+        color: "#fff",
+        customClass: {
+          popup: "rounded-lg",
+        },
+      });
+
+      // Refetch the current inventory data immediately
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      // Also refresh the scan results if they exist
+      if (items && items.length > 0) {
+        // Trigger a refetch by updating the query key
+        queryClient.invalidateQueries({ queryKey: ["scan-results"] });
+      }
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="bg-white rounded-xl border p-4 animate-pulse">
+            <div className="h-4 bg-slate-200 rounded w-1/3 mb-3" />
+            <div className="h-10 bg-slate-200 rounded" />
+          </div>
+        ))}
+      </div>
+    );
+  }
   return (
     <>
       <nav className="text-sm text-gray-600 flex items-center space-x-2 py-4">
@@ -166,15 +293,24 @@ export default function InventoryList() {
           </p>
         </div>
 
-        <div className="relative w-full sm:w-80">
-          <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search product or location…"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-3 py-2 border rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 outline-none duration-300 ease-in-out"
-          />
+        <div className="flex gap-3">
+          <div className="relative w-full sm:w-80">
+            <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search product or location…"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-3 py-2 border rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 outline-none duration-300 ease-in-out"
+            />
+          </div>
+          <button
+            onClick={() => setIsNewLocationModalOpen(true)}
+            className="flex items-center justify-center gap-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-4 py-2 rounded-xl font-medium transition-all duration-200 transform shadow-lg hover:shadow-xl whitespace-nowrap"
+          >
+            <Plus className="h-4 w-4" />
+            Add to New Location
+          </button>
         </div>
       </div>
       <div className="max-w-7xl mx-auto py-6 space-y-6">
@@ -192,69 +328,71 @@ export default function InventoryList() {
                 key={locationCode}
                 className="overflow-hidden rounded-lg border"
               >
-                <p className="bg-white border-b border-gray-200 px-4 py-2 font-bold text-xl uppercase tracking-wide">
-                  {locationCode}
-                </p>
+                <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-200 ">
+                  <p className="font-bold text-xl uppercase tracking-wide">
+                    {locationCode}
+                  </p>
+                  {/* <button
+                    onClick={() => {
+                      setActiveLocationCode(locationCode);
+                      // Find the location ID from the current items data
+                      const currentLocation = data?.inventry?.find(
+                        (item) => item.locationData?.code === locationCode
+                      );
+                      console.log("Opening modal for location:", locationCode);
+                      console.log("Found location data:", currentLocation);
+                      if (currentLocation?.locationData?._id) {
+                        setForm((prev) => ({
+                          ...prev,
+                          locationId: currentLocation.locationData._id,
+                          productSearch: "",
+                          showProductDropdown: false,
+                        }));
+                        console.log(
+                          "Set locationId to:",
+                          currentLocation.locationData._id
+                        );
+                      } else {
+                        console.error(
+                          "Could not find location ID for:",
+                          locationCode
+                        );
+                      }
+                      setIsCreateOpen(true);
+                    }}
+                    className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-2 py-1.5 rounded-xl font-medium transition-all duration-200 transform shadow-lg hover:shadow-xl whitespace-nowrap"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Product
+                  </button> */}
+                </div>
                 <div>
                   {rows.map((r, idx) => (
                     <div
                       key={r.id}
-                      className={`flex items-center justify-between px-4 py-1.5 hover:bg-gray-50 bg-white ${
+                      className={`flex items-center justify-between px-4 py-3 hover:bg-gray-50 bg-white ${
                         idx !== 0 ? "border-t" : ""
                       }`}
                     >
-                      <p
-                        title={r?.productTitle}
-                        className="text-sm font-medium line-clamp-2 leading-relaxed"
-                      >
-                        {r?.productTitle}
-                      </p>
-                        <div className="flex items-center rounded-lg overflow-hidden border border-gray-200 shadow-sm bg-gray-50 h-9">
-                          <button
-                            disabled={Number(r.quantity) <= 0}
-                            onClick={() => {
-                              const q = Math.max(0, Number(r.quantity) - 1);
-                              updateQty.mutate({ id: r.id, quantity: q });
-                            }}
-                            className={`px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors ${
-                              Number(r.quantity) <= 0
-                                ? "text-gray-300 bg-gray-50 cursor-not-allowed"
-                                : "text-red-400 bg-red-100 hover:bg-red-800 hover:text-white"
-                            }`}
-                            title="Decrease"
-                            aria-label={`Decrease quantity for ${r.productTitle}`}
-                          >
-                            <Minus className="w-4 h-4" />
-                          </button>
-                          <input
-                            value={r.quantity}
-                            onChange={(e) => {
-                              const val = e.target.value.replace(/[^0-9]/g, "");
-                              const q = Math.max(
-                                0,
-                                val === "" ? 0 : Number(val)
-                              );
-                              updateQty.mutate({ id: r.id, quantity: q });
-                            }}
-                            className="w-14 text-center px-3 py-2 text-sm bg-white border-l border-r outline-none focus:ring-0"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            title="Enter quantity"
-                            aria-label={`Quantity for ${r.productTitle}`}
-                            readOnly
-                          />
-                          <button
-                            onClick={() => {
-                              const q = Number(r.quantity) + 1;
-                              updateQty.mutate({ id: r.id, quantity: q });
-                            }}
-                            className="px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors bg-green-100 text-green-600 hover:bg-green-900 hover:text-white"
-                            title="Increase"
-                            aria-label={`Increase quantity for ${r.productTitle}`}
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
+                      <div className="flex-1">
+                        <p
+                          title={r?.productTitle}
+                          className="text-sm font-medium line-clamp-2 leading-relaxed mb-1"
+                        >
+                          {r?.productTitle}
+                        </p>
+                        <div className="flex items-center gap-4 text-xs text-gray-600">
+                          <span className="font-mono bg-gray-100 px-2 py-1 rounded">
+                            SKU: {r?.sku || "N/A"}
+                          </span>
+                          <span className="font-mono bg-blue-100 px-2 py-1 rounded text-blue-700">
+                            Model: {r?.modelCode || "N/A"}
+                          </span>
+                          <span className="text-gray-500">
+                            Qty: {r?.quantity}
+                          </span>
                         </div>
+                      </div>
                     </div>
                   ))}
                   {rows.length === 0 && (
@@ -329,6 +467,335 @@ export default function InventoryList() {
           </div>
         </div>
       </div>
+
+      {isCreateOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-lg">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Create Inventory</h3>
+              <button
+                onClick={() => setIsCreateOpen(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                console.log("Form data:", form);
+                console.log("Active location code:", activeLocationCode);
+                console.log("Form locationId:", form.locationId);
+                if (!form.productId || !form.locationId || !form.quantity)
+                  return;
+                createInv.mutate({
+                  productId: form.productId,
+                  locationId: form.locationId,
+                  quantity: String(form.quantity),
+                });
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Location
+                </label>
+                <div className="w-full rounded-md border px-3 py-2 text-sm bg-gray-50 text-gray-600">
+                  {activeLocationCode}
+                </div>
+              </div>
+
+              <div className="relative" ref={dropdownRef}>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Product
+                </label>
+                <input
+                  type="text"
+                  placeholder="Search products..."
+                  value={form.productSearch}
+                  onChange={(e) => {
+                    setForm((prev) => ({
+                      ...prev,
+                      productSearch: e.target.value,
+                      showProductDropdown: true,
+                      productId: "",
+                    }));
+                  }}
+                  onFocus={() =>
+                    setForm((prev) => ({ ...prev, showProductDropdown: true }))
+                  }
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  required
+                />
+                {form.showProductDropdown && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
+                    {Array.isArray(productsData?.products) ? (
+                      productsData.products
+                        .filter((p) =>
+                          (p.title || p.pro_title || p.name || p.sku || "")
+                            .toLowerCase()
+                            .includes((form.productSearch || "").toLowerCase())
+                        )
+                        .map((p) => (
+                          <div
+                            key={p._id}
+                            onClick={() => {
+                              setForm((prev) => ({
+                                ...prev,
+                                productId: p._id,
+                                productSearch:
+                                  p.title || p.pro_title || p.name || p.sku,
+                                showProductDropdown: false,
+                              }));
+                            }}
+                            className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                          >
+                            {p.title || p.pro_title || p.name || p.sku}
+                          </div>
+                        ))
+                    ) : (
+                      <div className="px-3 py-2 text-gray-500 text-sm">
+                        Loading products...
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Quantity
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.quantity}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      quantity: e.target.value.replace(/[^0-9]/g, ""),
+                    }))
+                  }
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  placeholder="e.g., 5"
+                  required
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateOpen(false)}
+                  className="px-4 py-2 text-sm rounded-lg border"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white"
+                >
+                  {createInv.isLoading ? "Saving…" : "Save"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* New Location Modal */}
+      {isNewLocationModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-lg">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Add Product to New Location</h3>
+              <button
+                onClick={() => setIsNewLocationModalOpen(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                console.log("New location form data:", newLocationForm);
+                if (!newLocationForm.productId || !newLocationForm.locationId || !newLocationForm.quantity)
+                  return;
+                createInv.mutate({
+                  productId: newLocationForm.productId,
+                  locationId: newLocationForm.locationId,
+                  quantity: String(newLocationForm.quantity),
+                });
+                // Reset form and close modal
+                setNewLocationForm({
+                  productId: "",
+                  locationId: "",
+                  quantity: "",
+                  productSearch: "",
+                  showProductDropdown: false,
+                  showLocationDropdown: false,
+                  locationSearch: "",
+                });
+                setIsNewLocationModalOpen(false);
+              }}
+              className="space-y-4"
+            >
+              {/* Location Selection */}
+              <div className="relative" ref={newLocationDropdownRef}>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Location
+                </label>
+                <input
+                  type="text"
+                  placeholder="Search locations..."
+                  value={newLocationForm.locationSearch}
+                  onChange={(e) => {
+                    setNewLocationForm((prev) => ({
+                      ...prev,
+                      locationSearch: e.target.value,
+                      showLocationDropdown: true,
+                      locationId: "",
+                    }));
+                  }}
+                  onFocus={() =>
+                    setNewLocationForm((prev) => ({ ...prev, showLocationDropdown: true }))
+                  }
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  required
+                />
+                {newLocationForm.showLocationDropdown && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
+                    {Array.isArray(locationsData?.locations) ? (
+                      locationsData.locations
+                        .filter((loc) =>
+                          (loc.code || "")
+                            .toLowerCase()
+                            .includes((newLocationForm.locationSearch || "").toLowerCase())
+                        )
+                        .map((loc) => (
+                          <div
+                            key={loc._id}
+                            onClick={() => {
+                              setNewLocationForm((prev) => ({
+                                ...prev,
+                                locationId: loc._id,
+                                locationSearch: loc.code,
+                                showLocationDropdown: false,
+                              }));
+                            }}
+                            className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                          >
+                            {loc.code} ({loc.type})
+                          </div>
+                        ))
+                    ) : (
+                      <div className="px-3 py-2 text-gray-500 text-sm">
+                        Loading locations...
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Product Selection */}
+              <div className="relative" ref={newProductDropdownRef}>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Product
+                </label>
+                <input
+                  type="text"
+                  placeholder="Search products..."
+                  value={newLocationForm.productSearch}
+                  onChange={(e) => {
+                    setNewLocationForm((prev) => ({
+                      ...prev,
+                      productSearch: e.target.value,
+                      showProductDropdown: true,
+                      productId: "",
+                    }));
+                  }}
+                  onFocus={() =>
+                    setNewLocationForm((prev) => ({ ...prev, showProductDropdown: true }))
+                  }
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  required
+                />
+                {newLocationForm.showProductDropdown && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
+                    {Array.isArray(productsData?.products) ? (
+                      productsData.products
+                        .filter((p) =>
+                          (p.title || p.pro_title || p.name || p.sku || "")
+                            .toLowerCase()
+                            .includes((newLocationForm.productSearch || "").toLowerCase())
+                        )
+                        .map((p) => (
+                          <div
+                            key={p._id}
+                            onClick={() => {
+                              setNewLocationForm((prev) => ({
+                                ...prev,
+                                productId: p._id,
+                                productSearch:
+                                  p.title || p.pro_title || p.name || p.sku,
+                                showProductDropdown: false,
+                              }));
+                            }}
+                            className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                          >
+                            {p.title || p.pro_title || p.name || p.sku}
+                          </div>
+                        ))
+                    ) : (
+                      <div className="px-3 py-2 text-gray-500 text-sm">
+                        Loading products...
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Quantity */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Quantity
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={newLocationForm.quantity}
+                  onChange={(e) =>
+                    setNewLocationForm((f) => ({
+                      ...f,
+                      quantity: e.target.value.replace(/[^0-9]/g, ""),
+                    }))
+                  }
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  placeholder="e.g., 5"
+                  required
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsNewLocationModalOpen(false)}
+                  className="px-4 py-2 text-sm rounded-lg border"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createInv.isLoading}
+                  className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white disabled:opacity-60"
+                >
+                  {createInv.isLoading ? "Saving…" : "Save"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }
