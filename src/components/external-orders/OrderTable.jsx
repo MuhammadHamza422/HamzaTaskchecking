@@ -53,7 +53,7 @@ export default function OrderTable({
       `${pad(date.getMinutes())}:` +
       `${pad(date.getSeconds())}`;
 
-    return <span className="text-sm text-gray-600">{formatted}</span>;
+    return <span className="text-sm text-gray-600 whitespace-nowrap">{formatted}</span>;
   };
 
   // Platform-specific column configurations
@@ -229,7 +229,7 @@ export default function OrderTable({
           dataIndex: "app_id",
           key: "app_id",
           render: (app_id) => (
-            <span className={app_id ? "text-green-600" : "text-gray-400"}>
+            <span className={`whitespace-nowrap ${app_id ? "text-green-600" : "text-gray-400"}`}>
               {app_id || "No app ID"}
             </span>
           ),
@@ -336,7 +336,7 @@ export default function OrderTable({
           dataIndex: "app_id",
           key: "app_id",
           render: (app_id) => (
-            <span className={app_id ? "text-green-600" : "text-gray-400"}>
+            <span className={`whitespace-nowrap ${app_id ? "text-green-600" : "text-gray-400"}`}>
               {app_id || "No app ID"}
             </span>
           ),
@@ -408,7 +408,7 @@ export default function OrderTable({
           dataIndex: "app_id",
           key: "app_id",
           render: (app_id) => (
-            <span className={app_id ? "text-green-600" : "text-gray-400"}>
+            <span className={`whitespace-nowrap ${app_id ? "text-green-600" : "text-gray-400"}`}>
               {app_id || "No app ID"}
             </span>
           ),
@@ -481,7 +481,7 @@ export default function OrderTable({
           dataIndex: "app_id",
           key: "app_id",
           render: (app_id) => (
-            <span className={app_id ? "text-green-600" : "text-gray-400"}>
+            <span className={`whitespace-nowrap ${app_id ? "text-green-600" : "text-gray-400"}`}>
               {app_id || "No app ID"}
             </span>
           ),

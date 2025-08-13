@@ -7,7 +7,6 @@ import {
   getProducts,
   getWarehouse,
   getZonesByWarehouse,
-  updateInventoryQuantity,
   getLocations,
 } from "../../api/warehouse";
 import ProductTableSkeleton from "./components/ProductTableSkeleton";
@@ -131,10 +130,19 @@ export default function InventoryList() {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setForm((prev) => ({ ...prev, showProductDropdown: false }));
       }
-      if (newLocationDropdownRef.current && !newLocationDropdownRef.current.contains(event.target)) {
-        setNewLocationForm((prev) => ({ ...prev, showLocationDropdown: false }));
+      if (
+        newLocationDropdownRef.current &&
+        !newLocationDropdownRef.current.contains(event.target)
+      ) {
+        setNewLocationForm((prev) => ({
+          ...prev,
+          showLocationDropdown: false,
+        }));
       }
-      if (newProductDropdownRef.current && !newProductDropdownRef.current.contains(event.target)) {
+      if (
+        newProductDropdownRef.current &&
+        !newProductDropdownRef.current.contains(event.target)
+      ) {
         setNewLocationForm((prev) => ({ ...prev, showProductDropdown: false }));
       }
     };
@@ -189,10 +197,16 @@ export default function InventoryList() {
             {
               _id: newProduct._id,
               quantity: newProduct.quantity,
-              productData: { 
+              productData: {
                 pro_title: newProduct.productTitle,
-                sku: productsData?.products?.find((p) => p._id === variables.productId)?.sku || "N/A",
-                model_code: productsData?.products?.find((p) => p._id === variables.productId)?.model_code || "N/A"
+                sku:
+                  productsData?.products?.find(
+                    (p) => p._id === variables.productId
+                  )?.sku || "N/A",
+                model_code:
+                  productsData?.products?.find(
+                    (p) => p._id === variables.productId
+                  )?.model_code || "N/A",
               },
               locationData: {
                 code: newProduct.locationCode,
@@ -238,14 +252,78 @@ export default function InventoryList() {
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
-        {[...Array(3)].map((_, i) => (
-          <div key={i} className="bg-white rounded-xl border p-4 animate-pulse">
-            <div className="h-4 bg-slate-200 rounded w-1/3 mb-3" />
-            <div className="h-10 bg-slate-200 rounded" />
+      <>
+        <nav className="text-sm text-gray-600 flex items-center space-x-2 py-4">
+          <button
+            onClick={() => navigate("/inventory/warehouses")}
+            className="flex items-center space-x-1 hover:underline"
+          >
+            <FiArrowLeft /> <span>Warehouses</span>
+          </button>
+          <span>/</span>
+          {warehouseName && (
+            <>
+              <span
+                onClick={() => navigate("/inventory/warehouses")}
+                className="cursor-pointer hover:underline"
+              >
+                {warehouseName}
+              </span>
+              <span>/</span>
+            </>
+          )}
+          {zoneName && (
+            <>
+              <span
+                onClick={() => {
+                  if (selectedZoneId) dispatch(setSelectedZoneId(selectedZoneId));
+                  navigate("/inventory/zones");
+                }}
+                className="cursor-pointer hover:underline"
+              >
+                {zoneName}
+              </span>
+              <span>/</span>
+            </>
+          )}
+          <span className="font-medium">Inventory</span>
+        </nav>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-zinc-200 bg-white p-6">
+          <div>
+            <h1 className="text-2xl font-semibold">Inventory by location</h1>
+            <p className="mt-1 text-sm text-zinc-600">
+              View and manage stock items.
+            </p>
           </div>
-        ))}
-      </div>
+
+          <div className="flex gap-3">
+            <div className="relative w-full sm:w-80">
+              <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search product or location…"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-3 py-2 border rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 outline-none duration-300 ease-in-out"
+              />
+            </div>
+            <button
+              onClick={() => setIsNewLocationModalOpen(true)}
+              className="flex items-center justify-center gap-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-4 py-2 rounded-xl font-medium transition-all duration-200 transform shadow-lg hover:shadow-xl whitespace-nowrap"
+            >
+              <Plus className="h-4 w-4" />
+              Add to New Location
+            </button>
+          </div>
+        </div>
+        <div className="max-w-7xl mx-auto py-6 space-y-6">
+          <div className="overflow-auto rounded-lg border">
+            <div className="min-w-full divide-y divide-gray-200">
+              <ProductTableSkeleton rows={8} columns={2} />
+            </div>
+          </div>
+        </div>
+      </>
     );
   }
   return (
@@ -332,69 +410,47 @@ export default function InventoryList() {
                   <p className="font-bold text-xl uppercase tracking-wide">
                     {locationCode}
                   </p>
-                  {/* <button
-                    onClick={() => {
-                      setActiveLocationCode(locationCode);
-                      // Find the location ID from the current items data
-                      const currentLocation = data?.inventry?.find(
-                        (item) => item.locationData?.code === locationCode
-                      );
-                      console.log("Opening modal for location:", locationCode);
-                      console.log("Found location data:", currentLocation);
-                      if (currentLocation?.locationData?._id) {
-                        setForm((prev) => ({
-                          ...prev,
-                          locationId: currentLocation.locationData._id,
-                          productSearch: "",
-                          showProductDropdown: false,
-                        }));
-                        console.log(
-                          "Set locationId to:",
-                          currentLocation.locationData._id
-                        );
-                      } else {
-                        console.error(
-                          "Could not find location ID for:",
-                          locationCode
-                        );
-                      }
-                      setIsCreateOpen(true);
-                    }}
-                    className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-2 py-1.5 rounded-xl font-medium transition-all duration-200 transform shadow-lg hover:shadow-xl whitespace-nowrap"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add Product
-                  </button> */}
                 </div>
                 <div>
-                  {rows.map((r, idx) => (
-                    <div
-                      key={r.id}
-                      className={`flex items-center justify-between px-4 py-3 hover:bg-gray-50 bg-white ${
-                        idx !== 0 ? "border-t" : ""
-                      }`}
-                    >
-                      <div className="flex-1">
-                        <p
-                          title={r?.productTitle}
-                          className="text-sm font-medium line-clamp-2 leading-relaxed mb-1"
+                  <table className="min-w-full border border-gray-200 bg-white">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border-b">
+                          Product Title
+                        </th>
+                        <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border-b">
+                          SKU
+                        </th>
+                        <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border-b">
+                          Quantity
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((r, idx) => (
+                        <tr
+                          key={r.id}
+                          className={`hover:bg-gray-50 ${
+                            idx % 2 !== 0 ? "bg-gray-50/50" : "bg-white"
+                          }`}
                         >
-                          {r?.productTitle}
-                        </p>
-                        <div className="flex items-center gap-4 text-xs text-gray-600">
-                          <span className="font-mono bg-gray-100 px-2 py-1 rounded">
-                            SKU: {r?.sku || "N/A"}
-                          </span>
-                          <span className="font-mono bg-blue-100 px-2 py-1 rounded text-blue-700">
-                            Model: {r?.modelCode || "N/A"}
-                          </span>
-                          <span className="text-gray-500">
-                            Qty: {r?.quantity}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                          <td
+                            className="px-4 py-3 text-sm font-medium leading-relaxed border-b w-[300px]"
+                            title={r?.productTitle}
+                          >
+                            {r?.productTitle}
+                          </td>
+                          <td className="px-4 py-3 text-xs font-mono border-b">
+                            {r?.sku || "N/A"}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-500 border-b">
+                            {r?.quantity}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
                   {rows.length === 0 && (
                     <div className="px-4 py-6 text-center text-gray-500">
                       No inventory found.
@@ -412,59 +468,58 @@ export default function InventoryList() {
             )}
           </div>
         )}
-
-        <div className="flex items-center justify-between mt-4">
-          <div className="text-sm text-gray-600">
-            Page {page} of {totalPages} • Total {total}
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className="border rounded px-2 py-1 text-sm disabled:opacity-50"
-            >
-              ‹ Prev
-            </button>
-            {(() => {
-              const nums = [];
-              const windowSize = 2;
-              const start = Math.max(1, page - windowSize);
-              const end = Math.min(totalPages, page + windowSize);
-              if (start > 1) {
-                nums.push(1);
-                if (start > 2) nums.push("...");
-              }
-              for (let n = start; n <= end; n++) nums.push(n);
-              if (end < totalPages) {
-                if (end < totalPages - 1) nums.push("...");
-                nums.push(totalPages);
-              }
-              return nums.map((n, idx) =>
-                n === "..." ? (
-                  <span key={`e-${idx}`} className="px-2 text-sm text-gray-500">
-                    …
-                  </span>
-                ) : (
-                  <button
-                    key={n}
-                    onClick={() => setPage(n)}
-                    className={`border rounded px-3 py-1 text-sm ${
-                      n === page ? "bg-blue-600 text-white border-blue-600" : ""
-                    }`}
-                  >
-                    {n}
-                  </button>
-                )
-              );
-            })()}
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages}
-              className="border rounded px-2 py-1 text-sm disabled:opacity-50"
-            >
-              Next ›
-            </button>
-          </div>
+      </div>
+      <div className="flex items-center justify-between mt-4">
+        <div className="text-sm text-gray-600">
+          Page {page} of {totalPages} • Total {total}
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="border rounded px-2 py-1 text-sm disabled:opacity-50"
+          >
+            ‹ Prev
+          </button>
+          {(() => {
+            const nums = [];
+            const windowSize = 2;
+            const start = Math.max(1, page - windowSize);
+            const end = Math.min(totalPages, page + windowSize);
+            if (start > 1) {
+              nums.push(1);
+              if (start > 2) nums.push("...");
+            }
+            for (let n = start; n <= end; n++) nums.push(n);
+            if (end < totalPages) {
+              if (end < totalPages - 1) nums.push("...");
+              nums.push(totalPages);
+            }
+            return nums.map((n, idx) =>
+              n === "..." ? (
+                <span key={`e-${idx}`} className="px-2 text-sm text-gray-500">
+                  …
+                </span>
+              ) : (
+                <button
+                  key={n}
+                  onClick={() => setPage(n)}
+                  className={`border rounded px-3 py-1 text-sm ${
+                    n === page ? "bg-blue-600 text-white border-blue-600" : ""
+                  }`}
+                >
+                  {n}
+                </button>
+              )
+            );
+          })()}
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page >= totalPages}
+            className="border rounded px-2 py-1 text-sm disabled:opacity-50"
+          >
+            Next ›
+          </button>
         </div>
       </div>
 
@@ -607,7 +662,9 @@ export default function InventoryList() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-lg">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Add Product to New Location</h3>
+              <h3 className="text-lg font-semibold">
+                Add Product to New Location
+              </h3>
               <button
                 onClick={() => setIsNewLocationModalOpen(false)}
                 className="text-gray-500 hover:text-gray-700"
@@ -619,7 +676,11 @@ export default function InventoryList() {
               onSubmit={(e) => {
                 e.preventDefault();
                 console.log("New location form data:", newLocationForm);
-                if (!newLocationForm.productId || !newLocationForm.locationId || !newLocationForm.quantity)
+                if (
+                  !newLocationForm.productId ||
+                  !newLocationForm.locationId ||
+                  !newLocationForm.quantity
+                )
                   return;
                 createInv.mutate({
                   productId: newLocationForm.productId,
@@ -658,7 +719,10 @@ export default function InventoryList() {
                     }));
                   }}
                   onFocus={() =>
-                    setNewLocationForm((prev) => ({ ...prev, showLocationDropdown: true }))
+                    setNewLocationForm((prev) => ({
+                      ...prev,
+                      showLocationDropdown: true,
+                    }))
                   }
                   className="w-full rounded-md border px-3 py-2 text-sm"
                   required
@@ -670,7 +734,11 @@ export default function InventoryList() {
                         .filter((loc) =>
                           (loc.code || "")
                             .toLowerCase()
-                            .includes((newLocationForm.locationSearch || "").toLowerCase())
+                            .includes(
+                              (
+                                newLocationForm.locationSearch || ""
+                              ).toLowerCase()
+                            )
                         )
                         .map((loc) => (
                           <div
@@ -715,7 +783,10 @@ export default function InventoryList() {
                     }));
                   }}
                   onFocus={() =>
-                    setNewLocationForm((prev) => ({ ...prev, showProductDropdown: true }))
+                    setNewLocationForm((prev) => ({
+                      ...prev,
+                      showProductDropdown: true,
+                    }))
                   }
                   className="w-full rounded-md border px-3 py-2 text-sm"
                   required
@@ -727,7 +798,11 @@ export default function InventoryList() {
                         .filter((p) =>
                           (p.title || p.pro_title || p.name || p.sku || "")
                             .toLowerCase()
-                            .includes((newLocationForm.productSearch || "").toLowerCase())
+                            .includes(
+                              (
+                                newLocationForm.productSearch || ""
+                              ).toLowerCase()
+                            )
                         )
                         .map((p) => (
                           <div
