@@ -4,10 +4,12 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "start": "vite",
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "vercel-build": "npm rebuild @swc/core --platform=linux --arch=x64 && vite build"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.3.0",
@@ -40,7 +42,6 @@
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.7.0",
-    "@vitejs/plugin-react-swc": "^3.10.2",
     "autoprefixer": "^10.4.21",
     "connect-history-api-fallback": "^2.0.0",
     "esbuild": "^0.25.9",
