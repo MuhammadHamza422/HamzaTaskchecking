@@ -130,3 +130,10 @@ export async function updateInventoryQuantity(inventoryId, quantity) {
   const { data } = await apiClient.patch(`/api/v1/inventry/quantity/${inventoryId}`, body);
   return data;
 }
+
+// POST /api/v1/inventry/create
+// Body: { productId, locationId, quantity }
+export async function createInventory(body) {
+  const { data } = await apiClient.post(`/api/v1/inventry/create`, body);
+  return data;
+}
