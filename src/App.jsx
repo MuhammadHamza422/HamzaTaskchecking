@@ -34,6 +34,7 @@ import UploadProducts from "./pages/inventory/UploadProducts";
 import ScanProduct from "./pages/inventory/Scan";
 
 
+
 function App() {
   return (
     <BrowserRouter>
@@ -71,6 +72,7 @@ function App() {
           <Route path="products" element={<Products />} />
           <Route path="products/upload" element={<UploadProducts />} />
           <Route path="scan" element={<ScanProduct />} />
+
         </Route>
       </Route>
       {/* Catch all route - redirect to dashboard if logged in, login if not */}

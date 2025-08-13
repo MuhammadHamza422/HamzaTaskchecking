@@ -17,7 +17,11 @@ export default function Inventory() {
       label: "Warehouses",
       icon: <FiBox className="h-5 w-5" />,
     },
-    { to: "/inventory/zones", label: "Zones", icon: <FiGrid className="h-5 w-5" /> },
+    {
+      to: "/inventory/zones",
+      label: "Zones",
+      icon: <FiGrid className="h-5 w-5" />,
+    },
     {
       to: "/inventory/locations",
       label: "Locations",
@@ -34,11 +38,10 @@ export default function Inventory() {
       icon: <FiHome className="h-5 w-5" />,
     },
     {
-      to: "/inventory/products/upload",
-      label: "Upload Products",
-      icon: <FiUpload className="h-5 w-5" />,
+      to: "/inventory/scan",
+      label: "Scan",
+      icon: <FiCamera className="h-5 w-5" />,
     },
-    { to: "/inventory/scan", label: "Scan", icon: <FiCamera className="h-5 w-5" /> },
   ];
 
   return (
