@@ -310,8 +310,8 @@ const filteredLinks =
               return (
                 <div key={link.label} className="relative group">
                   <button
-                    className={`flex items-center gap-1 transition-colors duration-200 ${
-                      isAnyActive ? "font-bold text-blue-100 border-b-2 border-white" : "text-white hover:text-blue-200"
+                    className={`flex items-center gap-1 transition-colors duration-200 bg-transparent ${
+                      isAnyActive ? "font-bold text-blue-100 border-b-2 border-white" : "text-white"
                     }`}
                   >
                     {link.label}
