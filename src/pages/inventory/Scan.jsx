@@ -1,116 +1,120 @@
-"use client"
+"use client";
 
-import { useState, useRef, useEffect } from "react"
-import { ArrowLeft, Camera, Type, Search, Scan, Package, Loader2, Keyboard } from "lucide-react"
-import InventoryDisplay from "./inventory-display"
-import apiClient from "../../api/client"
-
+import { useState, useRef, useEffect } from "react";
+import {
+  ArrowLeft,
+  Camera,
+  Type,
+  Search,
+  Scan,
+  Package,
+  Loader2,
+  Keyboard,
+} from "lucide-react";
+import InventoryDisplay from "./inventory-display";
+import apiClient from "../../api/client";
 
 export default function ScanProduct() {
-  const [mode, setMode] = useState("select")
-  const [searchQuery, setSearchQuery] = useState("")
-  const [isScanning, setIsScanning] = useState(false)
-  const [isSearching, setIsSearching] = useState(false)
-  const [searchResults, setSearchResults] = useState([])
-  const [totalInventory, setTotalInventory] = useState(0)
-  const [qrDetected, setQrDetected] = useState(false)
-  const [scannedData, setScannedData] = useState("")
-  const [cameraError, setCameraError] = useState("")
-  const [isCameraReady, setIsCameraReady] = useState(false)
-  const [barcodeBuffer, setBarcodeBuffer] = useState("")
-  const [lastBarcodeTime, setLastBarcodeTime] = useState(0)
-  const [barcodeDetected, setBarcodeDetected] = useState(false)
+  const [mode, setMode] = useState("select");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isScanning, setIsScanning] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState([]);
+  const [totalInventory, setTotalInventory] = useState(0);
+  const [qrDetected, setQrDetected] = useState(false);
+  const [scannedData, setScannedData] = useState("");
+  const [cameraError, setCameraError] = useState("");
+  const [isCameraReady, setIsCameraReady] = useState(false);
+  const [barcodeBuffer, setBarcodeBuffer] = useState("");
+  const [lastBarcodeTime, setLastBarcodeTime] = useState(0);
+  const [barcodeDetected, setBarcodeDetected] = useState(false);
 
-  const videoRef = useRef(null)
-  const canvasRef = useRef(null)
-  const streamRef = useRef(null)
-  const scanIntervalRef = useRef(null)
-  const jsQRRef = useRef(null)
-  const lastScanTimeRef = useRef(0)
-  const scanningActiveRef = useRef(false)
-  const barcodeTimeoutRef = useRef(null)
-  const hiddenInputRef = useRef(null)
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
+  const scanIntervalRef = useRef(null);
+  const jsQRRef = useRef(null);
+  const lastScanTimeRef = useRef(0);
+  const scanningActiveRef = useRef(false);
+  const barcodeTimeoutRef = useRef(null);
+  const hiddenInputRef = useRef(null);
 
   useEffect(() => {
     const handleKeyPress = (e) => {
       if (mode === "manual" && document.activeElement?.tagName === "INPUT") {
-        return
+        return;
       }
 
-      const currentTime = Date.now()
-      const timeDiff = currentTime - lastBarcodeTime
+      const currentTime = Date.now();
+      const timeDiff = currentTime - lastBarcodeTime;
 
-      
       if (timeDiff > 100) {
-        setBarcodeBuffer("")
+        setBarcodeBuffer("");
       }
 
       // Add character to buffer
       if (e.key.length === 1) {
-        setBarcodeBuffer((prev) => prev + e.key)
-        setLastBarcodeTime(currentTime)
+        setBarcodeBuffer((prev) => prev + e.key);
+        setLastBarcodeTime(currentTime);
 
         if (barcodeTimeoutRef.current) {
-          clearTimeout(barcodeTimeoutRef.current)
+          clearTimeout(barcodeTimeoutRef.current);
         }
 
         barcodeTimeoutRef.current = setTimeout(() => {
-          const finalBarcode = barcodeBuffer + e.key
+          const finalBarcode = barcodeBuffer + e.key;
           if (finalBarcode.length >= 3) {
-           
-            handleBarcodeDetection(finalBarcode)
-            setBarcodeBuffer("")
+            handleBarcodeDetection(finalBarcode);
+            setBarcodeBuffer("");
           }
-        }, 50)
+        }, 50);
       }
 
-      // Handle Enter key 
+      // Handle Enter key
       if (e.key === "Enter" && barcodeBuffer.length >= 3) {
-        e.preventDefault()
-        handleBarcodeDetection(barcodeBuffer)
-        setBarcodeBuffer("")
+        e.preventDefault();
+        handleBarcodeDetection(barcodeBuffer);
+        setBarcodeBuffer("");
       }
-    }
+    };
 
     // Add global keypress listener
-    document.addEventListener("keypress", handleKeyPress)
+    document.addEventListener("keypress", handleKeyPress);
 
     return () => {
-      document.removeEventListener("keypress", handleKeyPress)
+      document.removeEventListener("keypress", handleKeyPress);
       if (barcodeTimeoutRef.current) {
-        clearTimeout(barcodeTimeoutRef.current)
+        clearTimeout(barcodeTimeoutRef.current);
       }
-    }
-  }, [barcodeBuffer, lastBarcodeTime, mode])
+    };
+  }, [barcodeBuffer, lastBarcodeTime, mode]);
 
   const handleBarcodeDetection = async (barcode) => {
-    console.log("Barcode detected:", barcode)
-    setBarcodeDetected(true)
-    setScannedData(barcode)
+    console.log("Barcode detected:", barcode);
+    setBarcodeDetected(true);
+    setScannedData(barcode);
 
-    document.body.style.backgroundColor = "#dcfce7" 
+    document.body.style.backgroundColor = "#dcfce7";
     setTimeout(() => {
-      document.body.style.backgroundColor = ""
-    }, 300)
+      document.body.style.backgroundColor = "";
+    }, 300);
 
-  
-    await handleSearch(barcode)
+    await handleSearch(barcode);
 
-  
     setTimeout(() => {
-      setBarcodeDetected(false)
+      setBarcodeDetected(false);
       if (scannedData === barcode) {
-        setScannedData("")
+        setScannedData("");
       }
-    }, 3000)
-  }
+    }, 3000);
+  };
 
   const startCamera = async () => {
     try {
-      setCameraError("")
-      setIsCameraReady(false)
+      setCameraError("");
+      setIsCameraReady(false);
 
-      if (!videoRef.current) return
+      if (!videoRef.current) return;
 
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -118,246 +122,267 @@ export default function ScanProduct() {
           width: { ideal: 1280 },
           height: { ideal: 720 },
         },
-      })
+      });
 
-      streamRef.current = stream
-      videoRef.current.srcObject = stream
+      streamRef.current = stream;
+      videoRef.current.srcObject = stream;
 
       videoRef.current.onloadedmetadata = () => {
         if (videoRef.current) {
           videoRef.current.play().then(() => {
-            setIsCameraReady(true)
-            setIsScanning(true)
-            setQrDetected(false)
-            startQRScanning()
-          })
+            setIsCameraReady(true);
+            setIsScanning(true);
+            setQrDetected(false);
+            startQRScanning();
+          });
         }
-      }
+      };
     } catch (error) {
-      console.error("Error accessing camera:", error)
-      setCameraError("Unable to access camera. Please check permissions and try again.")
+      console.error("Error accessing camera:", error);
+      setCameraError(
+        "Unable to access camera. Please check permissions and try again."
+      );
     }
-  }
+  };
 
   const startQRScanning = async () => {
     try {
       if (!jsQRRef.current) {
-        jsQRRef.current = (await import("jsqr")).default
+        jsQRRef.current = (await import("jsqr")).default;
       }
 
-      scanningActiveRef.current = true
+      scanningActiveRef.current = true;
 
       const scanQRCode = () => {
-        if (!videoRef.current || !canvasRef.current || !scanningActiveRef.current) {
-          return
+        if (
+          !videoRef.current ||
+          !canvasRef.current ||
+          !scanningActiveRef.current
+        ) {
+          return;
         }
 
-        const video = videoRef.current
-        const canvas = canvasRef.current
-        const context = canvas.getContext("2d")
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        const context = canvas.getContext("2d");
 
         if (!context || video.readyState < 2 || video.videoWidth === 0) {
-          return
+          return;
         }
 
-        const now = Date.now()
+        const now = Date.now();
         if (now - lastScanTimeRef.current < 50) {
-          return
+          return;
         }
-        lastScanTimeRef.current = now
+        lastScanTimeRef.current = now;
 
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
 
         try {
-          context.drawImage(video, 0, 0, canvas.width, canvas.height)
-          const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
+          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imageData = context.getImageData(
+            0,
+            0,
+            canvas.width,
+            canvas.height
+          );
 
-          const code = jsQRRef.current(imageData.data, imageData.width, imageData.height, {
-            inversionAttempts: "dontInvert",
-          })
+          const code = jsQRRef.current(
+            imageData.data,
+            imageData.width,
+            imageData.height,
+            {
+              inversionAttempts: "dontInvert",
+            }
+          );
 
           if (code && code.data && scanningActiveRef.current) {
-            console.log("Auto QR Code detected:", code.data)
-            handleQRDetection(code.data)
+            console.log("Auto QR Code detected:", code.data);
+            handleQRDetection(code.data);
           }
         } catch (error) {
-          console.error("Error processing frame:", error)
+          console.error("Error processing frame:", error);
         }
-      }
+      };
 
       const animationFrame = () => {
         if (scanningActiveRef.current) {
-          scanQRCode()
-          requestAnimationFrame(animationFrame)
+          scanQRCode();
+          requestAnimationFrame(animationFrame);
         }
-      }
+      };
 
-      requestAnimationFrame(animationFrame)
+      requestAnimationFrame(animationFrame);
     } catch (error) {
-      console.error("Error loading jsQR:", error)
-      setCameraError("QR scanner failed to load. Please refresh and try again.")
+      console.error("Error loading jsQR:", error);
+      setCameraError(
+        "QR scanner failed to load. Please refresh and try again."
+      );
     }
-  }
+  };
 
   const stopCamera = () => {
-    scanningActiveRef.current = false
+    scanningActiveRef.current = false;
 
     if (scanIntervalRef.current) {
-      clearInterval(scanIntervalRef.current)
-      scanIntervalRef.current = null
+      clearInterval(scanIntervalRef.current);
+      scanIntervalRef.current = null;
     }
 
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop())
-      streamRef.current = null
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
     }
 
     if (videoRef.current) {
-      videoRef.current.srcObject = null
+      videoRef.current.srcObject = null;
     }
 
-    setIsScanning(false)
-    setIsCameraReady(false)
-    setQrDetected(false)
-    setScannedData("")
-    setCameraError("")
-    lastScanTimeRef.current = 0
-  }
+    setIsScanning(false);
+    setIsCameraReady(false);
+    setQrDetected(false);
+    setScannedData("");
+    setCameraError("");
+    lastScanTimeRef.current = 0;
+  };
 
   const searchProducts = async (query) => {
-    setIsSearching(true)
+    setIsSearching(true);
 
     try {
-      const { data } = await apiClient.get(`/api/v1/inventry/all?search=${encodeURIComponent(query)}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      })
+      const { data } = await apiClient.get(
+        `/api/v1/inventry/all?search=${encodeURIComponent(query)}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
-      setIsSearching(false)
+      setIsSearching(false);
 
       if (data) {
-        setSearchResults(data.inventry)
-        setTotalInventory(data.totalInventry)
-        return { items: data.inventry, total: data.totalInventry }
+        setSearchResults(data.inventry);
+        setTotalInventory(data.totalInventry);
+        return { items: data.inventry, total: data.totalInventry };
       } else {
-        throw new Error("Invalid response format")
+        throw new Error("Invalid response format");
       }
     } catch (error) {
-      console.error("API call failed, using mock data:", error)
+      console.error("API call failed, using mock data:", error);
 
-      setIsSearching(false)
+      setIsSearching(false);
     }
-  }
+  };
 
   const handleSearch = async (query) => {
-    if (!query.trim()) return
+    if (!query.trim()) return;
 
     try {
-      const { items, total } = await searchProducts(query)
+      const { items, total } = await searchProducts(query);
 
-      setSearchResults(items)
-      setTotalInventory(total)
+      setSearchResults(items);
+      setTotalInventory(total);
     } catch (error) {
-      console.error("Search failed:", error)
-      setSearchResults([])
-      setTotalInventory(0)
+      console.error("Search failed:", error);
+      setSearchResults([]);
+      setTotalInventory(0);
     }
-  }
+  };
 
   const handleManualSearch = (e) => {
-    e.preventDefault()
-    handleSearch(searchQuery)
-  }
+    e.preventDefault();
+    handleSearch(searchQuery);
+  };
 
   const handleKeyPress = (e) => {
     if (e.key === "Enter") {
-      handleSearch(searchQuery)
+      handleSearch(searchQuery);
     }
-  }
+  };
 
   const handleQRDetection = async (qrData) => {
-    if (qrDetected && scannedData === qrData) return
+    if (qrDetected && scannedData === qrData) return;
 
-    setQrDetected(true)
-    setScannedData(qrData)
+    setQrDetected(true);
+    setScannedData(qrData);
 
-    const video = videoRef.current
+    const video = videoRef.current;
     if (video) {
-      video.style.filter = "brightness(1.5) saturate(1.2)"
+      video.style.filter = "brightness(1.5) saturate(1.2)";
       setTimeout(() => {
-        if (video) video.style.filter = "none"
-      }, 300)
+        if (video) video.style.filter = "none";
+      }, 300);
     }
 
-    await handleSearch(qrData)
+    await handleSearch(qrData);
 
     setTimeout(() => {
-      setQrDetected(false)
-      setScannedData("")
-    }, 2000)
-  }
+      setQrDetected(false);
+      setScannedData("");
+    }, 2000);
+  };
 
   const goBack = () => {
     if (mode === "camera") {
-      stopCamera()
+      stopCamera();
     }
-    setMode("select")
-    setSearchResults([])
-    setSearchQuery("")
-    setTotalInventory(0)
-  }
+    setMode("select");
+    setSearchResults([]);
+    setSearchQuery("");
+    setTotalInventory(0);
+  };
 
   const manualScanQR = async () => {
-    if (!videoRef.current || !canvasRef.current || !isCameraReady) return
+    if (!videoRef.current || !canvasRef.current || !isCameraReady) return;
 
-    const video = videoRef.current
-    const canvas = canvasRef.current
-    const context = canvas.getContext("2d")
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const context = canvas.getContext("2d");
 
-    if (!context) return
+    if (!context) return;
 
-    canvas.width = video.videoWidth || 640
-    canvas.height = video.videoHeight || 480
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
 
     try {
-      context.drawImage(video, 0, 0, canvas.width, canvas.height)
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      video.style.filter = "brightness(1.8)"
+      video.style.filter = "brightness(1.8)";
       setTimeout(() => {
-        if (video) video.style.filter = "none"
-      }, 150)
+        if (video) video.style.filter = "none";
+      }, 150);
 
-      const jsQR = jsQRRef.current || (await import("jsqr")).default
-      if (!jsQRRef.current) jsQRRef.current = jsQR
+      const jsQR = jsQRRef.current || (await import("jsqr")).default;
+      if (!jsQRRef.current) jsQRRef.current = jsQR;
 
-      const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
 
       const code = jsQR(imageData.data, imageData.width, imageData.height, {
         inversionAttempts: "dontInvert",
-      })
+      });
 
       if (code && code.data) {
-        console.log("Manual QR Code scan:", code.data)
-        handleQRDetection(code.data)
+        console.log("Manual QR Code scan:", code.data);
+        handleQRDetection(code.data);
       } else {
-        setScannedData("No QR code detected in current view")
-        setTimeout(() => setScannedData(""), 2000)
+        setScannedData("No QR code detected in current view");
+        setTimeout(() => setScannedData(""), 2000);
       }
     } catch (error) {
-      console.error("Error during manual scan:", error)
-      setScannedData("Scan failed - please try again")
-      setTimeout(() => setScannedData(""), 2000)
+      console.error("Error during manual scan:", error);
+      setScannedData("Scan failed - please try again");
+      setTimeout(() => setScannedData(""), 2000);
     }
-  }
+  };
 
   useEffect(() => {
     return () => {
-      stopCamera()
-    }
-  }, [])
+      stopCamera();
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -379,9 +404,17 @@ export default function ScanProduct() {
             </button>
           )}
           <div>
-            <h1 className="text-xl font-bold text-slate-900 font-sans">Location Search</h1>
+            <h1 className="text-xl font-bold text-slate-900 font-sans">
+              Location Search
+            </h1>
             {mode !== "select" && (
-              <p className="text-sm text-slate-500 font-sans">{mode === "camera" ? "Scan QR Code" : "Manual Search"}</p>
+              <p className="text-sm text-slate-500 font-sans">
+                {mode === "scanner"
+                  ? "Scan Barcode Scanner"
+                  : mode === "camera"
+                  ? "Scan QR Code"
+                  : "Manual Search"}
+              </p>
             )}
           </div>
         </div>
@@ -401,58 +434,80 @@ export default function ScanProduct() {
         {mode === "select" && (
           <div className="space-y-6 cursor-pointer">
             <div className="space-y-4">
-              <h2 className="text-lg font-semibold text-slate-800 font-sans">Choose Search Method</h2>
+              <h2 className="text-lg font-semibold text-slate-800 font-sans">
+                Choose Search Method
+              </h2>
 
               <div className="grid grid-cols-1 gap-4">
-                <div className="p-4 bg-green-50 border-2 border-green-200 rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-green-100 rounded-lg">
-                      <Keyboard className="h-5 w-5 text-green-600" />
+                {mode === "scanner" ||
+                  (mode === "select" && (
+                    <div
+                      onClick={() => setMode("scanner")}
+                      className="p-4 bg-green-50 border-2 border-green-200 rounded-xl"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-green-100 rounded-lg">
+                          <Keyboard className="h-5 w-5 text-green-600" />
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-green-900 font-sans">
+                            Barcode Scanner Ready
+                          </h3>
+                          <p className="text-sm text-green-700 font-sans">
+                            Physical barcode scanners will auto-search location
+                          </p>
+                        </div>
+                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-green-900 font-sans">Barcode Scanner Ready</h3>
-                      <p className="text-sm text-green-700 font-sans">
-                        Physical barcode scanners will auto-search location
-                      </p>
-                    </div>
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                  </div>
-                </div>
+                  ))}
 
-                <div
-                  className="p-6 bg-white rounded-xl border-2 border-slate-200 hover:border-blue-300 hover:shadow-lg transition-all duration-200 cursor-pointer group"
-                  onClick={() => {
-                    setMode("camera")
-                    setTimeout(startCamera, 100)
-                  }}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-blue-100 rounded-xl group-hover:bg-blue-200 transition-colors">
-                      <Scan className="h-6 w-6 text-blue-600" />
+                {mode === "select" && (
+                  <>
+                    <div
+                      className="p-6 bg-white rounded-xl border-2 border-slate-200 hover:border-blue-300 hover:shadow-lg transition-all duration-200 cursor-pointer group"
+                      onClick={() => {
+                        setMode("camera");
+                        setTimeout(startCamera, 100);
+                      }}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 bg-blue-100 rounded-xl group-hover:bg-blue-200 transition-colors">
+                          <Scan className="h-6 w-6 text-blue-600" />
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-slate-900 font-sans">
+                            Scan Location
+                          </h3>
+                          <p className="text-sm text-slate-500 font-sans">
+                            Auto-detect and scan QR codes
+                          </p>
+                        </div>
+                        <Camera className="h-5 w-5 text-slate-400" />
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-slate-900 font-sans">Scan Location</h3>
-                      <p className="text-sm text-slate-500 font-sans">Auto-detect and scan QR codes</p>
-                    </div>
-                    <Camera className="h-5 w-5 text-slate-400" />
-                  </div>
-                </div>
 
-                <div
-                  className="p-6 bg-white rounded-xl border-2 border-slate-200 hover:border-sky-300 hover:shadow-lg transition-all duration-200 cursor-pointer group"
-                  onClick={() => setMode("manual")}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-sky-100 rounded-xl group-hover:bg-sky-200 transition-colors">
-                      <Type className="h-6 w-6 text-sky-600" />
+                    <div
+                      className="p-6 bg-white rounded-xl border-2 border-slate-200 hover:border-sky-300 hover:shadow-lg transition-all duration-200 cursor-pointer group"
+                      onClick={() => setMode("manual")}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 bg-sky-100 rounded-xl group-hover:bg-sky-200 transition-colors">
+                          <Type className="h-6 w-6 text-sky-600" />
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-slate-900 font-sans">
+                            Manual Search
+                          </h3>
+                          <p className="text-sm text-slate-500 font-sans">
+                            Type location name or code
+                          </p>
+                        </div>
+                        <Search className="h-5 w-5 text-slate-400" />
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-slate-900 font-sans">Manual Search</h3>
-                      <p className="text-sm text-slate-500 font-sans">Type location name or code</p>
-                    </div>
-                    <Search className="h-5 w-5 text-slate-400" />
-                  </div>
-                </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -461,17 +516,31 @@ export default function ScanProduct() {
                 {scannedData && (
                   <div
                     className={`p-3 border rounded-lg ${
-                      barcodeDetected ? "bg-green-50 border-green-200" : "bg-blue-50 border-blue-200"
+                      barcodeDetected
+                        ? "bg-green-50 border-green-200"
+                        : "bg-blue-50 border-blue-200"
                     }`}
                   >
-                    <p className={`text-sm font-sans ${barcodeDetected ? "text-green-700" : "text-blue-700"}`}>
-                      <span className="font-semibold">{barcodeDetected ? "Scanned Barcode:" : "Scanned QR Code:"}</span>{" "}
+                    <p
+                      className={`text-sm font-sans ${
+                        barcodeDetected ? "text-green-700" : "text-blue-700"
+                      }`}
+                    >
+                      <span className="font-semibold">
+                        {barcodeDetected
+                          ? "Scanned Barcode:"
+                          : "Scanned QR Code:"}
+                      </span>{" "}
                       {scannedData}
                     </p>
                   </div>
                 )}
 
-                <InventoryDisplay items={searchResults} totalCount={totalInventory} isLoading={isSearching} />
+                <InventoryDisplay
+                  items={searchResults}
+                  totalCount={totalInventory}
+                  isLoading={isSearching}
+                />
               </div>
             )}
           </div>
@@ -479,6 +548,7 @@ export default function ScanProduct() {
 
         {mode === "camera" && (
           <div className="space-y-6">
+          { (mode === "camera" && !searchResults.length > 0) &&  <>
             <div className="p-6 bg-white rounded-xl border-2 border-slate-200 shadow-sm">
               <div className="relative bg-slate-900 rounded-xl overflow-hidden">
                 <video
@@ -495,8 +565,12 @@ export default function ScanProduct() {
                   <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80">
                     <div className="text-center p-4">
                       <Camera className="h-12 w-12 text-red-400 mx-auto mb-3" />
-                      <p className="text-red-100 text-sm font-sans font-semibold mb-2">Camera Error</p>
-                      <p className="text-red-200 text-xs font-sans">{cameraError}</p>
+                      <p className="text-red-100 text-sm font-sans font-semibold mb-2">
+                        Camera Error
+                      </p>
+                      <p className="text-red-200 text-xs font-sans">
+                        {cameraError}
+                      </p>
                       <button
                         onClick={startCamera}
                         className="mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg font-sans transition-colors"
@@ -520,20 +594,38 @@ export default function ScanProduct() {
                         {qrDetected ? (
                           <>
                             <div className="w-8 h-8 bg-green-400 rounded-full mx-auto mb-2 flex items-center justify-center">
-                              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              <svg
+                                className="w-5 h-5 text-white"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M5 13l4 4L19 7"
+                                />
                               </svg>
                             </div>
-                            <p className="text-green-100 text-sm font-sans font-semibold">QR Code Scanned!</p>
+                            <p className="text-green-100 text-sm font-sans font-semibold">
+                              QR Code Scanned!
+                            </p>
                             {scannedData && (
-                              <p className="text-green-200 text-xs font-sans mt-1 truncate max-w-32">{scannedData}</p>
+                              <p className="text-green-200 text-xs font-sans mt-1 truncate max-w-32">
+                                {scannedData}
+                              </p>
                             )}
                           </>
                         ) : (
                           <>
                             <Scan className="h-8 w-8 text-blue-400 mx-auto mb-2 animate-pulse" />
-                            <p className="text-blue-100 text-sm font-sans">Scanning continuously...</p>
-                            <p className="text-blue-200 text-xs font-sans mt-1">Just show QR code to camera</p>
+                            <p className="text-blue-100 text-sm font-sans">
+                              Scanning continuously...
+                            </p>
+                            <p className="text-blue-200 text-xs font-sans mt-1">
+                              Just show QR code to camera
+                            </p>
                           </>
                         )}
                       </div>
@@ -545,7 +637,9 @@ export default function ScanProduct() {
                   <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80">
                     <div className="text-center">
                       <Loader2 className="h-8 w-8 text-blue-400 mx-auto mb-2 animate-spin" />
-                      <p className="text-blue-100 text-sm font-sans">Starting camera...</p>
+                      <p className="text-blue-100 text-sm font-sans">
+                        Starting camera...
+                      </p>
                     </div>
                   </div>
                 )}
@@ -561,7 +655,9 @@ export default function ScanProduct() {
               {isSearching && (
                 <div className="flex items-center justify-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-                  <span className="text-sm text-blue-600 font-sans">Searching location...</span>
+                  <span className="text-sm text-blue-600 font-sans">
+                    Searching location...
+                  </span>
                 </div>
               )}
             </div>
@@ -582,6 +678,7 @@ export default function ScanProduct() {
                 Scan QR Code
               </button>
             </div>
+            </>}
 
             {/* Scanned Results */}
             {searchResults.length > 0 && (
@@ -589,12 +686,17 @@ export default function ScanProduct() {
                 {scannedData && (
                   <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
                     <p className="text-sm text-green-700 font-sans">
-                      <span className="font-semibold">Scanned QR Code:</span> {scannedData}
+                      <span className="font-semibold">Scanned QR Code:</span>{" "}
+                      {scannedData}
                     </p>
                   </div>
                 )}
 
-                <InventoryDisplay items={searchResults} totalCount={totalInventory} isLoading={isSearching} />
+                <InventoryDisplay
+                  items={searchResults}
+                  totalCount={totalInventory}
+                  isLoading={isSearching}
+                />
               </div>
             )}
           </div>
@@ -605,7 +707,10 @@ export default function ScanProduct() {
             <div className="p-6 bg-white rounded-xl border-2 border-slate-200 shadow-sm">
               <form onSubmit={handleManualSearch} className="space-y-4">
                 <div className="space-y-2">
-                  <label htmlFor="search" className="text-sm font-semibold text-slate-700 font-sans">
+                  <label
+                    htmlFor="search"
+                    className="text-sm font-semibold text-slate-700 font-sans"
+                  >
                     Search Product
                   </label>
                   <input
@@ -640,18 +745,46 @@ export default function ScanProduct() {
               </form>
             </div>
 
-            <InventoryDisplay items={searchResults} totalCount={totalInventory} isLoading={isSearching} />
+            <InventoryDisplay
+              items={searchResults}
+              totalCount={totalInventory}
+              isLoading={isSearching}
+            />
 
             {searchResults.length === 0 && searchQuery && !isSearching && (
               <div className="p-8 text-center bg-white rounded-xl border-2 border-dashed border-slate-200">
                 <Package className="h-12 w-12 text-slate-400 mx-auto mb-3" />
-                <h3 className="font-semibold text-slate-600 font-sans mb-1">No inventry found</h3>
-                <p className="text-sm text-slate-500 font-sans">Try scanning again or check your spelling</p>
+                <h3 className="font-semibold text-slate-600 font-sans mb-1">
+                  No inventry found
+                </h3>
+                <p className="text-sm text-slate-500 font-sans">
+                  Try scanning again or check your spelling
+                </p>
               </div>
             )}
           </div>
         )}
+
+        {/* Scanned Results */}
+        {mode === "scanner" && (
+          <div className="space-y-4">
+            {scannedData && (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-sm text-green-700 font-sans">
+                  <span className="font-semibold">Scanned QR Code:</span>{" "}
+                  {scannedData}
+                </p>
+              </div>
+            )}
+
+            <InventoryDisplay
+              items={searchResults}
+              totalCount={totalInventory}
+              isLoading={isSearching}
+            />
+          </div>
+        )}
       </div>
     </div>
-  )
+  );
 }
