@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 
 function Icon({ name, active }) {
@@ -79,17 +79,32 @@ const navItems = [
 export default function InventoryLayout() {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [scrollTop, setScrollTop] = useState(0);
+
 
   const isActive = (to, exact) => {
     if (exact) return location.pathname === to;
     return location.pathname === to || location.pathname.startsWith(to + "/");
   };
 
+  useEffect(() => {
+    window.addEventListener("scroll", handleScroll);
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+    };
+  }, []);
+
+  const handleScroll = () => {
+    const scrollTop = window.scrollY;
+    setScrollTop(scrollTop);
+  };  
+
   return (
     <div className="flex gap-4">
       {/* Desktop Sidebar */}
+      <div className="relative w-64 h-full hidden md:block">
       <aside
-        className="hidden md:block w-64 shrink-0 rounded-xl overflow-hidden max-h-screen overflow-y-auto"
+        className={`  fixed ${scrollTop>100?"top-[1rem] max-h-[95vh]":"top-[8rem] max-h-[75vh]"}  left-4  w-64 h-full  shrink-0 rounded-xl overflow-hidden  overflow-y-auto`}
         style={{
           background: "linear-gradient(180deg, #1e3a8a 0%, #2563eb 100%)",
         }}
@@ -120,6 +135,7 @@ export default function InventoryLayout() {
           </nav>
         </div>
       </aside>
+      </div>
 
       {/* Mobile Sidebar Overlay */}
       <div className={`md:hidden fixed inset-0 z-[999] transition-opacity duration-300 ${

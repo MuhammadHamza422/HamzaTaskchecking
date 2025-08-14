@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { ArrowLeft, Camera, Type, Search, Scan, Package, Loader2, Keyboard } from "lucide-react"
 import InventoryDisplay from "./inventory-display"
 import apiClient from "../../api/client"
@@ -21,15 +21,82 @@ export default function ScanProduct() {
   const [lastBarcodeTime, setLastBarcodeTime] = useState(0)
   const [barcodeDetected, setBarcodeDetected] = useState(false)
 
+  console.log("isCameraReady", isCameraReady);
+
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
   const streamRef = useRef(null)
-  const scanIntervalRef = useRef(null)
   const jsQRRef = useRef(null)
   const lastScanTimeRef = useRef(0)
   const scanningActiveRef = useRef(false)
   const barcodeTimeoutRef = useRef(null)
   const hiddenInputRef = useRef(null)
+  const animationFrameRef = useRef(null)
+  const initializationRef = useRef(false)
+
+  const cleanup = useCallback(() => {
+    scanningActiveRef.current = false
+    initializationRef.current = false
+
+    // Cancel animation frame
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current)
+      animationFrameRef.current = null
+    }
+
+    // Clear barcode timeout
+    if (barcodeTimeoutRef.current) {
+      clearTimeout(barcodeTimeoutRef.current)
+      barcodeTimeoutRef.current = null
+    }
+
+    // Stop camera stream
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => {
+        track.stop()
+      })
+      streamRef.current = null
+    }
+
+    // Clear video element
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+      videoRef.current.onloadedmetadata = null
+    }
+
+    // Reset states
+    setIsScanning(false)
+    setIsCameraReady(false)
+    setQrDetected(false)
+    setCameraError("")
+    lastScanTimeRef.current = 0
+  }, [])
+
+  const handleBarcodeDetection = useCallback(async (barcode) => {
+    if (!barcode || barcode.length < 3) return
+
+    console.log("Barcode detected:", barcode)
+    setBarcodeDetected(true)
+    setScannedData(barcode)
+
+    // Visual feedback
+    document.body.style.backgroundColor = "#dcfce7"
+    setTimeout(() => {
+      document.body.style.backgroundColor = ""
+    }, 300)
+
+    try {
+      await handleSearch(barcode)
+    } catch (error) {
+      console.error("Search failed for barcode:", error)
+    }
+
+    // Reset detection state
+    setTimeout(() => {
+      setBarcodeDetected(false)
+      setScannedData("")
+    }, 3000)
+  }, [])
 
   useEffect(() => {
     const handleKeyPress = (e) => {
@@ -40,31 +107,32 @@ export default function ScanProduct() {
       const currentTime = Date.now()
       const timeDiff = currentTime - lastBarcodeTime
 
-      
+      // Reset buffer if too much time has passed
       if (timeDiff > 100) {
         setBarcodeBuffer("")
       }
 
       // Add character to buffer
       if (e.key.length === 1) {
-        setBarcodeBuffer((prev) => prev + e.key)
+        const newBuffer = barcodeBuffer + e.key
+        setBarcodeBuffer(newBuffer)
         setLastBarcodeTime(currentTime)
 
+        // Clear existing timeout
         if (barcodeTimeoutRef.current) {
           clearTimeout(barcodeTimeoutRef.current)
         }
 
+        // Set new timeout for barcode completion
         barcodeTimeoutRef.current = setTimeout(() => {
-          const finalBarcode = barcodeBuffer + e.key
-          if (finalBarcode.length >= 3) {
-           
-            handleBarcodeDetection(finalBarcode)
+          if (newBuffer.length >= 3) {
+            handleBarcodeDetection(newBuffer)
             setBarcodeBuffer("")
           }
         }, 50)
       }
 
-      // Handle Enter key 
+      // Handle Enter key
       if (e.key === "Enter" && barcodeBuffer.length >= 3) {
         e.preventDefault()
         handleBarcodeDetection(barcodeBuffer)
@@ -72,77 +140,131 @@ export default function ScanProduct() {
       }
     }
 
-    // Add global keypress listener
     document.addEventListener("keypress", handleKeyPress)
 
     return () => {
       document.removeEventListener("keypress", handleKeyPress)
       if (barcodeTimeoutRef.current) {
         clearTimeout(barcodeTimeoutRef.current)
+        barcodeTimeoutRef.current = null
       }
     }
-  }, [barcodeBuffer, lastBarcodeTime, mode])
+  }, [barcodeBuffer, lastBarcodeTime, mode, handleBarcodeDetection])
 
-  const handleBarcodeDetection = async (barcode) => {
-    console.log("Barcode detected:", barcode)
-    setBarcodeDetected(true)
-    setScannedData(barcode)
+  const startCamera = useCallback(async () => {
+    if (initializationRef.current) {
+      console.log("Camera initialization already in progress")
+      return
+    }
 
-    document.body.style.backgroundColor = "#dcfce7" 
-    setTimeout(() => {
-      document.body.style.backgroundColor = ""
-    }, 300)
+    initializationRef.current = true
+    cleanup() // Clean up any existing resources
 
-  
-    await handleSearch(barcode)
-
-  
-    setTimeout(() => {
-      setBarcodeDetected(false)
-      if (scannedData === barcode) {
-        setScannedData("")
-      }
-    }, 3000)
-  }
-
-  const startCamera = async () => {
     try {
       setCameraError("")
       setIsCameraReady(false)
 
-      if (!videoRef.current) return
+      if (!videoRef.current) {
+        throw new Error("Video element not available")
+      }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: "environment" },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-      })
+      // Request camera permissions with fallback options
+      let stream
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280, min: 640 },
+            height: { ideal: 720, min: 480 },
+          },
+        })
+      } catch (error) {
+        // Fallback to basic video constraints
+        console.warn("Failed with ideal constraints, trying basic:", error)
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "environment",
+          },
+        })
+      }
+
+      if (!initializationRef.current) {
+        // Initialization was cancelled, clean up
+        stream.getTracks().forEach((track) => track.stop())
+        return
+      }
 
       streamRef.current = stream
       videoRef.current.srcObject = stream
 
-      videoRef.current.onloadedmetadata = () => {
-        if (videoRef.current) {
-          videoRef.current.play().then(() => {
-            setIsCameraReady(true)
-            setIsScanning(true)
-            setQrDetected(false)
-            startQRScanning()
-          })
+      const videoLoadPromise = new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error("Video loading timeout"))
+        }, 10000) 
+
+        videoRef.current.onloadedmetadata = () => {
+          clearTimeout(timeout)
+          resolve()
         }
+
+        videoRef.current.onerror = () => {
+          clearTimeout(timeout)
+          reject(new Error("Video loading failed"))
+        }
+      })
+
+      await videoLoadPromise
+
+      if (!initializationRef.current) {
+        return // Cancelled during loading
       }
+
+      await videoRef.current.play()
+
+      setIsCameraReady(true)
+      setIsScanning(true)
+      setQrDetected(false)
+
+      // Start QR scanning after camera is ready
+      await startQRScanning()
     } catch (error) {
       console.error("Error accessing camera:", error)
-      setCameraError("Unable to access camera. Please check permissions and try again.")
-    }
-  }
+      let errorMessage = "Unable to access camera. "
 
-  const startQRScanning = async () => {
+      if (error.name === "NotAllowedError") {
+        errorMessage += "Please allow camera permissions and try again."
+      } else if (error.name === "NotFoundError") {
+        errorMessage += "No camera found on this device."
+      } else if (error.name === "NotReadableError") {
+        errorMessage += "Camera is being used by another application."
+      } else {
+        errorMessage += "Please check permissions and try again."
+      }
+
+      setCameraError(errorMessage)
+    } finally {
+      initializationRef.current = false
+    }
+  }, [cleanup])
+
+  const startQRScanning = useCallback(async () => {
     try {
+      // Load jsQR library with retry logic
       if (!jsQRRef.current) {
-        jsQRRef.current = (await import("jsqr")).default
+        let retries = 3
+        while (retries > 0 && !jsQRRef.current) {
+          try {
+            jsQRRef.current = (await import("jsqr")).default
+            break
+          } catch (error) {
+            console.error("Failed to load QR scanner library:", error)
+            retries--
+            if (retries === 0) {
+              throw new Error("Failed to load QR scanner library")
+            }
+            await new Promise((resolve) => setTimeout(resolve, 1000)) // Wait 1 second before retry
+          }
+        }
       }
 
       scanningActiveRef.current = true
@@ -156,16 +278,20 @@ export default function ScanProduct() {
         const canvas = canvasRef.current
         const context = canvas.getContext("2d")
 
-        if (!context || video.readyState < 2 || video.videoWidth === 0) {
+        // Check if video is ready
+        if (!context || video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) {
           return
         }
 
+        // Throttle scanning to improve performance
         const now = Date.now()
-        if (now - lastScanTimeRef.current < 50) {
+        if (now - lastScanTimeRef.current < 100) {
+          // Increased from 50ms to 100ms
           return
         }
         lastScanTimeRef.current = now
 
+        // Set canvas dimensions to match video
         canvas.width = video.videoWidth
         canvas.height = video.videoHeight
 
@@ -177,53 +303,61 @@ export default function ScanProduct() {
             inversionAttempts: "dontInvert",
           })
 
-          if (code && code.data && scanningActiveRef.current) {
-            console.log("Auto QR Code detected:", code.data)
+          if (code && code.data && scanningActiveRef.current && !qrDetected) {
+            console.log("QR Code detected:", code.data)
             handleQRDetection(code.data)
           }
         } catch (error) {
           console.error("Error processing frame:", error)
+          // Don't stop scanning on individual frame errors
         }
       }
 
-      const animationFrame = () => {
+      const animationLoop = () => {
         if (scanningActiveRef.current) {
           scanQRCode()
-          requestAnimationFrame(animationFrame)
+          animationFrameRef.current = requestAnimationFrame(animationLoop)
         }
       }
 
-      requestAnimationFrame(animationFrame)
+      animationLoop()
     } catch (error) {
-      console.error("Error loading jsQR:", error)
+      console.error("Error starting QR scanner:", error)
       setCameraError("QR scanner failed to load. Please refresh and try again.")
     }
-  }
+  }, [qrDetected])
 
-  const stopCamera = () => {
-    scanningActiveRef.current = false
+  const handleQRDetection = useCallback(
+    async (qrData) => {
+      if (qrDetected && scannedData === qrData) return
 
-    if (scanIntervalRef.current) {
-      clearInterval(scanIntervalRef.current)
-      scanIntervalRef.current = null
-    }
+      setQrDetected(true)
+      setScannedData(qrData)
 
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop())
-      streamRef.current = null
-    }
+      // Visual feedback
+      const video = videoRef.current
+      if (video) {
+        video.style.filter = "brightness(1.5) saturate(1.2)"
+        setTimeout(() => {
+          if (video) video.style.filter = "none"
+        }, 300)
+      }
 
-    if (videoRef.current) {
-      videoRef.current.srcObject = null
-    }
+      try {
+        await handleSearch(qrData)
+      } catch (error) {
+        console.error("Search failed for QR code:", error)
+      }
 
-    setIsScanning(false)
-    setIsCameraReady(false)
-    setQrDetected(false)
-    setScannedData("")
-    setCameraError("")
-    lastScanTimeRef.current = 0
-  }
+      setTimeout(() => {
+        setQrDetected(false)
+        if (scannedData === qrData) {
+          setScannedData("")
+        }
+      }, 2000)
+    },
+    [qrDetected, scannedData],
+  )
 
   const searchProducts = async (query) => {
     setIsSearching(true)
@@ -236,18 +370,19 @@ export default function ScanProduct() {
         },
       })
 
-      setIsSearching(false)
-
       if (data) {
-        setSearchResults(data.inventry)
-        setTotalInventory(data.totalInventry)
-        return { items: data.inventry, total: data.totalInventry }
+        setSearchResults(data.inventry || [])
+        setTotalInventory(data.totalInventry || 0)
+        return { items: data.inventry || [], total: data.totalInventry || 0 }
       } else {
         throw new Error("Invalid response format")
       }
     } catch (error) {
-      console.error("API call failed, using mock data:", error)
-
+      console.error("API call failed:", error)
+      setSearchResults([])
+      setTotalInventory(0)
+      throw error
+    } finally {
       setIsSearching(false)
     }
   }
@@ -256,10 +391,7 @@ export default function ScanProduct() {
     if (!query.trim()) return
 
     try {
-      const { items, total } = await searchProducts(query)
-
-      setSearchResults(items)
-      setTotalInventory(total)
+      await searchProducts(query)
     } catch (error) {
       console.error("Search failed:", error)
       setSearchResults([])
@@ -278,32 +410,8 @@ export default function ScanProduct() {
     }
   }
 
-  const handleQRDetection = async (qrData) => {
-    if (qrDetected && scannedData === qrData) return
-
-    setQrDetected(true)
-    setScannedData(qrData)
-
-    const video = videoRef.current
-    if (video) {
-      video.style.filter = "brightness(1.5) saturate(1.2)"
-      setTimeout(() => {
-        if (video) video.style.filter = "none"
-      }, 300)
-    }
-
-    await handleSearch(qrData)
-
-    setTimeout(() => {
-      setQrDetected(false)
-      setScannedData("")
-    }, 2000)
-  }
-
   const goBack = () => {
-    if (mode === "camera") {
-      stopCamera()
-    }
+    cleanup()
     setMode("select")
     setSearchResults([])
     setSearchQuery("")
@@ -325,17 +433,19 @@ export default function ScanProduct() {
     try {
       context.drawImage(video, 0, 0, canvas.width, canvas.height)
 
+      // Visual feedback
       video.style.filter = "brightness(1.8)"
       setTimeout(() => {
         if (video) video.style.filter = "none"
       }, 150)
 
-      const jsQR = jsQRRef.current || (await import("jsqr")).default
-      if (!jsQRRef.current) jsQRRef.current = jsQR
+      // Ensure jsQR is loaded
+      if (!jsQRRef.current) {
+        jsQRRef.current = (await import("jsqr")).default
+      }
 
       const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
-
-      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+      const code = jsQRRef.current(imageData.data, imageData.width, imageData.height, {
         inversionAttempts: "dontInvert",
       })
 
@@ -355,9 +465,9 @@ export default function ScanProduct() {
 
   useEffect(() => {
     return () => {
-      stopCamera()
+      cleanup()
     }
-  }, [])
+  }, [cleanup])
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -496,7 +606,7 @@ export default function ScanProduct() {
                     <div className="text-center p-4">
                       <Camera className="h-12 w-12 text-red-400 mx-auto mb-3" />
                       <p className="text-red-100 text-sm font-sans font-semibold mb-2">Camera Error</p>
-                      <p className="text-red-200 text-xs font-sans">{cameraError}</p>
+                      <p className="text-red-200 text-xs font-sans max-w-xs">{cameraError}</p>
                       <button
                         onClick={startCamera}
                         className="mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg font-sans transition-colors"
@@ -583,7 +693,6 @@ export default function ScanProduct() {
               </button>
             </div>
 
-            {/* Scanned Results */}
             {searchResults.length > 0 && (
               <div className="space-y-4">
                 {scannedData && (
@@ -645,7 +754,7 @@ export default function ScanProduct() {
             {searchResults.length === 0 && searchQuery && !isSearching && (
               <div className="p-8 text-center bg-white rounded-xl border-2 border-dashed border-slate-200">
                 <Package className="h-12 w-12 text-slate-400 mx-auto mb-3" />
-                <h3 className="font-semibold text-slate-600 font-sans mb-1">No inventry found</h3>
+                <h3 className="font-semibold text-slate-600 font-sans mb-1">No inventory found</h3>
                 <p className="text-sm text-slate-500 font-sans">Try scanning again or check your spelling</p>
               </div>
             )}
