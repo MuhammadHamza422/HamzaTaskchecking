@@ -6,48 +6,88 @@ import {
   getInventory,
   getProducts,
   getWarehouse,
-  getZonesByWarehouse,
   getLocations,
 } from "../../api/warehouse";
 import ProductTableSkeleton from "./components/ProductTableSkeleton";
+import InventoryTableSkeleton from "./components/InventoryTableSkeleton";
+import EmptyInventory from "./components/EmptyInventory";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { setSelectedZoneId } from "../../store/appSlice";
 import { Minus, Plus } from "lucide-react";
 import Swal from "sweetalert2";
 
+const productTypes = [
+  { label: "Consoles", code: "CON" },
+  { label: "Handhelds", code: "HAN" },
+  { label: "Accessories", code: "ACC" },
+  { label: "Games", code: "GAM" },
+];
+
 export default function InventoryList() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(30);
   const [searchTerm, setSearchTerm] = useState("");
+
+  const [isNewLocationModalOpen, setIsNewLocationModalOpen] = useState(false);
+  const [newLocationForm, setNewLocationForm] = useState({
+    productId: "",
+    locationId: "",
+    quantity: "",
+    productSearch: "",
+    showProductDropdown: false,
+    showLocationDropdown: false,
+    locationSearch: "",
+    type: "", // Add this line
+    typeCode: "", // Add this line
+  });
+
+  const newLocationDropdownRef = useRef(null);
+  const newProductDropdownRef = useRef(null);
+  const dropdownRef = useRef(null);
+
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const selectedWarehouseId = useSelector((s) => s.app.selectedWarehouseId);
-  const selectedZoneId = useSelector((s) => s.app.selectedZoneId);
+  const warehouseId = useSelector((s) => s.app.selectedWarehouseId);
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
-    queryKey: ["inventory", page, limit, searchTerm],
-    queryFn: () => getInventory({ page, limit, search: searchTerm }),
+    queryKey: ["inventory", page, limit, searchTerm, warehouseId],
+    queryFn: () =>
+      getInventory({
+        page,
+        limit,
+        search: searchTerm,
+        warehouseId,
+      }),
     keepPreviousData: true,
     staleTime: 60 * 1000,
+    enabled: !!warehouseId,
   });
 
   const items = useMemo(() => {
     const list = Array.isArray(data?.inventry) ? data.inventry : [];
-    const mapped = list.map((row) => ({
-      id: row._id,
-      quantity: row.quantity,
-      updatedAt: row.updatedAt,
-      productTitle: row.productData?.pro_title,
-      locationCode: row.locationData?.code,
-      sku: row.productData?.sku,
-      modelCode: row.productData?.model_code,
-      name: row.warehouseData?.name,
-      country: row.warehouseData?.country,
-    }));
+
+    const mapped = list
+      .filter((row) => {
+        const itemWarehouseId = row.warehouseData?._id;
+        return itemWarehouseId === warehouseId;
+      })
+      .map((row) => ({
+        id: row._id,
+        quantity: row.quantity,
+        updatedAt: row.updatedAt,
+        productTitle: row.productData?.pro_title,
+        locationCode: row.locationData?.code,
+        sku: row.productData?.sku,
+        modelCode: row.productData?.model_code,
+        name: row.warehouseData?.name,
+        country: row.warehouseData?.country,
+        warehouseId: row.warehouseData?._id,
+      }));
+
     return mapped;
-  }, [data]);
+  }, [data, warehouseId]);
 
   const groupedByLocation = useMemo(() => {
     const bucket = new Map();
@@ -72,69 +112,51 @@ export default function InventoryList() {
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
   const { data: whDetail } = useQuery({
-    queryKey: ["warehouse", selectedWarehouseId],
-    queryFn: () =>
-      selectedWarehouseId ? getWarehouse(selectedWarehouseId) : null,
-    enabled: !!selectedWarehouseId,
+    queryKey: ["warehouse", warehouseId],
+    queryFn: () => (warehouseId ? getWarehouse(warehouseId) : null),
+    enabled: !!warehouseId,
     staleTime: 5 * 60 * 1000,
+    onSuccess: (data) => {
+      const warehouseName = data?.warehouse?.name || data?.name || "";
+      setSearchTerm(warehouseName);
+    },
   });
   const warehouseName = whDetail?.warehouse?.name || whDetail?.name || "";
 
-  const { data: zonesRes } = useQuery({
-    queryKey: ["zones", selectedWarehouseId],
-    queryFn: () =>
-      selectedWarehouseId ? getZonesByWarehouse(selectedWarehouseId) : null,
-    enabled: !!selectedWarehouseId,
-    staleTime: 60 * 1000,
-  });
-  const zoneName = useMemo(() => {
-    const list = Array.isArray(zonesRes?.zones) ? zonesRes.zones : [];
-    const match = list.find((z) => (z.id ?? z._id) === selectedZoneId);
-    return match?.name || "";
-  }, [zonesRes, selectedZoneId]);
-
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [activeLocationCode, setActiveLocationCode] = useState("");
-  const [form, setForm] = useState({
-    productId: "",
-    locationId: "",
-    quantity: "",
-    productSearch: "",
-    showProductDropdown: false,
-  });
-  const dropdownRef = useRef(null);
-
-  // New state for adding to new location
-  const [isNewLocationModalOpen, setIsNewLocationModalOpen] = useState(false);
-  const [newLocationForm, setNewLocationForm] = useState({
-    productId: "",
-    locationId: "",
-    quantity: "",
-    productSearch: "",
-    showProductDropdown: false,
-    showLocationDropdown: false,
-    locationSearch: "",
-  });
-  const newLocationDropdownRef = useRef(null);
-  const newProductDropdownRef = useRef(null);
-
-  // Fetch products for dropdown
   const { data: productsData } = useQuery({
     queryKey: ["products", 1, 50, ""],
     queryFn: () => getProducts({ page: 1, limit: 50, search: "" }),
     staleTime: 5 * 60 * 1000,
   });
 
-  // Fetch locations for dropdown
-  const { data: locationsData } = useQuery({
-    queryKey: ["locations"],
-    queryFn: () => getLocations(),
-    staleTime: 5 * 60 * 1000,
+  const { data: locationsRes } = useQuery({
+    queryKey: ["locations", warehouseId],
+    enabled: !!warehouseId,
+    staleTime: 60 * 1000,
+    queryFn: async () => {
+      const res = await getLocations();
+      const list = Array.isArray(res?.locations)
+        ? res.locations
+        : Array.isArray(res)
+        ? res
+        : [];
+      return list
+        .map((l) => ({
+          id: l.id ?? l._id,
+          code: l.code,
+          type: String(l.type || "").toLowerCase(),
+          warehouseId:
+            typeof l.warehouse === "string"
+              ? l.warehouse
+              : l.warehouse?.id ?? l.warehouse?._id ?? null,
+          qrcode: l.qrcode || l.qrPath || null,
+        }))
+        .filter((l) => l.warehouseId === warehouseId);
+    },
   });
 
-  console.log("Locations", locationsData)
+  const locations = locationsRes || [];
 
-  // Handle click outside to close dropdown
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -164,77 +186,63 @@ export default function InventoryList() {
   }, []);
 
   const createInv = useMutation({
-    mutationFn: (body) => createInventory(body),
+    mutationFn: (body) =>
+      createInventory({ ...body, warehouseId: warehouseId }),
     onSuccess: (data, variables) => {
-      setIsCreateOpen(false);
-      setForm({
+      // Close the modal and reset form
+      setIsNewLocationModalOpen(false);
+      setNewLocationForm({
         productId: "",
         locationId: "",
         quantity: "",
         productSearch: "",
         showProductDropdown: false,
+        showLocationDropdown: false,
+        locationSearch: "",
       });
 
-      // Add the new product to local state immediately for instant UI update
-      const newProduct = {
-        _id: data?.inventory?._id || `temp-${Date.now()}`,
-        quantity: Number(variables.quantity),
-        productTitle:
-          productsData?.products?.find((p) => p._id === variables.productId)
-            ?.title ||
-          productsData?.products?.find((p) => p._id === variables.productId)
-            ?.pro_title ||
-          productsData?.products?.find((p) => p._id === variables.productId)
-            ?.name ||
-          productsData?.products?.find((p) => p._id === variables.productId)
-            ?.sku ||
-          productsData?.products?.find((p) => p._id === variables.productId)
-            ?.model_code ||
-          "New Product",
-        locationCode: activeLocationCode,
-      };
+      // Get the location and product details
+      const location = locations.find((l) => l.id === variables.locationId);
+      const product = productsData?.products?.find(
+        (p) => p._id === variables.productId
+      );
 
-      // Force a re-render by updating the query data
+      // Update the cache with the new inventory item
       queryClient.setQueryData(
-        ["inventory", page, limit, searchTerm],
+        ["inventory", page, limit, searchTerm, warehouseId],
         (old) => {
           if (!old) return old;
-          console.log("Updating cache with new product:", newProduct);
-          console.log("Old cache data:", old);
 
-          const updatedInventry = [
-            ...(old.inventry || []),
-            {
-              _id: newProduct._id,
-              quantity: newProduct.quantity,
-              productData: {
-                pro_title: newProduct.productTitle,
-                sku:
-                  productsData?.products?.find(
-                    (p) => p._id === variables.productId
-                  )?.sku || "N/A",
-                model_code:
-                  productsData?.products?.find(
-                    (p) => p._id === variables.productId
-                  )?.model_code || "N/A",
-              },
-              locationData: {
-                code: newProduct.locationCode,
-                _id: variables.locationId, // Use the actual locationId from the form
-              },
+          const newItem = {
+            _id: data?.inventory?._id || `temp-${Date.now()}`,
+            quantity: Number(variables.quantity),
+            productData: {
+              _id: variables.productId,
+              pro_title: product?.pro_title || product?.title || product?.name,
+              sku: product?.sku || "N/A",
+              model_code: product?.model_code || "N/A",
             },
-          ];
-
-          console.log("Updated inventry:", updatedInventry);
+            locationData: {
+              _id: variables.locationId,
+              code: location?.code || "Unknown",
+              type: location?.type || "unknown",
+            },
+            warehouseData: {
+              _id: warehouseId,
+              name: warehouseName,
+              country: whDetail?.warehouse?.country || whDetail?.country,
+            },
+          };
 
           return {
             ...old,
-            inventry: updatedInventry,
+            inventry: [newItem, ...(old.inventry || [])],
             totalInventry: (old.totalInventry || 0) + 1,
           };
         }
       );
 
+      // Show success message
       Swal.fire({
         icon: "success",
         title: "Product Added Successfully",
@@ -245,18 +253,23 @@ export default function InventoryList() {
         timerProgressBar: true,
         background: "#10b981",
         color: "#fff",
-        customClass: {
-          popup: "rounded-lg",
-        },
+        customClass: { popup: "rounded-lg" },
       });
-
-      // Refetch the current inventory data immediately
-      queryClient.invalidateQueries({ queryKey: ["inventory"] });
-      // Also refresh the scan results if they exist
-      if (items && items.length > 0) {
-        // Trigger a refetch by updating the query key
-        queryClient.invalidateQueries({ queryKey: ["scan-results"] });
-      }
+    },
+    onError: (error) => {
+      Swal.fire({
+        icon: "error",
+        title: "Error Adding Product",
+        text: error.message || "Something went wrong",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+        background: "#ef4444",
+        color: "#fff",
+        customClass: { popup: "rounded-lg" },
+      });
     },
   });
 
@@ -282,21 +295,6 @@ export default function InventoryList() {
               <span>/</span>
             </>
           )}
-          {zoneName && (
-            <>
-              <span
-                onClick={() => {
-                  if (selectedZoneId)
-                    dispatch(setSelectedZoneId(selectedZoneId));
-                  navigate("/inventory/zones");
-                }}
-                className="cursor-pointer hover:underline"
-              >
-                {zoneName}
-              </span>
-              <span>/</span>
-            </>
-          )}
           <span className="font-medium">Inventory</span>
         </nav>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-zinc-200 bg-white p-6">
@@ -318,21 +316,17 @@ export default function InventoryList() {
                 className="w-full pl-10 pr-3 py-2 border rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 outline-none duration-300 ease-in-out"
               />
             </div>
-            <button
+            {/* <button
               onClick={() => setIsNewLocationModalOpen(true)}
               className="flex items-center justify-center gap-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-4 py-2 rounded-xl font-medium transition-all duration-200 transform shadow-lg hover:shadow-xl whitespace-nowrap"
             >
               <Plus className="h-4 w-4" />
               Add to New Location
-            </button>
+            </button> */}
           </div>
         </div>
-        <div className="max-w-7xl mx-auto py-6 space-y-6">
-          <div className="overflow-auto rounded-lg border">
-            <div className="min-w-full divide-y divide-gray-200">
-              <ProductTableSkeleton rows={8} columns={2} />
-            </div>
-          </div>
+        <div className="max-w-7xl mx-auto py-6">
+          <InventoryTableSkeleton />
         </div>
       </>
     );
@@ -358,20 +352,6 @@ export default function InventoryList() {
             <span>/</span>
           </>
         )}
-        {zoneName && (
-          <>
-            <span
-              onClick={() => {
-                if (selectedZoneId) dispatch(setSelectedZoneId(selectedZoneId));
-                navigate("/inventory/zones");
-              }}
-              className="cursor-pointer hover:underline"
-            >
-              {zoneName}
-            </span>
-            <span>/</span>
-          </>
-        )}
         <span className="font-medium">Inventory</span>
       </nav>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-zinc-200 bg-white p-6">
@@ -393,23 +373,20 @@ export default function InventoryList() {
               className="w-full pl-10 pr-3 py-2 border rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 outline-none duration-300 ease-in-out"
             />
           </div>
-          <button
+          {/* <button
             onClick={() => setIsNewLocationModalOpen(true)}
             className="flex items-center justify-center gap-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-4 py-2 rounded-xl font-medium transition-all duration-200 transform shadow-lg hover:shadow-xl whitespace-nowrap"
           >
             <Plus className="h-4 w-4" />
             Add to New Location
-          </button>
+          </button> */}
         </div>
       </div>
-      <div className="max-w-7xl mx-auto py-6 space-y-6">
-        {/* Grouped by location code */}
+      <div className="max-w-7xl mx-auto py-6">
         {isLoading ? (
-          <div className="overflow-auto rounded-lg border">
-            <div className="min-w-full divide-y divide-gray-200">
-              <ProductTableSkeleton rows={8} columns={2} />
-            </div>
-          </div>
+          <InventoryTableSkeleton />
+        ) : groupedByLocation.length === 0 ? (
+          <EmptyInventory onAddNew={() => setIsNewLocationModalOpen(true)} />
         ) : (
           <div className="space-y-6">
             {groupedByLocation.map(({ locationCode, rows, country }) => (
@@ -423,14 +400,14 @@ export default function InventoryList() {
                   </p>
                   <p className="text-lg font-semibold uppercase">{country}</p>
                 </div>
-                <div>
+                <div className="overflow-x-auto">
                   <table className="min-w-full border border-gray-200 bg-white">
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border-b">
                           Product Title
                         </th>
-                        <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border-b">
+                        <th className="px-4 py-2 text-left whitespace-nowrap text-sm font-semibold text-gray-700 border-b">
                           SKU
                         </th>
                         <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border-b">
@@ -450,15 +427,15 @@ export default function InventoryList() {
                           }`}
                         >
                           <td
-                            className="px-4 py-3 text-sm font-medium leading-relaxed border-b w-[300px]"
+                            className="px-4 py-3 text-sm font-medium leading-relaxed border-b min-w-[300px]"
                             title={r?.productTitle}
                           >
                             {r?.productTitle}
                           </td>
-                          <td className="px-4 py-3 text-xs font-mono border-b">
+                          <td className="px-4 py-3 text-xs whitespace-nowrap font-mono border-b">
                             {r?.sku || "N/A"}
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-500 border-b">
+                          <td className="px-4 py-3 text-sm whitespace-nowrap text-gray-500 border-b">
                             {r?.name || ""}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-500 border-b">
@@ -470,8 +447,17 @@ export default function InventoryList() {
                   </table>
 
                   {rows.length === 0 && (
-                    <div className="px-4 py-6 text-center text-gray-500">
-                      No inventory found.
+                    <div className="px-4 py-8 text-center bg-gray-50">
+                      <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-gray-100 mb-4">
+                        <FiPackage className="w-6 h-6 text-gray-400" />
+                      </div>
+                      <p className="text-gray-500 mb-2">No items in this location</p>
+                      <button
+                        onClick={() => setIsNewLocationModalOpen(true)}
+                        className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                      >
+                        Add items →
+                      </button>
                     </div>
                   )}
                 </div>
@@ -541,144 +527,10 @@ export default function InventoryList() {
         </div>
       </div>
 
-      {isCreateOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-lg">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Create Inventory</h3>
-              <button
-                onClick={() => setIsCreateOpen(false)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                ✕
-              </button>
-            </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                console.log("Form data:", form);
-                console.log("Active location code:", activeLocationCode);
-                console.log("Form locationId:", form.locationId);
-                if (!form.productId || !form.locationId || !form.quantity)
-                  return;
-                createInv.mutate({
-                  productId: form.productId,
-                  locationId: form.locationId,
-                  quantity: String(form.quantity),
-                });
-              }}
-              className="space-y-4"
-            >
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Location
-                </label>
-                <div className="w-full rounded-md border px-3 py-2 text-sm bg-gray-50 text-gray-600">
-                  {activeLocationCode}
-                </div>
-              </div>
-
-              <div className="relative" ref={dropdownRef}>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Product
-                </label>
-                <input
-                  type="text"
-                  placeholder="Search products..."
-                  value={form.productSearch}
-                  onChange={(e) => {
-                    setForm((prev) => ({
-                      ...prev,
-                      productSearch: e.target.value,
-                      showProductDropdown: true,
-                      productId: "",
-                    }));
-                  }}
-                  onFocus={() =>
-                    setForm((prev) => ({ ...prev, showProductDropdown: true }))
-                  }
-                  className="w-full rounded-md border px-3 py-2 text-sm"
-                  required
-                />
-                {form.showProductDropdown && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
-                    {Array.isArray(productsData?.products) ? (
-                      productsData.products
-                        .filter((p) =>
-                          (p.title || p.pro_title || p.name || p.sku || "")
-                            .toLowerCase()
-                            .includes((form.productSearch || "").toLowerCase())
-                        )
-                        .map((p) => (
-                          <div
-                            key={p._id}
-                            onClick={() => {
-                              setForm((prev) => ({
-                                ...prev,
-                                productId: p._id,
-                                productSearch:
-                                  p.title || p.pro_title || p.name || p.sku,
-                                showProductDropdown: false,
-                              }));
-                            }}
-                            className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-                          >
-                            {p.title || p.pro_title || p.name || p.sku}
-                          </div>
-                        ))
-                    ) : (
-                      <div className="px-3 py-2 text-gray-500 text-sm">
-                        Loading products...
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Quantity
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.quantity}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      quantity: e.target.value.replace(/[^0-9]/g, ""),
-                    }))
-                  }
-                  className="w-full rounded-md border px-3 py-2 text-sm"
-                  placeholder="e.g., 5"
-                  required
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateOpen(false)}
-                  className="px-4 py-2 text-sm rounded-lg border"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white"
-                >
-                  {createInv.isLoading ? "Saving…" : "Save"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* New Location Modal */}
       {isNewLocationModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-lg">
+        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-lg max-h-[95vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">
                 Add Product to New Location
@@ -693,19 +545,20 @@ export default function InventoryList() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                console.log("New location form data:", newLocationForm);
                 if (
                   !newLocationForm.productId ||
                   !newLocationForm.locationId ||
-                  !newLocationForm.quantity
+                  !newLocationForm.quantity ||
+                  !newLocationForm.typeCode
                 )
                   return;
+
                 createInv.mutate({
                   productId: newLocationForm.productId,
                   locationId: newLocationForm.locationId,
                   quantity: String(newLocationForm.quantity),
+                  type: newLocationForm.typeCode,
                 });
-                // Reset form and close modal
                 setNewLocationForm({
                   productId: "",
                   locationId: "",
@@ -745,10 +598,11 @@ export default function InventoryList() {
                   className="w-full rounded-md border px-3 py-2 text-sm"
                   required
                 />
+
                 {newLocationForm.showLocationDropdown && (
                   <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
-                    {Array.isArray(locationsData?.locations) ? (
-                      locationsData.locations
+                    {Array.isArray(locations) ? (
+                      locations
                         .filter((loc) =>
                           (loc.code || "")
                             .toLowerCase()
@@ -760,11 +614,11 @@ export default function InventoryList() {
                         )
                         .map((loc) => (
                           <div
-                            key={loc._id}
+                            key={loc.id}
                             onClick={() => {
                               setNewLocationForm((prev) => ({
                                 ...prev,
-                                locationId: loc._id,
+                                locationId: loc.id, // Changed from loc._id to loc.id
                                 locationSearch: loc.code,
                                 showLocationDropdown: false,
                               }));
@@ -783,7 +637,38 @@ export default function InventoryList() {
                 )}
               </div>
 
-              {/* Product Selection */}
+              {/* Type Selection - Add this before Product Selection */}
+              <div className="relative">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Product Type
+                </label>
+                <select
+                  value={newLocationForm.typeCode}
+                  onChange={(e) => {
+                    const selectedType = productTypes.find(
+                      (t) => t.code === e.target.value
+                    );
+                    setNewLocationForm((prev) => ({
+                      ...prev,
+                      type: selectedType?.label || "",
+                      typeCode: e.target.value,
+                      productId: "", // Reset product selection when type changes
+                      productSearch: "", // Reset product search when type changes
+                    }));
+                  }}
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  required
+                >
+                  <option value="">Select Type</option>
+                  {productTypes.map((type) => (
+                    <option key={type.code} value={type.code}>
+                      {type.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Product Selection - Now filtered by type */}
               <div className="relative" ref={newProductDropdownRef}>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Product
@@ -808,19 +693,19 @@ export default function InventoryList() {
                   }
                   className="w-full rounded-md border px-3 py-2 text-sm"
                   required
+                  disabled={!newLocationForm.typeCode} // Disable if no type selected
                 />
                 {newLocationForm.showProductDropdown && (
                   <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
                     {Array.isArray(productsData?.products) ? (
                       productsData.products
-                        .filter((p) =>
-                          (p.title || p.pro_title || p.name || p.sku || "")
-                            .toLowerCase()
-                            .includes(
-                              (
-                                newLocationForm.productSearch || ""
-                              ).toLowerCase()
-                            )
+                        // Filter by type_code and search term
+                        .filter(
+                          (p) =>
+                            p.type_code === newLocationForm.typeCode &&
+                            (p.pro_title || p.sku || "")
+                              .toLowerCase()
+                              .includes(newLocationForm.productSearch.toLowerCase())
                         )
                         .map((p) => (
                           <div
@@ -829,14 +714,13 @@ export default function InventoryList() {
                               setNewLocationForm((prev) => ({
                                 ...prev,
                                 productId: p._id,
-                                productSearch:
-                                  p.title || p.pro_title || p.name || p.sku,
+                                productSearch: p.pro_title || p.sku,
                                 showProductDropdown: false,
                               }));
                             }}
                             className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
                           >
-                            {p.title || p.pro_title || p.name || p.sku}
+                            {p.pro_title} ({p.sku})
                           </div>
                         ))
                     ) : (

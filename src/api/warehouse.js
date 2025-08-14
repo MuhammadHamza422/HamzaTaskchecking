@@ -3,12 +3,18 @@ import apiClient from "./client";
 // Base path is relative; baseURL is set via VITE_API_BASE_URL in api client
 
 // GET /api/v1/warehouse/all?page=1&limit=10&search=...
-export async function getWarehouses({ page = 1, limit = 50, search = "" } = {}) {
+export async function getWarehouses({
+  page = 1,
+  limit = 50,
+  search = "",
+} = {}) {
   const params = new URLSearchParams();
   if (page) params.set("page", String(page));
   if (limit) params.set("limit", String(limit));
   if (search) params.set("search", String(search));
-  const { data } = await apiClient.get(`/api/v1/warehouse/all?${params.toString()}`);
+  const { data } = await apiClient.get(
+    `/api/v1/warehouse/all?${params.toString()}`
+  );
   return data;
 }
 
@@ -26,7 +32,10 @@ export async function createWarehouse(body) {
 
 // PATCH /api/v1/warehouse/update/:id
 export async function updateWarehouse(id, body) {
-  const { data } = await apiClient.patch(`/api/v1/warehouse/update/${id}`, body);
+  const { data } = await apiClient.patch(
+    `/api/v1/warehouse/update/${id}`,
+    body
+  );
   return data;
 }
 
@@ -104,30 +113,46 @@ export async function getProducts({ page = 1, limit = 30, search = "" } = {}) {
   params.set("page", String(page));
   params.set("limit", String(limit));
   if (search) params.set("search", String(search));
-  const { data } = await apiClient.get(`/api/v1/products/all?${params.toString()}`);
+  const { data } = await apiClient.get(
+    `/api/v1/products/all?${params.toString()}`
+  );
   return data;
 }
 
 // DELETE /api/v1/inventry/product/delete/:id
 export async function deleteProduct(id) {
-  const { data } = await apiClient.delete(`/api/v1/inventry/product/delete/${id}`);
+  const { data } = await apiClient.delete(
+    `/api/v1/inventry/product/delete/${id}`
+  );
   return data;
 }
 
 // INVENTORY
-export async function getInventory({ page = 1, limit = 30, search = "" } = {}) {
-  const params = new URLSearchParams();
-  params.set("page", String(page));
-  params.set("limit", String(limit));
-  if (search) params.set("search", String(search));
-  const { data } = await apiClient.get(`/api/v1/inventry/all?${params.toString()}`);
-  return data;
+export async function getInventory({
+  page = 1,
+  limit = 30,
+  search = "",
+  warehouseId,
+} = {}) {
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: String(limit),
+  });
+
+  if (search) params.append("search", search);
+  if (warehouseId) params.append("warehouse", warehouseId);
+
+  const response = await apiClient.get(`/api/v1/inventry/all?${params}`);
+  return response.data;
 }
 
 // PATCH /api/v1/inventry/quantity/:inventoryId
 export async function updateInventoryQuantity(inventoryId, quantity) {
   const body = { quantity: String(quantity) };
-  const { data } = await apiClient.patch(`/api/v1/inventry/quantity/${inventoryId}`, body);
+  const { data } = await apiClient.patch(
+    `/api/v1/inventry/quantity/${inventoryId}`,
+    body
+  );
   return data;
 }
 

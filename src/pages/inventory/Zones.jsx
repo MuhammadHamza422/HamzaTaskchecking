@@ -164,7 +164,7 @@ export default function Zones() {
               >
                 <FiEdit2 />
               </button>
-              <button
+              {/* <button
                 onClick={(e) => {
                   e.stopPropagation();
                   handleDeleteZone(z.id);
@@ -173,7 +173,7 @@ export default function Zones() {
                 title="Delete"
               >
                 <FiTrash2 />
-              </button>
+              </button> */}
             </div>
 
             <h2 className="truncate text-base font-semibold">{z.name}</h2>
@@ -183,7 +183,7 @@ export default function Zones() {
               </p>
             )}
 
-            <div className="mt-3 text-sm text-blue-600">Select →</div>
+            {/* <div className="mt-3 text-sm text-blue-600">Select →</div> */}
           </div>
         ))}
       </div>

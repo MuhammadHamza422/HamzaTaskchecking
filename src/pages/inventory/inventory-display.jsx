@@ -9,6 +9,13 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Swal from "sweetalert2";
 
+const productTypes = [
+  { label: "Consoles", code: "CON" },
+  { label: "Handhelds", code: "HAN" },
+  { label: "Accessories", code: "ACC" },
+  { label: "Games", code: "GAM" },
+];
+
 export default function InventoryDisplay({ items, totalCount, isLoading }) {
   const [search, setSearch] = useState("");
   const [localItems, setLocalItems] = useState(
@@ -22,7 +29,10 @@ export default function InventoryDisplay({ items, totalCount, isLoading }) {
     quantity: "",
     productSearch: "",
     showProductDropdown: false,
+    type: "",
+    typeCode: "",
   });
+  const [pendingQtyChange, setPendingQtyChange] = useState(null);
   const queryClient = useQueryClient();
   const dropdownRef = useRef(null);
 
@@ -73,13 +83,115 @@ export default function InventoryDisplay({ items, totalCount, isLoading }) {
     );
   };
 
+  // Add this validation function near the top of your component
+  const validateQuantityChange = (currentQty, newQty) => {
+    // Don't allow negative quantities
+    if (newQty < 0) {
+      Swal.fire({
+        icon: "error",
+        title: "Invalid Quantity",
+        text: "Quantity cannot be negative",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        background: "#ef4444",
+        color: "#fff",
+      });
+      return false;
+    }
+
+    // Optional: Add maximum quantity limit
+    if (newQty > 9999) {
+      Swal.fire({
+        icon: "error",
+        title: "Invalid Quantity",
+        text: "Quantity cannot exceed 9999",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        background: "#ef4444",
+        color: "#fff",
+      });
+      return false;
+    }
+
+    return true;
+  };
+
+  // Update the handleUpdateQty function
   const handleUpdateQty = async (id, nextQty) => {
-    const q = Math.max(0, Number(nextQty) || 0);
-    applyLocalQty(id, q);
+    const currentItem = localItems.find((item) => item._id === id);
+    if (!currentItem) return;
+
+    const currentQty = Number(currentItem.quantity) || 0;
+    const newQty = Math.max(0, Number(nextQty) || 0);
+
+    // Validate the quantity change
+    if (!validateQuantityChange(currentQty, newQty)) {
+      setPendingQtyChange(null);
+      return;
+    }
+
     try {
-      await updateInventoryQuantity(id, q);
-    } catch (_e) {
-      // Optional: revert? For now keep optimistic UI
+      // Show confirmation for large changes
+      if (Math.abs(newQty - currentQty) > 10) {
+        const result = await Swal.fire({
+          icon: "warning",
+          title: "Confirm Quantity Change",
+          text: `Are you sure you want to ${
+            newQty > currentQty ? "increase" : "decrease"
+          } the quantity by ${Math.abs(newQty - currentQty)}?`,
+          showCancelButton: true,
+          confirmButtonText: "Yes, update it",
+          cancelButtonText: "Cancel",
+          confirmButtonColor: "#3b82f6",
+        });
+
+        if (!result.isConfirmed) {
+          setPendingQtyChange(null);
+          return;
+        }
+      }
+
+      // Apply change locally first (optimistic update)
+      applyLocalQty(id, newQty);
+
+      // Update in backend
+      await updateInventoryQuantity(id, newQty);
+
+      // Clear pending change
+      setPendingQtyChange(null);
+
+      // Show success message
+      Swal.fire({
+        icon: "success",
+        title: "Quantity Updated",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 2000,
+        background: "#10b981",
+        color: "#fff",
+      });
+    } catch (error) {
+      // Revert local change on error
+      applyLocalQty(id, currentQty);
+      setPendingQtyChange(null);
+
+      // Show error message
+      Swal.fire({
+        icon: "error",
+        title: "Update Failed",
+        text: error.message || "Failed to update quantity",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        background: "#ef4444",
+        color: "#fff",
+      });
     }
   };
 
@@ -99,6 +211,8 @@ export default function InventoryDisplay({ items, totalCount, isLoading }) {
         quantity: "",
         productSearch: "",
         showProductDropdown: false,
+        type: "", // Reset type
+        typeCode: "", // Reset typeCode
       });
 
       // Add the new product to local state immediately
@@ -219,65 +333,129 @@ export default function InventoryDisplay({ items, totalCount, isLoading }) {
               </button>
             </div>
             <div>
-              {rows.map((r, idx) => (
-                <div
-                  key={r._id}
-                  className={`flex items-center justify-between px-4 py-1.5 hover:bg-gray-50 bg-white ${
-                    idx !== 0 ? "border-t" : ""
-                  }`}
-                >
-                  <p
-                    title={r?.productData?.pro_title}
-                    className="text-sm font-medium line-clamp-2 leading-relaxed"
-                  >
-                    {r?.productData?.pro_title}
-                  </p>
-                  <div className="flex items-center rounded-lg overflow-hidden border border-gray-200 shadow-sm bg-gray-50 h-9">
-                    <button
-                      disabled={Number(r.quantity) <= 0}
-                      onClick={() =>
-                        handleUpdateQty(
-                          r._id,
-                          Math.max(0, Number(r.quantity) - 1)
-                        )
-                      }
-                      className={`px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors ${
-                        Number(r.quantity) <= 0
-                          ? "text-gray-300 bg-gray-50 cursor-not-allowed"
-                          : "text-red-400 bg-red-100 hover:bg-red-800 hover:text-white"
+              <table className="min-w-full border border-gray-200 bg-white">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border-b">
+                      Product Title
+                    </th>
+                    <th className="px-4 py-2 text-left whitespace-nowrap text-sm font-semibold text-gray-700 border-b">
+                      SKU
+                    </th>
+                    <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border-b">
+                      Quantity
+                    </th>
+                    <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border-b">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, idx) => (
+                    <tr
+                      key={r._id}
+                      className={`hover:bg-gray-50 ${
+                        idx % 2 !== 0 ? "bg-gray-50/50" : "bg-white"
                       }`}
-                      title="Decrease"
-                      aria-label={`Decrease quantity for ${r?.productData?.pro_title}`}
                     >
-                      <Minus className="w-4 h-4" />
-                    </button>
-                    <input
-                      value={r.quantity}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/[^0-9]/g, "");
-                        const q = Math.max(0, val === "" ? 0 : Number(val));
-                        handleUpdateQty(r._id, q);
-                      }}
-                      className="w-14 text-center px-3 py-2 text-sm bg-white border-l border-r outline-none focus:ring-0"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      title="Enter quantity"
-                      aria-label={`Quantity for ${r?.productData?.pro_title}`}
-                      readOnly
-                    />
-                    <button
-                      onClick={() =>
-                        handleUpdateQty(r._id, Number(r.quantity) + 1)
-                      }
-                      className="px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors bg-green-100 text-green-600 hover:bg-green-900 hover:text-white"
-                      title="Increase"
-                      aria-label={`Increase quantity for ${r?.productData?.pro_title}`}
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                      <td
+                        className="px-4 py-3 text-sm font-medium leading-relaxed border-b min-w-[300px]"
+                        title={r?.productData?.pro_title}
+                      >
+                        {r?.productData?.pro_title}
+                      </td>
+                      <td className="px-4 py-3 text-xs whitespace-nowrap font-mono border-b">
+                        {r?.productData.sku || "N/A"}
+                      </td>
+
+                      <td className="px-4 py-3 text-sm text-gray-500 border-b">
+                        {r?.quantity}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center space-x-2">
+                          {pendingQtyChange?.id === r._id ? (
+                            <div className="flex items-center space-x-2">
+                              <div className="text-sm font-medium">
+                                New qty: {pendingQtyChange.newQty}
+                              </div>
+                              <button
+                                onClick={() => {
+                                  handleUpdateQty(
+                                    r._id,
+                                    pendingQtyChange.newQty
+                                  );
+                                  setPendingQtyChange(null);
+                                }}
+                                className="px-2 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600"
+                              >
+                                Validate
+                              </button>
+                              <button
+                                onClick={() => setPendingQtyChange(null)}
+                                className="px-2 py-1 text-xs bg-gray-500 text-white rounded hover:bg-gray-600"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center rounded-lg overflow-hidden border border-gray-200 shadow-sm bg-gray-50 h-9">
+                              <button
+                                disabled={Number(r.quantity) <= 0}
+                                onClick={() => {
+                                  const newQty = Math.max(
+                                    0,
+                                    Number(r.quantity) - 1
+                                  );
+                                  setPendingQtyChange({
+                                    id: r._id,
+                                    currentQty: Number(r.quantity),
+                                    newQty,
+                                    type: "decrease",
+                                  });
+                                }}
+                                className={`px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors ${
+                                  Number(r.quantity) <= 0
+                                    ? "text-gray-300 bg-gray-50 cursor-not-allowed"
+                                    : "text-red-400 bg-red-100 hover:bg-red-800 hover:text-white"
+                                }`}
+                                title="Decrease"
+                                aria-label={`Decrease quantity for ${r?.productData?.pro_title}`}
+                              >
+                                <Minus className="w-4 h-4" />
+                              </button>
+                              <input
+                                value={r.quantity}
+                                readOnly
+                                className="w-14 text-center px-3 py-2 text-sm bg-white border-l border-r outline-none focus:ring-0"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                title="Current quantity"
+                                aria-label={`Quantity for ${r?.productData?.pro_title}`}
+                              />
+                              <button
+                                onClick={() => {
+                                  const newQty = Number(r.quantity) + 1;
+                                  setPendingQtyChange({
+                                    id: r._id,
+                                    currentQty: Number(r.quantity),
+                                    newQty,
+                                    type: "increase",
+                                  });
+                                }}
+                                className="px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors bg-green-100 text-green-600 hover:bg-green-900 hover:text-white"
+                                title="Increase"
+                                aria-label={`Increase quantity for ${r?.productData?.pro_title}`}
+                              >
+                                <Plus className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
               {rows.length === 0 && (
                 <div className="px-4 py-6 text-center text-gray-500">
                   No inventory found.
@@ -296,8 +474,8 @@ export default function InventoryDisplay({ items, totalCount, isLoading }) {
       </div>
 
       {isCreateOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-lg">
+        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-lg max-h-[95vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Create Inventory</h3>
               <button
@@ -316,10 +494,12 @@ export default function InventoryDisplay({ items, totalCount, isLoading }) {
                   productId: form.productId,
                   locationId: form.locationId,
                   quantity: String(form.quantity),
+                  type: form.typeCode,
                 });
               }}
               className="space-y-4"
             >
+              {/* Location */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Location
@@ -329,6 +509,38 @@ export default function InventoryDisplay({ items, totalCount, isLoading }) {
                 </div>
               </div>
 
+              {/* Type Selection - Add this before Product Selection */}
+              <div className="relative">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Product Type
+                </label>
+                <select
+                  value={form.typeCode}
+                  onChange={(e) => {
+                    const selectedType = productTypes.find(
+                      (t) => t.code === e.target.value
+                    );
+                    setForm((prev) => ({
+                      ...prev,
+                      type: selectedType?.label || "",
+                      typeCode: e.target.value,
+                      productId: "", // Reset product selection when type changes
+                      productSearch: "", // Reset product search when type changes
+                    }));
+                  }}
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  required
+                >
+                  <option value="">Select Type</option>
+                  {productTypes.map((type) => (
+                    <option key={type.code} value={type.code}>
+                      {type.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Product Selection - Updated to filter by type */}
               <div className="relative" ref={dropdownRef}>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Product
@@ -350,15 +562,18 @@ export default function InventoryDisplay({ items, totalCount, isLoading }) {
                   }
                   className="w-full rounded-md border px-3 py-2 text-sm"
                   required
+                  disabled={!form.typeCode} // Disable if no type selected
                 />
                 {form.showProductDropdown && (
                   <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
                     {Array.isArray(productsData?.products) ? (
                       productsData.products
-                        .filter((p) =>
-                          (p.title || p.pro_title || p.name || p.sku || "")
-                            .toLowerCase()
-                            .includes((form.productSearch || "").toLowerCase())
+                        .filter(
+                          (p) =>
+                            p.type_code === form.typeCode && // Filter by type_code
+                            (p.pro_title || p.sku || "")
+                              .toLowerCase()
+                              .includes(form.productSearch.toLowerCase())
                         )
                         .map((p) => (
                           <div
@@ -367,14 +582,13 @@ export default function InventoryDisplay({ items, totalCount, isLoading }) {
                               setForm((prev) => ({
                                 ...prev,
                                 productId: p._id,
-                                productSearch:
-                                  p.title || p.pro_title || p.name || p.sku,
+                                productSearch: p.pro_title || p.sku,
                                 showProductDropdown: false,
                               }));
                             }}
                             className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
                           >
-                            {p.title || p.pro_title || p.name || p.sku}
+                            {p.pro_title} ({p.sku})
                           </div>
                         ))
                     ) : (
@@ -386,6 +600,7 @@ export default function InventoryDisplay({ items, totalCount, isLoading }) {
                 )}
               </div>
 
+              {/* Quantity */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Quantity

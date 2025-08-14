@@ -6,6 +6,9 @@ import {
   FiTrash2,
   FiEdit2,
   FiPrinter,
+  FiMapPin,
+  FiPackage,
+  FiAlertCircle,
 } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
@@ -23,6 +26,8 @@ import html2canvas from "html2canvas-pro";
 import jsPDF from "jspdf";
 import Swal from "sweetalert2";
 import { QRCodeSVG } from "qrcode.react";
+import Skeleton from "react-loading-skeleton";
+import "react-loading-skeleton/dist/skeleton.css";
 
 export default function Locations() {
   const navigate = useNavigate();
@@ -36,9 +41,9 @@ export default function Locations() {
   const [newShelf, setNewShelf] = useState("");
   const [newBin, setNewBin] = useState("");
 
-  useEffect(() => {
-    if (!warehouseId) navigate("/inventory/warehouses");
-  }, [warehouseId, navigate]);
+  // useEffect(() => {
+  //   if (!warehouseId) navigate("/inventory/warehouses");
+  // }, [warehouseId, navigate]);
 
   // Fetch warehouse for breadcrumb
   const { data: warehouseRes } = useQuery({
@@ -293,7 +298,7 @@ export default function Locations() {
 
   return (
     <div className="max-w-7xl mx-auto p-2 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center gap-y-4 justify-between">
         {/* Breadcrumb */}
         <nav className="text-sm text-gray-600 flex flex-wrap items-center gap-2">
           <button
@@ -326,15 +331,17 @@ export default function Locations() {
           )}
           <span className="font-semibold">Locations</span>
         </nav>
-        <button
-          onClick={openPrint}
-          title="Print"
-          aria-label="Print"
-          className="inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-lg font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <FiPrinter className="w-5 h-5" />
-          Print labels
-        </button>
+        {Array.isArray(locations) && locations.length > 0 && (
+          <button
+            onClick={openPrint}
+            title="Print"
+            aria-label="Print"
+            className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-lg font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <FiPrinter className="w-5 h-5" />
+            Print labels
+          </button>
+        )}
       </div>
 
       {/* Header + New */}
@@ -342,7 +349,7 @@ export default function Locations() {
         <h1 className="text-2xl font-bold">Locations</h1>
         <button
           onClick={() => setShowNew(true)}
-          className="inline-flex items-center space-x-1 px-4 py-2 border rounded hover:bg-gray-100 transition"
+          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
         >
           <FiPlus /> <span>New Location</span>
         </button>
@@ -442,39 +449,99 @@ export default function Locations() {
       {/* Locations Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {isLoading && (
-          <p className="col-span-full text-center text-gray-500">Loading…</p>
+          <>
+            <LocationSkeleton />
+            <LocationSkeleton />
+            <LocationSkeleton />
+            <LocationSkeleton />
+            <LocationSkeleton />
+            <LocationSkeleton />
+            <LocationSkeleton />
+            <LocationSkeleton />
+          </>
         )}
+
         {!isLoading && locations.length === 0 && (
-          <p className="col-span-full text-center text-gray-500">
-            No locations yet.
-          </p>
+          <div className="col-span-full">
+            <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+              <div className="bg-blue-50 p-4 rounded-full mb-4">
+                <FiMapPin className="w-8 h-8 text-blue-500" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                No Locations Yet
+              </h3>
+              <p className="text-gray-500 max-w-sm mb-6">
+                Start by adding your first location. This will help you organize
+                and track your inventory effectively.
+              </p>
+              <button
+                onClick={() => setShowNew(true)}
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <FiPlus className="mr-2 -ml-1 h-5 w-5" />
+                Add First Location
+              </button>
+            </div>
+          </div>
         )}
+
+        {!isLoading && error && (
+          <div className="col-span-full">
+            <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+              <div className="bg-red-50 p-4 rounded-full mb-4">
+                <FiAlertCircle className="w-8 h-8 text-red-500" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Error Loading Locations
+              </h3>
+              <p className="text-gray-500 max-w-sm mb-6">
+                {error.message || "Failed to load locations. Please try again."}
+              </p>
+              <button
+                onClick={() =>
+                  queryClient.invalidateQueries(["locations", warehouseId, zoneId])
+                }
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+              >
+                <FiRefreshCw className="mr-2 -ml-1 h-5 w-5" />
+                Retry
+              </button>
+            </div>
+          </div>
+        )}
+
         {!isLoading &&
+          Array.isArray(locations) &&
           locations.map((loc) => (
             <div
               key={loc?._id}
-              className="bg-white rounded-xl shadow p-5 flex flex-col justify-between relative"
+              className="bg-white rounded-xl shadow p-5 flex flex-col justify-between relative group hover:shadow-lg transition-shadow duration-200"
             >
               <div className="absolute top-2 right-2">
                 <input
-                  className="accent-white h-5 w-5 cursor-pointer border border-black"
+                  className="accent-blue-600 h-5 w-5 cursor-pointer border border-gray-300 rounded"
                   type="checkbox"
                   checked={selectedIds.has(loc.id)}
                   onChange={() => toggleSelected(loc.id)}
                 />
               </div>
               <div>
-                <h2 className="text-lg font-semibold truncate">{loc?.code}</h2>
-                <span className="inline-block mt-2 px-2 py-0.5 text-xs text-gray-600 border rounded">
+                <h2 className="text-lg font-semibold truncate flex items-center gap-2">
+                  <FiPackage className="flex-shrink-0 text-blue-500" />
+                  {loc?.code}
+                </h2>
+                <span className="inline-block mt-2 px-2 py-0.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-full">
                   {loc?.type}
                 </span>
-                <div className="flex items-center justify-center">
-                  <QRCodeSVG
-                    value={String(loc?.code || "")}
-                    size={128}
-                    level="M"
-                    includeMargin
-                  />
+                <div className="flex items-center justify-center mt-4">
+                  <div className="p-2 bg-gray-50 rounded-lg">
+                    <QRCodeSVG
+                      value={String(loc?.code || "")}
+                      size={128}
+                      level="M"
+                      includeMargin
+                    />
+                  </div>
                 </div>
               </div>
               <div className="mt-4 flex items-center justify-end gap-2">
@@ -503,17 +570,10 @@ export default function Locations() {
                       }
                     }
                   }}
-                  className="rounded p-2 text-zinc-600 hover:bg-zinc-100"
+                  className="rounded-full p-2 text-gray-600 hover:bg-gray-100 hover:text-blue-600 transition-colors"
                   title="Edit"
                 >
-                  <FiEdit2 />
-                </button>
-                <button
-                  onClick={() => handleDelete(loc.id)}
-                  className="rounded p-2 text-red-600 hover:bg-red-50"
-                  title="Delete"
-                >
-                  <FiTrash2 />
+                  <FiEdit2 className="w-5 h-5" />
                 </button>
               </div>
             </div>
@@ -932,3 +992,21 @@ export async function generatePDFFromNode({
     throw err;
   }
 }
+
+const LocationSkeleton = () => (
+  <div className="bg-white rounded-xl shadow p-5 flex flex-col justify-between">
+    <div>
+      <Skeleton width={120} height={24} />
+      <div className="mt-2">
+        <Skeleton width={60} height={20} />
+      </div>
+      <div className="flex items-center justify-center mt-4 mb-4">
+        <Skeleton width={128} height={128} />
+      </div>
+    </div>
+    <div className="mt-4 flex items-center justify-end gap-2">
+      <Skeleton width={32} height={32} circle />
+      <Skeleton width={32} height={32} circle />
+    </div>
+  </div>
+);
