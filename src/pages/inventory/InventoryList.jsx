@@ -43,6 +43,8 @@ export default function InventoryList() {
       locationCode: row.locationData?.code,
       sku: row.productData?.sku,
       modelCode: row.productData?.model_code,
+      name: row.warehouseData?.name,
+      country: row.warehouseData?.country,
     }));
     return mapped;
   }, [data]);
@@ -54,10 +56,16 @@ export default function InventoryList() {
       if (!bucket.has(code)) bucket.set(code, []);
       bucket.get(code).push(r);
     }
-    return Array.from(bucket.entries()).map(([locationCode, rows]) => ({
-      locationCode,
-      rows,
-    }));
+    return Array.from(bucket.entries()).map(([locationCode, rows]) => {
+      const country = rows.find((x) => x.country)?.country || "";
+      const warehouseName = rows.find((x) => x.name)?.name || "";
+      return {
+        locationCode,
+        rows,
+        country,
+        warehouseName,
+      };
+    });
   }, [items]);
 
   const total = data?.totalInventry || 0;
@@ -123,6 +131,8 @@ export default function InventoryList() {
     queryFn: () => getLocations(),
     staleTime: 5 * 60 * 1000,
   });
+
+  console.log("Locations", locationsData)
 
   // Handle click outside to close dropdown
   useEffect(() => {
@@ -276,7 +286,8 @@ export default function InventoryList() {
             <>
               <span
                 onClick={() => {
-                  if (selectedZoneId) dispatch(setSelectedZoneId(selectedZoneId));
+                  if (selectedZoneId)
+                    dispatch(setSelectedZoneId(selectedZoneId));
                   navigate("/inventory/zones");
                 }}
                 className="cursor-pointer hover:underline"
@@ -301,7 +312,7 @@ export default function InventoryList() {
               <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search product or location…"
+                placeholder="Search product, location, or warehouse…"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-3 py-2 border rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 outline-none duration-300 ease-in-out"
@@ -376,7 +387,7 @@ export default function InventoryList() {
             <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="Search product or location…"
+              placeholder="Search product, location, or warehouse…"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-3 py-2 border rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 outline-none duration-300 ease-in-out"
@@ -401,15 +412,16 @@ export default function InventoryList() {
           </div>
         ) : (
           <div className="space-y-6">
-            {groupedByLocation.map(({ locationCode, rows }) => (
+            {groupedByLocation.map(({ locationCode, rows, country }) => (
               <div
                 key={locationCode}
                 className="overflow-hidden rounded-lg border"
               >
-                <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-200 ">
+                <div className="flex items-center gap-4 px-4 py-2 bg-white border-b border-gray-200 ">
                   <p className="font-bold text-xl uppercase tracking-wide">
                     {locationCode}
                   </p>
+                  <p className="text-lg font-semibold uppercase">{country}</p>
                 </div>
                 <div>
                   <table className="min-w-full border border-gray-200 bg-white">
@@ -420,6 +432,9 @@ export default function InventoryList() {
                         </th>
                         <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border-b">
                           SKU
+                        </th>
+                        <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border-b">
+                          Warehouse
                         </th>
                         <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700 border-b">
                           Quantity
@@ -442,6 +457,9 @@ export default function InventoryList() {
                           </td>
                           <td className="px-4 py-3 text-xs font-mono border-b">
                             {r?.sku || "N/A"}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-500 border-b">
+                            {r?.name || ""}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-500 border-b">
                             {r?.quantity}

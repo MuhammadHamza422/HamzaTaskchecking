@@ -98,14 +98,14 @@ export default function Zones() {
           <h1 className="text-base font-semibold">
             Zones {selectedWarehouseId ? `— ${warehouseName || "Warehouse"}` : ""}
           </h1>
-          <div className="flex items-center gap-2">
+          {/* <div className="flex items-center gap-2">
             <button
               onClick={() => navigate("/zones/new")}
               className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700"
             >
               <FiPlus /> New Zone
             </button>
-          </div>
+          </div> */}
         </div>
 
         {/* Search */}

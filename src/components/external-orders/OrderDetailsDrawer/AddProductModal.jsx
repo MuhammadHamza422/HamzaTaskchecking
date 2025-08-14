@@ -333,7 +333,6 @@ export default function AddProductModal({
       let orderQty = "1"; // Default value
 
       if (activeTab === "woocommerce") {
-        
         let lineItems = [...(orderDetails?.order?.line_items || [])];
 
         // Loop over each merged product
@@ -350,7 +349,7 @@ export default function AddProductModal({
             );
 
             lineItems.push({
-              id: `merged-${mpIds.join("-")}`, 
+              id: `merged-${mpIds.join("-")}`,
               name: mp.pro_title || "Merged Product",
               price: mp.price || 0,
               quantity: 1,
@@ -361,7 +360,6 @@ export default function AddProductModal({
         });
 
         orderQty = String(lineItems.length || 1);
-
       } else if (activeTab === "walmart") {
         // Count total order lines in Walmart order
         orderQty =
@@ -642,11 +640,12 @@ export default function AddProductModal({
                       {product?.pro_title}
                     </div>
                     <p className="text-xs text-gray-500">
-                      Sale Price: ${(product?.sale_price || 0).toFixed(2)}
+                      Sale Price: ${(product?.sale_price || 0)}
                     </p>
                     <p className="text-xs text-gray-500">
                       Calculated Price: $
-                      {handlePrice(product?.sale_price || 0).toFixed(2)}
+                      {Math.floor(handlePrice(product?.sale_price || 0) * 100) /
+                        100}
                     </p>
                   </div>
 
