@@ -74,20 +74,18 @@ const AdminProductsPage = () => {
     keepPreviousData: true,
   });
 
-  // Filter products based on current filters
+  // First filter the products
   const getFilteredProducts = () => {
     if (!productsData?.products) return [];
 
     let filteredProducts = [...productsData.products];
 
-    // Filter by type
     if (filters.type) {
       filteredProducts = filteredProducts.filter(
         (product) => product.type_code === filters.type
       );
     }
 
-    // Filter by brand
     if (filters.brand) {
       filteredProducts = filteredProducts.filter(
         (product) => product.brnd_code === filters.brand
@@ -97,22 +95,18 @@ const AdminProductsPage = () => {
     return filteredProducts;
   };
 
-  const filteredProducts = getFilteredProducts();
-
-  // Use server-side pagination when no filters are applied
-  const hasActiveFilters = filters.type || filters.brand;
-  
-  // When filters are active, paginate the filtered results on frontend
+  // Then paginate the filtered results
   const getPaginatedFilteredProducts = () => {
-    if (!hasActiveFilters) return productsData?.products || [];
-    
+    const filtered = getFilteredProducts();
     const startIndex = (currentPage - 1) * pageSize;
     const endIndex = startIndex + pageSize;
-    return filteredProducts.slice(startIndex, endIndex);
+    return filtered.slice(startIndex, endIndex);
   };
 
+  // Use these variables for display
+  const filteredProducts = getFilteredProducts();
   const displayProducts = getPaginatedFilteredProducts();
-  const totalProducts = hasActiveFilters ? filteredProducts.length : (productsData?.totalProducts || 0);
+  const totalProducts = filteredProducts.length;
 
   // Debounced search
   const debouncedSearch = useCallback(
@@ -575,12 +569,7 @@ const AdminProductsPage = () => {
               showQuickJumper={!isMobile}
               showTotal={
                 !isMobile
-                  ? (total, range) => {
-                      if (hasActiveFilters) {
-                        return `${range[0]}-${range[1]} of ${total} filtered products`;
-                      }
-                      return `${range[0]}-${range[1]} of ${total} products`;
-                    }
+                  ? (total, range) => `${range[0]}-${range[1]} of ${total} products`
                   : undefined
               }
               onChange={handlePageChange}

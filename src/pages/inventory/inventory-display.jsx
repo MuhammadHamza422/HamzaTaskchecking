@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { FiSearch } from "react-icons/fi";
-import { Minus, Plus } from "lucide-react";
+import { Minus, Package, Plus } from "lucide-react";
 import {
   updateInventoryQuantity,
   getProducts,
@@ -16,7 +16,12 @@ const productTypes = [
   { label: "Games", code: "GAM" },
 ];
 
-export default function InventoryDisplay({ items, totalCount, isLoading }) {
+export default function InventoryDisplay({
+  items,
+  totalCount,
+  isLoading,
+  scannedData,
+}) {
   const [search, setSearch] = useState("");
   const [localItems, setLocalItems] = useState(
     Array.isArray(items) ? items : []
@@ -25,7 +30,7 @@ export default function InventoryDisplay({ items, totalCount, isLoading }) {
   const [activeLocationCode, setActiveLocationCode] = useState("");
   const [form, setForm] = useState({
     productId: "",
-    locationId: "",
+    locationId: scannedData || "", // Initialize with scannedData
     quantity: "",
     productSearch: "",
     showProductDropdown: false,
@@ -202,8 +207,18 @@ export default function InventoryDisplay({ items, totalCount, isLoading }) {
   });
 
   const createInv = useMutation({
-    mutationFn: (body) => createInventory(body),
+    mutationFn: (body) => {
+      if (!body.productId || !body.locationId || !body.quantity) {
+        throw new Error("Missing required fields");
+      }
+      return createInventory({
+        productId: body.productId,
+        locationId: body.locationId,
+        quantity: String(body.quantity),
+      });
+    },
     onSuccess: (data, variables) => {
+      // Close the modal and reset form
       setIsCreateOpen(false);
       setForm({
         productId: "",
@@ -211,36 +226,30 @@ export default function InventoryDisplay({ items, totalCount, isLoading }) {
         quantity: "",
         productSearch: "",
         showProductDropdown: false,
-        type: "", // Reset type
-        typeCode: "", // Reset typeCode
+        type: "",
+        typeCode: "",
       });
 
-      // Add the new product to local state immediately
-      const newProduct = {
-        _id: data?.inventory?._id || `temp-${Date.now()}`,
-        quantity: Number(variables.quantity),
-        productData: {
-          pro_title:
-            productsData?.products?.find((p) => p._id === variables.productId)
-              ?.title ||
-            productsData?.products?.find((p) => p._id === variables.productId)
-              ?.pro_title ||
-            productsData?.products?.find((p) => p._id === variables.productId)
-              ?.name ||
-            productsData?.products?.find((p) => p._id === variables.productId)
-              ?.sku ||
-            "New Product",
-        },
-        locationData: {
-          code: activeLocationCode,
-          _id: variables.locationId,
-        },
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
+      // Find the product details from the productsData
+      const addedProduct = productsData?.products?.find(
+        (p) => p._id === variables.productId
+      );
 
-      setLocalItems((prev) => [...prev, newProduct]);
+      // Update localItems state with the new inventory
+      setLocalItems((prev) => [
+        ...prev,
+        {
+          _id: data._id || Date.now(), // Use the returned ID or temporary ID
+          quantity: variables.quantity,
+          productData: addedProduct,
+          locationData: {
+            code: activeLocationCode || scannedData,
+            _id: variables.locationId,
+          },
+        },
+      ]);
 
+      // Show success message
       Swal.fire({
         icon: "success",
         title: "Products Added Successfully",
@@ -248,23 +257,36 @@ export default function InventoryDisplay({ items, totalCount, isLoading }) {
         position: "top-end",
         showConfirmButton: false,
         timer: 3000,
-        timerProgressBar: true,
         background: "#10b981",
         color: "#fff",
-        customClass: {
-          popup: "rounded-lg",
-        },
       });
 
-      // Refetch the current inventory data immediately
+      // Refresh queries in background
       queryClient.invalidateQueries({ queryKey: ["inventory"] });
-      // Also refresh the scan results if they exist
-      if (items && items.length > 0) {
-        // Trigger a refetch by updating the query key
-        queryClient.invalidateQueries({ queryKey: ["scan-results"] });
-      }
+    },
+    onError: (error) => {
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: error.message || "Failed to create inventory",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        background: "#ef4444",
+        color: "#fff",
+      });
     },
   });
+
+  useEffect(() => {
+    if (scannedData) {
+      setForm((prev) => ({
+        ...prev,
+        locationId: scannedData,
+      }));
+    }
+  }, [scannedData]);
 
   if (isLoading) {
     return (
@@ -305,14 +327,13 @@ export default function InventoryDisplay({ items, totalCount, isLoading }) {
       <div className="space-y-6">
         {groups.map(({ locationCode, rows }) => (
           <div key={locationCode} className="overflow-hidden rounded-lg border">
-            <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-200 ">
+            <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-200">
               <p className="font-bold text-xl uppercase tracking-wide">
                 {locationCode}
               </p>
               <button
                 onClick={() => {
                   setActiveLocationCode(locationCode);
-                  // Find the location ID from the current items data
                   const currentLocation = localItems.find(
                     (item) => item.locationData?.code === locationCode
                   );
@@ -466,8 +487,44 @@ export default function InventoryDisplay({ items, totalCount, isLoading }) {
         ))}
         {groups.length === 0 && (
           <div className="overflow-hidden rounded-lg border">
-            <div className="px-4 py-6 text-center text-gray-500">
-              No inventory found.
+            <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-200">
+              <p className="font-bold text-xl uppercase tracking-wide">
+                {scannedData}
+              </p>
+
+              <button
+                onClick={() => {
+                  setActiveLocationCode(scannedData);
+                  // Set the locationId in the form state
+                  setForm((prev) => ({
+                    ...prev,
+                    locationId:
+                      localItems.find(
+                        (item) => item.locationData?.code === scannedData
+                      )?.locationData?._id || scannedData,
+                  }));
+                  setIsCreateOpen(true);
+                }}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-medium transition-all duration-200 transform shadow-lg hover:shadow-xl"
+              >
+                <Plus className="h-4 w-4" />
+                Add first Product
+              </button>
+            </div>
+            <div className="px-4 py-6 text-center bg-white">
+              <div className="max-w-sm mx-auto">
+                <div className="mb-4">
+                  <Package className="h-12 w-12 text-gray-400 mx-auto" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                  No inventory found
+                </h3>
+                <p className="text-sm text-gray-500 mb-4">
+                  {scannedData
+                    ? `Location ${scannedData} has no products assigned to it.`
+                    : "This location currently has no products assigned to it."}
+                </p>
+              </div>
             </div>
           </div>
         )}
@@ -488,11 +545,33 @@ export default function InventoryDisplay({ items, totalCount, isLoading }) {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (!form.productId || !form.locationId || !form.quantity)
+                if (!form.productId || !form.quantity) return;
+
+                // Ensure we're using the location ID instead of the code
+                const locationItem = localItems.find(
+                  (item) =>
+                    item.locationData?.code ===
+                    (activeLocationCode || scannedData)
+                );
+
+                if (!locationItem?.locationData?._id) {
+                  Swal.fire({
+                    icon: "error",
+                    title: "Error",
+                    text: "Invalid location ID. Please try again.",
+                    toast: true,
+                    position: "top-end",
+                    showConfirmButton: false,
+                    timer: 3000,
+                    background: "#ef4444",
+                    color: "#fff",
+                  });
                   return;
+                }
+
                 createInv.mutate({
                   productId: form.productId,
-                  locationId: form.locationId,
+                  locationId: locationItem.locationData._id, // Use the actual MongoDB ObjectId
                   quantity: String(form.quantity),
                   type: form.typeCode,
                 });
@@ -514,92 +593,113 @@ export default function InventoryDisplay({ items, totalCount, isLoading }) {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Product Type
                 </label>
-                <select
-                  value={form.typeCode}
-                  onChange={(e) => {
-                    const selectedType = productTypes.find(
-                      (t) => t.code === e.target.value
-                    );
-                    setForm((prev) => ({
-                      ...prev,
-                      type: selectedType?.label || "",
-                      typeCode: e.target.value,
-                      productId: "", // Reset product selection when type changes
-                      productSearch: "", // Reset product search when type changes
-                    }));
-                  }}
-                  className="w-full rounded-md border px-3 py-2 text-sm"
-                  required
-                >
-                  <option value="">Select Type</option>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {productTypes.map((type) => (
-                    <option key={type.code} value={type.code}>
+                    <button
+                      key={type.code}
+                      type="button"
+                      onClick={() => {
+                        // If clicking the already selected type, deselect it
+                        if (form.typeCode === type.code) {
+                          setForm((prev) => ({
+                            ...prev,
+                            type: "",
+                            typeCode: "",
+                            productId: "",
+                            productSearch: "",
+                            showProductDropdown: false,
+                          }));
+                        } else {
+                          // Select the new type
+                          setForm((prev) => ({
+                            ...prev,
+                            type: type.label,
+                            typeCode: type.code,
+                            productId: "",
+                            productSearch: "",
+                            showProductDropdown: false,
+                          }));
+                        }
+                      }}
+                      className={`
+          p-2 rounded-lg border text-sm font-medium transition-all duration-200
+          ${
+            form.typeCode === type.code
+              ? "border-blue-500 bg-blue-50 text-blue-700 shadow-sm"
+              : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+          }
+        `}
+                    >
                       {type.label}
-                    </option>
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
-
-              {/* Product Selection - Updated to filter by type */}
-              <div className="relative" ref={dropdownRef}>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Product
-                </label>
-                <input
-                  type="text"
-                  placeholder="Search products..."
-                  value={form.productSearch}
-                  onChange={(e) => {
-                    setForm((prev) => ({
-                      ...prev,
-                      productSearch: e.target.value,
-                      showProductDropdown: true,
-                      productId: "",
-                    }));
-                  }}
-                  onFocus={() =>
-                    setForm((prev) => ({ ...prev, showProductDropdown: true }))
-                  }
-                  className="w-full rounded-md border px-3 py-2 text-sm"
-                  required
-                  disabled={!form.typeCode} // Disable if no type selected
-                />
-                {form.showProductDropdown && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
-                    {Array.isArray(productsData?.products) ? (
-                      productsData.products
-                        .filter(
-                          (p) =>
-                            p.type_code === form.typeCode && // Filter by type_code
-                            (p.pro_title || p.sku || "")
-                              .toLowerCase()
-                              .includes(form.productSearch.toLowerCase())
-                        )
-                        .map((p) => (
-                          <div
-                            key={p._id}
-                            onClick={() => {
-                              setForm((prev) => ({
-                                ...prev,
-                                productId: p._id,
-                                productSearch: p.pro_title || p.sku,
-                                showProductDropdown: false,
-                              }));
-                            }}
-                            className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-                          >
-                            {p.pro_title} ({p.sku})
+              {/* Product Selection - Only show if type is selected */}
+              {form.typeCode ? (
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Product
+                  </label>
+                  <div className="relative" ref={dropdownRef}>
+                    <input
+                      type="text"
+                      placeholder="Search products..."
+                      value={form.productSearch}
+                      onChange={(e) => {
+                        setForm((prev) => ({
+                          ...prev,
+                          productSearch: e.target.value,
+                          showProductDropdown: true,
+                          productId: "",
+                        }));
+                      }}
+                      onFocus={() =>
+                        setForm((prev) => ({
+                          ...prev,
+                          showProductDropdown: true,
+                        }))
+                      }
+                      className="w-full rounded-md border px-3 py-2 text-sm"
+                      required
+                    />
+                    {form.showProductDropdown && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
+                        {Array.isArray(productsData?.products) ? (
+                          productsData.products
+                            .filter(
+                              (p) =>
+                                p.type_code === form.typeCode &&
+                                (p.pro_title || p.sku || "")
+                                  .toLowerCase()
+                                  .includes(form.productSearch.toLowerCase())
+                            )
+                            .map((p) => (
+                              <div
+                                key={p._id}
+                                onClick={() => {
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    productId: p._id,
+                                    productSearch: p.pro_title || p.sku,
+                                    showProductDropdown: false,
+                                  }));
+                                }}
+                                className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                              >
+                                {p.pro_title} ({p.sku})
+                              </div>
+                            ))
+                        ) : (
+                          <div className="px-3 py-2 text-gray-500 text-sm">
+                            Loading products...
                           </div>
-                        ))
-                    ) : (
-                      <div className="px-3 py-2 text-gray-500 text-sm">
-                        Loading products...
+                        )}
                       </div>
                     )}
                   </div>
-                )}
-              </div>
-
+                </div>
+              ) : null}
               {/* Quantity */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -620,7 +720,6 @@ export default function InventoryDisplay({ items, totalCount, isLoading }) {
                   required
                 />
               </div>
-
               <div className="flex items-center justify-end gap-3 pt-2">
                 <button
                   type="button"
