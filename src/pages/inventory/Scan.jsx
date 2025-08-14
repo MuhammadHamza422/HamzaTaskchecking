@@ -399,7 +399,7 @@ export default function ScanProduct() {
 
       <div className="p-6">
         {mode === "select" && (
-          <div className="space-y-6">
+          <div className="space-y-6 cursor-pointer">
             <div className="space-y-4">
               <h2 className="text-lg font-semibold text-slate-800 font-sans">Choose Search Method</h2>
 
