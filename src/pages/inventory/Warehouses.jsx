@@ -409,7 +409,7 @@ export default function Warehouses() {
             {warehousesError?.message || "Failed to load warehouses"}
           </div>
         )}
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-[340px_1fr] mt-4">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[340px_1fr] mt-4">
           {/* LEFT: Warehouses */}
           <section className="rounded-xl border border-zinc-200 bg-white">
             <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
@@ -508,7 +508,7 @@ export default function Warehouses() {
                           >
                             <FiEdit2 />
                           </button>
-                          <button
+                          {/* <button
                             onClick={async (e) => {
                               e.stopPropagation();
                               await handleDeleteWarehouse(w.id);
@@ -517,7 +517,7 @@ export default function Warehouses() {
                             title="Delete"
                           >
                             <FiTrash2 />
-                          </button>
+                          </button> */}
                         </div>
                       </button>
                     </li>
@@ -586,7 +586,7 @@ export default function Warehouses() {
                           >
                             <FiEdit2 />
                           </button>
-                          <button
+                          {/* <button
                             onClick={async (e) => {
                               e.stopPropagation();
                               await handleDeleteZone(z.id);
@@ -595,7 +595,7 @@ export default function Warehouses() {
                             title="Delete"
                           >
                             <FiTrash2 />
-                          </button>
+                          </button> */}
                         </div>
                       </div>
                     );

@@ -4,7 +4,7 @@ import "react-loading-skeleton/dist/skeleton.css";
 
 export default function ProductTableSkeleton({ rows = 8, columns = 6 }) {
   return (
-    <tbody className="bg-white divide-y divide-gray-200">
+    <tbody className="divide-y divide-gray-200">
       {Array.from({ length: rows }).map((_, i) => (
         <tr key={i}>
           {Array.from({ length: columns }).map((__, j) => (
