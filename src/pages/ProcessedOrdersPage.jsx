@@ -3,6 +3,7 @@ import { Typography, notification, Button, message } from "antd";
 import { motion } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import apiClient from "../api/client";
+import { Loader2 } from "lucide-react";
 
 import OrderFilters from "../components/external-orders/OrderFilters";
 import OrderTable from "../components/external-orders/OrderTable";
@@ -70,6 +71,8 @@ export default function ProcessedOrdersPage() {
   const [selectAll, setSelectAll] = useState(false);
   const [isMovingToShipStation, setIsMovingToShipStation] = useState(false);
   const [kitsByOrderId, setKitsByOrderId] = useState({});
+  const [updateOrderStatusLoading, setUpdateOrderStatusLoading] =
+    useState(false);
 
   // Filter state
   const [filters, setFilters] = useState({
@@ -185,6 +188,77 @@ export default function ProcessedOrdersPage() {
       );
     } finally {
       setIsRefreshing(false);
+    }
+  };
+
+  // Update Order Status - Received from Shipstation Webhook
+
+  const handleUpdateOrderStatus = async () => {
+    setUpdateOrderStatusLoading(true);
+    try {
+      const { data } = await apiClient.patch(
+        "/api/v1/shipstation/update/wc/status"
+      );
+      if (data) {
+        Swal.fire({
+          icon: "success",
+          title: "Order Status Updated",
+          text: "Order status updated successfully",
+          toast: true,
+          position: "top-end",
+          showConfirmButton: false,
+          timer: 3000,
+          timerProgressBar: true,
+          background: "#10b981",
+          color: "#fff",
+          customClass: {
+            popup: "rounded-lg",
+          },
+        });
+        refetch();
+      }
+    } catch (error) {
+      console.error("Error updating order status:", error);
+      showErrorToast(
+        error.response?.data?.message || "Failed to update order status"
+      );
+    } finally {
+      setUpdateOrderStatusLoading(false);
+    }
+  };
+
+  // Update WM Order Status - Received from Shipstation
+  const handleWMUpdateOrderStatus = async () => {
+    setUpdateOrderStatusLoading(true);
+    try {
+      const { data } = await apiClient.patch(
+        "/api/v1/shipstation/update/wm/status"
+      );
+      if (data) {
+        Swal.fire({
+          icon: "success",
+          title: "Order Status Updated",
+          text: "Order status updated successfully",
+          toast: true,
+          position: "top-end",
+          showConfirmButton: false,
+          timer: 3000,
+          timerProgressBar: true,
+          background: "#10b981",
+          color: "#fff",
+          customClass: {
+            popup: "rounded-lg",
+          },
+        });
+        refetch();
+      }
+    } catch (error) {
+      console.error("Error updating order status:", error);
+      showErrorToast(
+        error.response?.data?.message || "Failed to update order status"
+      );
+    } finally {
+      setUpdateOrderStatusLoading(false);
     }
   };
 
@@ -535,7 +609,9 @@ export default function ProcessedOrdersPage() {
     }
 
     const orderDate = formatDateForShipStation(
-      typeof wm?.orderDate === "number" ? wm.orderDate : tableOrder?.createdAt || new Date()
+      typeof wm?.orderDate === "number"
+        ? wm.orderDate
+        : tableOrder?.createdAt || new Date()
     );
     const addr = wm?.shippingInfo?.postalAddress || {};
 
@@ -862,28 +938,46 @@ export default function ProcessedOrdersPage() {
                 platforms
               </p>
             </div>
-            <button
-              onClick={fetchLatestOrders}
-              disabled={isLoading || isRefreshing}
-              className="sm:w-auto w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200 shadow-sm"
-            >
-              <svg
-                className={`w-4 h-4 ${
-                  isLoading || isRefreshing ? "animate-spin" : ""
-                }`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+            <div className="flex items-center gap-4">
+              <button
+                onClick={fetchLatestOrders}
+                disabled={isLoading || isRefreshing}
+                className="sm:w-auto w-full flex min-w-fit text-[14px] sm:text-[15px] items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200 shadow-sm"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-              {isLoading || isRefreshing ? "Refreshing..." : "Refresh Orders"}
-            </button>
+                <svg
+                  className={`w-4 h-4 ${
+                    isLoading || isRefreshing ? "animate-spin" : ""
+                  }`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+                {isLoading || isRefreshing ? "Refreshing..." : "Refresh Orders"}
+              </button>
+              <button
+                onClick={
+                  activeTab === "woocommerce"
+                    ? handleUpdateOrderStatus
+                    : activeTab === "walmart"
+                    ? handleWMUpdateOrderStatus
+                    : ""
+                }
+                disabled={updateOrderStatusLoading}
+                className="sm:w-auto w-full flex items-center text-[14px] sm:text-[15px] min-w-fit  justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200 shadow-sm"
+              >
+                {updateOrderStatusLoading && (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                )}
+                {updateOrderStatusLoading ? "Updating..." : "Update Status"}
+              </button>
+            </div>
           </div>
         </div>
         {/* Filters */}
