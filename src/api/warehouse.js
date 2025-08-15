@@ -106,15 +106,39 @@ export async function deleteLocation(locationId) {
   return data;
 }
 
+// CSV Import API function
+export const importLocationsCSV = async (file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await apiClient.post(
+    "/api/v1/location/import/location",
+    formData,
+    {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    }
+  );
+  return response.data;
+};
+
 // PRODUCTS
 // Update the existing getProducts function
-export async function getProducts({ page = 1, limit = 30, search = "", type = "" } = {}) {
+export async function getProducts({
+  page = 1,
+  limit = 30,
+  search = "",
+  type = "",
+} = {}) {
   const params = new URLSearchParams();
   params.set("page", String(page));
   params.set("limit", String(limit));
   if (search) params.set("search", String(search));
   if (type) params.set("type", String(type)); // Make sure type is being sent
-  const { data } = await apiClient.get(`/api/v1/products/all?${params.toString()}`);
+  const { data } = await apiClient.get(
+    `/api/v1/products/all?${params.toString()}`
+  );
   return data;
 }
 

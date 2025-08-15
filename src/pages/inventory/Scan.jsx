@@ -103,13 +103,13 @@ export default function ScanProduct() {
       document.body.style.backgroundColor = "";
     }, 300);
 
+    // Set mode to scanner to show results page
+    setMode("scanner");
+    
     await handleSearch(barcode);
 
     setTimeout(() => {
       setBarcodeDetected(false);
-      if (scannedData === barcode) {
-        setScannedData("");
-      }
     }, 3000);
   };
 
@@ -327,7 +327,6 @@ export default function ScanProduct() {
 
     setTimeout(() => {
       setQrDetected(false);
-      setScannedData("");
     }, 2000);
   };
 
@@ -339,6 +338,8 @@ export default function ScanProduct() {
     setSearchResults([]);
     setSearchQuery("");
     setTotalInventory(0);
+    setScannedData("");
+    setBarcodeDetected(false);
   };
 
   const manualScanQR = async () => {
@@ -416,7 +417,7 @@ export default function ScanProduct() {
             {mode !== "select" && (
               <p className="text-sm text-slate-500 font-sans">
                 {mode === "scanner"
-                  ? "Scan Barcode Scanner"
+                  ? "Barcode Scanner Results"
                   : mode === "camera"
                   ? "Scan QR Code"
                   : "Manual Search"}
@@ -445,112 +446,100 @@ export default function ScanProduct() {
               </h2>
 
               <div className="grid grid-cols-1 gap-4">
-                {mode === "scanner" ||
-                  (mode === "select" && (
-                    <div
-                      onClick={() => setMode("scanner")}
-                      className="p-4 bg-green-50 border-2 border-green-200 rounded-xl"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-green-100 rounded-lg">
-                          <Keyboard className="h-5 w-5 text-green-600" />
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-green-900 font-sans">
-                            Barcode Scanner Ready
-                          </h3>
-                          <p className="text-sm text-green-700 font-sans">
-                            Physical barcode scanners will auto-search location
-                          </p>
-                        </div>
-                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                      </div>
+                <div
+                  onClick={() => setMode("scanner")}
+                  className="p-4 bg-green-50 border-2 border-green-200 rounded-xl"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <Keyboard className="h-5 w-5 text-green-600" />
                     </div>
-                  ))}
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-green-900 font-sans">
+                        Barcode Scanner Ready
+                      </h3>
+                      <p className="text-sm text-green-700 font-sans">
+                        Physical barcode scanners will auto-search location
+                      </p>
+                    </div>
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                  </div>
+                </div>
 
-                {mode === "select" && (
-                  <>
-                    <div
-                      className="p-6 bg-white rounded-xl border-2 border-slate-200 hover:border-blue-300 hover:shadow-lg transition-all duration-200 cursor-pointer group"
-                      onClick={() => {
-                        setMode("camera");
-                        setTimeout(startCamera, 100);
-                      }}
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="p-3 bg-blue-100 rounded-xl group-hover:bg-blue-200 transition-colors">
-                          <Scan className="h-6 w-6 text-blue-600" />
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-slate-900 font-sans">
-                            Scan Location
-                          </h3>
-                          <p className="text-sm text-slate-500 font-sans">
-                            Auto-detect and scan QR codes
-                          </p>
-                        </div>
-                        <Camera className="h-5 w-5 text-slate-400" />
-                      </div>
+                <div
+                  className="p-6 bg-white rounded-xl border-2 border-slate-200 hover:border-blue-300 hover:shadow-lg transition-all duration-200 cursor-pointer group"
+                  onClick={() => {
+                    setMode("camera");
+                    setTimeout(startCamera, 100);
+                  }}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-blue-100 rounded-xl group-hover:bg-blue-200 transition-colors">
+                      <Scan className="h-6 w-6 text-blue-600" />
                     </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-slate-900 font-sans">
+                        Scan Location
+                      </h3>
+                      <p className="text-sm text-slate-500 font-sans">
+                        Auto-detect and scan QR codes
+                      </p>
+                    </div>
+                    <Camera className="h-5 w-5 text-slate-400" />
+                  </div>
+                </div>
 
-                    <div
-                      className="p-6 bg-white rounded-xl border-2 border-slate-200 hover:border-sky-300 hover:shadow-lg transition-all duration-200 cursor-pointer group"
-                      onClick={() => setMode("manual")}
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="p-3 bg-sky-100 rounded-xl group-hover:bg-sky-200 transition-colors">
-                          <Type className="h-6 w-6 text-sky-600" />
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-slate-900 font-sans">
-                            Manual Search
-                          </h3>
-                          <p className="text-sm text-slate-500 font-sans">
-                            Type location name or code
-                          </p>
-                        </div>
-                        <Search className="h-5 w-5 text-slate-400" />
-                      </div>
+                <div
+                  className="p-6 bg-white rounded-xl border-2 border-slate-200 hover:border-sky-300 hover:shadow-lg transition-all duration-200 cursor-pointer group"
+                  onClick={() => setMode("manual")}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-sky-100 rounded-xl group-hover:bg-sky-200 transition-colors">
+                      <Type className="h-6 w-6 text-sky-600" />
                     </div>
-                  </>
-                )}
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-slate-900 font-sans">
+                        Manual Search
+                      </h3>
+                      <p className="text-sm text-slate-500 font-sans">
+                        Type location name or code
+                      </p>
+                    </div>
+                    <Search className="h-5 w-5 text-slate-400" />
+                  </div>
+                </div>
               </div>
             </div>
+          </div>
+        )}
 
-            {searchResults.length > 0 && (
-              <div className="space-y-4">
-                {scannedData && (
-                  <div
-                    className={`p-3 border rounded-lg ${
-                      barcodeDetected
-                        ? "bg-green-50 border-green-200"
-                        : "bg-blue-50 border-blue-200"
-                    }`}
-                  >
-                    <p
-                      className={`text-sm font-sans ${
-                        barcodeDetected ? "text-green-700" : "text-blue-700"
-                      }`}
-                    >
-                      <span className="font-semibold">
-                        {barcodeDetected
-                          ? "Scanned Barcode:"
-                          : "Scanned QR Code:"}
-                      </span>{" "}
-                      {scannedData}
-                    </p>
-                  </div>
-                )}
-
-                <InventoryDisplay
-                  items={searchResults}
-                  totalCount={totalInventory}
-                  isLoading={isSearching}
-                  scannedData={scannedData}
-                  locationid={locationId}
-                />
+        {mode === "scanner" && (
+          <div className="space-y-4">
+            {scannedData && (
+              <div className={`p-3 border rounded-lg ${
+                barcodeDetected
+                  ? "bg-green-50 border-green-200"
+                  : "bg-blue-50 border-blue-200"
+              }`}>
+                <p className={`text-sm font-sans ${
+                  barcodeDetected ? "text-green-700" : "text-blue-700"
+                }`}>
+                  <span className="font-semibold">
+                    Scanned Barcode:
+                  </span>{" "}
+                  {scannedData}
+                </p>
               </div>
             )}
+
+            <InventoryDisplay
+              items={searchResults}
+              setItems={setSearchResults}
+              totalCount={totalInventory}
+              isLoading={isSearching}
+              scannedData={scannedData}
+              locationid={locationId}
+            />
           </div>
         )}
 
@@ -706,9 +695,10 @@ export default function ScanProduct() {
 
                 <InventoryDisplay
                   items={searchResults}
+                  setItems={setSearchResults}
                   totalCount={totalInventory}
                   isLoading={isSearching}
-                  scannedData={scannedData || searchQuery} // Pass both scanned and searched data
+                  scannedData={scannedData || searchQuery}
                   locationid={locationId}
                 />
               </div>
@@ -758,28 +748,28 @@ export default function ScanProduct() {
                 </button>
               </form>
             </div>
-          </div>
-        )}
 
-        {/* Scanned Results */}
-        {(mode === "scanner" || searchQuery) && (
-          <div className="space-y-4">
-            {scannedData && (
-              <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                <p className="text-sm text-green-700 font-sans">
-                  <span className="font-semibold">Scanned QR Code:</span>{" "}
-                  {scannedData}
-                </p>
+            {searchResults.length > 0 && (
+              <div className="space-y-4">
+                {searchQuery && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-700 font-sans">
+                      <span className="font-semibold">Search Query:</span>{" "}
+                      {searchQuery}
+                    </p>
+                  </div>
+                )}
+
+                <InventoryDisplay
+                  items={searchResults}
+                  setItems={setSearchResults}
+                  totalCount={totalInventory}
+                  isLoading={isSearching}
+                  scannedData={searchQuery}
+                  locationid={locationId}
+                />
               </div>
             )}
-
-            <InventoryDisplay
-              items={searchResults}
-              totalCount={totalInventory}
-              isLoading={isSearching}
-              scannedData={scannedData || searchQuery} // Pass both scanned and searched data
-              locationid={locationId}
-            />
           </div>
         )}
       </div>
