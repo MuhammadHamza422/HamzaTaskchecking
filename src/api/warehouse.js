@@ -107,15 +107,14 @@ export async function deleteLocation(locationId) {
 }
 
 // PRODUCTS
-// GET /api/v1/inventry/product/all?page=&limit=&search=
-export async function getProducts({ page = 1, limit = 30, search = "" } = {}) {
+// Update the existing getProducts function
+export async function getProducts({ page = 1, limit = 30, search = "", type = "" } = {}) {
   const params = new URLSearchParams();
   params.set("page", String(page));
   params.set("limit", String(limit));
   if (search) params.set("search", String(search));
-  const { data } = await apiClient.get(
-    `/api/v1/products/all?${params.toString()}`
-  );
+  if (type) params.set("type", String(type)); // Make sure type is being sent
+  const { data } = await apiClient.get(`/api/v1/products/all?${params.toString()}`);
   return data;
 }
 

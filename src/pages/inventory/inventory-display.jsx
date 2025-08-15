@@ -16,11 +16,15 @@ const productTypes = [
   { label: "Games", code: "GAM" },
 ];
 
+// utility: test for a 24-char Mongo ObjectId
+const isObjectId = (id) => /^[a-f\d]{24}$/i.test(String(id));
+
 export default function InventoryDisplay({
   items,
   totalCount,
   isLoading,
   scannedData,
+  locationid,
 }) {
   const [search, setSearch] = useState("");
   const [localItems, setLocalItems] = useState(
@@ -30,7 +34,7 @@ export default function InventoryDisplay({
   const [activeLocationCode, setActiveLocationCode] = useState("");
   const [form, setForm] = useState({
     productId: "",
-    locationId: scannedData || "", // Initialize with scannedData
+    locationId: locationid,
     quantity: "",
     productSearch: "",
     showProductDropdown: false,
@@ -40,6 +44,7 @@ export default function InventoryDisplay({
   const [pendingQtyChange, setPendingQtyChange] = useState(null);
   const queryClient = useQueryClient();
   const dropdownRef = useRef(null);
+  console.log("Location Id", locationid);
 
   useEffect(() => {
     setLocalItems(Array.isArray(items) ? items : []);
@@ -130,17 +135,52 @@ export default function InventoryDisplay({
     const currentItem = localItems.find((item) => item._id === id);
     if (!currentItem) return;
 
+    console.log("Attempting update for item:", currentItem);
+
     const currentQty = Number(currentItem.quantity) || 0;
     const newQty = Math.max(0, Number(nextQty) || 0);
 
-    // Validate the quantity change
     if (!validateQuantityChange(currentQty, newQty)) {
       setPendingQtyChange(null);
       return;
     }
 
+    // Find a valid inventory id to send to backend
+    let inventoryId = id;
+
+    // Try alternative places where a backend id may exist
+    if (!isObjectId(inventoryId)) {
+      if (currentItem._id && isObjectId(currentItem._id)) {
+        inventoryId = currentItem._id;
+      } else if (
+        currentItem.locationData?.inventoryId &&
+        isObjectId(currentItem.locationData.inventoryId)
+      ) {
+        inventoryId = currentItem.locationData.inventoryId;
+      } else if (
+        currentItem.inventoryId &&
+        isObjectId(currentItem.inventoryId)
+      ) {
+        inventoryId = currentItem.inventoryId;
+      } else {
+        // Not a valid ObjectId — don't call backend
+        Swal.fire({
+          icon: "error",
+          title: "Update Failed",
+          text: "Can't update: invalid inventory id (item not saved to server yet). Please save the item first.",
+          toast: true,
+          position: "top-end",
+          showConfirmButton: false,
+          timer: 3000,
+          background: "#ef4444",
+          color: "#fff",
+        });
+        setPendingQtyChange(null);
+        return;
+      }
+    }
+
     try {
-      // Show confirmation for large changes
       if (Math.abs(newQty - currentQty) > 10) {
         const result = await Swal.fire({
           icon: "warning",
@@ -160,16 +200,13 @@ export default function InventoryDisplay({
         }
       }
 
-      // Apply change locally first (optimistic update)
+      // Optimistic UI
       applyLocalQty(id, newQty);
 
-      // Update in backend
-      await updateInventoryQuantity(id, newQty);
+      // IMPORTANT: pass the *valid* inventoryId to your API
+      await updateInventoryQuantity(inventoryId, newQty);
 
-      // Clear pending change
       setPendingQtyChange(null);
-
-      // Show success message
       Swal.fire({
         icon: "success",
         title: "Quantity Updated",
@@ -181,11 +218,9 @@ export default function InventoryDisplay({
         color: "#fff",
       });
     } catch (error) {
-      // Revert local change on error
+      // revert
       applyLocalQty(id, currentQty);
       setPendingQtyChange(null);
-
-      // Show error message
       Swal.fire({
         icon: "error",
         title: "Update Failed",
@@ -200,9 +235,16 @@ export default function InventoryDisplay({
     }
   };
 
-  const { data: productsData } = useQuery({
-    queryKey: ["products", 1, 50, ""],
-    queryFn: () => getProducts({ page: 1, limit: 50, search: "" }),
+  const { data: productsData, refetch: refetchProducts } = useQuery({
+    queryKey: ["products", form.typeCode],
+    queryFn: () =>
+      getProducts({
+        page: 1,
+        limit: 50,
+        search: form.productSearch,
+        type: form.typeCode,
+      }),
+    enabled: !!form.typeCode, // Only run query when type is selected
     staleTime: 5 * 60 * 1000,
   });
 
@@ -243,7 +285,7 @@ export default function InventoryDisplay({
           quantity: variables.quantity,
           productData: addedProduct,
           locationData: {
-            code: activeLocationCode || scannedData,
+            code: activeLocationCode || locationid,
             _id: variables.locationId,
           },
         },
@@ -287,6 +329,72 @@ export default function InventoryDisplay({
       }));
     }
   }, [scannedData]);
+
+  // Add this effect to refetch products when search changes
+  useEffect(() => {
+    if (form.typeCode && form.productSearch) {
+      const debounce = setTimeout(() => {
+        refetchProducts();
+      }, 300);
+      return () => clearTimeout(debounce);
+    }
+  }, [form.productSearch, form.typeCode]);
+
+  const handleFormSubmit = (e) => {
+    e.preventDefault();
+
+    // Basic validation
+    if (!form.productId || !form.quantity) {
+      Swal.fire({
+        icon: "error",
+        title: "Validation Error",
+        text: "Please select a product and enter quantity",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        background: "#ef4444",
+        color: "#fff",
+      });
+      return;
+    }
+
+    // FIXED: Handle both existing locations and new scanned locations
+    let locationIdToUse = locationid;
+
+    // Validate quantity is a positive number
+    const quantity = parseInt(form.quantity);
+    if (isNaN(quantity) || quantity <= 0) {
+      Swal.fire({
+        icon: "error",
+        title: "Invalid Quantity",
+        text: "Please enter a valid quantity greater than 0",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        background: "#ef4444",
+        color: "#fff",
+      });
+      return;
+    }
+
+    // Log what we're sending for debugging
+    console.log("Submitting inventory creation:", {
+      productId: form.productId,
+      locationId: locationIdToUse,
+      quantity: String(quantity),
+      type: form.typeCode,
+    });
+
+    // Submit the form
+    createInv.mutate({
+      productId: form.productId,
+      locationId: locationIdToUse,
+      quantity: String(quantity),
+      type: form.typeCode,
+    });
+  };
 
   if (isLoading) {
     return (
@@ -478,8 +586,44 @@ export default function InventoryDisplay({
                 </tbody>
               </table>
               {rows.length === 0 && (
-                <div className="px-4 py-6 text-center text-gray-500">
-                  No inventory found.
+                <div className="overflow-hidden rounded-lg border">
+                  <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-200">
+                    <p className="font-bold text-xl uppercase tracking-wide">
+                      {scannedData}
+                    </p>
+                    {scannedData && (
+                      <button
+                        onClick={() => {
+                          setActiveLocationCode(scannedData);
+                          // Set the locationId in the form state
+                          setForm((prev) => ({
+                            ...prev,
+                            locationId: locationid,
+                          }));
+                          setIsCreateOpen(true);
+                        }}
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-medium transition-all duration-200 transform shadow-lg hover:shadow-xl"
+                      >
+                        <Plus className="h-4 w-4" />
+                        Add first Product
+                      </button>
+                    )}
+                  </div>
+                  <div className="px-4 py-6 text-center bg-white">
+                    <div className="max-w-sm mx-auto">
+                      <div className="mb-4">
+                        <Package className="h-12 w-12 text-gray-400 mx-auto" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                        No inventory found
+                      </h3>
+                      <p className="text-sm text-gray-500 mb-4">
+                        {scannedData
+                          ? `Location ${scannedData} has no products assigned to it.`
+                          : "This location currently has no products assigned to it."}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -491,25 +635,23 @@ export default function InventoryDisplay({
               <p className="font-bold text-xl uppercase tracking-wide">
                 {scannedData}
               </p>
-
-              <button
-                onClick={() => {
-                  setActiveLocationCode(scannedData);
-                  // Set the locationId in the form state
-                  setForm((prev) => ({
-                    ...prev,
-                    locationId:
-                      localItems.find(
-                        (item) => item.locationData?.code === scannedData
-                      )?.locationData?._id || scannedData,
-                  }));
-                  setIsCreateOpen(true);
-                }}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-medium transition-all duration-200 transform shadow-lg hover:shadow-xl"
-              >
-                <Plus className="h-4 w-4" />
-                Add first Product
-              </button>
+              {scannedData && (
+                <button
+                  onClick={() => {
+                    setActiveLocationCode(scannedData);
+                    // Set the locationId in the form state
+                    setForm((prev) => ({
+                      ...prev,
+                      locationId: locationid,
+                    }));
+                    setIsCreateOpen(true);
+                  }}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-medium transition-all duration-200 transform shadow-lg hover:shadow-xl"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add first Product
+                </button>
+              )}
             </div>
             <div className="px-4 py-6 text-center bg-white">
               <div className="max-w-sm mx-auto">
@@ -542,49 +684,14 @@ export default function InventoryDisplay({
                 ✕
               </button>
             </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!form.productId || !form.quantity) return;
-
-                // Ensure we're using the location ID instead of the code
-                const locationItem = localItems.find(
-                  (item) =>
-                    item.locationData?.code ===
-                    (activeLocationCode || scannedData)
-                );
-
-                if (!locationItem?.locationData?._id) {
-                  Swal.fire({
-                    icon: "error",
-                    title: "Error",
-                    text: "Invalid location ID. Please try again.",
-                    toast: true,
-                    position: "top-end",
-                    showConfirmButton: false,
-                    timer: 3000,
-                    background: "#ef4444",
-                    color: "#fff",
-                  });
-                  return;
-                }
-
-                createInv.mutate({
-                  productId: form.productId,
-                  locationId: locationItem.locationData._id, // Use the actual MongoDB ObjectId
-                  quantity: String(form.quantity),
-                  type: form.typeCode,
-                });
-              }}
-              className="space-y-4"
-            >
+            <form onSubmit={handleFormSubmit} className="space-y-4">
               {/* Location */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Location
                 </label>
                 <div className="w-full rounded-md border px-3 py-2 text-sm bg-gray-50 text-gray-600">
-                  {activeLocationCode}
+                  {activeLocationCode || scannedData}
                 </div>
               </div>
 
@@ -665,34 +772,28 @@ export default function InventoryDisplay({
                     />
                     {form.showProductDropdown && (
                       <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
-                        {Array.isArray(productsData?.products) ? (
-                          productsData.products
-                            .filter(
-                              (p) =>
-                                p.type_code === form.typeCode &&
-                                (p.pro_title || p.sku || "")
-                                  .toLowerCase()
-                                  .includes(form.productSearch.toLowerCase())
-                            )
-                            .map((p) => (
-                              <div
-                                key={p._id}
-                                onClick={() => {
-                                  setForm((prev) => ({
-                                    ...prev,
-                                    productId: p._id,
-                                    productSearch: p.pro_title || p.sku,
-                                    showProductDropdown: false,
-                                  }));
-                                }}
-                                className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-                              >
-                                {p.pro_title} ({p.sku})
-                              </div>
-                            ))
+                        {productsData?.products?.length > 0 ? (
+                          productsData.products.map((p) => (
+                            <div
+                              key={p._id}
+                              onClick={() => {
+                                setForm((prev) => ({
+                                  ...prev,
+                                  productId: p._id,
+                                  productSearch: p.pro_title || p.sku,
+                                  showProductDropdown: false,
+                                }));
+                              }}
+                              className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                            >
+                              {p.pro_title} ({p.sku})
+                            </div>
+                          ))
                         ) : (
                           <div className="px-3 py-2 text-gray-500 text-sm">
-                            Loading products...
+                            {productsData?.products
+                              ? "No products found"
+                              : "Loading products..."}
                           </div>
                         )}
                       </div>
@@ -730,7 +831,9 @@ export default function InventoryDisplay({
                 </button>
                 <button
                   type="submit"
-                  disabled={createInv.isLoading}
+                  disabled={
+                    createInv.isLoading || !form.productId || !form.quantity
+                  }
                   className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white disabled:opacity-60"
                 >
                   {createInv.isLoading ? "Saving…" : "Save"}

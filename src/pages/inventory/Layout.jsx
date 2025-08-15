@@ -8,6 +8,59 @@ function Icon({ name, active }) {
   const common = "h-5 w-5";
   const c = active ? "text-white" : "text-blue-100";
   switch (name) {
+    case "app":
+      return (
+        <svg className={`${common} ${c}`} viewBox="0 0 24 24" fill="none">
+          {/* rounded square */}
+          <rect
+            x="3.5"
+            y="3.5"
+            width="17"
+            height="17"
+            rx="3"
+            stroke="currentColor"
+            strokeWidth="1.5"
+          />
+          {/* 2x2 grid */}
+          <rect
+            x="7.2"
+            y="7.2"
+            width="3.2"
+            height="3.2"
+            rx="0.6"
+            stroke="currentColor"
+            strokeWidth="1.2"
+          />
+          <rect
+            x="13.6"
+            y="7.2"
+            width="3.2"
+            height="3.2"
+            rx="0.6"
+            stroke="currentColor"
+            strokeWidth="1.2"
+          />
+          <rect
+            x="7.2"
+            y="13.6"
+            width="3.2"
+            height="3.2"
+            rx="0.6"
+            stroke="currentColor"
+            strokeWidth="1.2"
+          />
+          <rect
+            x="13.6"
+            y="13.6"
+            width="3.2"
+            height="3.2"
+            rx="0.6"
+            stroke="currentColor"
+            strokeWidth="1.2"
+          />
+        </svg>
+      );
+
     case "home":
       return (
         <svg className={`${common} ${c}`} viewBox="0 0 24 24" fill="none">
@@ -142,12 +195,59 @@ function Icon({ name, active }) {
           />
         </svg>
       );
+    case "activity":
+      return (
+        <svg className={`${common} ${c}`} viewBox="0 0 24 24" fill="none">
+          {/* document / list */}
+          <path
+            d="M7 2h6l4 4v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M9 8h6"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+          <path
+            d="M9 11h6"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+          <path
+            d="M9 14h4"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+          {/* small clock */}
+          <circle
+            cx="17.5"
+            cy="17.5"
+            r="2.2"
+            stroke="currentColor"
+            strokeWidth="1.2"
+          />
+          <path
+            d="M17.5 16.2v1l0.9 0.5"
+            stroke="currentColor"
+            strokeWidth="1.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+
     default:
       return <div className={`${common} ${c}`}>•</div>;
   }
 }
 
 const navItems = [
+  { to: "/", label: "App", icon: "app" },
   { to: "/inventory", label: "Home", icon: "home", exact: true },
   { to: "/inventory/warehouses", label: "Warehouses", icon: "warehouse" },
   { to: "/inventory/zones", label: "Zones", icon: "zones" },
@@ -155,6 +255,7 @@ const navItems = [
   { to: "/inventory/inventory", label: "Inventory", icon: "inventory" },
   { to: "/inventory/products", label: "Products", icon: "products" },
   { to: "/inventory/scan", label: "Scan", icon: "scan" },
+  { to: "/inventory/activity-logs", label: "Activity Logs", icon: "activity" },
 ];
 
 export default function InventoryLayout() {
@@ -338,7 +439,7 @@ export default function InventoryLayout() {
                 })}
               </nav>
             </div>
-             {user && (
+            {user && (
               <motion.button
                 whileTap={{ scale: 0.95 }}
                 whileHover={{ scale: 1.05 }}

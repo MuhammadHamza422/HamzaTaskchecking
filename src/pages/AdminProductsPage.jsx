@@ -48,7 +48,7 @@ const AdminProductsPage = () => {
 
   // Fetch products with TanStack Query
   const fetchProducts = async ({ queryKey }) => {
-    const [_, page, limit, searchQuery] = queryKey;
+    const [_, page, limit, searchQuery,typeFilter] = queryKey;
 
     const params = new URLSearchParams({
       page: page.toString(),
@@ -58,6 +58,10 @@ const AdminProductsPage = () => {
     if (searchQuery) {
       params.append("search", searchQuery);
     }
+    
+  if (typeFilter) {
+    params.append("type", typeFilter); // ✅ send type to API
+  }
 
     const response = await apiClient.get(`/api/v1/products/all?${params}`);
     return response.data;
@@ -69,7 +73,7 @@ const AdminProductsPage = () => {
     error,
     refetch,
   } = useQuery({
-    queryKey: ["products", currentPage, pageSize, search],
+    queryKey: ["products", currentPage, pageSize, search,filters.type,],
     queryFn: fetchProducts,
     keepPreviousData: true,
   });
@@ -105,8 +109,9 @@ const AdminProductsPage = () => {
 
   // Use these variables for display
   const filteredProducts = getFilteredProducts();
-  const displayProducts = getPaginatedFilteredProducts();
-  const totalProducts = filteredProducts.length;
+ const displayProducts = productsData?.products || [];
+const totalProducts = productsData?.total || 0; // backend should send total count
+
 
   // Debounced search
   const debouncedSearch = useCallback(
