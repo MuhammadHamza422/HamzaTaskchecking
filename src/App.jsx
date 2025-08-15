@@ -31,6 +31,7 @@ import Locations from "./pages/inventory/Locations";
 import InventoryList from "./pages/inventory/InventoryList";
 import Products from "./pages/inventory/Products";
 import ScanProduct from "./pages/inventory/Scan";
+import ActivityLogs from "./pages/inventory/ActivityLogs";
 
 
 
@@ -75,6 +76,7 @@ function App() {
           <Route path="inventory" element={<InventoryList />} />
           <Route path="products" element={<Products />} />
           <Route path="scan" element={<ScanProduct />} />
+          <Route path="activity-logs" element={<ActivityLogs />} />
 
         </Route>
       </Route>

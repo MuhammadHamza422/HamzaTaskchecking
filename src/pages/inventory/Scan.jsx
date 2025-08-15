@@ -10,6 +10,7 @@ import {
   Package,
   Loader2,
   Keyboard,
+  Plus,
 } from "lucide-react";
 import InventoryDisplay from "./inventory-display";
 import apiClient from "../../api/client";
@@ -23,6 +24,7 @@ export default function ScanProduct() {
   const [totalInventory, setTotalInventory] = useState(0);
   const [qrDetected, setQrDetected] = useState(false);
   const [scannedData, setScannedData] = useState("");
+  const [locationId, setLocationId] = useState("");
   const [cameraError, setCameraError] = useState("");
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [barcodeBuffer, setBarcodeBuffer] = useState("");
@@ -266,6 +268,8 @@ export default function ScanProduct() {
       setIsSearching(false);
 
       if (data) {
+        setLocationId(data.locations[0]._id);
+        console.log("Search results:", data.locations[0]._id);
         setSearchResults(data.inventry);
         setTotalInventory(data.totalInventry);
         return { items: data.inventry, total: data.totalInventry };
@@ -542,7 +546,8 @@ export default function ScanProduct() {
                   items={searchResults}
                   totalCount={totalInventory}
                   isLoading={isSearching}
-                  scannedData={scannedData} // Pass both scanned and searched data
+                  scannedData={scannedData}
+                  locationid={locationId}
                 />
               </div>
             )}
@@ -551,137 +556,141 @@ export default function ScanProduct() {
 
         {mode === "camera" && (
           <div className="space-y-6">
-          { (mode === "camera" && !searchResults.length > 0) &&  <>
-            <div className="p-6 bg-white rounded-xl border-2 border-slate-200 shadow-sm">
-              <div className="relative bg-slate-900 rounded-xl overflow-hidden">
-                <video
-                  ref={videoRef}
-                  className="w-full h-64 object-cover"
-                  playsInline
-                  muted
-                  style={{ transform: "scaleX(-1)" }}
-                />
+            {mode === "camera" && !searchResults.length > 0 && (
+              <>
+                <div className="p-6 bg-white rounded-xl border-2 border-slate-200 shadow-sm">
+                  <div className="relative bg-slate-900 rounded-xl overflow-hidden">
+                    <video
+                      ref={videoRef}
+                      className="w-full h-64 object-cover"
+                      playsInline
+                      muted
+                      style={{ transform: "scaleX(-1)" }}
+                    />
 
-                <canvas ref={canvasRef} className="hidden" />
+                    <canvas ref={canvasRef} className="hidden" />
 
-                {cameraError && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80">
-                    <div className="text-center p-4">
-                      <Camera className="h-12 w-12 text-red-400 mx-auto mb-3" />
-                      <p className="text-red-100 text-sm font-sans font-semibold mb-2">
-                        Camera Error
-                      </p>
-                      <p className="text-red-200 text-xs font-sans">
-                        {cameraError}
-                      </p>
-                      <button
-                        onClick={startCamera}
-                        className="mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg font-sans transition-colors"
-                      >
-                        Try Again
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {isCameraReady && !cameraError && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div
-                      className={`w-48 h-48 border-2 rounded-xl flex items-center justify-center transition-all duration-300 ${
-                        qrDetected
-                          ? "border-green-400 bg-green-400/20 border-solid"
-                          : "border-blue-400 border-dashed animate-pulse"
-                      }`}
-                    >
-                      <div className="text-center">
-                        {qrDetected ? (
-                          <>
-                            <div className="w-8 h-8 bg-green-400 rounded-full mx-auto mb-2 flex items-center justify-center">
-                              <svg
-                                className="w-5 h-5 text-white"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M5 13l4 4L19 7"
-                                />
-                              </svg>
-                            </div>
-                            <p className="text-green-100 text-sm font-sans font-semibold">
-                              QR Code Scanned!
-                            </p>
-                            {scannedData && (
-                              <p className="text-green-200 text-xs font-sans mt-1 truncate max-w-32">
-                                {scannedData}
-                              </p>
-                            )}
-                          </>
-                        ) : (
-                          <>
-                            <Scan className="h-8 w-8 text-blue-400 mx-auto mb-2 animate-pulse" />
-                            <p className="text-blue-100 text-sm font-sans">
-                              Scanning continuously...
-                            </p>
-                            <p className="text-blue-200 text-xs font-sans mt-1">
-                              Just show QR code to camera
-                            </p>
-                          </>
-                        )}
+                    {cameraError && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80">
+                        <div className="text-center p-4">
+                          <Camera className="h-12 w-12 text-red-400 mx-auto mb-3" />
+                          <p className="text-red-100 text-sm font-sans font-semibold mb-2">
+                            Camera Error
+                          </p>
+                          <p className="text-red-200 text-xs font-sans">
+                            {cameraError}
+                          </p>
+                          <button
+                            onClick={startCamera}
+                            className="mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg font-sans transition-colors"
+                          >
+                            Try Again
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                )}
+                    )}
 
-                {!isCameraReady && !cameraError && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80">
-                    <div className="text-center">
-                      <Loader2 className="h-8 w-8 text-blue-400 mx-auto mb-2 animate-spin" />
-                      <p className="text-blue-100 text-sm font-sans">
-                        Starting camera...
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+                    {isCameraReady && !cameraError && (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div
+                          className={`w-48 h-48 border-2 rounded-xl flex items-center justify-center transition-all duration-300 ${
+                            qrDetected
+                              ? "border-green-400 bg-green-400/20 border-solid"
+                              : "border-blue-400 border-dashed animate-pulse"
+                          }`}
+                        >
+                          <div className="text-center">
+                            {qrDetected ? (
+                              <>
+                                <div className="w-8 h-8 bg-green-400 rounded-full mx-auto mb-2 flex items-center justify-center">
+                                  <svg
+                                    className="w-5 h-5 text-white"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M5 13l4 4L19 7"
+                                    />
+                                  </svg>
+                                </div>
+                                <p className="text-green-100 text-sm font-sans font-semibold">
+                                  QR Code Scanned!
+                                </p>
+                                {scannedData && (
+                                  <p className="text-green-200 text-xs font-sans mt-1 truncate max-w-32">
+                                    {scannedData}
+                                  </p>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <Scan className="h-8 w-8 text-blue-400 mx-auto mb-2 animate-pulse" />
+                                <p className="text-blue-100 text-sm font-sans">
+                                  Scanning continuously...
+                                </p>
+                                <p className="text-blue-200 text-xs font-sans mt-1">
+                                  Just show QR code to camera
+                                </p>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
-            <div className="text-center space-y-2">
-              <p className="text-sm text-slate-600 font-sans">
-                {qrDetected
-                  ? "QR code processed! Ready for next scan..."
-                  : "Auto-scanning active - just show QR code to camera"}
-              </p>
-              {isSearching && (
-                <div className="flex items-center justify-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-                  <span className="text-sm text-blue-600 font-sans">
-                    Searching location...
-                  </span>
+                    {!isCameraReady && !cameraError && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80">
+                        <div className="text-center">
+                          <Loader2 className="h-8 w-8 text-blue-400 mx-auto mb-2 animate-spin" />
+                          <p className="text-blue-100 text-sm font-sans">
+                            Starting camera...
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
 
-            <div className="flex gap-3">
-              <button
-                onClick={goBack}
-                className="flex-1 px-4 py-3 border border-slate-300 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-colors bg-white focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 font-sans"
-              >
-                Cancel Scan
-              </button>
-              <button
-                onClick={manualScanQR}
-                disabled={!isCameraReady || cameraError !== "" || qrDetected}
-                className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl transition-colors font-sans focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 flex items-center justify-center gap-2"
-              >
-                <Scan className="h-4 w-4" />
-                Scan QR Code
-              </button>
-            </div>
-            </>}
+                <div className="text-center space-y-2">
+                  <p className="text-sm text-slate-600 font-sans">
+                    {qrDetected
+                      ? "QR code processed! Ready for next scan..."
+                      : "Auto-scanning active - just show QR code to camera"}
+                  </p>
+                  {isSearching && (
+                    <div className="flex items-center justify-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                      <span className="text-sm text-blue-600 font-sans">
+                        Searching location...
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={goBack}
+                    className="flex-1 px-4 py-3 border border-slate-300 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-colors bg-white focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 font-sans"
+                  >
+                    Cancel Scan
+                  </button>
+                  <button
+                    onClick={manualScanQR}
+                    disabled={
+                      !isCameraReady || cameraError !== "" || qrDetected
+                    }
+                    className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl transition-colors font-sans focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 flex items-center justify-center gap-2"
+                  >
+                    <Scan className="h-4 w-4" />
+                    Scan QR Code
+                  </button>
+                </div>
+              </>
+            )}
 
             {/* Scanned Results */}
             {searchResults.length > 0 && (
@@ -700,6 +709,7 @@ export default function ScanProduct() {
                   totalCount={totalInventory}
                   isLoading={isSearching}
                   scannedData={scannedData || searchQuery} // Pass both scanned and searched data
+                  locationid={locationId}
                 />
               </div>
             )}
@@ -748,46 +758,11 @@ export default function ScanProduct() {
                 </button>
               </form>
             </div>
-
-            {searchResults.length > 0 ? (
-              <InventoryDisplay
-                items={searchResults}
-                totalCount={totalInventory}
-                isLoading={isSearching}
-                scannedData={searchQuery}
-              />
-            ) : searchQuery && !isSearching && (
-              <div className="overflow-hidden rounded-lg border">
-                <div className="px-4 py-6 text-center bg-white">
-                  <div className="max-w-sm mx-auto">
-                    <div className="mb-4">
-                      <Package className="h-12 w-12 text-gray-400 mx-auto" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                      No inventory found
-                    </h3>
-                    <p className="text-sm text-gray-500 mb-4">
-                      {`Location ${searchQuery} has no products assigned to it.`}
-                    </p>
-                    <button
-                      onClick={() => {
-                        setIsCreateOpen(true);
-                        setActiveLocationCode(searchQuery);
-                      }}
-                      className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-medium transition-all duration-200 transform shadow-lg hover:shadow-xl"
-                    >
-                      <Plus className="h-4 w-4" />
-                      Add First Product
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
         {/* Scanned Results */}
-        {mode === "scanner" && (
+        {(mode === "scanner" || searchQuery) && (
           <div className="space-y-4">
             {scannedData && (
               <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
@@ -803,6 +778,7 @@ export default function ScanProduct() {
               totalCount={totalInventory}
               isLoading={isSearching}
               scannedData={scannedData || searchQuery} // Pass both scanned and searched data
+              locationid={locationId}
             />
           </div>
         )}

@@ -9,6 +9,7 @@ import {
   FiUpload,
   FiCamera,
 } from "react-icons/fi";
+import { LuScanLine } from "react-icons/lu";
 
 export default function Inventory() {
   const cards = [
@@ -40,6 +41,11 @@ export default function Inventory() {
     {
       to: "/inventory/scan",
       label: "Scan",
+      icon: <LuScanLine className="h-5 w-5" />,
+    },
+    {
+      to: "/inventory/activity-logs",
+      label: "Activity Logs",
       icon: <FiCamera className="h-5 w-5" />,
     },
   ];
