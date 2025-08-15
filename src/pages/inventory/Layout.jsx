@@ -3,6 +3,8 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "../../contexts/AuthContext";
 import Swal from "sweetalert2";
+import { MdFullscreen, MdFullscreenExit } from "react-icons/md";
+import useFullscreen from "../../components/useFullscreen";
 
 function Icon({ name, active }) {
   const common = "h-5 w-5";
@@ -263,6 +265,7 @@ export default function InventoryLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrollTop, setScrollTop] = useState(0);
   const { user, logout } = useAuth();
+  const { ref, isFullscreen, toggle } = useFullscreen();
 
   const isActive = (to, exact) => {
     if (exact) return location.pathname === to;
@@ -304,9 +307,9 @@ export default function InventoryLayout() {
   };
 
   return (
-    <div className="flex m-0 p-0">
+    <div ref={ref} className="flex m-0 p-0">
       {/* Desktop Sidebar */}
-      <div className="relative w-64 h-full hidden md:block">
+      <div className="relative w-64 max-h-screen overflow-y-auto hidden lg:block">
         <aside
           className={`fixed ${
             scrollTop > 100 ? "max-h-screen" : " max-h-screen"
@@ -317,16 +320,30 @@ export default function InventoryLayout() {
         >
           <div className="p-4 flex flex-col justify-between h-full">
             <div>
-              <Link to="/" className="block mb-4">
-                <img
-                  src="/logo.png"
-                  alt="Logo"
-                  className="w-32 sm:w-40 md:w-44 object-contain cursor-pointer"
-                />
-              </Link>
-              {/* <div className="mb-4">
-                <h2 className="text-white text-2xl text-center font-semibold">Inventory</h2>
-              </div> */}
+              <div className="flex items-center justify-between">
+                <Link to="/" className="block mb-4">
+                  <img
+                    src="/logo.png"
+                    alt="Logo"
+                    className="w-32 sm:w-40 md:w-44 object-contain cursor-pointer"
+                  />
+                </Link>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggle();
+                  }}
+                  aria-pressed={isFullscreen}
+                  aria-label={
+                    isFullscreen ? "Exit full screen" : "Enter full screen"
+                  }
+                  className="text-white text-3xl rounded focus:outline-none"
+                  title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                >
+                  {isFullscreen ? <MdFullscreenExit /> : <MdFullscreen />}
+                </button>
+              </div>
+
               <nav className="space-y-1">
                 {navItems.map((item) => {
                   const active = isActive(item.to, item.exact);
@@ -374,7 +391,7 @@ export default function InventoryLayout() {
 
       {/* Mobile Sidebar Overlay */}
       <div
-        className={`md:hidden fixed inset-0 z-[999] transition-opacity duration-300 ${
+        className={`lg:hidden fixed inset-0 z-[999] transition-opacity duration-300 ${
           mobileOpen
             ? "opacity-100 pointer-events-auto"
             : "opacity-0 pointer-events-none"
@@ -385,7 +402,7 @@ export default function InventoryLayout() {
           onClick={() => setMobileOpen(false)}
         />
         <aside
-          className={`absolute inset-y-0 left-0 z-10 w-64 rounded-r-xl overflow-hidden shadow-xl transform transition-transform duration-300 ease-in-out ${
+          className={`absolute inset-y-0 left-0 z-10 w-64 rounded-r-xl max-h-screen overflow-y-auto shadow-xl transform transition-transform duration-300 ease-in-out ${
             mobileOpen ? "translate-x-0" : "-translate-x-full"
           }`}
           style={{
@@ -465,9 +482,9 @@ export default function InventoryLayout() {
       </div>
 
       {/* Content */}
-      <section className="flex-1 min-w-0 p-4">
+      <section className="flex-1 min-w-0 p-4 bg-white">
         {/* Mobile top bar */}
-        <div className="md:hidden mb-3 flex items-center">
+        <div className="lg:hidden mb-3 flex items-center justify-between">
           <button
             onClick={() => setMobileOpen(true)}
             className="inline-flex items-center justify-center rounded-lg border px-3 py-2 text-sm transition-colors duration-200 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white"
@@ -484,8 +501,22 @@ export default function InventoryLayout() {
             </svg>
             <span className="ml-2">Menu</span>
           </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              toggle();
+            }}
+            aria-pressed={isFullscreen}
+            aria-label={isFullscreen ? "Exit full screen" : "Enter full screen"}
+            className="text-black text-3xl rounded focus:outline-none"
+            title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+          >
+            {isFullscreen ? <MdFullscreenExit /> : <MdFullscreen />}
+          </button>
         </div>
-        <Outlet />
+        <div className="bg-white rounded-lg">
+          <Outlet />
+        </div>
       </section>
     </div>
   );

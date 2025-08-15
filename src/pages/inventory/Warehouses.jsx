@@ -1,5 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { FiEdit2, FiPlus, FiSearch, FiTrash2 } from "react-icons/fi";
+import {
+  FiCheck,
+  FiCopy,
+  FiEdit2,
+  FiPlus,
+  FiSearch,
+  FiTrash2,
+} from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { useDispatch, useSelector } from "react-redux";
@@ -28,6 +35,9 @@ export default function Warehouses() {
   const selectedZoneId = useSelector((s) => s.app.selectedZoneId);
   const queryClient = useQueryClient();
 
+  const [copiedId, setCopiedId] = useState(null);
+  const [copiedZoneId, setCopiedZoneId] = useState(null);
+
   // Zones come from React Query based on selected warehouse
   const [q, setQ] = useState("");
 
@@ -45,6 +55,7 @@ export default function Warehouses() {
   const [znLoading, setZnLoading] = useState(false);
   const [whFormError, setWhFormError] = useState("");
   const [znFormError, setZnFormError] = useState("");
+  const [copied, setCopied] = useState(false);
 
   const countryOptions = [
     "uae",
@@ -492,9 +503,27 @@ export default function Warehouses() {
                         ].join(" ")}
                       >
                         <div>
-                          <div className="font-medium">{w.name}</div>
-                          <div className="text-xs text-zinc-500">
+                          <p className="font-medium">{w.name}</p>
+                          <p className="text-xs text-zinc-500">
                             {w.country || "—"}
+                          </p>
+                          <div
+                            className="flex items-center gap-1 group cursor-pointer"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (copiedId === w.id) return;
+                              navigator.clipboard.writeText(w.id);
+                              setCopiedId(w.id);
+                              setTimeout(() => setCopiedId(null), 2000);
+                            }}
+                            title={copiedId === w.id ? "Copied!" : "Copy"}
+                          >
+                            <p className="text-xs text-zinc-500">{w.id}</p>
+                            {copiedId === w.id ? (
+                              <FiCheck className="h-3 w-3 text-green-600 transition-colors" />
+                            ) : (
+                              <FiCopy className="h-3 w-3 text-zinc-400 group-hover:text-zinc-600 transition-colors" />
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
@@ -538,13 +567,13 @@ export default function Warehouses() {
                     }`
                   : "Zones"}
               </h2>
-                <button
-                  onClick={openNewZn}
-                  disabled={!selectedWarehouseId}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-sm text-white disabled:opacity-50 hover:enabled:bg-green-700"
-                >
-                  <FiPlus /> New Zone
-                </button>
+              <button
+                onClick={openNewZn}
+                disabled={!selectedWarehouseId}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-sm text-white disabled:opacity-50 hover:enabled:bg-green-700"
+              >
+                <FiPlus /> New Zone
+              </button>
             </div>
 
             <div className="p-4">
@@ -555,7 +584,7 @@ export default function Warehouses() {
               )}
 
               {selectedWarehouseId && (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-2">
                   {filteredZones.length === 0 && (
                     <div className="col-span-full rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-600">
                       No zones found for this warehouse.
@@ -574,7 +603,27 @@ export default function Warehouses() {
                             : "border-zinc-200 bg-white hover:bg-zinc-50",
                         ].join(" ")}
                       >
-                        <div className="font-medium">{z.name}</div>
+                        <div>
+                          <p className="font-medium">{z.name}</p>
+                          <div
+                            className="flex items-center gap-1 group cursor-pointer"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (copiedZoneId === z.id) return; // prevent multiple copies during cooldown
+                              navigator.clipboard.writeText(z.id);
+                              setCopiedZoneId(z.id);
+                              setTimeout(() => setCopiedZoneId(null), 2000);
+                            }}
+                            title={copiedZoneId === z.id ? "Copied!" : "Copy"}
+                          >
+                            <p className="text-xs text-zinc-500">{z.id}</p>
+                            {copiedZoneId === z.id ? (
+                              <FiCheck className="h-3 w-3 text-green-600 transition-colors" />
+                            ) : (
+                              <FiCopy className="h-3 w-3 text-zinc-400 group-hover:text-zinc-600 transition-colors" />
+                            )}
+                          </div>
+                        </div>
                         <div className="flex items-center gap-1">
                           <button
                             onClick={(e) => {

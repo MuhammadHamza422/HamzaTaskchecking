@@ -9,6 +9,8 @@ import {
   FiMapPin,
   FiPackage,
   FiAlertCircle,
+  FiDownload,
+  FiRefreshCw,
 } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
@@ -20,6 +22,7 @@ import {
   updateLocation,
   deleteLocation,
   getZonesByWarehouse,
+  importLocationsCSV,
 } from "../../api/warehouse";
 import { setSelectedZoneId } from "../../store/appSlice.js";
 import html2canvas from "html2canvas-pro";
@@ -40,6 +43,8 @@ export default function Locations() {
   const [newBay, setNewBay] = useState("");
   const [newShelf, setNewShelf] = useState("");
   const [newBin, setNewBin] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
 
   // useEffect(() => {
   //   if (!warehouseId) navigate("/inventory/warehouses");
@@ -150,43 +155,145 @@ export default function Locations() {
     },
   });
 
-  const handleDelete = (id) => {
-    Swal.fire({
-      title: "Are you sure?",
-      text: "This location will be permanently deleted.",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#d33",
-      cancelButtonColor: "#3085d6",
-      confirmButtonText: "Yes, delete it!",
-      cancelButtonText: "Cancel",
-    }).then((result) => {
-      if (result.isConfirmed) {
-        deleteMut.mutate(id);
+  const bulkDeleteMut = useMutation({
+    mutationFn: async (ids) => {
+      // Delete locations one by one
+      const results = await Promise.allSettled(
+        ids.map((id) => deleteLocation(id))
+      );
+      return results;
+    },
+    onSuccess: (results) => {
+      const successCount = results.filter(
+        (r) => r.status === "fulfilled"
+      ).length;
+      const failedCount = results.filter((r) => r.status === "rejected").length;
+
+      if (successCount > 0) {
+        queryClient.invalidateQueries({
+          queryKey: ["locations", warehouseId, zoneId],
+        });
+        setSelectedIds(new Set());
+
+        Swal.fire({
+          icon: "success",
+          title: "Bulk Delete Successful!",
+          text: `Successfully deleted ${successCount} location${
+            successCount !== 1 ? "s" : ""
+          }${failedCount > 0 ? ` (${failedCount} failed)` : ""}`,
+          toast: true,
+          position: "top-end",
+          showConfirmButton: false,
+          timer: 3000,
+          timerProgressBar: true,
+          background: "#10b981",
+          color: "#fff",
+        });
       }
-    });
-  };
 
-  const deleteMut = useMutation({
-    mutationFn: (id) => deleteLocation(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["locations", warehouseId, zoneId],
-      });
-
+      if (failedCount > 0) {
+        Swal.fire({
+          icon: "warning",
+          title: "Some Deletions Failed",
+          text: `${failedCount} location${
+            failedCount !== 1 ? "s" : ""
+          } could not be deleted`,
+          toast: true,
+          position: "top-end",
+          showConfirmButton: false,
+          timer: 4000,
+          timerProgressBar: true,
+          background: "#f59e0b",
+          color: "#fff",
+        });
+      }
+    },
+    onError: (error) => {
       Swal.fire({
+        icon: "error",
+        title: "Bulk Delete Failed",
+        text: error.message || "Failed to delete selected locations",
         toast: true,
         position: "top-end",
-        icon: "success",
-        title: "Location deleted successfully",
         showConfirmButton: false,
-        timer: 2000,
+        timer: 4000,
         timerProgressBar: true,
         background: "#ef4444",
         color: "#fff",
       });
     },
   });
+
+  // Handle CSV file upload
+  const handleCSVUpload = async (event) => {
+    const file = event.target.files[0];
+
+    if (!file) {
+      return;
+    }
+
+    // Validate file type
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      message.error("Please select a CSV file");
+      return;
+    }
+
+    setUploading(true);
+
+    try {
+      const result = await importLocationsCSV(file);
+      console.log("result", result);
+      // Show success message
+      Swal.fire({
+        icon: "success",
+        title: "CSV Import Successful!",
+        text: result.message || "Locations have been imported successfully",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+        background: "#10b981",
+        color: "#fff",
+        customClass: {
+          popup: "rounded-lg",
+        },
+      });
+
+      // Refresh the product list
+      // refetch();
+    } catch (error) {
+      Swal.fire({
+        icon: "error",
+        title: "Import Failed",
+        text:
+          error.response?.data?.message ||
+          error.message ||
+          "Failed to import CSV file",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 4000,
+        timerProgressBar: true,
+        background: "#ef4444",
+        color: "#fff",
+        customClass: {
+          popup: "rounded-lg",
+        },
+      });
+    } finally {
+      setUploading(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  // Handle Import CSV button click
+  const handleImportCSVClick = () => {
+    fileInputRef.current?.click();
+  };
 
   const toggleSelected = (id) => {
     setSelectedIds((prev) => {
@@ -196,6 +303,27 @@ export default function Locations() {
       return next;
     });
   };
+
+  // Handle select all
+  const handleSelectAll = (checked) => {
+    if (checked) {
+      const allIds = locations.map((loc) => loc.id);
+      setSelectedIds(new Set(allIds));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  // Handle row click selection
+  const handleRowClick = (id) => {
+    toggleSelected(id);
+  };
+
+  // Check if all items are selected
+  const isAllSelected =
+    locations.length > 0 && selectedIds.size === locations.length;
+  const isIndeterminate =
+    selectedIds.size > 0 && selectedIds.size < locations.length;
 
   const openPrint = () => setPrintOpen(true);
   const closePrint = () => setPrintOpen(false);
@@ -290,10 +418,16 @@ export default function Locations() {
     });
   };
 
-  const handleChange = (e) => {
-    // strip everything except A-Z and a-z
-    const cleaned = e.target.value.replace(/[^A-Za-z]/g, "");
-    setValue(cleaned);
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setImportFile(file);
+
+      // Auto-import the file
+      const formData = new FormData();
+      formData.append("file", file);
+      importCSVMut.mutate(formData);
+    }
   };
 
   return (
@@ -347,12 +481,29 @@ export default function Locations() {
       {/* Header + New */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-2xl font-bold">Locations</h1>
-        <button
-          onClick={() => setShowNew(true)}
-          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        >
-          <FiPlus /> <span>New Location</span>
-        </button>
+        <div className="flex gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+          <button
+            onClick={handleImportCSVClick}
+            loading={uploading}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            <FiDownload className="mr-2" />
+            {uploading ? "Uploading..." : "Import CSV"}
+          </button>
+          <button
+            onClick={() => setShowNew(true)}
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            <FiPlus /> <span>New Location</span>
+          </button>
+        </div>
       </div>
 
       {/* Print Preview Modal */}
@@ -447,137 +598,186 @@ export default function Locations() {
       )}
 
       {/* Locations Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      <div className="overflow-x-auto bg-white rounded-xl shadow">
         {isLoading && (
-          <>
-            <LocationSkeleton />
-            <LocationSkeleton />
-            <LocationSkeleton />
-            <LocationSkeleton />
-            <LocationSkeleton />
-            <LocationSkeleton />
-            <LocationSkeleton />
-            <LocationSkeleton />
-          </>
+          <div className="p-4 w-full">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left text-sm font-semibold text-gray-600">
+                    <input type="checkbox" className="h-4 w-4 accent-blue-600" disabled />
+                  </th>
+                  <th className="px-4 py-2 text-center text-sm font-semibold text-gray-600">QR Code</th>
+                  <th className="px-4 py-2 text-left text-sm font-semibold text-gray-600">Code</th>
+                  <th className="px-4 py-2 text-left text-sm font-semibold text-gray-600">Type</th>
+                  <th className="px-4 py-2 text-right text-sm font-semibold text-gray-600">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                <LocationSkeleton />
+                <LocationSkeleton />
+                <LocationSkeleton />
+              </tbody>
+            </table>
+          </div>
         )}
 
-        {!isLoading && locations.length === 0 && (
-          <div className="col-span-full">
-            <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-              <div className="bg-blue-50 p-4 rounded-full mb-4">
-                <FiMapPin className="w-8 h-8 text-blue-500" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                No Locations Yet
-              </h3>
-              <p className="text-gray-500 max-w-sm mb-6">
-                Start by adding your first location. This will help you organize
-                and track your inventory effectively.
-              </p>
-              <button
-                onClick={() => setShowNew(true)}
-                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              >
-                <FiPlus className="mr-2 -ml-1 h-5 w-5" />
-                Add First Location
-              </button>
+        {!isLoading && locations.length === 0 && !error && (
+          <div className="py-12 text-center">
+            <div className="bg-blue-50 p-4 rounded-full mx-auto mb-4 w-fit">
+              <FiMapPin className="w-8 h-8 text-blue-500" />
             </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              No Locations Yet
+            </h3>
+            <p className="text-gray-500 max-w-sm mx-auto mb-6">
+              Start by adding your first location to organize and track your
+              inventory.
+            </p>
+            <button
+              onClick={() => setShowNew(true)}
+              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none"
+            >
+              <FiPlus className="mr-2 -ml-1 h-5 w-5" />
+              Add First Location
+            </button>
           </div>
         )}
 
         {!isLoading && error && (
-          <div className="col-span-full">
-            <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-              <div className="bg-red-50 p-4 rounded-full mb-4">
-                <FiAlertCircle className="w-8 h-8 text-red-500" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Error Loading Locations
-              </h3>
-              <p className="text-gray-500 max-w-sm mb-6">
-                {error.message || "Failed to load locations. Please try again."}
-              </p>
-              <button
-                onClick={() =>
-                  queryClient.invalidateQueries(["locations", warehouseId, zoneId])
-                }
-                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-              >
-                <FiRefreshCw className="mr-2 -ml-1 h-5 w-5" />
-                Retry
-              </button>
+          <div className="py-12 text-center">
+            <div className="bg-red-50 p-4 rounded-full mx-auto mb-4 w-fit">
+              <FiAlertCircle className="w-8 h-8 text-red-500" />
             </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Error Loading Locations
+            </h3>
+            <p className="text-gray-500 max-w-sm mx-auto mb-6">
+              {error.message || "Failed to load locations. Please try again."}
+            </p>
+            <button
+              onClick={() =>
+                queryClient.invalidateQueries([
+                  "locations",
+                  warehouseId,
+                  zoneId,
+                ])
+              }
+              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700"
+            >
+              <FiRefreshCw className="mr-2 -ml-1 h-5 w-5" />
+              Retry
+            </button>
           </div>
         )}
 
-        {!isLoading &&
-          Array.isArray(locations) &&
-          locations.map((loc) => (
-            <div
-              key={loc?._id}
-              className="bg-white rounded-xl shadow p-5 flex flex-col justify-between relative group hover:shadow-lg transition-shadow duration-200"
-            >
-              <div className="absolute top-2 right-2">
-                <input
-                  className="accent-blue-600 h-5 w-5 cursor-pointer border border-gray-300 rounded"
-                  type="checkbox"
-                  checked={selectedIds.has(loc.id)}
-                  onChange={() => toggleSelected(loc.id)}
-                />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold truncate flex items-center gap-2">
-                  <FiPackage className="flex-shrink-0 text-blue-500" />
-                  {loc?.code}
-                </h2>
-                <span className="inline-block mt-2 px-2 py-0.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-full">
-                  {loc?.type}
-                </span>
-                <div className="flex items-center justify-center mt-4">
-                  <div className="p-2 bg-gray-50 rounded-lg">
-                    <QRCodeSVG
-                      value={String(loc?.code || "")}
-                      size={128}
-                      level="M"
-                      includeMargin
+        {!isLoading && locations.length > 0 && (
+          <>
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left text-sm font-semibold text-gray-600">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-blue-600"
+                      checked={isAllSelected}
+                      ref={(input) => {
+                        if (input) input.indeterminate = isIndeterminate;
+                      }}
+                      onChange={(e) => handleSelectAll(e.target.checked)}
                     />
-                  </div>
-                </div>
-              </div>
-              <div className="mt-4 flex items-center justify-end gap-2">
-                <button
-                  onClick={() => {
-                    setEditing(loc);
-                    setEditCode(loc.code);
-                    setEditType(loc.type);
-                    // Pre-fill edit parts from code pattern
-                    const c = String(loc.code || "");
-                    let m = c.match(
-                      /^([A-Za-z])-(\d{1,2})-(\d{1,2})-BIN-(\d{1,2})$/
-                    );
-                    if (m) {
-                      setEditRow(m[1].toUpperCase());
-                      setEditBay(m[2]);
-                      setEditShelf(m[3]);
-                      setEditBin(m[4]);
-                    } else {
-                      m = c.match(/^([A-Za-z])-(\d{1,2})-(\d{1,2})$/);
-                      if (m) {
-                        setEditRow(m[1].toUpperCase());
-                        setEditBay(m[2]);
-                        setEditShelf(m[3]);
-                        setEditBin("");
-                      }
-                    }
-                  }}
-                  className="rounded-full p-2 text-gray-600 hover:bg-gray-100 hover:text-blue-600 transition-colors"
-                  title="Edit"
-                >
-                  <FiEdit2 className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-          ))}
+                  </th>
+                  <th className="px-4 py-2 text-left text-sm font-semibold text-gray-600">
+                    QR Code
+                  </th>
+                  <th className="px-4 py-2 text-left text-sm font-semibold text-gray-600">
+                    Code
+                  </th>
+                  <th className="px-4 py-2 text-left text-sm font-semibold text-gray-600">
+                    Type
+                  </th>
+                  <th className="px-4 py-2 text-right text-sm font-semibold text-gray-600">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {locations.map((loc) => (
+                  <tr
+                    key={loc?._id}
+                    className="hover:bg-gray-50 transition-colors cursor-pointer"
+                    onClick={() => handleRowClick(loc.id)}
+                  >
+                    <td
+                      className="px-4 py-2"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-blue-600 cursor-pointer"
+                        checked={selectedIds.has(loc.id)}
+                        onChange={() => toggleSelected(loc.id)}
+                      />
+                    </td>
+                    <td className="px-4 py-2 flex items-center justify-start">
+                      <QRCodeSVG
+                        value={String(loc?.code || "")}
+                        size={40}
+                        level="M"
+                        includeMargin
+                      />
+                    </td>
+                    <td className="px-4 py-2 font-medium text-gray-900">
+                      {loc?.code}
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="inline-block uppercase px-2 py-0.5 text-sm font-medium text-blue-600 bg-blue-50 rounded-full">
+                        {loc?.type}
+                      </span>
+                    </td>
+
+                    <td
+                      className="px-4 py-2 text-right"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        onClick={() => {
+                          setEditing(loc);
+                          setEditCode(loc.code);
+                          setEditType(loc.type);
+
+                          // Pattern matching
+                          const c = String(loc.code || "");
+                          let m = c.match(
+                            /^([A-Za-z])-(\d{1,2})-(\d{1,2})-BIN-(\d{1,2})$/
+                          );
+                          if (m) {
+                            setEditRow(m[1].toUpperCase());
+                            setEditBay(m[2]);
+                            setEditShelf(m[3]);
+                            setEditBin(m[4]);
+                          } else {
+                            m = c.match(/^([A-Za-z])-(\d{1,2})-(\d{1,2})$/);
+                            if (m) {
+                              setEditRow(m[1].toUpperCase());
+                              setEditBay(m[2]);
+                              setEditShelf(m[3]);
+                              setEditBin("");
+                            }
+                          }
+                        }}
+                        className="rounded-full p-2 text-gray-600 hover:bg-gray-100 hover:text-blue-600 transition-colors"
+                        title="Edit"
+                      >
+                        <FiEdit2 className="w-5 h-5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
       </div>
 
       {/* New Location Modal */}
@@ -813,6 +1013,15 @@ export default function Locations() {
           </div>
         </>
       )}
+
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv"
+        onChange={handleCSVUpload}
+        style={{ display: "none" }}
+      />
     </div>
   );
 }
@@ -994,19 +1203,24 @@ export async function generatePDFFromNode({
 }
 
 const LocationSkeleton = () => (
-  <div className="bg-white rounded-xl shadow p-5 flex flex-col justify-between">
-    <div>
-      <Skeleton width={120} height={24} />
-      <div className="mt-2">
+  <tr>
+    <td className="px-4 py-3">
+      <Skeleton width={20} height={20} circle />
+    </td>
+    <td className="px-4 py-3 text-center">
+      <Skeleton width={40} height={40} />
+    </td>
+    <td className="px-4 py-3">
+      <Skeleton width={120} height={16} />
+    </td>
+    <td className="px-4 py-3">
+      <span className="inline-block">
         <Skeleton width={60} height={20} />
-      </div>
-      <div className="flex items-center justify-center mt-4 mb-4">
-        <Skeleton width={128} height={128} />
-      </div>
-    </div>
-    <div className="mt-4 flex items-center justify-end gap-2">
-      <Skeleton width={32} height={32} circle />
-      <Skeleton width={32} height={32} circle />
-    </div>
-  </div>
+      </span>
+    </td>
+    <td className="px-4 py-3 text-right">
+      <Skeleton width={28} height={28} circle />
+    </td>
+  </tr>
 );
+
