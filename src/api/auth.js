@@ -1,6 +1,12 @@
 import apiClient from "./client";
 
-export const fetchUserActivity = async ({ page = 1, limit = 30, date, user }) => {
+export const fetchUserActivity = async ({
+  page = 1,
+  limit = 30,
+  app,
+  date,
+  user,
+}) => {
   const params = new URLSearchParams({
     page: String(page),
     limit: String(limit),
@@ -12,8 +18,13 @@ export const fetchUserActivity = async ({ page = 1, limit = 30, date, user }) =>
   if (user) {
     params.append("user", user);
   }
+  if (app) {
+    params.append("app", app);
+  }
 
-  const { data } = await apiClient.get(`/api/v1/auth/activity?${params.toString()}`);
+  const { data } = await apiClient.get(
+    `/api/v1/auth/activity?${params.toString()}`
+  );
   return data;
 };
 
@@ -22,5 +33,3 @@ export const fetchAllUsers = async () => {
   // Expected shape: { users: [{ _id, firstName, lastName, email, ... }] }
   return Array.isArray(data?.users) ? data.users : [];
 };
-
-
