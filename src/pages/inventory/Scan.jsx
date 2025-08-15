@@ -28,6 +28,8 @@ export default function ScanProduct() {
   const [barcodeBuffer, setBarcodeBuffer] = useState("");
   const [lastBarcodeTime, setLastBarcodeTime] = useState(0);
   const [barcodeDetected, setBarcodeDetected] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [activeLocationCode, setActiveLocationCode] = useState("");
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -393,7 +395,7 @@ export default function ScanProduct() {
         aria-hidden="true"
       />
 
-      <div className="bg-white border-b border-slate-200 px-6 py-4 shadow-sm">
+      <div className="bg-white border-b rounded-xl border-slate-200 px-6 py-4 shadow-sm">
         <div className="flex items-center gap-4">
           {mode !== "select" && (
             <button
@@ -430,7 +432,7 @@ export default function ScanProduct() {
         </div>
       )}
 
-      <div className="p-6">
+      <div className="py-6">
         {mode === "select" && (
           <div className="space-y-6 cursor-pointer">
             <div className="space-y-4">
@@ -540,6 +542,7 @@ export default function ScanProduct() {
                   items={searchResults}
                   totalCount={totalInventory}
                   isLoading={isSearching}
+                  scannedData={scannedData} // Pass both scanned and searched data
                 />
               </div>
             )}
@@ -696,6 +699,7 @@ export default function ScanProduct() {
                   items={searchResults}
                   totalCount={totalInventory}
                   isLoading={isSearching}
+                  scannedData={scannedData || searchQuery} // Pass both scanned and searched data
                 />
               </div>
             )}
@@ -745,21 +749,38 @@ export default function ScanProduct() {
               </form>
             </div>
 
-            <InventoryDisplay
-              items={searchResults}
-              totalCount={totalInventory}
-              isLoading={isSearching}
-            />
-
-            {searchResults.length === 0 && searchQuery && !isSearching && (
-              <div className="p-8 text-center bg-white rounded-xl border-2 border-dashed border-slate-200">
-                <Package className="h-12 w-12 text-slate-400 mx-auto mb-3" />
-                <h3 className="font-semibold text-slate-600 font-sans mb-1">
-                  No inventry found
-                </h3>
-                <p className="text-sm text-slate-500 font-sans">
-                  Try scanning again or check your spelling
-                </p>
+            {searchResults.length > 0 ? (
+              <InventoryDisplay
+                items={searchResults}
+                totalCount={totalInventory}
+                isLoading={isSearching}
+                scannedData={searchQuery}
+              />
+            ) : searchQuery && !isSearching && (
+              <div className="overflow-hidden rounded-lg border">
+                <div className="px-4 py-6 text-center bg-white">
+                  <div className="max-w-sm mx-auto">
+                    <div className="mb-4">
+                      <Package className="h-12 w-12 text-gray-400 mx-auto" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                      No inventory found
+                    </h3>
+                    <p className="text-sm text-gray-500 mb-4">
+                      {`Location ${searchQuery} has no products assigned to it.`}
+                    </p>
+                    <button
+                      onClick={() => {
+                        setIsCreateOpen(true);
+                        setActiveLocationCode(searchQuery);
+                      }}
+                      className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-medium transition-all duration-200 transform shadow-lg hover:shadow-xl"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add First Product
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -781,6 +802,7 @@ export default function ScanProduct() {
               items={searchResults}
               totalCount={totalInventory}
               isLoading={isSearching}
+              scannedData={scannedData || searchQuery} // Pass both scanned and searched data
             />
           </div>
         )}
