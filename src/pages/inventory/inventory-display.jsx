@@ -44,7 +44,7 @@ export default function InventoryDisplay({
   const [pendingQtyChanges, setPendingQtyChanges] = useState(new Map()); // Track multiple pending changes
   const queryClient = useQueryClient();
   const dropdownRef = useRef(null);
-  console.log("Location Id", locationid);
+  // console.log("Location Id", locationid);
 
   // Handle click outside to close dropdown
   useEffect(() => {
@@ -97,13 +97,13 @@ export default function InventoryDisplay({
     }));
 
     // Debug logging
-    console.log("Inventory groups:", {
-      totalItems: filtered.length,
-      groups: result,
-      scannedData,
-      activeLocationCode,
-      locationid,
-    });
+    // console.log("Inventory groups:", {
+    //   totalItems: filtered.length,
+    //   groups: result,
+    //   scannedData,
+    //   activeLocationCode,
+    //   locationid,
+    // });
 
     return result;
   }, [filtered, scannedData, activeLocationCode, locationid]);
@@ -189,7 +189,7 @@ export default function InventoryDisplay({
     const currentItem = items.find((item) => item._id === id);
     if (!currentItem) return;
 
-    console.log("Attempting update for item:", currentItem);
+    // console.log("Attempting update for item:", currentItem);
 
     const currentQty = Number(currentItem.quantity) || 0;
     const newQty = Math.max(0, Number(nextQty) || 0);
@@ -232,12 +232,12 @@ export default function InventoryDisplay({
 
         if (matchingItem && isObjectId(matchingItem._id)) {
           inventoryId = matchingItem._id;
-          console.log("Found matching item with real ID:", inventoryId);
+          // console.log("Found matching item with real ID:", inventoryId);
         } else {
           // If this is a newly created item, try to handle immediate quantity update
-          console.log(
-            "Newly created item, attempting immediate quantity update"
-          );
+          // console.log(
+          //   "Newly created item, attempting immediate quantity update"
+          // );
 
           const result = await handleImmediateQuantityUpdate(
             currentItem,
@@ -332,6 +332,50 @@ export default function InventoryDisplay({
     }
   };
 
+  const handleQuantityInputChange = (itemId, inputValue) => {
+    // console.log("Manual input change:", { itemId, inputValue }); // Debug log
+
+    // Find the current item to get the original quantity
+    const currentItem = items.find((item) => item._id === itemId);
+    if (!currentItem) {
+      console.error("Item not found for ID:", itemId);
+      return;
+    }
+
+    // Allow empty string for clearing the input
+    if (inputValue === "") {
+      setPendingQtyChanges((prev) => {
+        const newMap = new Map(prev);
+        newMap.set(itemId, {
+          currentQty: Number(currentItem.quantity || 0),
+          newQty: 0,
+          type: "manual",
+        });
+        return newMap;
+      });
+      return;
+    }
+
+    // Only allow numeric input
+    const numericValue = inputValue.replace(/\D/g, "");
+    if (numericValue !== inputValue) return; // Ignore non-numeric input
+
+    const newQty = parseInt(numericValue) || 0;
+
+    // Optional: Add max limit validation
+    if (newQty > 9999) return;
+
+    setPendingQtyChanges((prev) => {
+      const newMap = new Map(prev);
+      newMap.set(itemId, {
+        currentQty: Number(currentItem.quantity || 0),
+        newQty,
+        type: "manual",
+      });
+      return newMap;
+    });
+  };
+
   const { data: productsData, refetch: refetchProducts } = useQuery({
     queryKey: ["products", form.typeCode],
     queryFn: () =>
@@ -360,12 +404,15 @@ export default function InventoryDisplay({
     onSuccess: async (data, variables) => {
       try {
         // If no id in response, fallback to refetching inventory and update UI from server
-        const hasValidId = data?.inventory?._id && isObjectId(data.inventory._id);
+        const hasValidId =
+          data?.inventory?._id && isObjectId(data.inventory._id);
 
         if (!hasValidId) {
           // Attempt to refetch inventory for current location code
           try {
-            const res = await getInventory({ search: activeLocationCode || scannedData });
+            const res = await getInventory({
+              search: activeLocationCode || scannedData,
+            });
             if (Array.isArray(res?.inventry)) {
               setItems(res.inventry);
               Swal.fire({
@@ -448,7 +495,7 @@ export default function InventoryDisplay({
         });
       } catch (error) {
         console.error("Error updating UI after inventory creation:", error);
-        
+
         Swal.fire({
           icon: "error",
           title: "Error",
@@ -586,16 +633,6 @@ export default function InventoryDisplay({
       return;
     }
 
-    // Log what we're sending for debugging
-    console.log("Submitting inventory creation:", {
-      productId: form.productId,
-      locationId: locationid,
-      quantity: String(quantity),
-      type: form.typeCode,
-      activeLocationCode,
-      scannedData,
-    });
-
     // Submit the form
     createInv.mutate({
       productId: form.productId,
@@ -624,9 +661,7 @@ export default function InventoryDisplay({
         <div>
           <h2 className="text-lg font-semibold">Inventory</h2>
           <p className="mt-0.5 text-sm text-zinc-600">
-            {totalCount
-              ? `${totalCount} total items`
-              : `${items.length} items`}
+            {totalCount ? `${totalCount} total items` : `${items.length} items`}
           </p>
         </div>
         <div className="relative w-full sm:w-80">
@@ -676,7 +711,7 @@ export default function InventoryDisplay({
                 Add Product
               </button>
             </div>
-            <div>
+            <div className="overflow-x-auto">
               <table className="min-w-full border border-gray-200 bg-white">
                 <thead className="bg-gray-50">
                   <tr>
@@ -755,14 +790,34 @@ export default function InventoryDisplay({
                               value={
                                 pendingQtyChanges.has(r?._id)
                                   ? pendingQtyChanges.get(r?._id).newQty
-                                  : r?.quantity
+                                  : r?.quantity || ""
                               }
-                              readOnly
-                              className="w-14 text-center px-3 py-2 text-sm bg-white border-l border-r outline-none focus:ring-0"
+                              onChange={(e) =>
+                                handleQuantityInputChange(
+                                  r?._id,
+                                  e.target.value
+                                )
+                              }
+                              onKeyDown={(e) => {
+                                // Allow Enter key to trigger validation
+                                if (e.key === "Enter") {
+                                  const pendingChange = pendingQtyChanges.get(
+                                    r?._id
+                                  );
+                                  if (pendingChange) {
+                                    handleUpdateQty(
+                                      r?._id,
+                                      pendingChange.newQty
+                                    );
+                                  }
+                                }
+                              }}
+                              className="w-14 text-center px-3 py-2 text-sm bg-white border-l border-r outline-none focus:ring-2 focus:ring-blue-500 focus:bg-blue-50 transition-colors"
                               inputMode="numeric"
                               pattern="[0-9]*"
-                              title="Current quantity"
+                              title="Current quantity - Click to edit manually or press Enter to save"
                               aria-label={`Quantity for ${r?.productData?.pro_title}`}
+                              placeholder="0"
                             />
                             <button
                               onClick={() => {
@@ -794,38 +849,45 @@ export default function InventoryDisplay({
                           </div>
                           {/* Pending Changes Display */}
                           {pendingQtyChanges.has(r?._id) && (
-                            <div className="flex items-center space-x-2 b">
-                              {/* <p className="text-sm font-medium text-blue-700">
-                                New qty: {pendingQtyChanges.get(r?._id)?.newQty}
-                              </p> */}
-                              <button
-                                onClick={() => {
-                                  const pendingChange = pendingQtyChanges.get(
-                                    r?._id
-                                  );
-                                  if (pendingChange) {
-                                    handleUpdateQty(
-                                      r?._id,
-                                      pendingChange.newQty
+                            <div className="fixed left-0 bottom-0 w-full p-5 bg-white flex flex-col sm:flex-row sm:items-center gap-y-2 justify-between duration-300 ease-in-out">
+                              <h2 className="text-xl sm:text-2xl font-bold">
+                                {r?.productData?.pro_title}
+                              </h2>
+                              <div className="flex items-center max-sm:justify-end space-x-2 b">
+                                <p className="text-sm font-medium text-blue-700">
+                                  New qty:{" "}
+                                  {pendingQtyChanges.get(r?._id)?.newQty}
+                                </p>
+                                <button
+                                  onClick={() => {
+                                    const pendingChange = pendingQtyChanges.get(
+                                      r?._id
                                     );
-                                  }
-                                }}
-                                className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors font-medium"
-                              >
-                                Validate
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setPendingQtyChanges((prev) => {
-                                    const newMap = new Map(prev);
-                                    newMap.delete(r?._id);
-                                    return newMap;
-                                  });
-                                }}
-                                className="px-3 py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors font-medium"
-                              >
-                                Cancel
-                              </button>
+
+                                    if (pendingChange) {
+                                      handleUpdateQty(
+                                        r?._id,
+                                        pendingChange.newQty
+                                      );
+                                    }
+                                  }}
+                                  className="px-3 py-2 text-sm tracking-wide bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+                                >
+                                  Validate
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setPendingQtyChanges((prev) => {
+                                      const newMap = new Map(prev);
+                                      newMap.delete(r?._id);
+                                      return newMap;
+                                    });
+                                  }}
+                                  className="px-3 py-2 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
                             </div>
                           )}
                         </div>
