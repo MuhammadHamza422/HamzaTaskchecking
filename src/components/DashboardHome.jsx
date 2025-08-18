@@ -1,11 +1,22 @@
-import { Package, Boxes, Users, ClipboardList, ShoppingCart } from "lucide-react";
+import {
+  Package,
+  Boxes,
+  Users,
+  ClipboardList,
+  ShoppingCart,
+} from "lucide-react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
 
 export default function DashboardCards() {
+  const { user } = useAuth();
+
+  // Example structure of your cards with required access
   const cards = [
     {
       title: "Orders Processing",
       icon: ClipboardList,
+      accessKey: "orders", // 👈 match with roles.access
       color: "text-indigo-500",
       hoverColor: "group-hover:text-indigo-600",
       link: "/orders/external/orders/pending",
@@ -15,6 +26,7 @@ export default function DashboardCards() {
     {
       title: "Inventory",
       icon: Boxes,
+      accessKey: "inventory",
       color: "text-green-500",
       hoverColor: "group-hover:text-green-600",
       link: "/inventory",
@@ -24,44 +36,57 @@ export default function DashboardCards() {
     {
       title: "Users & Roles",
       icon: Users,
+      accessKey: "users",
       color: "text-pink-500",
       hoverColor: "group-hover:text-pink-600",
       link: "/admin/users",
       bgColor: "bg-pink-50",
       border: "border-pink-500",
     },
-    // {
-    //   title: "Products",
-    //   icon: Package,
-    //   color: "text-orange-500",
-    //   hoverColor: "group-hover:text-orange-600",
-    //   link: "/products",
-    // },
-    // {
-    //   title: "New Orders",
-    //   icon: ShoppingCart,
-    //   color: "text-blue-500",
-    //   hoverColor: "group-hover:text-blue-600",
-    //   link: "/new-orders",
-    // },
+    {
+      title: "Products",
+      icon: Package,
+      accessKey: "products",
+      color: "text-orange-500",
+      hoverColor: "group-hover:text-orange-600",
+      link: "/products",
+      bgColor: "bg-orange-50",
+      border: "border-orange-500",
+    },
+    {
+      title: "New Orders",
+      icon: ShoppingCart,
+      accessKey: "newOrders",
+      color: "text-blue-500",
+      hoverColor: "group-hover:text-blue-600",
+      link: "/new-orders",
+      bgColor: "bg-blue-50",
+      border: "border-blue-500",
+    },
   ];
+
+  // Extract user access keys (safe check in case user is null/undefined)
+  const userAccess =
+    user?.roles?.access?.map((a) => a.app?.toLowerCase()) || [];
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-      {cards.map((card, index) => (
-        <Link
-          key={index}
-          to={card.link}
-          className={`${card.bgColor}  rounded-2xl shadow-sm border-2  ${card.border} p-6 flex flex-col items-center justify-center hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer group`}
-        >
-          <card.icon
-            className={`${card.color} w-14 h-14 mb-4 ${card.hoverColor} transition-colors`}
-          />
-          <span className="text-gray-900 font-semibold text-lg text-center">
-            {card.title}
-          </span>
-        </Link>
-      ))}
+      {cards
+        .filter((card) => userAccess.includes(card.accessKey.toLowerCase()))
+        .map((card, index) => (
+          <Link
+            key={index}
+            to={card.link}
+            className={`${card.bgColor} rounded-2xl shadow-sm border-2 ${card.border} p-6 flex flex-col items-center justify-center hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer group`}
+          >
+            <card.icon
+              className={`${card.color} w-14 h-14 mb-4 ${card.hoverColor} transition-colors`}
+            />
+            <span className="text-gray-900 font-semibold text-lg text-center">
+              {card.title}
+            </span>
+          </Link>
+        ))}
     </div>
   );
 }

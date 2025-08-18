@@ -249,13 +249,13 @@ function Icon({ name, active }) {
 const navItems = [
   { to: "/", label: "App", icon: "app" },
   { to: "/inventory", label: "Home", icon: "home", exact: true },
-  { to: "/inventory/warehouses", label: "Warehouses", icon: "warehouse" },
-  { to: "/inventory/zones", label: "Zones", icon: "zones" },
-  { to: "/inventory/locations", label: "Locations", icon: "locations" },
+  { to: "/inventory/warehouses", label: "Warehouse", icon: "warehouse" },
+  { to: "/inventory/zones", label: "Zone", icon: "zones" },
+  { to: "/inventory/locations", label: "Location", icon: "locations" },
   { to: "/inventory/inventory", label: "Inventory", icon: "inventory" },
   { to: "/inventory/products", label: "Products", icon: "products" },
   { to: "/inventory/scan", label: "Scan", icon: "scan" },
-  { to: "/inventory/activity-logs", label: "Activity Logs", icon: "activity" },
+  { to: "/inventory/activity-logs", label: "Activity Log", icon: "activity" },
 ];
 
 export default function InventoryLayout() {
@@ -263,6 +263,8 @@ export default function InventoryLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrollTop, setScrollTop] = useState(0);
   const { user, logout } = useAuth();
+
+  console.log("user", user);
 
   const isActive = (to, exact) => {
     if (exact) return location.pathname === to;
@@ -303,6 +305,22 @@ export default function InventoryLayout() {
     }
   };
 
+  // Get allowed inventory menus for the user
+  const allowedInventoryMenus =
+    user?.roles?.access?.find((role) => role.app === "inventory")?.menu || [];
+
+  // Convert to lowercase to normalize (since in DB you have "activity log" but in navItems it's "activity")
+  const normalizedAllowedMenus = allowedInventoryMenus.map(
+    (m) => m.toLowerCase().replace(/\s+/g, "-") // convert "activity log" → "activity-log"
+  );
+
+  // Now filter navItems based on allowed menus
+  const filteredNavItems = navItems.filter((item) =>
+    normalizedAllowedMenus.includes(
+      item.label.toLowerCase().replace(/\s+/g, "-")
+    )
+  );
+
   return (
     <div className="flex m-0 p-0">
       {/* Desktop Sidebar */}
@@ -328,7 +346,7 @@ export default function InventoryLayout() {
                 <h2 className="text-white text-2xl text-center font-semibold">Inventory</h2>
               </div> */}
               <nav className="space-y-1">
-                {navItems.map((item) => {
+                {filteredNavItems.map((item) => {
                   const active = isActive(item.to, item.exact);
                   return (
                     <Link

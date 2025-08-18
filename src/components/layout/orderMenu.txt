@@ -15,26 +15,42 @@ const navLinks = [
   { to: "/sourcing/orders", label: "Sourcing Orders", roles: ["sourcer"] },
   { to: "/requests/pending", label: "Pending", roles: ["purchaser"] },
   { to: "/requests/my", label: "Assigned to Me", roles: ["purchaser"] },
-
   {
     label: "Users",
     isDropdown: true,
     app: "users",
     roles: ["admin"],
     children: [
-      { to: "/admin/users", label: "Users", default: true },
-      { to: "/admin/user-activity", label: "User Activity" },
-      { to: "/admin/roles", label: "Role Management" },
+      {
+        to: "/admin/users",
+        label: "Users",
+        default: true,
+      },
+      {
+        to: "/admin/user-activity",
+        label: "User Activity",
+      },
+      {
+        to: "/admin/roles",
+        label: "Role Management",
+      },
     ],
   },
   {
     label: "Products",
     isDropdown: true,
-    app: "orders",
     roles: ["admin"],
+    app: "orders",
     children: [
-      { to: "orders/admin/products", label: "Products", default: true },
-      { to: "orders/merged-products", label: "Merged Products" },
+      {
+        to: "orders/admin/products",
+        label: "Products",
+        default: true,
+      },
+      {
+        to: "orders/merged-products",
+        label: "Merged Products",
+      },
     ],
   },
   {
@@ -48,7 +64,10 @@ const navLinks = [
         label: "Pending Orders",
         default: true,
       },
-      { to: "orders/external/orders/processed", label: "Processed Orders" },
+      {
+        to: "orders/external/orders/processed",
+        label: "Processed Orders",
+      },
     ],
   },
   {
@@ -57,23 +76,13 @@ const navLinks = [
     app: "orders",
     roles: ["admin"],
   },
-  { to: "orders/kits", label: "Kits", app: "orders", roles: ["admin"] },
+  {
+    to: "orders/kits",
+    label: "Kits",
+    app: "orders",
+    roles: ["admin"],
+  },
 ];
-
-/* ✅ Check if user has access to app */
-const hasAppAccess = (user, app) => {
-  if (!app) return true;
-  return user?.roles?.access?.some((a) => a.app === app);
-};
-
-/* ✅ Filter children menus by DB menus */
-const filterChildren = (user, app, children) => {
-  const appAccess = user?.roles?.access?.find((a) => a.app === app);
-  if (!appAccess) return [];
-  return children.filter((child) =>
-    appAccess.menu.includes(child.label.toLowerCase())
-  );
-};
 
 const shouldShowNavigation = (pathname) => {
   return !pathname.startsWith("/inventory");
@@ -86,6 +95,9 @@ const MainLayout = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const pathName = location.pathname;
 
+  console.log("pathName", pathName);
+  console.log("user", user);
+
   const handleNavClick = (to) => {
     if (location.pathname === to) {
       navigate("/reload", { replace: true });
@@ -96,25 +108,17 @@ const MainLayout = () => {
     setIsMobileMenuOpen(false);
   };
 
-  /* ✅ Filter top-level links by role + app permission */
-  const filteredLinks = navLinks.filter(
-    (link) =>
-      link.roles?.includes(user.role) &&
-      hasAppAccess(user, link.app) &&
-      ((pathName.startsWith("/admin") &&
-        ["Users", "Dashboard"].includes(link.label)) ||
-        (pathName.startsWith("/orders") &&
-          ["Dashboard", "Products", "Orders", "Platforms", "Kits"].includes(
-            link.label
-          )))
-  );
-
-  //  ||
-  //       ((pathName === "/" || pathName.startsWith("/inventory")) &&
-  //         link.label === "Dashboard") ||
-  //       (!pathName.startsWith("/admin") &&
-  //         !pathName.startsWith("/orders") &&
-  //         !pathName.startsWith("/inventory"))
+  const filteredLinks = pathName.startsWith("/admin")
+    ? navLinks.filter((link) => ["Users", "Dashboard"].includes(link.label))
+    : pathName.startsWith("/orders")
+    ? navLinks.filter((link) =>
+        ["Dashboard", "Products", "Orders", "Platforms", "Kits"].includes(
+          link.label
+        )
+      )
+    : pathName === "/" || pathName.startsWith("/inventory")
+    ? navLinks.filter((link) => link.label === "Dashboard")
+    : navLinks.filter((link) => link.roles?.includes(user.role));
 
   const handleLogout = async () => {
     const result = await Swal.fire({
@@ -143,6 +147,10 @@ const MainLayout = () => {
       user.name ||
       user.email?.split("@")[0]
     : "Guest";
+
+  // const filteredNavLinks = navLinks.filter(
+  //   (link) => user && user.role && link.roles.includes(user.role)
+  // );
 
   return (
     <div className="min-h-screen bg-[#f4f6fa] overflow-x-hidden">
@@ -173,6 +181,7 @@ const MainLayout = () => {
               >
                 <div className="flex justify-between items-center">
                   <div>
+                    {/* <h2 className="text-lg font-semibold">Menu</h2> */}
                     <p className="text-sm opacity-90">Welcome,</p>
                     <p className="text-lg font-semibold">{displayName}</p>
                   </div>
@@ -202,19 +211,14 @@ const MainLayout = () => {
                 <nav className="space-y-2">
                   {filteredLinks.map((link) => {
                     if (link.isDropdown) {
-                      const children = filterChildren(
-                        user,
-                        link.app,
-                        link.children
-                      );
-                      if (!children.length) return null;
+                      // Orders dropdown for mobile
                       return (
                         <div key={link.label} className="mb-2">
                           <div className="font-semibold text-gray-700 mb-1">
                             {link.label}
                           </div>
                           <div className="flex flex-col gap-1">
-                            {children.map((child) => {
+                            {link.children.map((child) => {
                               const isActive = location.pathname === child.to;
                               return (
                                 <div
@@ -316,18 +320,13 @@ const MainLayout = () => {
                 onClick={() => handleNavClick("/")}
               />
 
-              {/* Desktop Navigation */}
+              {/* Desktop Navigation - Hidden on mobile and inventory pages */}
               {shouldShowNavigation(pathName) && (
                 <nav className="hidden lg:flex gap-6 mt-4">
                   {filteredLinks.map((link) => {
                     if (link.isDropdown) {
-                      const children = filterChildren(
-                        user,
-                        link.app,
-                        link.children
-                      );
-                      if (!children.length) return null;
-                      const isAnyActive = children.some(
+                      // Orders dropdown
+                      const isAnyActive = link.children.some(
                         (child) => location.pathname === child.to
                       );
                       return (
@@ -355,7 +354,7 @@ const MainLayout = () => {
                             </svg>
                           </button>
                           <div className="absolute left-0 mt-2 w-48 bg-white rounded-lg shadow-lg z-50 opacity-0 group-hover:opacity-100 group-hover:visible invisible transition-all duration-200">
-                            {children.map((child) => {
+                            {link.children.map((child) => {
                               const isActive = location.pathname === child.to;
                               return (
                                 <div
@@ -408,10 +407,12 @@ const MainLayout = () => {
               transition={{ delay: 0.3 }}
               className="flex items-center gap-2 sm:gap-4"
             >
+              {/* Welcome message - Hidden on small screens */}
               <span className="hidden sm:block text-sm md:text-base">
                 Welcome, <strong>{displayName}</strong>
               </span>
 
+              {/* Desktop Logout Button - Hidden on mobile */}
               {user && (
                 <motion.button
                   whileTap={{ scale: 0.95 }}
@@ -434,6 +435,7 @@ const MainLayout = () => {
                 </motion.button>
               )}
 
+              {/* Mobile Menu Button */}
               <button
                 onClick={() => setIsMobileMenuOpen(true)}
                 className="lg:hidden text-white bg-blue-600 p-2 rounded-md transition-colors duration-200 shadow-lg hover:shadow-white"

@@ -725,12 +725,12 @@ export default function ScanProduct() {
                     htmlFor="search"
                     className="text-sm font-semibold text-slate-700 font-sans"
                   >
-                    Search Product
+                    Search Location
                   </label>
                   <input
                     id="search"
                     type="text"
-                    placeholder="Type product name or code..."
+                    placeholder="Type location code..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onKeyPress={handleKeyPress}

@@ -44,6 +44,7 @@ const UserActivityPage = () => {
       return fetchUserActivity({
         page,
         limit,
+        app: "users",
         date: dateStr || undefined,
         user: userId || undefined,
       });

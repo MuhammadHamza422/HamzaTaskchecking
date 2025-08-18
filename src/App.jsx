@@ -32,57 +32,65 @@ import InventoryList from "./pages/inventory/InventoryList";
 import Products from "./pages/inventory/Products";
 import ScanProduct from "./pages/inventory/Scan";
 import ActivityLogs from "./pages/inventory/ActivityLogs";
-
-
+import RoleManagement from "./pages/Roles";
 
 function App() {
   return (
     <BrowserRouter>
-    <Routes>
-      <Route path="/login" element={<LoginRoute />} />
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <MainLayout />
-          </ProtectedRoute>
-        }
-      >
-        {/* Child routes of MainLayout */}
-        <Route index element={<DashboardPage />} />
-        <Route path="sourcing/orders" element={<SourcingPage />} />
-        <Route path="sourcing/new" element={<SourcerPage />} />
-        <Route path="requests/pending" element={<PurchaserPendingPage />} />
-        <Route path="requests/my" element={<PurchaserPage />} />
-        <Route path="requests/:sourcingId" element={<RequestDetailPage />} />
-        {/* Admin User Routes */}
-        <Route path="admin/users" element={<AdminUsersPage />} />
-        <Route path="admin/user-activity" element={<UserActivityPage />} />
-        {/* Orders Routes */}
-        <Route path="orders/admin/products" element={<AdminProductsPage />} />
-        <Route path="orders/merged-products" element={<MergedProductsPage />} />
-        <Route path="orders/external/orders/pending" element={<ExternalOrdersPage />} />
-        <Route path="orders/external/orders/processed" element={<ProcessedOrdersPage />} />
-        <Route path="orders/platforms" element={<PlatformsPage />} />
-        <Route path="orders/kits" element={<KitsPage />} />
-      
-       
-        {/* Inventory Routes */}
-        <Route path="inventory" element={<InventoryLayout />}>
-          <Route index element={<Inventory />} />
-          <Route path="warehouses" element={<Warehouses />} />
-          <Route path="zones" element={<Zones />} />
-          <Route path="locations" element={<Locations />} />
-          <Route path="inventory" element={<InventoryList />} />
-          <Route path="products" element={<Products />} />
-          <Route path="scan" element={<ScanProduct />} />
-          <Route path="activity-logs" element={<ActivityLogs />} />
+      <Routes>
+        <Route path="/login" element={<LoginRoute />} />
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <MainLayout />
+            </ProtectedRoute>
+          }
+        >
+          {/* Child routes of MainLayout */}
+          <Route index element={<DashboardPage />} />
+          <Route path="sourcing/orders" element={<SourcingPage />} />
+          <Route path="sourcing/new" element={<SourcerPage />} />
+          <Route path="requests/pending" element={<PurchaserPendingPage />} />
+          <Route path="requests/my" element={<PurchaserPage />} />
+          <Route path="requests/:sourcingId" element={<RequestDetailPage />} />
+          {/* Admin User Routes */}
+          <Route path="admin/users" element={<AdminUsersPage />} />
+          <Route path="admin/user-activity" element={<UserActivityPage />} />
+          <Route path="admin/roles" element={<RoleManagement />} />
 
+          {/* Orders Routes */}
+          <Route path="orders/admin/products" element={<AdminProductsPage />} />
+          <Route
+            path="orders/merged-products"
+            element={<MergedProductsPage />}
+          />
+          <Route
+            path="orders/external/orders/pending"
+            element={<ExternalOrdersPage />}
+          />
+          <Route
+            path="orders/external/orders/processed"
+            element={<ProcessedOrdersPage />}
+          />
+          <Route path="orders/platforms" element={<PlatformsPage />} />
+          <Route path="orders/kits" element={<KitsPage />} />
+
+          {/* Inventory Routes */}
+          <Route path="inventory" element={<InventoryLayout />}>
+            <Route index element={<Inventory />} />
+            <Route path="warehouses" element={<Warehouses />} />
+            <Route path="zones" element={<Zones />} />
+            <Route path="locations" element={<Locations />} />
+            <Route path="inventory" element={<InventoryList />} />
+            <Route path="products" element={<Products />} />
+            <Route path="scan" element={<ScanProduct />} />
+            <Route path="activity-logs" element={<ActivityLogs />} />
+          </Route>
         </Route>
-      </Route>
-      {/* Catch all route - redirect to dashboard if logged in, login if not */}
-      <Route path="*" element={<CatchAllRoute />} />
-    </Routes>
+        {/* Catch all route - redirect to dashboard if logged in, login if not */}
+        <Route path="*" element={<CatchAllRoute />} />
+      </Routes>
     </BrowserRouter>
   );
 }

@@ -28,6 +28,7 @@ const initialFormState = {
   password: "",
   role: "sourcer",
   is_active: true,
+  roles: "",
 };
 
 const roleColors = {
@@ -47,6 +48,20 @@ const AdminUsersPage = () => {
   const [changedFields, setChangedFields] = useState(new Set());
   const [form] = Form.useForm();
   const { user: currentUser } = useAuth();
+  const [rolesOptions, setRolesOptions] = useState([]);
+
+  const loadRoles = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await apiClient.get("/api/v1/role/all");
+
+      setRolesOptions(data?.roles);
+    } catch (error) {
+      console.error("Failed to load roles:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   // Check if current user is admin
   const isAdmin = currentUser?.role === "admin";
@@ -64,6 +79,7 @@ const AdminUsersPage = () => {
           email: user.email,
           role: user.role,
           is_active: user.isActive,
+          roles: user.roles,
           createdAt: user.createdAt,
           updatedAt: user.updatedAt,
         }));
@@ -79,6 +95,10 @@ const AdminUsersPage = () => {
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
+
+  useEffect(() => {
+    loadRoles();
+  }, [loadRoles]);
 
   const handleOpenModal = (user = null) => {
     // Check if user is admin before allowing edit
@@ -98,7 +118,8 @@ const AdminUsersPage = () => {
         email: user.email,
         role: user.role,
         is_active: user.is_active,
-        password: "", // Clear password field for editing
+        password: "",
+        roles: user.roles,
       };
       form.setFieldsValue(formData);
     } else {
@@ -142,6 +163,9 @@ const AdminUsersPage = () => {
         break;
       case "password":
         hasChanged = value !== ""; // Password is changed if not empty
+        break;
+      case "roles":
+        hasChanged = value !== originalUser.roles;
         break;
       default:
         break;
@@ -198,6 +222,9 @@ const AdminUsersPage = () => {
         if (values.password && values.password.trim() !== "") {
           dataToSubmit.password = values.password.trim();
         }
+        if (values.roles !== originalUser.roles) {
+          dataToSubmit.roles = values.roles;
+        }
       } else {
         // For new users, include all required fields
         dataToSubmit = {
@@ -206,6 +233,7 @@ const AdminUsersPage = () => {
           email: values.email,
           role: values.role,
           password: values.password,
+          roles: values.roles,
         };
       }
 
@@ -366,7 +394,9 @@ const AdminUsersPage = () => {
       dataIndex: "role",
       key: "role",
       render: (role) => (
-          <Tag title={role} color={roleColors[role]}>{role.toUpperCase()}</Tag>
+        <Tag title={role} color={roleColors[role]}>
+          {role.toUpperCase()}
+        </Tag>
       ),
       width: 100,
     },
@@ -450,45 +480,46 @@ const AdminUsersPage = () => {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
     >
-        <Card
+      <Card
+        style={{
+          background: "linear-gradient(to right, #f0f4ff, #dbeafe)",
+          borderRadius: "12px",
+          boxShadow: "0 8px 24px rgba(0,0,0,0.06)",
+          padding: "2rem",
+          marginBottom: "2rem",
+        }}
+      >
+        <div
           style={{
-            background: "linear-gradient(to right, #f0f4ff, #dbeafe)",
-            borderRadius: "12px",
-            boxShadow: "0 8px 24px rgba(0,0,0,0.06)",
-            padding: "2rem",
-            marginBottom: "2rem",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <Title level={3} style={{ margin: 0 }}>
-              Manage Users
-            </Title>
-            <motion.div whileHover={{ scale: 1.05 }}>
-              <Button type="primary" onClick={() => handleOpenModal()}>
-                Add New User
-              </Button>
-            </motion.div>
-          </div>
-        </Card>
-
-        <div className="rounded-lg shadow-[0 4px 14px rgba(0,0,0,0.05)] overflow-x-auto">
-          <Table
-            dataSource={users}
-            columns={columns}
-            rowKey="id"
-            loading={loading}
-            pagination={{ pageSize: 10 }}
-            scroll={{ x: 1200 }}
-          />
+          <Title level={3} style={{ margin: 0 }}>
+            Manage Users
+          </Title>
+          <motion.div whileHover={{ scale: 1.05 }}>
+            <Button type="primary" onClick={() => handleOpenModal()}>
+              Add New User
+            </Button>
+          </motion.div>
         </div>
+      </Card>
 
-      <Modal className="max-h-[95vh] overflow-y-auto"
+      <div className="rounded-lg shadow-[0 4px 14px rgba(0,0,0,0.05)] overflow-x-auto">
+        <Table
+          dataSource={users}
+          columns={columns}
+          rowKey="id"
+          loading={loading}
+          pagination={{ pageSize: 10 }}
+          scroll={{ x: 1200 }}
+        />
+      </div>
+
+      <Modal
+        className="max-h-[95vh] overflow-y-auto"
         title={
           <Title level={4} style={{ margin: 0 }}>
             {editingUser ? "Edit User" : "Add New User"}
@@ -588,6 +619,21 @@ const AdminUsersPage = () => {
               <Option value="admin">Admin</Option>
             </Select>
           </Form.Item>
+          <Form.Item label="Roles" name="roles" rules={[{ required: true }]}>
+            <Select
+              onChange={(value) => handleFieldChange("roles", value)}
+              style={
+                changedFields.has("roles") ? { borderColor: "#1890ff" } : {}
+              }
+            >
+              {rolesOptions.map((role) => (
+                <Option key={role._id} value={role._id}>
+                  {role?.role}
+                </Option>
+              ))}
+            </Select>
+          </Form.Item>
+
           <Form.Item label="Is Active" name="is_active" valuePropName="checked">
             <Switch
               onChange={(checked) => handleFieldChange("is_active", checked)}
