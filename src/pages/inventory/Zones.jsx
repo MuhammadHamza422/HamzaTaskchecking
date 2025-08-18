@@ -3,30 +3,53 @@ import { useNavigate } from "react-router-dom";
 import { FiPlus, FiEdit2, FiTrash2, FiSearch } from "react-icons/fi";
 import { useDispatch, useSelector } from "react-redux";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getZonesByWarehouse, deleteZone as apiDeleteZone, getWarehouse } from "../../api/warehouse";
+import {
+  getZonesByWarehouse,
+  deleteZone as apiDeleteZone,
+  getWarehouse,
+  createZone as apiCreateZone,
+  updateZone as apiUpdateZone,
+} from "../../api/warehouse";
 import { setSelectedZoneId } from "../../store/appSlice.js";
 import Swal from "sweetalert2";
+import Modal from "../../components/Modal.jsx";
 
 export default function Zones() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const queryClient = useQueryClient();
 
+  const [whModalOpen, setWhModalOpen] = useState(false);
+  const [whEdit, setWhEdit] = useState(null);
+  const [whName, setWhName] = useState("");
+  const [whCountry, setWhCountry] = useState("");
+  const [whLoading, setWhLoading] = useState(false);
+
   const selectedWarehouseId = useSelector((s) => s.app.selectedWarehouseId);
   const selectedZoneId = useSelector((s) => s.app.selectedZoneId);
 
   const [q, setQ] = useState("");
 
+  // Zone modal & form state (added)
+  const [znModalOpen, setZnModalOpen] = useState(false);
+  const [znEdit, setZnEdit] = useState(null);
+  const [znName, setZnName] = useState("");
+  const [znDesc, setZnDesc] = useState("");
+  const [znLoading, setZnLoading] = useState(false);
+  const [znFormError, setZnFormError] = useState("");
+
   const { data, isLoading, error } = useQuery({
     queryKey: ["zones", selectedWarehouseId],
-    queryFn: () => (selectedWarehouseId ? getZonesByWarehouse(selectedWarehouseId) : null),
+    queryFn: () =>
+      selectedWarehouseId ? getZonesByWarehouse(selectedWarehouseId) : null,
     enabled: !!selectedWarehouseId,
     staleTime: 60 * 1000,
   });
 
   const { data: warehouseDetail } = useQuery({
     queryKey: ["warehouse", selectedWarehouseId],
-    queryFn: () => (selectedWarehouseId ? getWarehouse(selectedWarehouseId) : null),
+    queryFn: () =>
+      selectedWarehouseId ? getWarehouse(selectedWarehouseId) : null,
     enabled: !!selectedWarehouseId,
     staleTime: 5 * 60 * 1000,
   });
@@ -35,6 +58,7 @@ export default function Zones() {
     const list = Array.isArray(data?.zones) ? data.zones : [];
     return list.map((z) => ({
       id: z.id ?? z._id,
+      _raw: z,
       name: z.name,
       description: z.description,
       warehouseId: z.warehouse?.id ?? z.warehouse?._id ?? selectedWarehouseId,
@@ -44,7 +68,10 @@ export default function Zones() {
   const warehouseName = useMemo(() => {
     if (warehouseDetail?.warehouse?.name) return warehouseDetail.warehouse.name;
     if (warehouseDetail?.name) return warehouseDetail.name;
-    const first = Array.isArray(data?.zones) && data.zones.length > 0 ? data.zones[0] : null;
+    const first =
+      Array.isArray(data?.zones) && data.zones.length > 0
+        ? data.zones[0]
+        : null;
     return first?.warehouse?.name || "";
   }, [warehouseDetail, data]);
 
@@ -58,20 +85,95 @@ export default function Zones() {
     );
   }, [q, zones]);
 
-  if (!selectedWarehouseId) {
-    return (
-      <div className="space-y-3">
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">
-          No warehouse selected. Please pick one first.
-        </div>
-        <button
-          onClick={() => navigate("/inventory/warehouses")}
-          className="inline-flex items-center rounded-lg border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50"
-        >
-          Go to Warehouses
-        </button>
-      </div>
-    );
+  // open create modal
+  function openCreateZn() {
+    setZnEdit(null);
+    setZnName("");
+    setZnDesc("");
+    setZnFormError("");
+    setZnModalOpen(true);
+  }
+
+  // open edit modal
+  function openEditZn(z) {
+    setZnEdit(z);
+    setZnName(z.name || "");
+    setZnDesc(z.description || "");
+    setZnFormError("");
+    setZnModalOpen(true);
+  }
+
+  function closeZn() {
+    setZnModalOpen(false);
+    setZnEdit(null);
+    setZnName("");
+    setZnDesc("");
+    setZnFormError("");
+    setZnLoading(false);
+  }
+
+  async function saveZn(e) {
+    e.preventDefault();
+    setZnFormError("");
+    if (!selectedWarehouseId) return;
+    const name = (znName || "").trim();
+    if (!name) {
+      setZnFormError("Zone name is required.");
+      return;
+    }
+    const payload = {
+      name,
+      description: (znDesc || "").trim(),
+      warehouse: String(selectedWarehouseId),
+    };
+
+    try {
+      setZnLoading(true);
+
+      if (znEdit && znEdit.id) {
+        // Update existing zone
+        const updated = await apiUpdateZone(znEdit.id, payload);
+
+        // Optimistically update cache (match by id or _id)
+        queryClient.setQueryData(["zones", selectedWarehouseId], (old) => {
+          if (!old) return old;
+          const current = Array.isArray(old.zones) ? old.zones : [];
+          const updatedList = current.map((z) =>
+            z._id === znEdit.id || z.id === znEdit.id
+              ? { ...z, name: payload.name, description: payload.description }
+              : z
+          );
+          return { ...(old || {}), zones: updatedList };
+        });
+      } else {
+        // Create new zone
+        const created = await apiCreateZone(payload);
+
+        // Insert into cache
+        queryClient.setQueryData(["zones", selectedWarehouseId], (old) => {
+          const current = Array.isArray(old?.zones) ? old.zones : [];
+          // created may return the new zone in various shapes; normalize if needed
+          const newZone = created?.zone ?? created?.data ?? created;
+          return {
+            ...(old || {}),
+            zones: [newZone, ...current],
+          };
+        });
+      }
+
+      closeZn();
+
+      // Background refetch to ensure server is authoritative
+      queryClient.invalidateQueries({
+        queryKey: ["zones", selectedWarehouseId],
+      });
+    } catch (err) {
+      setZnFormError(
+        err?.response?.data?.message || err?.message || "Save failed"
+      );
+    } finally {
+      setZnLoading(false);
+    }
   }
 
   async function handleDeleteZone(id) {
@@ -90,22 +192,50 @@ export default function Zones() {
     queryClient.invalidateQueries({ queryKey: ["zones", selectedWarehouseId] });
   }
 
+  function openEditWh(w) {
+    setWhEdit(w);
+    setWhName(w.name);
+    setWhCountry(w.country);
+    setWhModalOpen(true);
+  }
+  function closeWh() {
+    setWhModalOpen(false);
+    setWhEdit(null);
+  }
+
+  if (!selectedWarehouseId) {
+    return (
+      <div className="space-y-3">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">
+          No warehouse selected. Please pick one first.
+        </div>
+        <button
+          onClick={() => navigate("/inventory/warehouses")}
+          className="inline-flex items-center rounded-lg border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50"
+        >
+          Go to Warehouses
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="rounded-xl border border-zinc-200 bg-white">
         <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
           <h1 className="text-base font-semibold">
-            Zones {selectedWarehouseId ? `— ${warehouseName || "Warehouse"}` : ""}
+            Zones{" "}
+            {selectedWarehouseId ? `— ${warehouseName || "Warehouse"}` : ""}
           </h1>
-          {/* <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => navigate("/zones/new")}
+              onClick={openCreateZn}
               className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700"
             >
               <FiPlus /> New Zone
             </button>
-          </div> */}
+          </div>
         </div>
 
         {/* Search */}
@@ -157,23 +287,13 @@ export default function Zones() {
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  navigate(`/zones/${z.id}/edit`);
+                  openEditZn(z); // <-- fixed: open zone edit (not warehouse)
                 }}
                 className="rounded p-1 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
                 title="Edit"
               >
                 <FiEdit2 />
               </button>
-              {/* <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteZone(z.id);
-                }}
-                className="rounded p-1 text-red-600 hover:bg-red-50"
-                title="Delete"
-              >
-                <FiTrash2 />
-              </button> */}
             </div>
 
             <h2 className="truncate text-base font-semibold">{z.name}</h2>
@@ -182,11 +302,10 @@ export default function Zones() {
                 {z.description}
               </p>
             )}
-
-            {/* <div className="mt-3 text-sm text-blue-600">Select →</div> */}
           </div>
         ))}
       </div>
+
       {/* Selected zone details */}
       {selectedZoneId && (
         <div className="rounded-xl border border-zinc-200 bg-white p-5">
@@ -195,7 +314,9 @@ export default function Zones() {
             if (!z) return null;
             return (
               <div>
-                <h2 className="text-lg font-semibold">Selected Zone: {z?.name}</h2>
+                <h2 className="text-lg font-semibold">
+                  Selected Zone: {z?.name}
+                </h2>
                 {z?.description && (
                   <p className="mt-1 text-sm text-zinc-600">{z?.description}</p>
                 )}
@@ -204,6 +325,63 @@ export default function Zones() {
           })()}
         </div>
       )}
+      <Modal open={znModalOpen} onClose={() => closeZn(false)}>
+        {/* Clean Tailwind-only Zone Modal */}
+
+        <div className="w-full max-w-md">
+          <h3 className="text-lg font-semibold">
+            {znEdit ? "Edit Zone" : "New Zone"}
+          </h3>
+          <form onSubmit={saveZn} className="mt-4 space-y-3">
+            {znFormError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {znFormError}
+              </div>
+            )}
+            <div>
+              <label className="block text-sm font-medium text-zinc-700">
+                Name
+              </label>
+              <input
+                type="text"
+                autoFocus
+                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+                value={znName}
+                onChange={(e) => setZnName(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700">
+                Description
+              </label>
+              <textarea
+                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+                rows={3}
+                value={znDesc}
+                onChange={(e) => setZnDesc(e.target.value)}
+              />
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeZn}
+                className="rounded-lg border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={znLoading}
+                className={`rounded-lg bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700 ${
+                  znLoading ? "opacity-50 cursor-not-allowed" : ""
+                }`}
+              >
+                {znLoading ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </form>
+        </div>
+      </Modal>
     </div>
   );
 }

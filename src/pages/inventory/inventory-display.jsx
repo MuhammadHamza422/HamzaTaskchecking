@@ -9,6 +9,7 @@ import {
 } from "../../api/warehouse";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Swal from "sweetalert2";
+import Modal from "../../components/Modal";
 
 const productTypes = [
   { label: "Consoles", code: "CON" },
@@ -993,65 +994,64 @@ export default function InventoryDisplay({
         )}
       </div>
 
-      {isCreateOpen && (
-        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-lg max-h-[95vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Create Inventory</h3>
-              <button
-                onClick={() => setIsCreateOpen(false)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                ✕
-              </button>
-            </div>
-            <form onSubmit={handleFormSubmit} className="space-y-4">
-              {/* Location */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Location
-                </label>
-                <div className="w-full rounded-md border px-3 py-2 text-sm bg-gray-50 text-gray-600">
-                  {activeLocationCode || scannedData}
-                </div>
+      <Modal open={isCreateOpen} onClose={() => setIsCreateOpen(false)}>
+        <div className="w-full max-w-lg rounded-xl bg-white max-h-[95vh] overflow-y-auto">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">Create Inventory</h3>
+            <button
+              onClick={() => setIsCreateOpen(false)}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              ✕
+            </button>
+          </div>
+          <form onSubmit={handleFormSubmit} className="space-y-4">
+            {/* Location */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Location
+              </label>
+              <div className="w-full rounded-md border px-3 py-2 text-sm bg-gray-50 text-gray-600">
+                {activeLocationCode || scannedData}
               </div>
+            </div>
 
-              {/* Type Selection - Add this before Product Selection */}
-              <div className="relative">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Product Type
-                </label>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {productTypes.map((type) => (
-                    <button
-                      key={type.code}
-                      type="button"
-                      onClick={() => {
-                        // If clicking the already selected type, deselect it
-                        if (form.typeCode === type.code) {
-                          setForm((prev) => ({
-                            ...prev,
-                            type: "",
-                            typeCode: "",
-                            productId: "",
-                            productSearch: "",
-                            showProductDropdown: false,
-                            selectedProduct: null,
-                          }));
-                        } else {
-                          // Select the new type
-                          setForm((prev) => ({
-                            ...prev,
-                            type: type.label,
-                            typeCode: type.code,
-                            productId: "",
-                            productSearch: "",
-                            showProductDropdown: false,
-                            selectedProduct: null,
-                          }));
-                        }
-                      }}
-                      className={`
+            {/* Type Selection - Add this before Product Selection */}
+            <div className="relative">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Product Type
+              </label>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {productTypes.map((type) => (
+                  <button
+                    key={type.code}
+                    type="button"
+                    onClick={() => {
+                      // If clicking the already selected type, deselect it
+                      if (form.typeCode === type.code) {
+                        setForm((prev) => ({
+                          ...prev,
+                          type: "",
+                          typeCode: "",
+                          productId: "",
+                          productSearch: "",
+                          showProductDropdown: false,
+                          selectedProduct: null,
+                        }));
+                      } else {
+                        // Select the new type
+                        setForm((prev) => ({
+                          ...prev,
+                          type: type.label,
+                          typeCode: type.code,
+                          productId: "",
+                          productSearch: "",
+                          showProductDropdown: false,
+                          selectedProduct: null,
+                        }));
+                      }
+                    }}
+                    className={`
           p-2 rounded-lg border text-sm font-medium transition-all duration-200
           ${
             form.typeCode === type.code
@@ -1059,114 +1059,113 @@ export default function InventoryDisplay({
               : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
           }
         `}
-                    >
-                      {type.label}
-                    </button>
-                  ))}
-                </div>
+                  >
+                    {type.label}
+                  </button>
+                ))}
               </div>
-              {/* Product Selection - Only show if type is selected */}
-              {form.typeCode ? (
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    Product
-                  </label>
-                  <div className="relative" ref={dropdownRef}>
-                    <input
-                      type="text"
-                      placeholder="Search products..."
-                      value={form.productSearch}
-                      onChange={(e) => {
-                        setForm((prev) => ({
-                          ...prev,
-                          productSearch: e.target.value,
-                          showProductDropdown: true,
-                          productId: "",
-                        }));
-                      }}
-                      onFocus={() =>
-                        setForm((prev) => ({
-                          ...prev,
-                          showProductDropdown: true,
-                        }))
-                      }
-                      className="w-full rounded-md border px-3 py-2 text-sm"
-                      required
-                    />
-                    {form.showProductDropdown && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
-                        {productsData?.products?.length > 0 ? (
-                          productsData.products.map((p) => (
-                            <div
-                              key={p._id}
-                              onClick={() => {
-                                setForm((prev) => ({
-                                  ...prev,
-                                  productId: p._id,
-                                  productSearch: p.pro_title || p.sku,
-                                  showProductDropdown: false,
-                                  selectedProduct: p, // Store the selected product
-                                }));
-                              }}
-                              className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-                            >
-                              {p.pro_title} ({p.sku})
-                            </div>
-                          ))
-                        ) : (
-                          <div className="px-3 py-2 text-gray-500 text-sm">
-                            {productsData?.products
-                              ? "No products found"
-                              : "Loading products..."}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : null}
-              {/* Quantity */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Quantity
+            </div>
+            {/* Product Selection - Only show if type is selected */}
+            {form.typeCode ? (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Product
                 </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.quantity}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      quantity: e.target.value.replace(/[^0-9]/g, ""),
-                    }))
-                  }
-                  className="w-full rounded-md border px-3 py-2 text-sm"
-                  placeholder="e.g., 5"
-                  required
-                />
+                <div className="relative" ref={dropdownRef}>
+                  <input
+                    type="text"
+                    placeholder="Search products..."
+                    value={form.productSearch}
+                    onChange={(e) => {
+                      setForm((prev) => ({
+                        ...prev,
+                        productSearch: e.target.value,
+                        showProductDropdown: true,
+                        productId: "",
+                      }));
+                    }}
+                    onFocus={() =>
+                      setForm((prev) => ({
+                        ...prev,
+                        showProductDropdown: true,
+                      }))
+                    }
+                    className="w-full rounded-md border px-3 py-2 text-sm"
+                    required
+                  />
+                  {form.showProductDropdown && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
+                      {productsData?.products?.length > 0 ? (
+                        productsData.products.map((p) => (
+                          <div
+                            key={p._id}
+                            onClick={() => {
+                              setForm((prev) => ({
+                                ...prev,
+                                productId: p._id,
+                                productSearch: p.pro_title || p.sku,
+                                showProductDropdown: false,
+                                selectedProduct: p, // Store the selected product
+                              }));
+                            }}
+                            className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                          >
+                            {p.pro_title} ({p.sku})
+                          </div>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-gray-500 text-sm">
+                          {productsData?.products
+                            ? "No products found"
+                            : "Loading products..."}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateOpen(false)}
-                  className="px-4 py-2 text-sm rounded-lg border"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={
-                    createInv.isLoading || !form.productId || !form.quantity
-                  }
-                  className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white disabled:opacity-60"
-                >
-                  {createInv.isLoading ? "Saving…" : "Save"}
-                </button>
-              </div>
-            </form>
-          </div>
+            ) : null}
+            {/* Quantity */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Quantity
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={form.quantity}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    quantity: e.target.value.replace(/[^0-9]/g, ""),
+                  }))
+                }
+                className="w-full rounded-md border px-3 py-2 text-sm"
+                placeholder="e.g., 5"
+                required
+              />
+            </div>
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsCreateOpen(false)}
+                className="px-4 py-2 text-sm rounded-lg border"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={
+                  createInv.isLoading || !form.productId || !form.quantity
+                }
+                className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white disabled:opacity-60"
+              >
+                {createInv.isLoading ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </form>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

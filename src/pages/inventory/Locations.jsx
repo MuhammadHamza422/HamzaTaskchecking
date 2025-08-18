@@ -31,6 +31,7 @@ import Swal from "sweetalert2";
 import { QRCodeSVG } from "qrcode.react";
 import Skeleton from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
+import Modal from "../../components/Modal.jsx";
 
 export default function Locations() {
   const navigate = useNavigate();
@@ -46,9 +47,8 @@ export default function Locations() {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
 
-  // useEffect(() => {
-  //   if (!warehouseId) navigate("/inventory/warehouses");
-  // }, [warehouseId, navigate]);
+  const [newErrors, setNewErrors] = useState({});
+  const [editErrors, setEditErrors] = useState({});
 
   // Fetch warehouse for breadcrumb
   const { data: warehouseRes } = useQuery({
@@ -92,24 +92,40 @@ export default function Locations() {
         : [];
       return list
         .map((l) => ({
-          id: l.id ?? l._id,
+          id: l._id,
           code: l.code,
           type: String(l.type || "").toLowerCase(),
           warehouseId:
             typeof l.warehouse === "string"
-              ? l.warehouse
-              : l.warehouse?.id ?? l.warehouse?._id ?? null,
-          zoneId:
-            typeof l.zone === "string"
-              ? l.zone
-              : l.zone?.id ?? l.zone?._id ?? null,
-          qrcode: l.qrcode || l.qrPath || null,
+              ? l?.warehouse
+              : l?.warehouse?._id ?? null,
+          zoneId: typeof l?.zone === "string" ? l?.zone : l?.zone?._id ?? null,
+          qrcode: l?.qrcode || l?.qrPath || null,
         }))
-        .filter((l) => l.warehouseId === warehouseId && l.zoneId === zoneId);
+        .filter((l) => l?.warehouseId === warehouseId && l?.zoneId === zoneId);
     },
   });
 
   const locations = locationsRes || [];
+  console.log(locations.map((l) => l.id));
+
+  // compute shelf set and helpers for validations
+  const shelfCodesSet = useMemo(() => {
+    const s = new Set();
+    for (const l of locations) {
+      if ((l.type || "").toLowerCase() === "shelf" && l.code) {
+        s.add(String(l.code));
+      }
+    }
+    return s;
+  }, [locations]);
+
+  const hasShelves = shelfCodesSet.size > 0;
+
+  const existsLocationCode = (code) =>
+    locations.some((l) => String(l.code) === String(code));
+
+  const existsShelfBase = (base) => shelfCodesSet.has(String(base));
 
   // Create/Edit state
   const [showNew, setShowNew] = useState(false);
@@ -142,6 +158,18 @@ export default function Locations() {
       setNewBay("");
       setNewShelf("");
       setNewBin("");
+      Swal.fire({
+        icon: "success",
+        title: "Location Created!",
+        text: "The new location has been successfully created.",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+        background: "#10b981",
+        color: "#fff",
+      });
     },
   });
 
@@ -226,6 +254,24 @@ export default function Locations() {
 
   // Handle CSV file upload
   const handleCSVUpload = async (event) => {
+    // if zone not selected, block and clear the input
+    if (!zoneId) {
+      Swal.fire({
+        icon: "warning",
+        title: "Select Zone",
+        text: "Please select a zone first before importing CSV.",
+        // toast: true,
+        // position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        // timerProgressBar: true,
+        background: "#f59e0b",
+        color: "#fff",
+      });
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
     const file = event.target.files[0];
 
     if (!file) {
@@ -292,6 +338,21 @@ export default function Locations() {
 
   // Handle Import CSV button click
   const handleImportCSVClick = () => {
+    if (!zoneId) {
+      Swal.fire({
+        icon: "warning",
+        title: "Select Zone",
+        text: "Please select a zone first before importing CSV.",
+        // toast: true,
+        // position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        // timerProgressBar: true,
+        background: "#f59e0b",
+        color: "#fff",
+      });
+      return;
+    }
     fileInputRef.current?.click();
   };
 
@@ -357,6 +418,27 @@ export default function Locations() {
     }
   };
 
+  // NEW: open modal only if zone is selected
+  const handleOpenNew = () => {
+    if (!zoneId) {
+      Swal.fire({
+        icon: "warning",
+        title: "Select Zone",
+        text: "Please select a zone first before adding a location.",
+        position: "center",
+        showConfirmButton: false,
+        timer: 3000,
+        // timerProgressBar: true,
+        background: "#f59e0b",
+        color: "#fff",
+      });
+      return;
+    }
+    // default to shelf if no shelves exist (hide bin option)
+    if (!hasShelves) setNewType("shelf");
+    setShowNew(true);
+  };
+
   // Handlers
   // Helpers for input sanitization and code building
   const sanitizeRow = (v) =>
@@ -364,18 +446,45 @@ export default function Locations() {
       .replace(/[^A-Za-z]/g, "")
       .toUpperCase()
       .slice(0, 1);
-  const sanitizeNum2 = (v) => v.replace(/[^0-9]/g, "").slice(0, 2);
+  // returns "" when value is empty or zero, otherwise returns "1".."99"
+  const sanitizeNum2 = (v) => {
+    // keep only digits, remove leading zeros
+    const cleaned = String(v || "")
+      .replace(/[^0-9]/g, "")
+      .replace(/^0+/, "");
+    if (!cleaned) return "";
+    const n = parseInt(cleaned.slice(0, 2), 10);
+    return n > 0 ? String(n) : "";
+  };
+
   const buildCode = (row, bay, shelf, type, binNum) => {
     const base = `${row}-${bay}-${shelf}`;
     return type === "bin" ? `${base}-BIN-${binNum}` : base;
   };
 
+  // Handlers
   const onCreate = (e) => {
     e.preventDefault();
+
+    if (!validateNew()) {
+      return; // will show inline errors
+    }
+
+    // Ensure zone still present (double-check)
+    if (!zoneId) {
+      Swal.fire({
+        icon: "warning",
+        title: "Select Zone",
+        text: "Please select a zone first before adding a location.",
+      });
+      return;
+    }
+
     const row = sanitizeRow(newRow);
     const bay = sanitizeNum2(newBay);
     const shelf = sanitizeNum2(newShelf);
     const binNum = sanitizeNum2(newBin);
+
     if (!row || !bay || !shelf || (newType === "bin" && !binNum)) {
       setNewError(
         "Please enter row (A), bay (1-99), shelf (1-99) and bin (1-99 for BIN type)."
@@ -383,7 +492,43 @@ export default function Locations() {
       return;
     }
     setNewError("");
+
+    const base = `${row}-${bay}-${shelf}`;
     const code = buildCode(row, bay, shelf, newType, binNum);
+
+    // If creating a shelf: prevent duplicates
+    if (newType === "shelf") {
+      if (existsLocationCode(code)) {
+        Swal.fire({
+          icon: "warning",
+          title: "Duplicate Shelf",
+          text: `Shelf "${code}" already exists in this zone.`,
+        });
+        return;
+      }
+    }
+
+    // If creating a bin: require parent shelf exists
+    if (newType === "bin") {
+      if (!existsShelfBase(base)) {
+        Swal.fire({
+          icon: "warning",
+          title: "Missing Shelf",
+          text: `Shelf "${base}" doesn't exist. Create the shelf first to add a BIN.`,
+        });
+        return;
+      }
+      // prevent duplicate bin codes too
+      if (existsLocationCode(code)) {
+        Swal.fire({
+          icon: "warning",
+          title: "Duplicate BIN",
+          text: `BIN "${code}" already exists in this zone.`,
+        });
+        return;
+      }
+    }
+
     createMut.mutate({
       type: newType,
       code,
@@ -395,6 +540,11 @@ export default function Locations() {
   const onEditSubmit = (e) => {
     e.preventDefault();
     if (!editing) return;
+
+    if (!validateEdit()) {
+      return; // will show inline errors
+    }
+
     const row = sanitizeRow(editRow);
     const bay = sanitizeNum2(editBay);
     const shelf = sanitizeNum2(editShelf);
@@ -406,7 +556,49 @@ export default function Locations() {
       return;
     }
     setEditError("");
+
+    const base = `${row}-${bay}-${shelf}`;
     const code = buildCode(row, bay, shelf, editType, binNum);
+
+    // If editing to shelf, ensure duplicate shelf code does not exist on a different item
+    if (editType === "shelf") {
+      const duplicate = locations.find(
+        (l) => l.code === code && String(l.id) !== String(editing.id)
+      );
+      if (duplicate) {
+        Swal.fire({
+          icon: "warning",
+          title: "Duplicate Shelf",
+          text: `Another shelf with code "${code}" already exists.`,
+        });
+        return;
+      }
+    }
+
+    // If editing to bin, ensure parent shelf exists
+    if (editType === "bin") {
+      if (!existsShelfBase(base)) {
+        Swal.fire({
+          icon: "warning",
+          title: "Missing Shelf",
+          text: `Shelf "${base}" doesn't exist. Create the shelf first to add a BIN.`,
+        });
+        return;
+      }
+      // prevent duplicate bin codes on different items
+      const duplicateBin = locations.find(
+        (l) => l.code === code && String(l.id) !== String(editing.id)
+      );
+      if (duplicateBin) {
+        Swal.fire({
+          icon: "warning",
+          title: "Duplicate BIN",
+          text: `Another BIN with code "${code}" already exists.`,
+        });
+        return;
+      }
+    }
+
     updateMut.mutate({
       id: editing.id,
       payload: {
@@ -428,6 +620,43 @@ export default function Locations() {
       formData.append("file", file);
       importCSVMut.mutate(formData);
     }
+  };
+
+  // Validation helpers for New form
+  const validateNew = () => {
+    const errs = {};
+    const row = sanitizeRow(newRow);
+
+    const bay = sanitizeNum2(newBay); // sanitizeNum2 now returns "" for zero
+    const shelf = sanitizeNum2(newShelf);
+    const binNum = sanitizeNum2(newBin);
+
+    if (!row) errs.row = "Row is required";
+    if (!bay) errs.bay = "Bay is required and must be greater than 0";
+    if (!shelf) errs.shelf = "Shelf is required and must be greater than 0";
+    if (newType === "bin" && !binNum)
+      errs.bin = "Bin is required and must be greater than 0";
+
+    setNewErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  // Validation helpers for Edit form
+  const validateEdit = () => {
+    const errs = {};
+    const row = sanitizeRow(editRow);
+    const bay = sanitizeNum2(editBay);
+    const shelf = sanitizeNum2(editShelf);
+    const binNum = sanitizeNum2(editBin);
+
+    if (!row) errs.row = "Row is required";
+    if (!bay) errs.bay = "Bay is required and must be greater than 0";
+    if (!shelf) errs.shelf = "Shelf is required and must be greater than 0";
+    if (editType === "bin" && !binNum)
+      errs.bin = "Bin is required and must be greater than 0";
+
+    setEditErrors(errs);
+    return Object.keys(errs).length === 0;
   };
 
   return (
@@ -498,7 +727,7 @@ export default function Locations() {
             {uploading ? "Uploading..." : "Import CSV"}
           </button>
           <button
-            onClick={() => setShowNew(true)}
+            onClick={handleOpenNew}
             className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
             <FiPlus /> <span>New Location</span>
@@ -538,10 +767,10 @@ export default function Locations() {
               <div
                 ref={printRef}
                 className="mx-auto bg-white"
-                style={{ width: "272mm", minHeight: "300mm", padding: "22mm" }}
+                style={{ width: "282mm", minHeight: "300mm", padding: "22mm" }}
               >
                 {/* Grid: two per row */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-[3rem]">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-[2.6rem]">
                   {locations
                     .filter(
                       (l) => selectedIds.size === 0 || selectedIds.has(l.id)
@@ -551,12 +780,11 @@ export default function Locations() {
                         key={loc.id}
                         className="border border-black flex items-center"
                       >
-                        <div className="flex items-center justify-center w-[200px] h-[200px]">
+                        <div className="flex items-center justify-center p-4">
                           <QRCodeSVG
                             value={String(loc.code || "")}
-                            size={200}
-                            level="M"
-                            includeMargin
+                            size={186}
+                            level="L"
                           />
                         </div>
                         <div className="border-l border-black text-black flex-1 h-full">
@@ -581,7 +809,7 @@ export default function Locations() {
                             </p>
                             <p className="px-2 py-2.5">{loc.code}</p>
                           </div>
-                          <div className="grid grid-cols-2 text-sm">
+                          <div className="grid grid-cols-2 text-sm h-fit">
                             <p className="px-2 py-3 border-r border-black font-medium">
                               STATUS
                             </p>
@@ -597,6 +825,8 @@ export default function Locations() {
         </div>
       )}
 
+      <Modal open={printOpen} onClose={closePrint}></Modal>
+
       {/* Locations Grid */}
       <div className="overflow-x-auto bg-white rounded-xl shadow">
         {isLoading && (
@@ -605,12 +835,24 @@ export default function Locations() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-2 text-left text-sm font-semibold text-gray-600">
-                    <input type="checkbox" className="h-4 w-4 accent-blue-600" disabled />
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-blue-600"
+                      disabled
+                    />
                   </th>
-                  <th className="px-4 py-2 text-center text-sm font-semibold text-gray-600">QR Code</th>
-                  <th className="px-4 py-2 text-left text-sm font-semibold text-gray-600">Code</th>
-                  <th className="px-4 py-2 text-left text-sm font-semibold text-gray-600">Type</th>
-                  <th className="px-4 py-2 text-right text-sm font-semibold text-gray-600">Actions</th>
+                  <th className="px-4 py-2 text-center text-sm font-semibold text-gray-600">
+                    QR Code
+                  </th>
+                  <th className="px-4 py-2 text-left text-sm font-semibold text-gray-600">
+                    Code
+                  </th>
+                  <th className="px-4 py-2 text-left text-sm font-semibold text-gray-600">
+                    Type
+                  </th>
+                  <th className="px-4 py-2 text-right text-sm font-semibold text-gray-600">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -635,7 +877,7 @@ export default function Locations() {
               inventory.
             </p>
             <button
-              onClick={() => setShowNew(true)}
+              onClick={handleOpenNew}
               className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none"
             >
               <FiPlus className="mr-2 -ml-1 h-5 w-5" />
@@ -704,7 +946,7 @@ export default function Locations() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {locations.map((loc) => (
                   <tr
-                    key={loc?._id}
+                    key={String(loc.id || loc.code)}
                     className="hover:bg-gray-50 transition-colors cursor-pointer"
                     onClick={() => handleRowClick(loc.id)}
                   >
@@ -781,238 +1023,302 @@ export default function Locations() {
       </div>
 
       {/* New Location Modal */}
-      {showNew && (
-        <>
-          <div
-            className="fixed inset-0 bg-black bg-opacity-50 z-[999]"
-            onClick={() => setShowNew(false)}
-          />
-          <div className="fixed inset-0 flex items-center justify-center z-[999] px-4">
-            <form
-              onSubmit={onCreate}
-              className="bg-white rounded-xl w-full max-w-md shadow-lg p-6 space-y-4 max-h-[95vh] overflow-y-auto"
+
+      <Modal open={showNew} onClose={() => setShowNew(false)}>
+        <form
+          onSubmit={onCreate}
+          className="bg-white rounded-xl w-full max-w-md space-y-4"
+        >
+          <header className="flex justify-between items-center">
+            <h3 className="text-xl font-semibold">New Location</h3>
+            <button
+              onClick={() => setShowNew(false)}
+              className="text-gray-600 hover:text-gray-800"
             >
-              <header className="flex justify-between items-center">
-                <h3 className="text-xl font-semibold">New Location</h3>
-                <button
-                  onClick={() => setShowNew(false)}
-                  className="text-gray-600 hover:text-gray-800"
-                >
-                  <FiX size={24} />
-                </button>
-              </header>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium">Type</label>
-                <select
-                  value={newType}
-                  onChange={(e) => setNewType(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-                >
-                  <option value="shelf">Shelf</option>
-                  <option value="bin">Bin</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium">Row</label>
-                <input
-                  type="text"
-                  value={newRow}
-                  onChange={(e) =>
-                    setNewRow(
-                      e.target.value
-                        .replace(/[^A-Za-z]/g, "")
-                        .toUpperCase()
-                        .slice(0, 1)
-                    )
-                  }
-                  placeholder="A"
-                  className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium">Bay</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={newBay}
-                  onChange={(e) =>
-                    setNewBay(e.target.value.replace(/[^0-9]/g, "").slice(0, 2))
-                  }
-                  placeholder="1"
-                  className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium">Shelf</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={newShelf}
-                  onChange={(e) =>
-                    setNewShelf(
-                      e.target.value.replace(/[^0-9]/g, "").slice(0, 2)
-                    )
-                  }
-                  placeholder="1"
-                  className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-                />
-              </div>
-              {newType === "bin" && (
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium">Bin</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={newBin}
-                    onChange={(e) =>
-                      setNewBin(
-                        e.target.value.replace(/[^0-9]/g, "").slice(0, 2)
-                      )
-                    }
-                    placeholder="1"
-                    className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-                  />
-                </div>
-              )}
-              {newError && <p className="text-red-600">{newError}</p>}
-              <div className="flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setShowNew(false)}
-                  className="px-4 py-2 border rounded"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={createMut.isPending}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50"
-                >
-                  {createMut.isPending ? "Creating…" : "Create"}
-                </button>
-              </div>
-            </form>
+              <FiX size={24} />
+            </button>
+          </header>
+          <div className="space-y-2">
+            <label className="block text-sm font-medium">Type</label>
+            <select
+              value={newType}
+              onChange={(e) => {
+                const val = e.target.value;
+                // prevent selecting bin if no shelves exist
+                if (val === "bin" && !hasShelves) {
+                  Swal.fire({
+                    icon: "warning",
+                    title: "No shelves",
+                    text: "You don't have any shelf in this zone. Create a shelf first to add BINs.",
+                  });
+                  setNewType("shelf");
+                  return;
+                }
+                setNewType(val);
+              }}
+              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+            >
+              <option value="shelf">Shelf</option>
+              {/* Only show bin option when there are shelves */}
+              {hasShelves && <option value="bin">Bin</option>}
+            </select>
           </div>
-        </>
-      )}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium">Row</label>
+            <input
+              type="text"
+              value={newRow}
+              onChange={(e) =>
+                setNewRow(
+                  e.target.value
+                    .replace(/[^A-Za-z]/g, "")
+                    .toUpperCase()
+                    .slice(0, 1)
+                )
+              }
+              placeholder="A"
+              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+            />
+            {newErrors?.row && (
+              <p className="text-sm text-red-600 mt-1">{newErrors?.row}</p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <label className="block text-sm font-medium">Bay</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={newBay}
+              onChange={(e) =>
+                setNewBay(
+                  e.target.value
+                    .replace(/[^0-9]/g, "")
+                    .replace(/^0+/, "")
+                    .slice(0, 2)
+                )
+              }
+              placeholder="1"
+              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+            />
+            {newErrors.bay && (
+              <p className="text-sm text-red-600 mt-1">{newErrors.bay}</p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <label className="block text-sm font-medium">Shelf</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={newShelf}
+              onChange={(e) =>
+                setNewShelf(
+                  e.target.value
+                    .replace(/[^0-9]/g, "")
+                    .replace(/^0+/, "")
+                    .slice(0, 2)
+                )
+              }
+              placeholder="1"
+              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+            />
+            {newErrors.shelf && (
+              <p className="text-sm text-red-600 mt-1">{newErrors.shelf}</p>
+            )}
+          </div>
+          {newType === "bin" && (
+            <div className="space-y-2">
+              <label className="block text-sm font-medium">Bin</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={newBin}
+                onChange={(e) =>
+                  setNewBin(
+                    e.target.value
+                      .replace(/[^0-9]/g, "")
+                      .replace(/^0+/, "")
+                      .slice(0, 2)
+                  )
+                }
+                placeholder="1"
+                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+              />
+              {newErrors.bin && (
+                <p className="text-sm text-red-600 mt-1">{newErrors.bin}</p>
+              )}
+            </div>
+          )}
+          {newError && <p className="text-red-600">{newError}</p>}
+          <div className="flex justify-end space-x-3">
+            <button
+              type="button"
+              onClick={() => setShowNew(false)}
+              className="px-4 py-2 border rounded"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={createMut.isPending}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50"
+            >
+              {createMut.isPending ? "Creating…" : "Create"}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Edit Location Modal */}
-      {editing && (
-        <>
-          <div
-            className="fixed inset-0 bg-black bg-opacity-50 z-40"
-            onClick={() => setEditing(null)}
-          />
-          <div className="fixed inset-0 flex items-center justify-center z-50 px-4">
-            <form
-              onSubmit={onEditSubmit}
-              className="bg-white rounded-xl w-full max-w-md shadow-lg p-6 space-y-4"
+
+      <Modal open={editing} onClose={() => setEditing(false)}>
+        <form
+          onSubmit={onEditSubmit}
+          className="bg-white rounded-xl w-full max-w-md space-y-3"
+        >
+          <header className="flex justify-between items-center">
+            <h3 className="text-xl font-semibold">Edit Location</h3>
+            <button
+              onClick={() => setEditing(null)}
+              className="text-gray-600 hover:text-gray-800"
             >
-              <header className="flex justify-between items-center">
-                <h3 className="text-xl font-semibold">Edit Location</h3>
-                <button
-                  onClick={() => setEditing(null)}
-                  className="text-gray-600 hover:text-gray-800"
-                >
-                  <FiX size={24} />
-                </button>
-              </header>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium">Type</label>
-                <select
-                  value={editType}
-                  onChange={(e) => setEditType(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-                >
-                  <option value="shelf">Shelf</option>
-                  <option value="bin">Bin</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium">Row</label>
-                <input
-                  type="text"
-                  value={editRow}
-                  onChange={(e) =>
-                    setEditRow(
-                      e.target.value
-                        .replace(/[^A-Za-z]/g, "")
-                        .toUpperCase()
-                        .slice(0, 1)
-                    )
+              <FiX size={24} />
+            </button>
+          </header>
+          <div className="space-y-2">
+            <label className="block text-sm font-medium">Type</label>
+            <select
+              value={editType}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === "bin" && !hasShelves) {
+                  Swal.fire({
+                    icon: "warning",
+                    title: "No shelves",
+                    text: "You don't have any shelf in this zone. Create a shelf first to add BINs.",
+                  });
+                  // if user was already editing a bin allow it; otherwise revert to shelf
+                  if (editing.type === "bin") {
+                    setEditType("bin");
+                  } else {
+                    setEditType("shelf");
                   }
-                  placeholder="A"
-                  className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium">Bay</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={editBay}
-                  onChange={(e) =>
-                    setEditBay(
-                      e.target.value.replace(/[^0-9]/g, "").slice(0, 2)
-                    )
-                  }
-                  placeholder="1"
-                  className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium">Shelf</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={editShelf}
-                  onChange={(e) =>
-                    setEditShelf(
-                      e.target.value.replace(/[^0-9]/g, "").slice(0, 2)
-                    )
-                  }
-                  placeholder="1"
-                  className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-                />
-              </div>
-              {editType === "bin" && (
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium">Bin</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={editBin}
-                    onChange={(e) =>
-                      setEditBin(
-                        e.target.value.replace(/[^0-9]/g, "").slice(0, 2)
-                      )
-                    }
-                    placeholder="1"
-                    className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-                  />
-                </div>
+                  return;
+                }
+                setEditType(val);
+              }}
+              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+            >
+              <option value="shelf">Shelf</option>
+              {/* show bin option only when shelves exist or we're already editing a bin */}
+              {(hasShelves || editType === "bin") && (
+                <option value="bin">Bin</option>
               )}
-              {editError && <p className="text-red-600">{editError}</p>}
-              <div className="flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setEditing(null)}
-                  className="px-4 py-2 border rounded"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={updateMut.isPending}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50"
-                >
-                  {updateMut.isPending ? "Saving…" : "Save"}
-                </button>
-              </div>
-            </form>
+            </select>
           </div>
-        </>
-      )}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium">Row</label>
+            <input
+              type="text"
+              value={editRow}
+              onChange={(e) =>
+                setEditRow(
+                  e.target.value
+                    .replace(/[^A-Za-z]/g, "")
+                    .toUpperCase()
+                    .slice(0, 1)
+                )
+              }
+              placeholder="A"
+              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+            />
+            {editErrors.row && (
+              <p className="text-sm text-red-600 mt-1">{editErrors.row}</p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <label className="block text-sm font-medium">Bay</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={editBay}
+              onChange={(e) =>
+                setEditBay(
+                  e.target.value
+                    .replace(/[^0-9]/g, "")
+                    .replace(/^0+/, "")
+                    .slice(0, 2)
+                )
+              }
+              placeholder="1"
+              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+            />
+            {editErrors.bay && (
+              <p className="text-sm text-red-600 mt-1">{editErrors.bay}</p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <label className="block text-sm font-medium">Shelf</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={editShelf}
+              onChange={(e) =>
+                setEditShelf(
+                  e.target.value
+                    .replace(/[^0-9]/g, "")
+                    .replace(/^0+/, "")
+                    .slice(0, 2)
+                )
+              }
+              placeholder="1"
+              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+            />
+            {editErrors.shelf && (
+              <p className="text-sm text-red-600 mt-1">{editErrors.shelf}</p>
+            )}
+          </div>
+          {editType === "bin" && (
+            <div className="space-y-2">
+              <label className="block text-sm font-medium">Bin</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={editBin}
+                onChange={(e) =>
+                  setEditBin(
+                    e.target.value
+                      .replace(/[^0-9]/g, "")
+                      .replace(/^0+/, "")
+                      .slice(0, 2)
+                  )
+                }
+                placeholder="1"
+                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+              />
+              {editType === "bin" && editErrors.bin && (
+                <p className="text-sm text-red-600 mt-1">{editErrors.bin}</p>
+              )}
+            </div>
+          )}
+          {editError && <p className="text-red-600">{editError}</p>}
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setEditing(null)}
+              className="px-4 py-2 border rounded"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={updateMut.isPending}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50"
+            >
+              {updateMut.isPending ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Hidden file input */}
       <input
@@ -1223,4 +1529,3 @@ const LocationSkeleton = () => (
     </td>
   </tr>
 );
-
