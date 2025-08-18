@@ -5,6 +5,7 @@ import {
   updateInventoryQuantity,
   getProducts,
   createInventory,
+  getInventory,
 } from "../../api/warehouse";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Swal from "sweetalert2";
@@ -25,11 +26,9 @@ export default function InventoryDisplay({
   isLoading,
   scannedData,
   locationid,
+  setItems,
 }) {
   const [search, setSearch] = useState("");
-  const [localItems, setLocalItems] = useState(
-    Array.isArray(items) ? items : []
-  );
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [activeLocationCode, setActiveLocationCode] = useState("");
   const [form, setForm] = useState({
@@ -40,15 +39,12 @@ export default function InventoryDisplay({
     showProductDropdown: false,
     type: "",
     typeCode: "",
+    selectedProduct: null, // Store the selected product data
   });
-  const [pendingQtyChange, setPendingQtyChange] = useState(null);
+  const [pendingQtyChanges, setPendingQtyChanges] = useState(new Map()); // Track multiple pending changes
   const queryClient = useQueryClient();
   const dropdownRef = useRef(null);
-  console.log("Location Id", locationid);
-
-  useEffect(() => {
-    setLocalItems(Array.isArray(items) ? items : []);
-  }, [items]);
+  // console.log("Location Id", locationid);
 
   // Handle click outside to close dropdown
   useEffect(() => {
@@ -65,30 +61,56 @@ export default function InventoryDisplay({
   }, []);
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return localItems;
+    if (!search.trim()) return items;
     const t = search.toLowerCase();
-    return localItems.filter(
+    return items.filter(
       (it) =>
         (it?.productData?.pro_title || "").toLowerCase().includes(t) ||
         (it?.locationData?.code || "").toLowerCase().includes(t)
     );
-  }, [localItems, search]);
+  }, [items, search]);
 
   const groups = useMemo(() => {
     const map = new Map();
     for (const it of filtered) {
-      const code = it?.locationData?.code || "Unknown";
+      // Try to get the location code from multiple sources
+      let code = it?.locationData?.code;
+
+      // If no code in locationData, try to use the active location or scanned data
+      if (!code) {
+        if (activeLocationCode) {
+          code = activeLocationCode;
+        } else if (scannedData) {
+          code = scannedData;
+        } else {
+          code = "Unknown";
+        }
+      }
+
       if (!map.has(code)) map.set(code, []);
       map.get(code).push(it);
     }
-    return Array.from(map.entries()).map(([locationCode, rows]) => ({
+
+    const result = Array.from(map.entries()).map(([locationCode, rows]) => ({
       locationCode,
       rows,
     }));
-  }, [filtered]);
+
+    // Debug logging
+    // console.log("Inventory groups:", {
+    //   totalItems: filtered.length,
+    //   groups: result,
+    //   scannedData,
+    //   activeLocationCode,
+    //   locationid,
+    // });
+
+    return result;
+  }, [filtered, scannedData, activeLocationCode, locationid]);
 
   const applyLocalQty = (id, quantity) => {
-    setLocalItems((prev) =>
+    // Only update parent state, no local state
+    setItems((prev) =>
       prev.map((it) => (it._id === id ? { ...it, quantity } : it))
     );
   };
@@ -130,18 +152,54 @@ export default function InventoryDisplay({
     return true;
   };
 
+  // Helper function to handle immediate quantity updates for newly created items
+  const handleImmediateQuantityUpdate = async (item, newQty) => {
+    try {
+      // Try to create a new inventory entry with the updated quantity
+      const createData = await createInventory({
+        productId: item.productId,
+        locationId: item.locationId,
+        quantity: String(newQty),
+      });
+
+      if (createData?.inventory?._id && isObjectId(createData.inventory._id)) {
+        // Update the item with the real ID from server
+        const realInventoryId = createData.inventory._id;
+
+        // Update parent state with the real ID
+        setItems((prev) =>
+          prev.map((prevItem) =>
+            prevItem._id === item._id
+              ? { ...prevItem, _id: realInventoryId, quantity: newQty }
+              : prevItem
+          )
+        );
+
+        return { success: true, realId: realInventoryId };
+      }
+    } catch (error) {
+      console.error("Failed to create inventory entry:", error);
+    }
+
+    return { success: false };
+  };
+
   // Update the handleUpdateQty function
   const handleUpdateQty = async (id, nextQty) => {
-    const currentItem = localItems.find((item) => item._id === id);
+    const currentItem = items.find((item) => item._id === id);
     if (!currentItem) return;
 
-    console.log("Attempting update for item:", currentItem);
+    // console.log("Attempting update for item:", currentItem);
 
     const currentQty = Number(currentItem.quantity) || 0;
     const newQty = Math.max(0, Number(nextQty) || 0);
 
     if (!validateQuantityChange(currentQty, newQty)) {
-      setPendingQtyChange(null);
+      setPendingQtyChanges((prev) => {
+        const newMap = new Map(prev);
+        newMap.delete(id);
+        return newMap;
+      });
       return;
     }
 
@@ -163,50 +221,88 @@ export default function InventoryDisplay({
       ) {
         inventoryId = currentItem.inventoryId;
       } else {
-        // Not a valid ObjectId — don't call backend
-        Swal.fire({
-          icon: "error",
-          title: "Update Failed",
-          text: "Can't update: invalid inventory id (item not saved to server yet). Please save the item first.",
-          toast: true,
-          position: "top-end",
-          showConfirmButton: false,
-          timer: 3000,
-          background: "#ef4444",
-          color: "#fff",
-        });
-        setPendingQtyChange(null);
-        return;
+        // For newly created items, try to find the real inventory ID from the server
+        // by searching through the current items to see if we have a matching item with a real ID
+        const matchingItem = items.find(
+          (item) =>
+            item.productId === currentItem.productId &&
+            item.locationId === currentItem.locationId &&
+            isObjectId(item._id)
+        );
+
+        if (matchingItem && isObjectId(matchingItem._id)) {
+          inventoryId = matchingItem._id;
+          // console.log("Found matching item with real ID:", inventoryId);
+        } else {
+          // If this is a newly created item, try to handle immediate quantity update
+          // console.log(
+          //   "Newly created item, attempting immediate quantity update"
+          // );
+
+          const result = await handleImmediateQuantityUpdate(
+            currentItem,
+            newQty
+          );
+
+          if (result.success) {
+            // Successfully updated the quantity for the newly created item
+            // Remove from pending changes
+            setPendingQtyChanges((prev) => {
+              const newMap = new Map(prev);
+              newMap.delete(id);
+              return newMap;
+            });
+
+            Swal.fire({
+              icon: "success",
+              title: "Quantity Updated",
+              toast: true,
+              position: "top-end",
+              showConfirmButton: false,
+              timer: 2000,
+              background: "#10b981",
+              color: "#fff",
+            });
+
+            return;
+          } else {
+            // If we still don't have a valid ID, show error
+            Swal.fire({
+              icon: "error",
+              title: "Update Failed",
+              text: "This item doesn't have a valid server ID yet. Please wait a moment for the item to be fully saved, then try again.",
+              toast: true,
+              position: "top-end",
+              showConfirmButton: false,
+              timer: 5000,
+              background: "#ef4444",
+              color: "#fff",
+            });
+            setPendingQtyChanges((prev) => {
+              const newMap = new Map(prev);
+              newMap.delete(id);
+              return newMap;
+            });
+            return;
+          }
+        }
       }
     }
 
     try {
-      if (Math.abs(newQty - currentQty) > 10) {
-        const result = await Swal.fire({
-          icon: "warning",
-          title: "Confirm Quantity Change",
-          text: `Are you sure you want to ${
-            newQty > currentQty ? "increase" : "decrease"
-          } the quantity by ${Math.abs(newQty - currentQty)}?`,
-          showCancelButton: true,
-          confirmButtonText: "Yes, update it",
-          cancelButtonText: "Cancel",
-          confirmButtonColor: "#3b82f6",
-        });
-
-        if (!result.isConfirmed) {
-          setPendingQtyChange(null);
-          return;
-        }
-      }
-
       // Optimistic UI
       applyLocalQty(id, newQty);
 
       // IMPORTANT: pass the *valid* inventoryId to your API
       await updateInventoryQuantity(inventoryId, newQty);
 
-      setPendingQtyChange(null);
+      // Remove from pending changes
+      setPendingQtyChanges((prev) => {
+        const newMap = new Map(prev);
+        newMap.delete(id);
+        return newMap;
+      });
+
       Swal.fire({
         icon: "success",
         title: "Quantity Updated",
@@ -220,19 +316,64 @@ export default function InventoryDisplay({
     } catch (error) {
       // revert
       applyLocalQty(id, currentQty);
-      setPendingQtyChange(null);
+      setPendingQtyChanges((prev) => {
+        const newMap = new Map(prev);
+        newMap.delete(id);
+        return newMap;
+      });
       Swal.fire({
         icon: "error",
         title: "Update Failed",
         text: error.message || "Failed to update quantity",
-        toast: true,
-        position: "top-end",
-        showConfirmButton: false,
         timer: 3000,
         background: "#ef4444",
         color: "#fff",
       });
     }
+  };
+
+  const handleQuantityInputChange = (itemId, inputValue) => {
+    // console.log("Manual input change:", { itemId, inputValue }); // Debug log
+
+    // Find the current item to get the original quantity
+    const currentItem = items.find((item) => item._id === itemId);
+    if (!currentItem) {
+      console.error("Item not found for ID:", itemId);
+      return;
+    }
+
+    // Allow empty string for clearing the input
+    if (inputValue === "") {
+      setPendingQtyChanges((prev) => {
+        const newMap = new Map(prev);
+        newMap.set(itemId, {
+          currentQty: Number(currentItem.quantity || 0),
+          newQty: 0,
+          type: "manual",
+        });
+        return newMap;
+      });
+      return;
+    }
+
+    // Only allow numeric input
+    const numericValue = inputValue.replace(/\D/g, "");
+    if (numericValue !== inputValue) return; // Ignore non-numeric input
+
+    const newQty = parseInt(numericValue) || 0;
+
+    // Optional: Add max limit validation
+    if (newQty > 9999) return;
+
+    setPendingQtyChanges((prev) => {
+      const newMap = new Map(prev);
+      newMap.set(itemId, {
+        currentQty: Number(currentItem.quantity || 0),
+        newQty,
+        type: "manual",
+      });
+      return newMap;
+    });
   };
 
   const { data: productsData, refetch: refetchProducts } = useQuery({
@@ -249,62 +390,136 @@ export default function InventoryDisplay({
   });
 
   const createInv = useMutation({
-    mutationFn: (body) => {
+    mutationFn: async (body) => {
       if (!body.productId || !body.locationId || !body.quantity) {
         throw new Error("Missing required fields");
       }
-      return createInventory({
+      const data = await createInventory({
         productId: body.productId,
         locationId: body.locationId,
         quantity: String(body.quantity),
       });
+      return data;
     },
-    onSuccess: (data, variables) => {
-      // Close the modal and reset form
-      setIsCreateOpen(false);
-      setForm({
-        productId: "",
-        locationId: "",
-        quantity: "",
-        productSearch: "",
-        showProductDropdown: false,
-        type: "",
-        typeCode: "",
-      });
+    onSuccess: async (data, variables) => {
+      try {
+        // If no id in response, fallback to refetching inventory and update UI from server
+        const hasValidId =
+          data?.inventory?._id && isObjectId(data.inventory._id);
 
-      // Find the product details from the productsData
-      const addedProduct = productsData?.products?.find(
-        (p) => p._id === variables.productId
-      );
+        if (!hasValidId) {
+          // Attempt to refetch inventory for current location code
+          try {
+            const res = await getInventory({
+              search: activeLocationCode || scannedData,
+            });
+            if (Array.isArray(res?.inventry)) {
+              setItems(res.inventry);
+              Swal.fire({
+                icon: "success",
+                title: "Product Added",
+                toast: true,
+                position: "top-end",
+                showConfirmButton: false,
+                timer: 2000,
+                background: "#10b981",
+                color: "#fff",
+              });
+              setIsCreateOpen(false);
+              setForm({
+                productId: "",
+                locationId: "",
+                quantity: "",
+                productSearch: "",
+                showProductDropdown: false,
+                type: "",
+                typeCode: "",
+                selectedProduct: null,
+              });
+              return;
+            }
+          } catch (e) {
+            console.warn("Refetch after create failed:", e);
+          }
+        }
 
-      // Update localItems state with the new inventory
-      setLocalItems((prev) => [
-        ...prev,
-        {
-          _id: data._id || Date.now(), // Use the returned ID or temporary ID
+        const realInventoryId = hasValidId ? data.inventory._id : undefined;
+
+        const newInventoryItem = {
+          _id: realInventoryId,
+          productId: variables.productId,
+          locationId: variables.locationId,
           quantity: variables.quantity,
-          productData: addedProduct,
-          locationData: {
-            code: activeLocationCode || locationid,
-            _id: variables.locationId,
+          productData: form.selectedProduct || {
+            pro_title: "Product Added Successfully",
+            sku: "SKU: " + variables.productId.slice(-6),
           },
-        },
-      ]);
+          locationData: {
+            _id: variables.locationId,
+            code: activeLocationCode || scannedData || "Location",
+          },
+        };
 
-      // Show success message
-      Swal.fire({
-        icon: "success",
-        title: "Products Added Successfully",
-        toast: true,
-        position: "top-end",
-        showConfirmButton: false,
-        timer: 3000,
-        background: "#10b981",
-        color: "#fff",
-      });
+        // Ensure the location code is set for future reference
+        if (!activeLocationCode && scannedData) {
+          setActiveLocationCode(scannedData);
+        }
 
-      // Refresh queries in background
-      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+        if (realInventoryId) {
+          setItems((prev) => [...prev, newInventoryItem]);
+        } else {
+          // If still no id, do not append optimistic row; UI already refreshed above
+        }
+
+        setIsCreateOpen(false);
+        setForm({
+          productId: "",
+          locationId: "",
+          quantity: "",
+          productSearch: "",
+          showProductDropdown: false,
+          type: "",
+          typeCode: "",
+          selectedProduct: null,
+        });
+
+        Swal.fire({
+          icon: "success",
+          title: "Product Added Successfully",
+          toast: true,
+          position: "top-end",
+          showConfirmButton: false,
+          timer: 3000,
+          background: "#10b981",
+          color: "#fff",
+        });
+      } catch (error) {
+        console.error("Error updating UI after inventory creation:", error);
+
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text: "Failed to create inventory. Please try again.",
+          toast: true,
+          position: "top-end",
+          showConfirmButton: false,
+          timer: 3000,
+          background: "#ef4444",
+          color: "#fff",
+        });
+
+        setIsCreateOpen(false);
+        setForm({
+          productId: "",
+          locationId: "",
+          quantity: "",
+          productSearch: "",
+          showProductDropdown: false,
+          type: "",
+          typeCode: "",
+          selectedProduct: null,
+        });
+      }
     },
     onError: (error) => {
       Swal.fire({
@@ -327,8 +542,19 @@ export default function InventoryDisplay({
         ...prev,
         locationId: scannedData,
       }));
+      // Also ensure we have the location ID set for the form
+      if (locationid) {
+        setForm((prev) => ({
+          ...prev,
+          locationId: locationid,
+        }));
+      }
+      // Set the active location code when scanned data is available
+      if (!activeLocationCode) {
+        setActiveLocationCode(scannedData);
+      }
     }
-  }, [scannedData]);
+  }, [scannedData, locationid, activeLocationCode]);
 
   // Add this effect to refetch products when search changes
   useEffect(() => {
@@ -359,8 +585,36 @@ export default function InventoryDisplay({
       return;
     }
 
-    // FIXED: Handle both existing locations and new scanned locations
-    let locationIdToUse = locationid;
+    // Ensure we have a valid location ID and location code
+    if (!locationid) {
+      Swal.fire({
+        icon: "error",
+        title: "Location Error",
+        text: "No valid location selected. Please scan or search for a location first.",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        background: "#ef4444",
+        color: "#fff",
+      });
+      return;
+    }
+
+    if (!activeLocationCode && !scannedData) {
+      Swal.fire({
+        icon: "error",
+        title: "Location Error",
+        text: "No location code available. Please scan or search for a location first.",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        background: "#ef4444",
+        color: "#fff",
+      });
+      return;
+    }
 
     // Validate quantity is a positive number
     const quantity = parseInt(form.quantity);
@@ -379,18 +633,10 @@ export default function InventoryDisplay({
       return;
     }
 
-    // Log what we're sending for debugging
-    console.log("Submitting inventory creation:", {
-      productId: form.productId,
-      locationId: locationIdToUse,
-      quantity: String(quantity),
-      type: form.typeCode,
-    });
-
     // Submit the form
     createInv.mutate({
       productId: form.productId,
-      locationId: locationIdToUse,
+      locationId: locationid,
       quantity: String(quantity),
       type: form.typeCode,
     });
@@ -415,9 +661,7 @@ export default function InventoryDisplay({
         <div>
           <h2 className="text-lg font-semibold">Inventory</h2>
           <p className="mt-0.5 text-sm text-zinc-600">
-            {totalCount
-              ? `${totalCount} total items`
-              : `${localItems.length} items`}
+            {totalCount ? `${totalCount} total items` : `${items.length} items`}
           </p>
         </div>
         <div className="relative w-full sm:w-80">
@@ -442,17 +686,23 @@ export default function InventoryDisplay({
               <button
                 onClick={() => {
                   setActiveLocationCode(locationCode);
-                  const currentLocation = localItems.find(
+                  // Ensure we have the correct location ID for this location code
+                  const currentLocation = items.find(
                     (item) => item.locationData?.code === locationCode
                   );
-                  if (currentLocation?.locationData?._id) {
-                    setForm((prev) => ({
-                      ...prev,
-                      locationId: currentLocation.locationData._id,
-                      productSearch: "",
-                      showProductDropdown: false,
-                    }));
-                  }
+
+                  // Set the form with the correct location information
+                  setForm((prev) => ({
+                    ...prev,
+                    locationId:
+                      currentLocation?.locationData?._id || locationid,
+                    productSearch: "",
+                    showProductDropdown: false,
+                    type: "",
+                    typeCode: "",
+                    selectedProduct: null,
+                  }));
+
                   setIsCreateOpen(true);
                 }}
                 className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-2 py-1.5 rounded-xl font-medium transition-all duration-200 transform shadow-lg hover:shadow-xl whitespace-nowrap"
@@ -461,7 +711,7 @@ export default function InventoryDisplay({
                 Add Product
               </button>
             </div>
-            <div>
+            <div className="overflow-x-auto">
               <table className="min-w-full border border-gray-200 bg-white">
                 <thead className="bg-gray-50">
                   <tr>
@@ -482,7 +732,7 @@ export default function InventoryDisplay({
                 <tbody>
                   {rows.map((r, idx) => (
                     <tr
-                      key={r._id}
+                      key={r?._id}
                       className={`hover:bg-gray-50 ${
                         idx % 2 !== 0 ? "bg-gray-50/50" : "bg-white"
                       }`}
@@ -501,82 +751,143 @@ export default function InventoryDisplay({
                         {r?.quantity}
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center space-x-2">
-                          {pendingQtyChange?.id === r._id ? (
-                            <div className="flex items-center space-x-2">
-                              <div className="text-sm font-medium">
-                                New qty: {pendingQtyChange.newQty}
-                              </div>
-                              <button
-                                onClick={() => {
-                                  handleUpdateQty(
-                                    r._id,
-                                    pendingQtyChange.newQty
-                                  );
-                                  setPendingQtyChange(null);
-                                }}
-                                className="px-2 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600"
-                              >
-                                Validate
-                              </button>
-                              <button
-                                onClick={() => setPendingQtyChange(null)}
-                                className="px-2 py-1 text-xs bg-gray-500 text-white rounded hover:bg-gray-600"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex items-center rounded-lg overflow-hidden border border-gray-200 shadow-sm bg-gray-50 h-9">
-                              <button
-                                disabled={Number(r.quantity) <= 0}
-                                onClick={() => {
-                                  const newQty = Math.max(
-                                    0,
-                                    Number(r.quantity) - 1
-                                  );
-                                  setPendingQtyChange({
-                                    id: r._id,
-                                    currentQty: Number(r.quantity),
+                        <div className="flex flex-col items-center gap-y-1">
+                          {/* Quantity Controls */}
+                          <div className="flex items-center rounded-lg overflow-hidden border border-gray-200 shadow-sm bg-gray-50 h-9">
+                            <button
+                              disabled={Number(r?.quantity) <= 0}
+                              onClick={() => {
+                                // Get current pending quantity or start with current quantity
+                                const currentPending = pendingQtyChanges.get(
+                                  r?._id
+                                );
+                                const baseQty = currentPending
+                                  ? currentPending.newQty
+                                  : Number(r?.quantity);
+                                const newQty = Math.max(0, baseQty - 1);
+
+                                setPendingQtyChanges((prev) => {
+                                  const newMap = new Map(prev);
+                                  newMap.set(r?._id, {
+                                    currentQty: Number(r?.quantity),
                                     newQty,
                                     type: "decrease",
                                   });
-                                }}
-                                className={`px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors ${
-                                  Number(r.quantity) <= 0
-                                    ? "text-gray-300 bg-gray-50 cursor-not-allowed"
-                                    : "text-red-400 bg-red-100 hover:bg-red-800 hover:text-white"
-                                }`}
-                                title="Decrease"
-                                aria-label={`Decrease quantity for ${r?.productData?.pro_title}`}
-                              >
-                                <Minus className="w-4 h-4" />
-                              </button>
-                              <input
-                                value={r.quantity}
-                                readOnly
-                                className="w-14 text-center px-3 py-2 text-sm bg-white border-l border-r outline-none focus:ring-0"
-                                inputMode="numeric"
-                                pattern="[0-9]*"
-                                title="Current quantity"
-                                aria-label={`Quantity for ${r?.productData?.pro_title}`}
-                              />
-                              <button
-                                onClick={() => {
-                                  const newQty = Number(r.quantity) + 1;
-                                  setPendingQtyChange({
-                                    id: r._id,
-                                    currentQty: Number(r.quantity),
+                                  return newMap;
+                                });
+                              }}
+                              className={`px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors ${
+                                Number(r.quantity) <= 0
+                                  ? "text-gray-300 bg-gray-50 cursor-not-allowed"
+                                  : "text-red-400 bg-red-100 hover:bg-red-800 hover:text-white"
+                              }`}
+                              title="Decrease by 1"
+                              aria-label={`Decrease quantity for ${r?.productData?.pro_title}`}
+                            >
+                              <Minus className="w-4 h-4" />
+                            </button>
+                            <input
+                              value={
+                                pendingQtyChanges.has(r?._id)
+                                  ? pendingQtyChanges.get(r?._id).newQty
+                                  : r?.quantity || ""
+                              }
+                              onChange={(e) =>
+                                handleQuantityInputChange(
+                                  r?._id,
+                                  e.target.value
+                                )
+                              }
+                              onKeyDown={(e) => {
+                                // Allow Enter key to trigger validation
+                                if (e.key === "Enter") {
+                                  const pendingChange = pendingQtyChanges.get(
+                                    r?._id
+                                  );
+                                  if (pendingChange) {
+                                    handleUpdateQty(
+                                      r?._id,
+                                      pendingChange.newQty
+                                    );
+                                  }
+                                }
+                              }}
+                              className="w-14 text-center px-3 py-2 text-sm bg-white border-l border-r outline-none focus:ring-2 focus:ring-blue-500 focus:bg-blue-50 transition-colors"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              title="Current quantity - Click to edit manually or press Enter to save"
+                              aria-label={`Quantity for ${r?.productData?.pro_title}`}
+                              placeholder="0"
+                            />
+                            <button
+                              onClick={() => {
+                                // Get current pending quantity or start with current quantity
+                                const currentPending = pendingQtyChanges.get(
+                                  r?._id
+                                );
+                                const baseQty = currentPending
+                                  ? currentPending.newQty
+                                  : Number(r?.quantity);
+                                const newQty = baseQty + 1;
+
+                                setPendingQtyChanges((prev) => {
+                                  const newMap = new Map(prev);
+                                  newMap.set(r?._id, {
+                                    currentQty: Number(r?.quantity),
                                     newQty,
                                     type: "increase",
                                   });
-                                }}
-                                className="px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors bg-green-100 text-green-600 hover:bg-green-900 hover:text-white"
-                                title="Increase"
-                                aria-label={`Increase quantity for ${r?.productData?.pro_title}`}
-                              >
-                                <Plus className="w-4 h-4" />
-                              </button>
+                                  return newMap;
+                                });
+                              }}
+                              className="px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors bg-green-100 text-green-600 hover:bg-green-900 hover:text-white"
+                              title="Increase by 1"
+                              aria-label={`Increase quantity for ${r?.productData?.pro_title}`}
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+                          {/* Pending Changes Display */}
+                          {pendingQtyChanges.has(r?._id) && (
+                            <div className="fixed left-0 bottom-0 w-full p-5 bg-white flex flex-col sm:flex-row sm:items-center gap-y-2 justify-between duration-300 ease-in-out">
+                              <h2 className="text-xl sm:text-2xl font-bold">
+                                {r?.productData?.pro_title}
+                              </h2>
+                              <div className="flex items-center max-sm:justify-end space-x-2 b">
+                                <p className="text-sm font-medium text-blue-700">
+                                  New qty:{" "}
+                                  {pendingQtyChanges.get(r?._id)?.newQty}
+                                </p>
+                                <button
+                                  onClick={() => {
+                                    const pendingChange = pendingQtyChanges.get(
+                                      r?._id
+                                    );
+
+                                    if (pendingChange) {
+                                      handleUpdateQty(
+                                        r?._id,
+                                        pendingChange.newQty
+                                      );
+                                    }
+                                  }}
+                                  className="px-3 py-2 text-sm tracking-wide bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+                                >
+                                  Validate
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setPendingQtyChanges((prev) => {
+                                      const newMap = new Map(prev);
+                                      newMap.delete(r?._id);
+                                      return newMap;
+                                    });
+                                  }}
+                                  className="px-3 py-2 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
                             </div>
                           )}
                         </div>
@@ -599,6 +910,11 @@ export default function InventoryDisplay({
                           setForm((prev) => ({
                             ...prev,
                             locationId: locationid,
+                            productSearch: "",
+                            showProductDropdown: false,
+                            type: "",
+                            typeCode: "",
+                            selectedProduct: null,
                           }));
                           setIsCreateOpen(true);
                         }}
@@ -643,6 +959,11 @@ export default function InventoryDisplay({
                     setForm((prev) => ({
                       ...prev,
                       locationId: locationid,
+                      productSearch: "",
+                      showProductDropdown: false,
+                      type: "",
+                      typeCode: "",
+                      selectedProduct: null,
                     }));
                     setIsCreateOpen(true);
                   }}
@@ -715,6 +1036,7 @@ export default function InventoryDisplay({
                             productId: "",
                             productSearch: "",
                             showProductDropdown: false,
+                            selectedProduct: null,
                           }));
                         } else {
                           // Select the new type
@@ -725,6 +1047,7 @@ export default function InventoryDisplay({
                             productId: "",
                             productSearch: "",
                             showProductDropdown: false,
+                            selectedProduct: null,
                           }));
                         }
                       }}
@@ -782,6 +1105,7 @@ export default function InventoryDisplay({
                                   productId: p._id,
                                   productSearch: p.pro_title || p.sku,
                                   showProductDropdown: false,
+                                  selectedProduct: p, // Store the selected product
                                 }));
                               }}
                               className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"

@@ -5,6 +5,8 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { motion } from "framer-motion";
 import Swal from "sweetalert2";
+import useFullscreen from "../useFullscreen";
+import { MdFullscreen, MdFullscreenExit } from "react-icons/md";
 
 const navLinks = [
   {
@@ -85,6 +87,7 @@ const MainLayout = () => {
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const pathName = location.pathname;
+  const { ref, isFullscreen, toggle } = useFullscreen();
 
   const handleNavClick = (to) => {
     if (location.pathname === to) {
@@ -145,7 +148,7 @@ const MainLayout = () => {
     : "Guest";
 
   return (
-    <div className="min-h-screen bg-[#f4f6fa] overflow-x-hidden">
+    <div ref={ref} className="min-h-screen bg-[#f4f6fa] overflow-x-hidden">
       {shouldShowNavigation(pathName) && (
         <>
           {/* Mobile Sidebar Overlay */}
@@ -408,6 +411,24 @@ const MainLayout = () => {
               transition={{ delay: 0.3 }}
               className="flex items-center gap-2 sm:gap-4"
             >
+<<<<<<< HEAD
+=======
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggle();
+                }}
+                aria-pressed={isFullscreen}
+                aria-label={
+                  isFullscreen ? "Exit full screen" : "Enter full screen"
+                }
+                className="text-white text-3xl rounded focus:outline-none"
+                title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+              >
+                {isFullscreen ? <MdFullscreenExit /> : <MdFullscreen />}
+              </button>
+              {/* Welcome message - Hidden on small screens */}
+>>>>>>> 7df92f99bed77821dc2221a923fd0b7d7b5e556b
               <span className="hidden sm:block text-sm md:text-base">
                 Welcome, <strong>{displayName}</strong>
               </span>
@@ -459,7 +480,11 @@ const MainLayout = () => {
 
       {/* Main Content */}
       <main
+<<<<<<< HEAD
         className={`transition-all duration-300 ease-in-out ${
+=======
+        className={`transition-all bg-white duration-300 ease-in-out ${
+>>>>>>> 7df92f99bed77821dc2221a923fd0b7d7b5e556b
           shouldShowNavigation(pathName) ? "p-4 sm:p-6" : "p-0"
         }`}
       >
