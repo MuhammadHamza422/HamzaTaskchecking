@@ -24,9 +24,9 @@ export const AuthProvider = ({ children }) => {
 
   // Update user Info
   const fetchUserInfo = async () => {
-    if (!user.id) return;
+    if (!user?.id) return;
     try {
-      const { data } = await apiClient.get(`/api/v1/auth/userInfo/${user.id}`);
+      const { data } = await apiClient.get(`/api/v1/auth/userInfo/${user?.id}`);
       setUser(data.user);
       localStorage.setItem("user", JSON.stringify(data.user));
     } catch (error) {
@@ -36,7 +36,8 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     fetchUserInfo();
-  }, [user._id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const login = async (newToken, userData) => {
     localStorage.setItem("token", newToken);
