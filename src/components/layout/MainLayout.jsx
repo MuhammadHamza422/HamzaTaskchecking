@@ -411,8 +411,6 @@ const MainLayout = () => {
               transition={{ delay: 0.3 }}
               className="flex items-center gap-2 sm:gap-4"
             >
-<<<<<<< HEAD
-=======
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -427,8 +425,6 @@ const MainLayout = () => {
               >
                 {isFullscreen ? <MdFullscreenExit /> : <MdFullscreen />}
               </button>
-              {/* Welcome message - Hidden on small screens */}
->>>>>>> 7df92f99bed77821dc2221a923fd0b7d7b5e556b
               <span className="hidden sm:block text-sm md:text-base">
                 Welcome, <strong>{displayName}</strong>
               </span>
@@ -480,11 +476,7 @@ const MainLayout = () => {
 
       {/* Main Content */}
       <main
-<<<<<<< HEAD
-        className={`transition-all duration-300 ease-in-out ${
-=======
         className={`transition-all bg-white duration-300 ease-in-out ${
->>>>>>> 7df92f99bed77821dc2221a923fd0b7d7b5e556b
           shouldShowNavigation(pathName) ? "p-4 sm:p-6" : "p-0"
         }`}
       >
