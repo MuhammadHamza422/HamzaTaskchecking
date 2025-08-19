@@ -404,7 +404,7 @@ const AdminUsersPage = () => {
         // Single role object
         return (
           <Tag color={roleColors[roles.role] || "default"}>
-            {roles.role?.toUpperCase()}
+            {roles?.role?.toUpperCase()}
           </Tag>
         );
       },
