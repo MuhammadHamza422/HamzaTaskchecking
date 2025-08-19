@@ -9,6 +9,7 @@ import {
 } from "../../api/warehouse";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Swal from "sweetalert2";
+import { useAuth } from "../../contexts/AuthContext";
 
 const productTypes = [
   { label: "Consoles", code: "CON" },
@@ -44,6 +45,8 @@ export default function InventoryDisplay({
   const [pendingQtyChanges, setPendingQtyChanges] = useState(new Map()); // Track multiple pending changes
   const queryClient = useQueryClient();
   const dropdownRef = useRef(null);
+  const { user } = useAuth();
+  console.log("User Role:", user?.roles.role);
   // console.log("Location Id", locationid);
 
   // Handle click outside to close dropdown
@@ -656,7 +659,7 @@ export default function InventoryDisplay({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-zinc-200 bg-white p-4">
         <div>
           <h2 className="text-lg font-semibold">Inventory</h2>
@@ -683,33 +686,35 @@ export default function InventoryDisplay({
               <p className="font-bold text-xl uppercase tracking-wide">
                 {locationCode}
               </p>
-              <button
-                onClick={() => {
-                  setActiveLocationCode(locationCode);
-                  // Ensure we have the correct location ID for this location code
-                  const currentLocation = items.find(
-                    (item) => item.locationData?.code === locationCode
-                  );
+              {user?.roles.role !== "Picker" && (
+                <button
+                  onClick={() => {
+                    setActiveLocationCode(locationCode);
+                    // Ensure we have the correct location ID for this location code
+                    const currentLocation = items.find(
+                      (item) => item.locationData?.code === locationCode
+                    );
 
-                  // Set the form with the correct location information
-                  setForm((prev) => ({
-                    ...prev,
-                    locationId:
-                      currentLocation?.locationData?._id || locationid,
-                    productSearch: "",
-                    showProductDropdown: false,
-                    type: "",
-                    typeCode: "",
-                    selectedProduct: null,
-                  }));
+                    // Set the form with the correct location information
+                    setForm((prev) => ({
+                      ...prev,
+                      locationId:
+                        currentLocation?.locationData?._id || locationid,
+                      productSearch: "",
+                      showProductDropdown: false,
+                      type: "",
+                      typeCode: "",
+                      selectedProduct: null,
+                    }));
 
-                  setIsCreateOpen(true);
-                }}
-                className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-2 py-1.5 rounded-xl font-medium transition-all duration-200 transform shadow-lg hover:shadow-xl whitespace-nowrap"
-              >
-                <Plus className="h-4 w-4" />
-                Add Product
-              </button>
+                    setIsCreateOpen(true);
+                  }}
+                  className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-2 py-1.5 rounded-xl font-medium transition-all duration-200 transform shadow-lg hover:shadow-xl whitespace-nowrap"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Product
+                </button>
+              )}
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full border border-gray-200 bg-white">
@@ -819,33 +824,35 @@ export default function InventoryDisplay({
                               aria-label={`Quantity for ${r?.productData?.pro_title}`}
                               placeholder="0"
                             />
-                            <button
-                              onClick={() => {
-                                // Get current pending quantity or start with current quantity
-                                const currentPending = pendingQtyChanges.get(
-                                  r?._id
-                                );
-                                const baseQty = currentPending
-                                  ? currentPending.newQty
-                                  : Number(r?.quantity);
-                                const newQty = baseQty + 1;
+                            {user?.roles.role !== "Picker" && (
+                              <button
+                                onClick={() => {
+                                  // Get current pending quantity or start with current quantity
+                                  const currentPending = pendingQtyChanges.get(
+                                    r?._id
+                                  );
+                                  const baseQty = currentPending
+                                    ? currentPending.newQty
+                                    : Number(r?.quantity);
+                                  const newQty = baseQty + 1;
 
-                                setPendingQtyChanges((prev) => {
-                                  const newMap = new Map(prev);
-                                  newMap.set(r?._id, {
-                                    currentQty: Number(r?.quantity),
-                                    newQty,
-                                    type: "increase",
+                                  setPendingQtyChanges((prev) => {
+                                    const newMap = new Map(prev);
+                                    newMap.set(r?._id, {
+                                      currentQty: Number(r?.quantity),
+                                      newQty,
+                                      type: "increase",
+                                    });
+                                    return newMap;
                                   });
-                                  return newMap;
-                                });
-                              }}
-                              className="px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors bg-green-100 text-green-600 hover:bg-green-900 hover:text-white"
-                              title="Increase by 1"
-                              aria-label={`Increase quantity for ${r?.productData?.pro_title}`}
-                            >
-                              <Plus className="w-4 h-4" />
-                            </button>
+                                }}
+                                className="px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors bg-green-100 text-green-600 hover:bg-green-900 hover:text-white"
+                                title="Increase by 1"
+                                aria-label={`Increase quantity for ${r?.productData?.pro_title}`}
+                              >
+                                <Plus className="w-4 h-4" />
+                              </button>
+                            )}
                           </div>
                           {/* Pending Changes Display */}
                           {pendingQtyChanges.has(r?._id) && (

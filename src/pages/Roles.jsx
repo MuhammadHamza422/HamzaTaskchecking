@@ -454,7 +454,7 @@ export default function RoleManagement() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-200px)]">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-screen">
           {/* Left Panel - Roles */}
           <CustomCard className="flex flex-col bg-blue-100 ">
             <CustomCardHeader className="flex-shrink-0">
