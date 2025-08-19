@@ -45,7 +45,7 @@ const ActivityLogs = () => {
       return fetchUserActivity({
         page,
         limit,
-        app: "inventry",
+        app: "inventory",
         date: dateStr || undefined,
         user: userId || undefined,
       });
@@ -76,6 +76,25 @@ const ActivityLogs = () => {
     }));
   }, [usersData]);
 
+  const colors = {
+    added: "green",
+    update: "blue",
+    delete: "red",
+  };
+
+  // Function to render text with colored words
+  const renderColoredText = (text) => {
+    const key = Object.keys(colors).find((k) => text.toLowerCase().includes(k));
+
+    const bgColor = key ? colors[key] : "default";
+
+    return (
+      <Tag color={bgColor} style={{ width: "100%", textAlign: "center" }}>
+        {text}
+      </Tag>
+    );
+  };
+
   const columns = useMemo(
     () => [
       {
@@ -94,7 +113,7 @@ const ActivityLogs = () => {
         dataIndex: "action",
         key: "action",
         width: 160,
-        render: (text) => <Tag color="blue">{text}</Tag>,
+        render: (text) => renderColoredText(text),
       },
       {
         title: "Performed By",

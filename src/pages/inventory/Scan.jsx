@@ -105,7 +105,7 @@ export default function ScanProduct() {
 
     // Set mode to scanner to show results page
     setMode("scanner");
-    
+
     await handleSearch(barcode);
 
     setTimeout(() => {
@@ -516,17 +516,19 @@ export default function ScanProduct() {
         {mode === "scanner" && (
           <div className="space-y-4">
             {scannedData && (
-              <div className={`p-3 border rounded-lg ${
-                barcodeDetected
-                  ? "bg-green-50 border-green-200"
-                  : "bg-blue-50 border-blue-200"
-              }`}>
-                <p className={`text-sm font-sans ${
-                  barcodeDetected ? "text-green-700" : "text-blue-700"
-                }`}>
-                  <span className="font-semibold">
-                    Scanned Barcode:
-                  </span>{" "}
+              <div
+                className={`p-3 border rounded-lg ${
+                  barcodeDetected
+                    ? "bg-green-50 border-green-200"
+                    : "bg-blue-50 border-blue-200"
+                }`}
+              >
+                <p
+                  className={`text-sm font-sans ${
+                    barcodeDetected ? "text-green-700" : "text-blue-700"
+                  }`}
+                >
+                  <span className="font-semibold">Scanned Barcode:</span>{" "}
                   {scannedData}
                 </p>
               </div>
@@ -545,7 +547,7 @@ export default function ScanProduct() {
 
         {mode === "camera" && (
           <div className="space-y-6">
-            {mode === "camera" && !searchResults.length > 0 && (
+            {mode === "camera" && !searchResults.length > 0 && !locationId && (
               <>
                 <div className="p-6 bg-white rounded-xl border-2 border-slate-200 shadow-sm">
                   <div className="relative bg-slate-900 rounded-xl overflow-hidden">
@@ -682,27 +684,27 @@ export default function ScanProduct() {
             )}
 
             {/* Scanned Results */}
-            {searchResults.length > 0 && (
-              <div className="space-y-4">
-                {scannedData && (
-                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                    <p className="text-sm text-green-700 font-sans">
-                      <span className="font-semibold">Scanned QR Code:</span>{" "}
-                      {scannedData}
-                    </p>
-                  </div>
-                )}
+            {/* {searchResults.length > 0 && ( */}
+            <div className="space-y-4">
+              {scannedData && (
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <p className="text-sm text-green-700 font-sans">
+                    <span className="font-semibold">Scanned QR Code:</span>{" "}
+                    {scannedData}
+                  </p>
+                </div>
+              )}
 
-                <InventoryDisplay
-                  items={searchResults}
-                  setItems={setSearchResults}
-                  totalCount={totalInventory}
-                  isLoading={isSearching}
-                  scannedData={scannedData || searchQuery}
-                  locationid={locationId}
-                />
-              </div>
-            )}
+              <InventoryDisplay
+                items={searchResults}
+                setItems={setSearchResults}
+                totalCount={totalInventory}
+                isLoading={isSearching}
+                scannedData={scannedData || searchQuery}
+                locationid={locationId}
+              />
+            </div>
+            {/* )} */}
           </div>
         )}
 
