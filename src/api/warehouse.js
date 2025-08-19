@@ -77,8 +77,8 @@ export async function deleteZone(zoneId) {
 
 // LOCATIONS
 // GET /api/v1/location/all
-export async function getLocations() {
-  const { data } = await apiClient.get(`/api/v1/location/all`);
+export async function getLocations(page = 1, limit = 1000) {
+  const { data } = await apiClient.get(`/api/v1/location/all?page=${page}&limit=${limit}`);
   return data;
 }
 
