@@ -51,6 +51,7 @@ const navLinks = [
         default: true,
       },
       { to: "orders/external/orders/processed", label: "Processed Orders" },
+      { to: "orders/external/orders/manual", label: "Manual Orders" },
     ],
   },
   {
