@@ -33,6 +33,7 @@ import Skeleton from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
 import useFullscreen from "../../components/useFullscreen.jsx";
 import { Modal } from "antd";
+import { useAuth } from "../../contexts/AuthContext.jsx";
 
 export default function Locations() {
   const navigate = useNavigate();
@@ -51,6 +52,8 @@ export default function Locations() {
   const [newErrors, setNewErrors] = useState({});
   const [editErrors, setEditErrors] = useState({});
   const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
+  const { user } = useAuth();
+  const role = user?.roles.role;
 
   // Fetch warehouse for breadcrumb
   const { data: warehouseRes } = useQuery({
@@ -712,29 +715,31 @@ export default function Locations() {
       {/* Header + New */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-2xl font-bold">Locations</h1>
-        <div className="flex gap-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv"
-            onChange={handleFileSelect}
-            className="hidden"
-          />
-          <button
-            onClick={handleImportCSVClick}
-            loading={uploading}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            <FiDownload className="mr-2" />
-            {uploading ? "Uploading..." : "Import CSV"}
-          </button>
-          <button
-            onClick={handleOpenNew}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            <FiPlus /> <span>New Location</span>
-          </button>
-        </div>
+        {role !== "Technician" && role !== "Picker" && (
+          <div className="flex gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            <button
+              onClick={handleImportCSVClick}
+              loading={uploading}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              <FiDownload className="mr-2" />
+              {uploading ? "Uploading..." : "Import CSV"}
+            </button>
+            <button
+              onClick={handleOpenNew}
+              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              <FiPlus /> <span>New Location</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Print Preview Modal */}
@@ -788,13 +793,15 @@ export default function Locations() {
               Start by adding your first location to organize and track your
               inventory.
             </p>
-            <button
-              onClick={handleOpenNew}
-              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none"
-            >
-              <FiPlus className="mr-2 -ml-1 h-5 w-5" />
-              Add First Location
-            </button>
+            {role !== "Technician" && role !== "Picker" && (
+              <button
+                onClick={handleOpenNew}
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none"
+              >
+                <FiPlus className="mr-2 -ml-1 h-5 w-5" />
+                Add First Location
+              </button>
+            )}
           </div>
         )}
 

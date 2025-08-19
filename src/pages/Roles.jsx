@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import apiClient from "../api/client";
 import Swal from "sweetalert2";
+import Skeleton from "react-loading-skeleton";
+import "react-loading-skeleton/dist/skeleton.css";
 
 const cn = (...classes) => classes.filter(Boolean).join(" ");
 
@@ -42,6 +44,7 @@ const rolesOptions = [
       "processed orders",
       "platforms",
       "kits",
+      "manual orders",
     ],
   },
   {
@@ -454,294 +457,371 @@ export default function RoleManagement() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-screen">
-          {/* Left Panel - Roles */}
-          <CustomCard className="flex flex-col bg-blue-100 ">
-            <CustomCardHeader className="flex-shrink-0">
-              <div className="flex items-center justify-between">
-                <CustomCardTitle className="flex items-center gap-2">
-                  Roles
-                  <CustomBadge variant="secondary" className="ml-2">
-                    {roles?.length}
-                  </CustomBadge>
-                </CustomCardTitle>
-                <CustomButton
-                  onClick={() => setIsCreatingRole(true)}
-                  size="sm"
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  New Role
-                </CustomButton>
-              </div>
-            </CustomCardHeader>
-
-            <CustomCardContent className="flex-1 overflow-hidden">
-              <CustomScrollArea className="h-full">
-                <div className="space-y-3 px-2">
-                  {isCreatingRole && (
-                    <CustomCard className="border-2 border-dashed border-blue-300 bg-blue-50">
-                      <CustomCardContent className="px-4 py-2 mt-5">
-                        <div className="flex gap-2">
-                          <CustomInput
-                            type="text"
-                            value={newRoleName}
-                            onChange={(e) => setNewRoleName(e.target.value)}
-                            placeholder="Enter role name"
-                            className="flex-1"
-                            onKeyPress={(e) =>
-                              e.key === "Enter" && createRole()
-                            }
-                          />
-                          <CustomButton
-                            onClick={createRole}
-                            size="sm"
-                            className="bg-green-600 hover:bg-green-700"
-                          >
-                            <Check className="w-4 h-4" />
-                          </CustomButton>
-                          <CustomButton
-                            onClick={() => {
-                              setIsCreatingRole(false);
-                              setNewRoleName("");
-                            }}
-                            variant="outline"
-                            size="sm"
-                          >
-                            <X className="w-4 h-4" />
-                          </CustomButton>
-                        </div>
-                      </CustomCardContent>
-                    </CustomCard>
-                  )}
-
-                  {roles.map((role) => (
-                    <CustomCard
-                      key={role._id}
-                      className={cn(
-                        "cursor-pointer transition-all duration-200 border hover:shadow-md py-2 mt-2",
-                        selectedRole?._id === role._id
-                          ? "ring-2 ring-blue-500 bg-white border-blue-200"
-                          : "hover:border-slate-300 bg-gray-50 border-gray-300"
-                      )}
-                      onClick={() => setSelectedRole(role)}
-                    >
-                      <CustomCardContent className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            {editingRole === role._id ? (
-                              <div className="flex gap-2">
-                                <CustomInput
-                                  value={editRoleName}
-                                  onChange={(e) =>
-                                    setEditRoleName(e.target.value)
-                                  }
-                                  className="text-sm"
-                                  onKeyPress={(e) =>
-                                    e.key === "Enter" && saveRoleName(role._id)
-                                  }
-                                />
-                                <CustomButton
-                                  onClick={() => saveRoleName(role._id)}
-                                  size="sm"
-                                  variant="ghost"
-                                >
-                                  <Check className="w-4 h-4" />
-                                </CustomButton>
-                                <CustomButton
-                                  onClick={() => {
-                                    setEditingRole(null);
-                                    setEditRoleName("");
-                                  }}
-                                  size="sm"
-                                  variant="ghost"
-                                >
-                                  <X className="w-4 h-4" />
-                                </CustomButton>
-                              </div>
-                            ) : (
-                              <>
-                                <div className="flex items-center justify-between">
-                                  <h3 className="font-semibold text-slate-900 mb-1">
-                                    {role.role}
-                                  </h3>
-                                  <div className="flex gap-1 ml-2">
-                                    <CustomButton
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setEditingRole(role._id);
-                                        setEditRoleName(role.role);
-                                      }}
-                                      className="text-blue-600 hover:text-blue-700 hover:bg-blue-100"
-                                    >
-                                      <Edit className="w-4 h-4" />
-                                    </CustomButton>
-                                    <CustomButton
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        deleteRole(role._id);
-                                      }}
-                                      className="text-red-600 hover:text-red-700 hover:bg-red-100"
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </CustomButton>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <CustomBadge
-                                    variant="secondary"
-                                    className="text-xs"
-                                  >
-                                    {getPermissionCount(role)} permissions
-                                  </CustomBadge>
-                                  <CustomBadge
-                                    variant="outline"
-                                    className="text-xs"
-                                  >
-                                    {role?.access?.length} apps
-                                  </CustomBadge>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </CustomCardContent>
-                    </CustomCard>
-                  ))}
+        {!loading ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-screen">
+            {/* Left Panel - Roles */}
+            <CustomCard className="flex flex-col bg-blue-100 ">
+              <CustomCardHeader className="flex-shrink-0">
+                <div className="flex items-center justify-between">
+                  <CustomCardTitle className="flex items-center gap-2">
+                    Roles
+                    <CustomBadge variant="secondary" className="ml-2">
+                      {roles?.length}
+                    </CustomBadge>
+                  </CustomCardTitle>
+                  <CustomButton
+                    onClick={() => setIsCreatingRole(true)}
+                    size="sm"
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    New Role
+                  </CustomButton>
                 </div>
-              </CustomScrollArea>
-            </CustomCardContent>
-          </CustomCard>
+              </CustomCardHeader>
 
-          {/* Right Panel - Permissions */}
-          <CustomCard className="flex flex-col">
-            <CustomCardHeader className="flex-shrink-0">
-              <div className="flex items-center justify-between">
-                <CustomCardTitle>
-                  Permissions{" "}
-                  {selectedRole && (
-                    <span className="text-blue-600 font-normal">
-                      ({selectedRole.role})
-                    </span>
-                  )}
-                </CustomCardTitle>
-                {selectedRole && (
-                  <CustomBadge variant="secondary">
-                    {getPermissionCount(selectedRole)} active
-                  </CustomBadge>
-                )}
-              </div>
-            </CustomCardHeader>
-
-            <CustomCardContent className="flex-1 overflow-hidden">
-              {selectedRole ? (
+              <CustomCardContent className="flex-1 overflow-hidden">
                 <CustomScrollArea className="h-full">
-                  <div className="space-y-4 px-2">
-                    {rolesOptions.map((appOption) => (
-                      <CustomCard
-                        key={appOption.app}
-                        className="border border-slate-200 bg-gray-50 "
-                      >
-                        <CustomCardContent className="p-0">
-                          {/* App Header */}
-                          <div className="flex items-center justify-between p-4 bg-sky-100 border-b">
-                            <div className="flex items-center gap-3">
-                              <CustomCheckbox
-                                checked={isAppGranted(appOption.app)}
-                                onCheckedChange={() =>
-                                  toggleAppPermission(appOption.app)
-                                }
-                              />
-                              <div>
-                                <h3 className="font-semibold text-slate-900">
-                                  {appOption.label}
-                                </h3>
-                                <p className="text-sm text-slate-500">
-                                  {selectedRole?.access?.find(
-                                    (a) => a.app === appOption.app
-                                  )?.menu?.length || 0}{" "}
-                                  of {appOption?.menu?.length} permissions
-                                </p>
-                              </div>
-                              {isAppPartiallyGranted(appOption?.app) && (
-                                <CustomBadge
-                                  variant="secondary"
-                                  className="bg-yellow-100 text-yellow-800"
-                                >
-                                  Partial
-                                </CustomBadge>
-                              )}
-                            </div>
+                  <div className="space-y-3 px-2">
+                    {isCreatingRole && (
+                      <CustomCard className="border-2 border-dashed border-blue-300 bg-blue-50">
+                        <CustomCardContent className="px-4 py-2 mt-5">
+                          <div className="flex gap-2">
+                            <CustomInput
+                              type="text"
+                              value={newRoleName}
+                              onChange={(e) => setNewRoleName(e.target.value)}
+                              placeholder="Enter role name"
+                              className="flex-1"
+                              onKeyPress={(e) =>
+                                e.key === "Enter" && createRole()
+                              }
+                            />
                             <CustomButton
-                              variant="ghost"
+                              onClick={createRole}
                               size="sm"
-                              onClick={() => toggleExpanded(appOption.app)}
-                              className="text-slate-500 hover:text-slate-700"
+                              className="bg-green-600 hover:bg-green-700"
                             >
-                              {expandedApps.has(appOption.app) ? (
-                                <ChevronUp className="w-4 h-4" />
-                              ) : (
-                                <ChevronDown className="w-4 h-4" />
-                              )}
+                              <Check className="w-4 h-4" />
+                            </CustomButton>
+                            <CustomButton
+                              onClick={() => {
+                                setIsCreatingRole(false);
+                                setNewRoleName("");
+                              }}
+                              variant="outline"
+                              size="sm"
+                            >
+                              <X className="w-4 h-4" />
                             </CustomButton>
                           </div>
+                        </CustomCardContent>
+                      </CustomCard>
+                    )}
 
-                          {/* Menu Items */}
-                          {expandedApps.has(appOption.app) && (
-                            <div className="p-4 space-y-3">
-                              {appOption.menu.map((menuItem) => (
-                                <div
-                                  key={menuItem}
-                                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50"
-                                >
-                                  <CustomCheckbox
-                                    checked={isMenuGranted(
-                                      appOption.app,
-                                      menuItem
-                                    )}
-                                    onCheckedChange={() =>
-                                      toggleMenuPermission(
-                                        appOption.app,
-                                        menuItem
-                                      )
+                    {roles.map((role) => (
+                      <CustomCard
+                        key={role._id}
+                        className={cn(
+                          "cursor-pointer transition-all duration-200 border hover:shadow-md py-2 mt-2",
+                          selectedRole?._id === role._id
+                            ? "ring-2 ring-blue-500 bg-white border-blue-200"
+                            : "hover:border-slate-300 bg-gray-50 border-gray-300"
+                        )}
+                        onClick={() => setSelectedRole(role)}
+                      >
+                        <CustomCardContent className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              {editingRole === role._id ? (
+                                <div className="flex gap-2">
+                                  <CustomInput
+                                    value={editRoleName}
+                                    onChange={(e) =>
+                                      setEditRoleName(e.target.value)
+                                    }
+                                    className="text-sm"
+                                    onKeyPress={(e) =>
+                                      e.key === "Enter" &&
+                                      saveRoleName(role._id)
                                     }
                                   />
-                                  <span className="text-sm text-slate-700 capitalize">
-                                    {menuItem.replace(/[-_]/g, " ")}
-                                  </span>
+                                  <CustomButton
+                                    onClick={() => saveRoleName(role._id)}
+                                    size="sm"
+                                    variant="ghost"
+                                  >
+                                    <Check className="w-4 h-4" />
+                                  </CustomButton>
+                                  <CustomButton
+                                    onClick={() => {
+                                      setEditingRole(null);
+                                      setEditRoleName("");
+                                    }}
+                                    size="sm"
+                                    variant="ghost"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </CustomButton>
                                 </div>
-                              ))}
+                              ) : (
+                                <>
+                                  <div className="flex items-center justify-between">
+                                    <h3 className="font-semibold text-slate-900 mb-1">
+                                      {role.role}
+                                    </h3>
+                                    <div className="flex gap-1 ml-2">
+                                      <CustomButton
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setEditingRole(role._id);
+                                          setEditRoleName(role.role);
+                                        }}
+                                        className="text-blue-600 hover:text-blue-700 hover:bg-blue-100"
+                                      >
+                                        <Edit className="w-4 h-4" />
+                                      </CustomButton>
+                                      <CustomButton
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          deleteRole(role._id);
+                                        }}
+                                        className="text-red-600 hover:text-red-700 hover:bg-red-100"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </CustomButton>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <CustomBadge
+                                      variant="secondary"
+                                      className="text-xs"
+                                    >
+                                      {getPermissionCount(role)} permissions
+                                    </CustomBadge>
+                                    <CustomBadge
+                                      variant="outline"
+                                      className="text-xs"
+                                    >
+                                      {role?.access?.length} apps
+                                    </CustomBadge>
+                                  </div>
+                                </>
+                              )}
                             </div>
-                          )}
+                          </div>
                         </CustomCardContent>
                       </CustomCard>
                     ))}
                   </div>
                 </CustomScrollArea>
-              ) : (
-                <div className="flex items-center justify-center h-full text-center">
-                  <div className="text-slate-500">
-                    <div className="w-16 h-16 mx-auto mb-4 bg-slate-100 rounded-full flex items-center justify-center">
-                      <Edit className="w-8 h-8 text-slate-400" />
-                    </div>
-                    <h3 className="text-lg font-medium mb-2">
-                      No Role Selected
-                    </h3>
-                    <p className="text-sm">
-                      Select a role from the left panel to manage its
-                      permissions
-                    </p>
-                  </div>
+              </CustomCardContent>
+            </CustomCard>
+
+            {/* Right Panel - Permissions */}
+            <CustomCard className="flex flex-col">
+              <CustomCardHeader className="flex-shrink-0">
+                <div className="flex items-center justify-between">
+                  <CustomCardTitle>
+                    Permissions{" "}
+                    {selectedRole && (
+                      <span className="text-blue-600 font-normal">
+                        ({selectedRole.role})
+                      </span>
+                    )}
+                  </CustomCardTitle>
+                  {selectedRole && (
+                    <CustomBadge variant="secondary">
+                      {getPermissionCount(selectedRole)} active
+                    </CustomBadge>
+                  )}
                 </div>
-              )}
-            </CustomCardContent>
-          </CustomCard>
-        </div>
+              </CustomCardHeader>
+
+              <CustomCardContent className="flex-1 overflow-hidden">
+                {selectedRole ? (
+                  <CustomScrollArea className="h-full">
+                    <div className="space-y-4 px-2">
+                      {rolesOptions.map((appOption) => (
+                        <CustomCard
+                          key={appOption.app}
+                          className=" bg-gray-50 border  border-sky-600 "
+                        >
+                          <CustomCardContent className="p-0">
+                            {/* App Header */}
+                            <div className="flex items-center justify-between p-4 bg-sky-100 rounded-t-lg">
+                              <div className="flex items-center gap-3">
+                                <CustomCheckbox
+                                  checked={isAppGranted(appOption.app)}
+                                  onCheckedChange={() =>
+                                    toggleAppPermission(appOption.app)
+                                  }
+                                />
+                                <div>
+                                  <h3 className="font-semibold text-slate-900">
+                                    {appOption.label}
+                                  </h3>
+                                  <p className="text-sm text-slate-500">
+                                    {selectedRole?.access?.find(
+                                      (a) => a.app === appOption.app
+                                    )?.menu?.length || 0}{" "}
+                                    of {appOption?.menu?.length} permissions
+                                  </p>
+                                </div>
+                                {isAppPartiallyGranted(appOption?.app) && (
+                                  <CustomBadge
+                                    variant="secondary"
+                                    className="bg-yellow-100 text-yellow-800"
+                                  >
+                                    Partial
+                                  </CustomBadge>
+                                )}
+                              </div>
+                              <CustomButton
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => toggleExpanded(appOption.app)}
+                                className="text-slate-500 hover:text-slate-700"
+                              >
+                                {expandedApps.has(appOption.app) ? (
+                                  <ChevronUp className="w-4 h-4" />
+                                ) : (
+                                  <ChevronDown className="w-4 h-4" />
+                                )}
+                              </CustomButton>
+                            </div>
+
+                            {/* Menu Items */}
+                            {expandedApps.has(appOption.app) && (
+                              <div className="p-4 space-y-3">
+                                {appOption.menu.map((menuItem) => (
+                                  <div
+                                    key={menuItem}
+                                    className="flex items-center gap-3 p-2 rounded-lg  hover:bg-slate-50 border  border-sky-600"
+                                  >
+                                    <CustomCheckbox
+                                      checked={isMenuGranted(
+                                        appOption.app,
+                                        menuItem
+                                      )}
+                                      onCheckedChange={() =>
+                                        toggleMenuPermission(
+                                          appOption.app,
+                                          menuItem
+                                        )
+                                      }
+                                    />
+                                    <span className="text-sm text-slate-700 capitalize">
+                                      {menuItem.replace(/[-_]/g, " ")}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </CustomCardContent>
+                        </CustomCard>
+                      ))}
+                    </div>
+                  </CustomScrollArea>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-center">
+                    <div className="text-slate-500">
+                      <div className="w-16 h-16 mx-auto mb-4 bg-slate-100 rounded-full flex items-center justify-center">
+                        <Edit className="w-8 h-8 text-slate-400" />
+                      </div>
+                      <h3 className="text-lg font-medium mb-2">
+                        No Role Selected
+                      </h3>
+                      <p className="text-sm">
+                        Select a role from the left panel to manage its
+                        permissions
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </CustomCardContent>
+            </CustomCard>
+          </div>
+        ) : (
+          <RolesPermissionsSkeleton />
+        )}
       </div>
     </div>
   );
 }
+
+const RolesPermissionsSkeleton = () => {
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-screen">
+      {/* Left Panel Skeleton */}
+      <div className="flex flex-col bg-blue-50 rounded-xl shadow-sm">
+        <div className="p-4 border-b border-blue-200 flex items-center justify-between">
+          <Skeleton width={100} height={20} />
+          <Skeleton width={80} height={32} />
+        </div>
+        <div className="flex-1 overflow-hidden p-4 space-y-4">
+          {Array(5)
+            .fill(0)
+            .map((_, idx) => (
+              <div
+                key={idx}
+                className="border rounded-lg bg-white p-4 shadow-sm"
+              >
+                <Skeleton width="60%" height={18} />
+                <div className="mt-2 flex gap-2">
+                  <Skeleton width={80} height={16} />
+                  <Skeleton width={60} height={16} />
+                </div>
+              </div>
+            ))}
+        </div>
+      </div>
+
+      {/* Right Panel Skeleton */}
+      <div className="flex flex-col bg-white rounded-xl shadow-sm">
+        <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+          <Skeleton width={120} height={20} />
+          <Skeleton width={50} height={20} />
+        </div>
+        <div className="flex-1 overflow-hidden p-4 space-y-4">
+          {Array(3)
+            .fill(0)
+            .map((_, idx) => (
+              <div
+                key={idx}
+                className="border border-slate-200 rounded-lg bg-gray-50"
+              >
+                <div className="p-4 border-b flex items-center justify-between bg-slate-100">
+                  <div className="flex items-center gap-3">
+                    <Skeleton circle width={20} height={20} />
+                    <div>
+                      <Skeleton width={100} height={16} />
+                      <Skeleton width={80} height={12} />
+                    </div>
+                  </div>
+                  <Skeleton width={24} height={24} />
+                </div>
+                <div className="p-4 space-y-3">
+                  {Array(3)
+                    .fill(0)
+                    .map((_, idx2) => (
+                      <div
+                        key={idx2}
+                        className="flex items-center gap-3 p-2 rounded-lg"
+                      >
+                        <Skeleton circle width={18} height={18} />
+                        <Skeleton width={120} height={14} />
+                      </div>
+                    ))}
+                </div>
+              </div>
+            ))}
+        </div>
+      </div>
+    </div>
+  );
+};

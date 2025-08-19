@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { FiEdit2, FiTrash2, FiPlus, FiSearch } from "react-icons/fi";
 import { getZone, deleteZone } from "../api/zone";
 import { getLocations, deleteLocation } from "../api/location";
+import { useAuth } from "../../contexts/AuthContext";
 
 export default function ZoneDetail() {
   const { id } = useParams();
@@ -13,6 +14,8 @@ export default function ZoneDetail() {
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
+  const { user } = useAuth();
+  const role = user?.roles.role;
 
   useEffect(() => {
     (async () => {

@@ -14,6 +14,7 @@ import { setSelectedZoneId } from "../../store/appSlice.js";
 import Swal from "sweetalert2";
 import useFullscreen from "../../components/useFullscreen.jsx";
 import { Modal } from "antd";
+import { useAuth } from "../../contexts/AuthContext.jsx";
 
 export default function Zones() {
   const navigate = useNavigate();
@@ -25,6 +26,8 @@ export default function Zones() {
   const [whName, setWhName] = useState("");
   const [whCountry, setWhCountry] = useState("");
   const [whLoading, setWhLoading] = useState(false);
+  const { user } = useAuth();
+  const role = user?.roles.role;
 
   const selectedWarehouseId = useSelector((s) => s.app.selectedWarehouseId);
   const selectedZoneId = useSelector((s) => s.app.selectedZoneId);
@@ -231,12 +234,14 @@ export default function Zones() {
             {selectedWarehouseId ? `— ${warehouseName || "Warehouse"}` : ""}
           </h1>
           <div className="flex items-center gap-2">
-            <button
-              onClick={openCreateZn}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700"
-            >
-              <FiPlus /> New Zone
-            </button>
+            {role !== "Technician" && role !== "Picker" && (
+              <button
+                onClick={openCreateZn}
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700"
+              >
+                <FiPlus /> New Zone
+              </button>
+            )}
           </div>
         </div>
 
@@ -286,16 +291,18 @@ export default function Zones() {
           >
             {/* Actions */}
             <div className="absolute right-2 top-2 hidden gap-1 group-hover:flex">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openEditZn(z); // <-- fixed: open zone edit (not warehouse)
-                }}
-                className="rounded p-1 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
-                title="Edit"
-              >
-                <FiEdit2 />
-              </button>
+              {role !== "Technician" && role !== "Picker" && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openEditZn(z); // <-- fixed: open zone edit (not warehouse)
+                  }}
+                  className="rounded p-1 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+                  title="Edit"
+                >
+                  <FiEdit2 />
+                </button>
+              )}
             </div>
 
             <h2 className="truncate text-base font-semibold">{z.name}</h2>

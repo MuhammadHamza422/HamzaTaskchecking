@@ -37,6 +37,10 @@ const roleColors = {
   manager: "purple",
   purchaser: "blue",
   sourcer: "green",
+  "Inventory Supervisor": "cyan",
+  Technician: "orange",
+  Picker: "magenta",
+  Purchaser: "skyblue",
 };
 
 const AdminUsersPage = () => {
@@ -156,9 +160,9 @@ const AdminUsersPage = () => {
       case "email":
         hasChanged = value !== originalUser.email;
         break;
-      case "role":
-        hasChanged = value !== originalUser.role;
-        break;
+      // case "role":
+      //   hasChanged = value !== originalUser.role;
+      //   break;
       case "is_active":
         hasChanged = value !== originalUser.is_active;
         break;
@@ -214,9 +218,9 @@ const AdminUsersPage = () => {
         if (values.email !== originalUser.email) {
           dataToSubmit.email = values.email;
         }
-        if (values.role !== originalUser.role) {
-          dataToSubmit.role = values.role;
-        }
+        // if (values.role !== originalUser.role) {
+        //   dataToSubmit.role = values.role;
+        // }
         if (values.is_active !== originalUser.is_active) {
           dataToSubmit.isActive = values.is_active;
         }
@@ -232,7 +236,7 @@ const AdminUsersPage = () => {
           firstName: values.first_name,
           lastName: values.last_name,
           email: values.email,
-          role: values.role,
+          // role: values.role,
           password: values.password,
           roles: values.roles,
         };
@@ -392,13 +396,18 @@ const AdminUsersPage = () => {
     },
     {
       title: "Role",
-      dataIndex: "role",
-      key: "role",
-      render: (role) => (
-        <Tag title={role} color={roleColors[role]}>
-          {role.toUpperCase()}
-        </Tag>
-      ),
+      dataIndex: "roles",
+      key: "roles",
+      render: (roles) => {
+        if (!roles) return null;
+
+        // Single role object
+        return (
+          <Tag color={roleColors[roles.role] || "default"}>
+            {roles.role?.toUpperCase()}
+          </Tag>
+        );
+      },
       width: 100,
     },
     {
@@ -620,7 +629,7 @@ const AdminUsersPage = () => {
                 }
               />
             </Form.Item>
-            <Form.Item label="Role" name="role" rules={[{ required: true }]}>
+            {/* <Form.Item label="Role" name="role" rules={[{ required: true }]}>
               <Select
                 onChange={(value) => handleFieldChange("role", value)}
                 style={
@@ -632,7 +641,7 @@ const AdminUsersPage = () => {
                 <Option value="manager">Manager</Option>
                 <Option value="admin">Admin</Option>
               </Select>
-            </Form.Item>
+            </Form.Item> */}
             <Form.Item label="Roles" name="roles" rules={[{ required: true }]}>
               <Select
                 onChange={(value) => handleFieldChange("roles", value)}

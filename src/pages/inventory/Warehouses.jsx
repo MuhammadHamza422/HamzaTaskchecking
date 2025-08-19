@@ -30,7 +30,7 @@ import useFullscreen from "../../components/useFullscreen.jsx";
 import { Modal } from "antd";
 
 export default function Warehouses() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const selectedWarehouseId = useSelector((s) => s.app.selectedWarehouseId);
@@ -59,6 +59,7 @@ export default function Warehouses() {
   const [znFormError, setZnFormError] = useState("");
   const [copied, setCopied] = useState(false);
   const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
+  const role = user?.roles.role;
 
   const countryOptions = [
     "uae",
@@ -431,12 +432,14 @@ export default function Warehouses() {
           <section className="rounded-xl border border-zinc-200 bg-white">
             <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
               <h2 className="text-base font-semibold">Warehouses</h2>
-              <button
-                onClick={openNewWh}
-                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700"
-              >
-                <FiPlus /> New
-              </button>
+              {role !== "Technician" && role !== "Picker" && (
+                <button
+                  onClick={openNewWh}
+                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700"
+                >
+                  <FiPlus /> New
+                </button>
+              )}
             </div>
             <div className="px-4 py-3 border-b border-zinc-200">
               <button
@@ -533,16 +536,18 @@ export default function Warehouses() {
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openEditWh(w);
-                            }}
-                            className="rounded p-1 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
-                            title="Edit"
-                          >
-                            <FiEdit2 />
-                          </button>
+                          {role !== "Technician" && role !== "Picker" && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEditWh(w);
+                              }}
+                              className="rounded p-1 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+                              title="Edit"
+                            >
+                              <FiEdit2 />
+                            </button>
+                          )}
                           {/* <button
                             onClick={async (e) => {
                               e.stopPropagation();
@@ -573,13 +578,15 @@ export default function Warehouses() {
                     }`
                   : "Zones"}
               </h2>
-              <button
-                onClick={openNewZn}
-                disabled={!selectedWarehouseId}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-sm text-white disabled:opacity-50 hover:enabled:bg-green-700"
-              >
-                <FiPlus /> New Zone
-              </button>
+              {role !== "Technician" && role !== "Picker" && (
+                <button
+                  onClick={openNewZn}
+                  disabled={!selectedWarehouseId}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-sm text-white disabled:opacity-50 hover:enabled:bg-green-700"
+                >
+                  <FiPlus /> New Zone
+                </button>
+              )}
             </div>
 
             <div className="p-4">
@@ -630,18 +637,19 @@ export default function Warehouses() {
                             )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openEditZn(z);
-                            }}
-                            className="rounded p-1 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
-                            title="Edit"
-                          >
-                            <FiEdit2 />
-                          </button>
-                          {/* <button
+                        {role !== "Technician" && role !== "Picker" && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEditZn(z);
+                              }}
+                              className="rounded p-1 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+                              title="Edit"
+                            >
+                              <FiEdit2 />
+                            </button>
+                            {/* <button
                             onClick={async (e) => {
                               e.stopPropagation();
                               await handleDeleteZone(z.id);
@@ -651,7 +659,8 @@ export default function Warehouses() {
                           >
                             <FiTrash2 />
                           </button> */}
-                        </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
