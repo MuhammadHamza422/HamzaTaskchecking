@@ -33,6 +33,7 @@ import Products from "./pages/inventory/Products";
 import ScanProduct from "./pages/inventory/Scan";
 import ActivityLogs from "./pages/inventory/ActivityLogs";
 import RoleManagement from "./pages/Roles";
+import ManualOrdersPage from "./pages/ManualOrdersPage/ManualOrdersPage";
 
 function App() {
   return (
@@ -72,6 +73,10 @@ function App() {
           <Route
             path="orders/external/orders/processed"
             element={<ProcessedOrdersPage />}
+          />
+          <Route
+            path="orders/external/orders/manual"
+            element={<ManualOrdersPage />}
           />
           <Route path="orders/platforms" element={<PlatformsPage />} />
           <Route path="orders/kits" element={<KitsPage />} />

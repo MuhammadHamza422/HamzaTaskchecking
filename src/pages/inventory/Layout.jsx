@@ -325,7 +325,7 @@ export default function InventoryLayout() {
   );
 
   return (
-    <div ref={ref} className="flex m-0 p-0">
+    <div ref={ref} className="flex m-0 p-0 bg-white min-h-screen">
       {/* Desktop Sidebar */}
       <div className="relative w-64 max-h-screen overflow-y-auto hidden lg:block">
         <aside

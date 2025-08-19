@@ -8,9 +8,6 @@
   line-height: 1.5;
   font-weight: 400;
 }
-body{
-  background-color: #ffffff;
-}
 
 a {
   font-weight: 500;
@@ -135,7 +132,6 @@ h1 {
   }
 }
 
-
-/* .space-y-6 > :not([hidden]) ~ :not([hidden]) {
-  margin: 0 !important;
-} */
+:where(.css-dev-only-do-not-override-7t2xvq).ant-form-item {
+  margin-bottom: 0 !important;
+}

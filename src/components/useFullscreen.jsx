@@ -11,6 +11,14 @@ export default function useFullscreen({ onChange } = {}) {
       document.mozFullScreenElement ||
       document.msFullscreenElement;
     const nowFs = Boolean(fsElem);
+    
+    // Apply scroll-friendly styles to fullscreen element
+    if (fsElem) {
+      fsElem.style.overflow = 'auto';
+      fsElem.style.height = '100vh';
+      fsElem.style.width = '100vw';
+    }
+    
     setIsFullscreen(nowFs);
     if (typeof onChange === "function") onChange(nowFs, fsElem);
   }, [onChange]);
@@ -20,11 +28,41 @@ export default function useFullscreen({ onChange } = {}) {
     document.addEventListener("webkitfullscreenchange", handleFsChange);
     document.addEventListener("mozfullscreenchange", handleFsChange);
     document.addEventListener("MSFullscreenChange", handleFsChange);
+    
+    // Add CSS styles for fullscreen elements
+    const style = document.createElement('style');
+    style.textContent = `
+      :fullscreen {
+        overflow: auto !important;
+        height: 100vh !important;
+        width: 100vw !important;
+      }
+      :-webkit-full-screen {
+        overflow: auto !important;
+        height: 100vh !important;
+        width: 100vw !important;
+      }
+      :-moz-full-screen {
+        overflow: auto !important;
+        height: 100vh !important;
+        width: 100vw !important;
+      }
+      :-ms-fullscreen {
+        overflow: auto !important;
+        height: 100vh !important;
+        width: 100vw !important;
+      }
+    `;
+    document.head.appendChild(style);
+    
     return () => {
       document.removeEventListener("fullscreenchange", handleFsChange);
       document.removeEventListener("webkitfullscreenchange", handleFsChange);
       document.removeEventListener("mozfullscreenchange", handleFsChange);
       document.removeEventListener("MSFullscreenChange", handleFsChange);
+      if (style.parentNode) {
+        style.parentNode.removeChild(style);
+      }
     };
   }, [handleFsChange]);
 
@@ -37,7 +75,7 @@ export default function useFullscreen({ onChange } = {}) {
       else if (target.mozRequestFullScreen) target.mozRequestFullScreen();
       else if (target.msRequestFullscreen) target.msRequestFullscreen();
     } catch (err) {
-      // ignore or let caller handle
+      console.warn('Fullscreen request failed:', err);
     }
   }, []);
 
@@ -48,7 +86,7 @@ export default function useFullscreen({ onChange } = {}) {
       else if (document.mozCancelFullScreen) document.mozCancelFullScreen();
       else if (document.msExitFullscreen) document.msExitFullscreen();
     } catch (err) {
-      // ignore
+      console.warn('Fullscreen exit failed:', err);
     }
   }, []);
 
@@ -57,22 +95,9 @@ export default function useFullscreen({ onChange } = {}) {
     return enter(el);
   }, [isFullscreen, enter, exit]);
 
-  /**
-   * getContainer for AntD:
-   * - return ref.current when you want Drawer mounted inside the fullscreen container
-   * - return false to render inline in-place if no fullscreen element is available
-   *
-   * AntD accepts: HTMLElement | () => HTMLElement | false
-   */
   const getContainer = useCallback(() => {
     return ref.current || false;
   }, []);
-
-  /**
-   * If you prefer Drawer to fallback to document.body (portal) when not fullscreen,
-   * use:
-   *   const getContainer = useCallback(() => ref.current || document.body, []);
-   */
 
   return { ref, isFullscreen, enter, exit, toggle, getContainer };
 }
