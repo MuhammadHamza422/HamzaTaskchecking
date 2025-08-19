@@ -20,7 +20,6 @@ export default function useFullscreen({ onChange } = {}) {
     document.addEventListener("webkitfullscreenchange", handleFsChange);
     document.addEventListener("mozfullscreenchange", handleFsChange);
     document.addEventListener("MSFullscreenChange", handleFsChange);
-
     return () => {
       document.removeEventListener("fullscreenchange", handleFsChange);
       document.removeEventListener("webkitfullscreenchange", handleFsChange);
@@ -38,9 +37,7 @@ export default function useFullscreen({ onChange } = {}) {
       else if (target.mozRequestFullScreen) target.mozRequestFullScreen();
       else if (target.msRequestFullscreen) target.msRequestFullscreen();
     } catch (err) {
-      // Some browsers throw if not from user gesture or blocked
-      // keep error handling minimal — caller can catch if needed
-      // console.warn("enter fullscreen failed", err);
+      // ignore or let caller handle
     }
   }, []);
 
@@ -51,17 +48,31 @@ export default function useFullscreen({ onChange } = {}) {
       else if (document.mozCancelFullScreen) document.mozCancelFullScreen();
       else if (document.msExitFullscreen) document.msExitFullscreen();
     } catch (err) {
-      // console.warn("exit fullscreen failed", err);
+      // ignore
     }
   }, []);
 
-  const toggle = useCallback(
-    (el) => {
-      if (isFullscreen) return exit();
-      return enter(el);
-    },
-    [isFullscreen, enter, exit]
-  );
+  const toggle = useCallback((el) => {
+    if (isFullscreen) return exit();
+    return enter(el);
+  }, [isFullscreen, enter, exit]);
 
-  return { ref, isFullscreen, enter, exit, toggle };
+  /**
+   * getContainer for AntD:
+   * - return ref.current when you want Drawer mounted inside the fullscreen container
+   * - return false to render inline in-place if no fullscreen element is available
+   *
+   * AntD accepts: HTMLElement | () => HTMLElement | false
+   */
+  const getContainer = useCallback(() => {
+    return ref.current || false;
+  }, []);
+
+  /**
+   * If you prefer Drawer to fallback to document.body (portal) when not fullscreen,
+   * use:
+   *   const getContainer = useCallback(() => ref.current || document.body, []);
+   */
+
+  return { ref, isFullscreen, enter, exit, toggle, getContainer };
 }

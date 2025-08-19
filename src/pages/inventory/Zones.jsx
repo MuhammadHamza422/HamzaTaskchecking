@@ -12,7 +12,8 @@ import {
 } from "../../api/warehouse";
 import { setSelectedZoneId } from "../../store/appSlice.js";
 import Swal from "sweetalert2";
-import Modal from "../../components/Modal.jsx";
+import useFullscreen from "../../components/useFullscreen.jsx";
+import { Modal } from "antd";
 
 export default function Zones() {
   const navigate = useNavigate();
@@ -27,6 +28,7 @@ export default function Zones() {
 
   const selectedWarehouseId = useSelector((s) => s.app.selectedWarehouseId);
   const selectedZoneId = useSelector((s) => s.app.selectedZoneId);
+  const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
 
   const [q, setQ] = useState("");
 
@@ -220,7 +222,7 @@ export default function Zones() {
   }
 
   return (
-    <div className="space-y-6">
+    <div ref={fullscreenRef} className="space-y-6">
       {/* Header */}
       <div className="rounded-xl border border-zinc-200 bg-white">
         <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
@@ -325,63 +327,74 @@ export default function Zones() {
           })()}
         </div>
       )}
-      <Modal open={znModalOpen} onClose={() => closeZn(false)}>
-        {/* Clean Tailwind-only Zone Modal */}
 
-        <div className="w-full max-w-md">
-          <h3 className="text-lg font-semibold">
-            {znEdit ? "Edit Zone" : "New Zone"}
-          </h3>
-          <form onSubmit={saveZn} className="mt-4 space-y-3">
-            {znFormError && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                {znFormError}
+      <div ref={fullscreenRef}>
+        <Modal
+          getContainer={getContainer}
+          key={String(isFullscreen)}
+          open={znModalOpen}
+          onCancel={() => closeZn(false)}
+          centered
+          footer={null}
+          width={450}
+          title={null}
+          className="max-h-[95vh] overflow-y-auto"
+        >
+          <div className="w-full max-w-md">
+            <h3 className="text-lg font-semibold">
+              {znEdit ? "Edit Zone" : "New Zone"}
+            </h3>
+            <form onSubmit={saveZn} className="mt-4 space-y-3">
+              {znFormError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {znFormError}
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-zinc-700">
+                  Name
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+                  value={znName}
+                  onChange={(e) => setZnName(e.target.value)}
+                />
               </div>
-            )}
-            <div>
-              <label className="block text-sm font-medium text-zinc-700">
-                Name
-              </label>
-              <input
-                type="text"
-                autoFocus
-                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-                value={znName}
-                onChange={(e) => setZnName(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700">
-                Description
-              </label>
-              <textarea
-                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-                rows={3}
-                value={znDesc}
-                onChange={(e) => setZnDesc(e.target.value)}
-              />
-            </div>
-            <div className="mt-6 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={closeZn}
-                className="rounded-lg border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={znLoading}
-                className={`rounded-lg bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700 ${
-                  znLoading ? "opacity-50 cursor-not-allowed" : ""
-                }`}
-              >
-                {znLoading ? "Saving…" : "Save"}
-              </button>
-            </div>
-          </form>
-        </div>
-      </Modal>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700">
+                  Description
+                </label>
+                <textarea
+                  className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+                  rows={3}
+                  value={znDesc}
+                  onChange={(e) => setZnDesc(e.target.value)}
+                />
+              </div>
+              <div className="mt-6 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closeZn}
+                  className="rounded-lg border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={znLoading}
+                  className={`rounded-lg bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700 ${
+                    znLoading ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
+                >
+                  {znLoading ? "Saving…" : "Save"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </Modal>
+      </div>
     </div>
   );
 }

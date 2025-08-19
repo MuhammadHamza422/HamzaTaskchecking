@@ -11,6 +11,7 @@ import AddProductModal from "./AddProductModal";
 import WooCommerceDetails from "./WooCommerceDetails";
 import WalmartDetails from "./WalmartDetails";
 import ProcessedWooCommerceDetails from "../ProcessedWooCommerceDetails";
+import useFullscreen from "../../useFullscreen";
 
 const { Text, Title } = Typography;
 
@@ -29,7 +30,7 @@ export default function OrderDetailsDrawer({
   const [addProductModalVisible, setAddProductModalVisible] = useState(false);
   const [selectedLineItemId, setSelectedLineItemId] = useState("");
   const [localKitProducts, setLocalKitProducts] = useState([]);
-
+  const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
   // Reset local optimistic kit state when switching orders
   useEffect(() => {
     setLocalKitProducts([]);
@@ -71,7 +72,10 @@ export default function OrderDetailsDrawer({
 
   if (orderDetailsLoading) {
     return (
+      <div ref={fullscreenRef}>
       <Drawer
+        getContainer={getContainer}
+        key={String(isFullscreen)}
         width={700}
         open={open}
         onClose={onClose}
@@ -86,12 +90,16 @@ export default function OrderDetailsDrawer({
           <Spin size="large" />
         </div>
       </Drawer>
+      </div>
     );
   }
 
   return (
     <>
+    <div ref={fullscreenRef}>
       <Drawer
+        getContainer={getContainer}
+        key={String(isFullscreen)}
         width={700}
         open={open}
         onClose={onClose}
@@ -149,7 +157,7 @@ export default function OrderDetailsDrawer({
           </div>
         )}
       </Drawer>
-
+      </div>
       {/* Add Product Modal */}
       <AddProductModal
         visible={addProductModalVisible}

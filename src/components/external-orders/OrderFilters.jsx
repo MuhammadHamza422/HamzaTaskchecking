@@ -1,12 +1,5 @@
 import React, { useState, useEffect } from "react";
-import {
-  Input,
-  Select,
-  DatePicker,
-  Button,
-  Drawer,
-  Badge,
-} from "antd";
+import { Input, Select, DatePicker, Button, Drawer, Badge } from "antd";
 import {
   SearchOutlined,
   FilterOutlined,
@@ -14,13 +7,14 @@ import {
   CloseOutlined,
 } from "@ant-design/icons";
 import { useMediaQuery } from "react-responsive";
+import useFullscreen from "../useFullscreen";
 
 const { Option } = Select;
 const { RangePicker } = DatePicker;
 
 const wcorderStatus = [
   "pending",
-  "failed", 
+  "failed",
   "processing",
   "on-hold",
   "completed",
@@ -34,7 +28,7 @@ export default function OrderFilters({ filters, onFiltersChange, onReset }) {
   const [searchValue, setSearchValue] = useState(filters.search);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const isMobile = useMediaQuery({ maxWidth: 768 });
-
+  const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
   // Debounced search with pagination reset
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -49,9 +43,9 @@ export default function OrderFilters({ filters, onFiltersChange, onReset }) {
   };
 
   const handleDateRangeChange = (dates) => {
-    onFiltersChange({ 
-      ...filters, 
-      dateRange: dates 
+    onFiltersChange({
+      ...filters,
+      dateRange: dates,
     });
   };
 
@@ -83,7 +77,13 @@ export default function OrderFilters({ filters, onFiltersChange, onReset }) {
 
   // Filter content component
   const FilterContent = ({ isMobileDrawer = false }) => (
-    <div className={`grid ${isMobileDrawer ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-5'} gap-4`}>
+    <div
+      className={`grid ${
+        isMobileDrawer
+          ? "grid-cols-1"
+          : "grid-cols-1 md:grid-cols-2 lg:grid-cols-5"
+      } gap-4`}
+    >
       {/* Date Range Filter */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -188,7 +188,7 @@ export default function OrderFilters({ filters, onFiltersChange, onReset }) {
                   Filters
                 </Button>
               </Badge>
-               
+
               {activeFiltersCount > 0 && (
                 <Button
                   icon={<ReloadOutlined />}
@@ -205,7 +205,8 @@ export default function OrderFilters({ filters, onFiltersChange, onReset }) {
             {/* Active filters summary */}
             {activeFiltersCount > 0 && (
               <div className="text-xs text-gray-500">
-                {activeFiltersCount} filter{activeFiltersCount > 1 ? 's' : ''} active
+                {activeFiltersCount} filter{activeFiltersCount > 1 ? "s" : ""}{" "}
+                active
               </div>
             )}
           </div>
@@ -217,8 +218,8 @@ export default function OrderFilters({ filters, onFiltersChange, onReset }) {
                 {filters.search && (
                   <div className="bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded-full flex items-center gap-1">
                     Search: {filters.search}
-                    <CloseOutlined 
-                      className="cursor-pointer hover:text-blue-900" 
+                    <CloseOutlined
+                      className="cursor-pointer hover:text-blue-900"
                       onClick={() => {
                         setSearchValue("");
                         onFiltersChange({ ...filters, search: "" });
@@ -229,8 +230,8 @@ export default function OrderFilters({ filters, onFiltersChange, onReset }) {
                 {filters.wc_status && (
                   <div className="bg-green-50 text-green-700 text-xs px-2 py-1 rounded-full flex items-center gap-1">
                     WC: {filters.wc_status}
-                    <CloseOutlined 
-                      className="cursor-pointer hover:text-green-900" 
+                    <CloseOutlined
+                      className="cursor-pointer hover:text-green-900"
                       onClick={() => handleWcStatusChange(undefined)}
                     />
                   </div>
@@ -238,8 +239,8 @@ export default function OrderFilters({ filters, onFiltersChange, onReset }) {
                 {filters.status && (
                   <div className="bg-purple-50 text-purple-700 text-xs px-2 py-1 rounded-full flex items-center gap-1">
                     Status: {filters.status}
-                    <CloseOutlined 
-                      className="cursor-pointer hover:text-purple-900" 
+                    <CloseOutlined
+                      className="cursor-pointer hover:text-purple-900"
                       onClick={() => handleStatusChange(undefined)}
                     />
                   </div>
@@ -247,8 +248,8 @@ export default function OrderFilters({ filters, onFiltersChange, onReset }) {
                 {filters.dateRange && filters.dateRange.length === 2 && (
                   <div className="bg-orange-50 text-orange-700 text-xs px-2 py-1 rounded-full flex items-center gap-1">
                     Date Range
-                    <CloseOutlined 
-                      className="cursor-pointer hover:text-orange-900" 
+                    <CloseOutlined
+                      className="cursor-pointer hover:text-orange-900"
                       onClick={() => handleDateRangeChange(null)}
                     />
                   </div>
@@ -259,47 +260,51 @@ export default function OrderFilters({ filters, onFiltersChange, onReset }) {
         </div>
 
         {/* Mobile drawer for filters */}
-        <Drawer
-          title="Filters"
-          placement="bottom"
-          onClose={() => setIsDrawerOpen(false)}
-          open={isDrawerOpen}
-          height="auto"
-          styles={{
-            body: { padding: '20px' }
-          }}
-          extra={
-            <Button
-              icon={<ReloadOutlined />}
-              onClick={handleReset}
-              type="text"
-            >
-              Reset All
-            </Button>
-          }
-        >
-          <div className="space-y-6">
-            <FilterContent isMobileDrawer={true} />
-             
-            <div className="flex gap-3 pt-4 border-t">
-              <Button 
-                type="primary" 
-                size="large" 
-                className="flex-1"
-                onClick={() => setIsDrawerOpen(false)}
+        <div ref={fullscreenRef}>
+          <Drawer
+            getContainer={getContainer}
+            key={String(isFullscreen)}
+            title="Filters"
+            placement="bottom"
+            onClose={() => setIsDrawerOpen(false)}
+            open={isDrawerOpen}
+            height="auto"
+            styles={{
+              body: { padding: "20px" },
+            }}
+            extra={
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={handleReset}
+                type="text"
               >
-                Apply Filters
+                Reset All
               </Button>
-              <Button 
-                size="large" 
-                onClick={() => setIsDrawerOpen(false)}
-                className="flex-1"
-              >
-                Cancel
-              </Button>
+            }
+          >
+            <div className="space-y-6">
+              <FilterContent isMobileDrawer={true} />
+
+              <div className="flex gap-3 pt-4 border-t">
+                <Button
+                  type="primary"
+                  size="large"
+                  className="flex-1"
+                  onClick={() => setIsDrawerOpen(false)}
+                >
+                  Apply Filters
+                </Button>
+                <Button
+                  size="large"
+                  onClick={() => setIsDrawerOpen(false)}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
-          </div>
-        </Drawer>
+          </Drawer>
+        </div>
       </>
     );
   }

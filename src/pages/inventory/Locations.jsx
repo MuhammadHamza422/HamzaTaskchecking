@@ -31,7 +31,8 @@ import Swal from "sweetalert2";
 import { QRCodeSVG } from "qrcode.react";
 import Skeleton from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
-import Modal from "../../components/Modal.jsx";
+import useFullscreen from "../../components/useFullscreen.jsx";
+import { Modal } from "antd";
 
 export default function Locations() {
   const navigate = useNavigate();
@@ -49,6 +50,7 @@ export default function Locations() {
 
   const [newErrors, setNewErrors] = useState({});
   const [editErrors, setEditErrors] = useState({});
+  const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
 
   // Fetch warehouse for breadcrumb
   const { data: warehouseRes } = useQuery({
@@ -736,96 +738,6 @@ export default function Locations() {
       </div>
 
       {/* Print Preview Modal */}
-      {printOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) closePrint();
-          }}
-        >
-          <div className="bg-white rounded-lg w-full max-w-6xl max-h-[95vh] overflow-y-auto shadow-xl">
-            <div className="flex items-center justify-between border-b px-4 py-3">
-              <h3 className="text-lg font-semibold">Print Preview</h3>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={closePrint}
-                  className="rounded border px-3 py-1.5 text-sm"
-                >
-                  Close
-                </button>
-                <button
-                  onClick={generatePDF}
-                  disabled={downloading}
-                  className="rounded bg-blue-600 text-white px-3 py-1.5 text-sm disabled:opacity-60"
-                >
-                  {downloading ? "Generating…" : "Download PDF"}
-                </button>
-              </div>
-            </div>
-            <div className="overflow-auto p-4">
-              {/* A4 Canvas Wrapper */}
-              <div
-                ref={printRef}
-                className="mx-auto bg-white"
-                style={{ width: "282mm", minHeight: "300mm", padding: "22mm" }}
-              >
-                {/* Grid: two per row */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-[2.6rem]">
-                  {locations
-                    .filter(
-                      (l) => selectedIds.size === 0 || selectedIds.has(l.id)
-                    )
-                    .map((loc) => (
-                      <div
-                        key={loc.id}
-                        className="border border-black flex items-center"
-                      >
-                        <div className="flex items-center justify-center p-4">
-                          <QRCodeSVG
-                            value={String(loc.code || "")}
-                            size={186}
-                            level="L"
-                          />
-                        </div>
-                        <div className="border-l border-black text-black flex-1 h-full">
-                          <div className="flex flex-col items-center justify-center py-2">
-                            <p className="font-semibold">RetroVentures</p>
-                            <p className="text-xs">Fleetwood Warehouse</p>
-                          </div>
-                          <div className="grid grid-cols-3 text-center border-y border-black overflow-hidden">
-                            <p className="col-span-3 py-2 text-sm font-semibold tracking-[0.35em]">
-                              {(loc.type || "").toUpperCase()}
-                            </p>
-                          </div>
-                          <div className="grid grid-cols-2 border-b text-sm border-black">
-                            <p className="px-2 py-2.5 border-r border-black font-medium">
-                              Zone
-                            </p>
-                            <p className="px-2 py-2.5">{zoneName || ""}</p>
-                          </div>
-                          <div className="grid grid-cols-2 border-b text-sm border-black">
-                            <p className="px-2 py-2.5 border-r border-black font-medium">
-                              LABEL
-                            </p>
-                            <p className="px-2 py-2.5">{loc.code}</p>
-                          </div>
-                          <div className="grid grid-cols-2 text-sm h-fit">
-                            <p className="px-2 py-3 border-r border-black font-medium">
-                              STATUS
-                            </p>
-                            <p className="px-2 py-3"></p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <Modal open={printOpen} onClose={closePrint}></Modal>
 
       {/* Locations Grid */}
       <div className="overflow-x-auto bg-white rounded-xl shadow">
@@ -1023,269 +935,74 @@ export default function Locations() {
       </div>
 
       {/* New Location Modal */}
-
-      <Modal open={showNew} onClose={() => setShowNew(false)}>
-        <form
-          onSubmit={onCreate}
-          className="bg-white rounded-xl w-full max-w-md space-y-4"
+      <div ref={fullscreenRef}>
+        <Modal
+          getContainer={getContainer}
+          key={String(isFullscreen)}
+          open={showNew}
+          onCancel={() => setShowNew(false)}
+          centered
+          footer={null}
+          width={450}
+          closable={false}
+          title={null}
+          className="max-h-[95vh] overflow-y-auto"
         >
-          <header className="flex justify-between items-center">
+          <form onSubmit={onCreate} className="w-full space-y-4">
             <h3 className="text-xl font-semibold">New Location</h3>
-            <button
-              onClick={() => setShowNew(false)}
-              className="text-gray-600 hover:text-gray-800"
-            >
-              <FiX size={24} />
-            </button>
-          </header>
-          <div className="space-y-2">
-            <label className="block text-sm font-medium">Type</label>
-            <select
-              value={newType}
-              onChange={(e) => {
-                const val = e.target.value;
-                // prevent selecting bin if no shelves exist
-                if (val === "bin" && !hasShelves) {
-                  Swal.fire({
-                    icon: "warning",
-                    title: "No shelves",
-                    text: "You don't have any shelf in this zone. Create a shelf first to add BINs.",
-                  });
-                  setNewType("shelf");
-                  return;
-                }
-                setNewType(val);
-              }}
-              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-            >
-              <option value="shelf">Shelf</option>
-              {/* Only show bin option when there are shelves */}
-              {hasShelves && <option value="bin">Bin</option>}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <label className="block text-sm font-medium">Row</label>
-            <input
-              type="text"
-              value={newRow}
-              onChange={(e) =>
-                setNewRow(
-                  e.target.value
-                    .replace(/[^A-Za-z]/g, "")
-                    .toUpperCase()
-                    .slice(0, 1)
-                )
-              }
-              placeholder="A"
-              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-            />
-            {newErrors?.row && (
-              <p className="text-sm text-red-600 mt-1">{newErrors?.row}</p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <label className="block text-sm font-medium">Bay</label>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={newBay}
-              onChange={(e) =>
-                setNewBay(
-                  e.target.value
-                    .replace(/[^0-9]/g, "")
-                    .replace(/^0+/, "")
-                    .slice(0, 2)
-                )
-              }
-              placeholder="1"
-              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-            />
-            {newErrors.bay && (
-              <p className="text-sm text-red-600 mt-1">{newErrors.bay}</p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <label className="block text-sm font-medium">Shelf</label>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={newShelf}
-              onChange={(e) =>
-                setNewShelf(
-                  e.target.value
-                    .replace(/[^0-9]/g, "")
-                    .replace(/^0+/, "")
-                    .slice(0, 2)
-                )
-              }
-              placeholder="1"
-              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-            />
-            {newErrors.shelf && (
-              <p className="text-sm text-red-600 mt-1">{newErrors.shelf}</p>
-            )}
-          </div>
-          {newType === "bin" && (
             <div className="space-y-2">
-              <label className="block text-sm font-medium">Bin</label>
-              <input
-                type="text"
-                inputMode="numeric"
-                value={newBin}
-                onChange={(e) =>
-                  setNewBin(
-                    e.target.value
-                      .replace(/[^0-9]/g, "")
-                      .replace(/^0+/, "")
-                      .slice(0, 2)
-                  )
-                }
-                placeholder="1"
-                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-              />
-              {newErrors.bin && (
-                <p className="text-sm text-red-600 mt-1">{newErrors.bin}</p>
-              )}
-            </div>
-          )}
-          {newError && <p className="text-red-600">{newError}</p>}
-          <div className="flex justify-end space-x-3">
-            <button
-              type="button"
-              onClick={() => setShowNew(false)}
-              className="px-4 py-2 border rounded"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={createMut.isPending}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50"
-            >
-              {createMut.isPending ? "Creating…" : "Create"}
-            </button>
-          </div>
-        </form>
-      </Modal>
-
-      {/* Edit Location Modal */}
-
-      <Modal open={editing} onClose={() => setEditing(false)}>
-        <form
-          onSubmit={onEditSubmit}
-          className="bg-white rounded-xl w-full max-w-md space-y-3"
-        >
-          <header className="flex justify-between items-center">
-            <h3 className="text-xl font-semibold">Edit Location</h3>
-            <button
-              onClick={() => setEditing(null)}
-              className="text-gray-600 hover:text-gray-800"
-            >
-              <FiX size={24} />
-            </button>
-          </header>
-          <div className="space-y-2">
-            <label className="block text-sm font-medium">Type</label>
-            <select
-              value={editType}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val === "bin" && !hasShelves) {
-                  Swal.fire({
-                    icon: "warning",
-                    title: "No shelves",
-                    text: "You don't have any shelf in this zone. Create a shelf first to add BINs.",
-                  });
-                  // if user was already editing a bin allow it; otherwise revert to shelf
-                  if (editing.type === "bin") {
-                    setEditType("bin");
-                  } else {
-                    setEditType("shelf");
+              <label className="block text-sm font-medium">Type</label>
+              <select
+                value={newType}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  // prevent selecting bin if no shelves exist
+                  if (val === "bin" && !hasShelves) {
+                    Swal.fire({
+                      icon: "warning",
+                      title: "No shelves",
+                      text: "You don't have any shelf in this zone. Create a shelf first to add BINs.",
+                    });
+                    setNewType("shelf");
+                    return;
                   }
-                  return;
-                }
-                setEditType(val);
-              }}
-              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-            >
-              <option value="shelf">Shelf</option>
-              {/* show bin option only when shelves exist or we're already editing a bin */}
-              {(hasShelves || editType === "bin") && (
-                <option value="bin">Bin</option>
-              )}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <label className="block text-sm font-medium">Row</label>
-            <input
-              type="text"
-              value={editRow}
-              onChange={(e) =>
-                setEditRow(
-                  e.target.value
-                    .replace(/[^A-Za-z]/g, "")
-                    .toUpperCase()
-                    .slice(0, 1)
-                )
-              }
-              placeholder="A"
-              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-            />
-            {editErrors.row && (
-              <p className="text-sm text-red-600 mt-1">{editErrors.row}</p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <label className="block text-sm font-medium">Bay</label>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={editBay}
-              onChange={(e) =>
-                setEditBay(
-                  e.target.value
-                    .replace(/[^0-9]/g, "")
-                    .replace(/^0+/, "")
-                    .slice(0, 2)
-                )
-              }
-              placeholder="1"
-              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-            />
-            {editErrors.bay && (
-              <p className="text-sm text-red-600 mt-1">{editErrors.bay}</p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <label className="block text-sm font-medium">Shelf</label>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={editShelf}
-              onChange={(e) =>
-                setEditShelf(
-                  e.target.value
-                    .replace(/[^0-9]/g, "")
-                    .replace(/^0+/, "")
-                    .slice(0, 2)
-                )
-              }
-              placeholder="1"
-              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-            />
-            {editErrors.shelf && (
-              <p className="text-sm text-red-600 mt-1">{editErrors.shelf}</p>
-            )}
-          </div>
-          {editType === "bin" && (
+                  setNewType(val);
+                }}
+                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+              >
+                <option value="shelf">Shelf</option>
+                {/* Only show bin option when there are shelves */}
+                {hasShelves && <option value="bin">Bin</option>}
+              </select>
+            </div>
             <div className="space-y-2">
-              <label className="block text-sm font-medium">Bin</label>
+              <label className="block text-sm font-medium">Row</label>
+              <input
+                type="text"
+                value={newRow}
+                onChange={(e) =>
+                  setNewRow(
+                    e.target.value
+                      .replace(/[^A-Za-z]/g, "")
+                      .toUpperCase()
+                      .slice(0, 1)
+                  )
+                }
+                placeholder="A"
+                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+              />
+              {newErrors?.row && (
+                <p className="text-sm text-red-600 mt-1">{newErrors?.row}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <label className="block text-sm font-medium">Bay</label>
               <input
                 type="text"
                 inputMode="numeric"
-                value={editBin}
+                value={newBay}
                 onChange={(e) =>
-                  setEditBin(
+                  setNewBay(
                     e.target.value
                       .replace(/[^0-9]/g, "")
                       .replace(/^0+/, "")
@@ -1295,30 +1012,324 @@ export default function Locations() {
                 placeholder="1"
                 className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
               />
-              {editType === "bin" && editErrors.bin && (
-                <p className="text-sm text-red-600 mt-1">{editErrors.bin}</p>
+              {newErrors.bay && (
+                <p className="text-sm text-red-600 mt-1">{newErrors.bay}</p>
               )}
             </div>
-          )}
-          {editError && <p className="text-red-600">{editError}</p>}
-          <div className="flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => setEditing(null)}
-              className="px-4 py-2 border rounded"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={updateMut.isPending}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50"
-            >
-              {updateMut.isPending ? "Saving…" : "Save"}
-            </button>
+            <div className="space-y-2">
+              <label className="block text-sm font-medium">Shelf</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={newShelf}
+                onChange={(e) =>
+                  setNewShelf(
+                    e.target.value
+                      .replace(/[^0-9]/g, "")
+                      .replace(/^0+/, "")
+                      .slice(0, 2)
+                  )
+                }
+                placeholder="1"
+                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+              />
+              {newErrors.shelf && (
+                <p className="text-sm text-red-600 mt-1">{newErrors.shelf}</p>
+              )}
+            </div>
+            {newType === "bin" && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium">Bin</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={newBin}
+                  onChange={(e) =>
+                    setNewBin(
+                      e.target.value
+                        .replace(/[^0-9]/g, "")
+                        .replace(/^0+/, "")
+                        .slice(0, 2)
+                    )
+                  }
+                  placeholder="1"
+                  className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+                />
+                {newErrors.bin && (
+                  <p className="text-sm text-red-600 mt-1">{newErrors.bin}</p>
+                )}
+              </div>
+            )}
+            {newError && <p className="text-red-600">{newError}</p>}
+            <div className="flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => setShowNew(false)}
+                className="px-4 py-2 border rounded"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={createMut.isPending}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50"
+              >
+                {createMut.isPending ? "Creating…" : "Create"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      </div>
+      {/* Edit Location Modal */}
+      <div ref={fullscreenRef}>
+        <Modal
+          getContainer={getContainer}
+          key={String(isFullscreen)}
+          open={editing}
+          onCancel={() => setEditing(false)}
+          centered
+          footer={null}
+          width={450}
+          closable={false}
+          title={null}
+          className="max-h-[95vh] overflow-y-auto"
+        >
+          <form
+            onSubmit={onEditSubmit}
+            className="bg-white rounded-xl w-full max-w-md space-y-3"
+          >
+            <h3 className="text-xl font-semibold">Edit Location</h3>
+            <div className="space-y-2">
+              <label className="block text-sm font-medium">Type</label>
+              <select
+                value={editType}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "bin" && !hasShelves) {
+                    Swal.fire({
+                      icon: "warning",
+                      title: "No shelves",
+                      text: "You don't have any shelf in this zone. Create a shelf first to add BINs.",
+                    });
+                    // if user was already editing a bin allow it; otherwise revert to shelf
+                    if (editing.type === "bin") {
+                      setEditType("bin");
+                    } else {
+                      setEditType("shelf");
+                    }
+                    return;
+                  }
+                  setEditType(val);
+                }}
+                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+              >
+                <option value="shelf">Shelf</option>
+                {/* show bin option only when shelves exist or we're already editing a bin */}
+                {(hasShelves || editType === "bin") && (
+                  <option value="bin">Bin</option>
+                )}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="block text-sm font-medium">Row</label>
+              <input
+                type="text"
+                value={editRow}
+                onChange={(e) =>
+                  setEditRow(
+                    e.target.value
+                      .replace(/[^A-Za-z]/g, "")
+                      .toUpperCase()
+                      .slice(0, 1)
+                  )
+                }
+                placeholder="A"
+                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+              />
+              {editErrors.row && (
+                <p className="text-sm text-red-600 mt-1">{editErrors.row}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <label className="block text-sm font-medium">Bay</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={editBay}
+                onChange={(e) =>
+                  setEditBay(
+                    e.target.value
+                      .replace(/[^0-9]/g, "")
+                      .replace(/^0+/, "")
+                      .slice(0, 2)
+                  )
+                }
+                placeholder="1"
+                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+              />
+              {editErrors.bay && (
+                <p className="text-sm text-red-600 mt-1">{editErrors.bay}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <label className="block text-sm font-medium">Shelf</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={editShelf}
+                onChange={(e) =>
+                  setEditShelf(
+                    e.target.value
+                      .replace(/[^0-9]/g, "")
+                      .replace(/^0+/, "")
+                      .slice(0, 2)
+                  )
+                }
+                placeholder="1"
+                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+              />
+              {editErrors.shelf && (
+                <p className="text-sm text-red-600 mt-1">{editErrors.shelf}</p>
+              )}
+            </div>
+            {editType === "bin" && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium">Bin</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={editBin}
+                  onChange={(e) =>
+                    setEditBin(
+                      e.target.value
+                        .replace(/[^0-9]/g, "")
+                        .replace(/^0+/, "")
+                        .slice(0, 2)
+                    )
+                  }
+                  placeholder="1"
+                  className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+                />
+                {editType === "bin" && editErrors.bin && (
+                  <p className="text-sm text-red-600 mt-1">{editErrors.bin}</p>
+                )}
+              </div>
+            )}
+            {editError && <p className="text-red-600">{editError}</p>}
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setEditing(null)}
+                className="px-4 py-2 border rounded"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={updateMut.isPending}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50"
+              >
+                {updateMut.isPending ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      </div>
+
+      <div ref={fullscreenRef}>
+        <Modal
+          getContainer={getContainer}
+          key={String(isFullscreen)}
+          open={printOpen}
+          onCancel={closePrint}
+          centered
+          footer={null}
+          width={1152}
+          closable={false}
+          title={null}
+          className="max-h-[95vh] overflow-y-auto"
+        >
+          <div className="bg-white w-full">
+            <div className="flex items-center justify-between border-b px-4 pb-2">
+              <h3 className="text-lg font-semibold">Print Preview</h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={closePrint}
+                  className="rounded border px-3 py-1.5 text-sm"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={generatePDF}
+                  disabled={downloading}
+                  className="rounded bg-blue-600 text-white px-3 py-1.5 text-sm disabled:opacity-60"
+                >
+                  {downloading ? "Generating…" : "Download PDF"}
+                </button>
+              </div>
+            </div>
+            <div className="overflow-auto p-3">
+              {/* A4 Canvas Wrapper */}
+              <div
+                ref={printRef}
+                className="mx-auto bg-white"
+                style={{ width: "282mm", minHeight: "300mm", padding: "22mm" }}
+              >
+                {/* Grid: two per row */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-[2.6rem]">
+                  {locations
+                    .filter(
+                      (l) => selectedIds.size === 0 || selectedIds.has(l.id)
+                    )
+                    .map((loc) => (
+                      <div
+                        key={loc.id}
+                        className="border border-black flex items-center"
+                      >
+                        <div className="flex items-center justify-center p-4">
+                          <QRCodeSVG
+                            value={String(loc.code || "")}
+                            size={186}
+                            level="L"
+                          />
+                        </div>
+                        <div className="border-l border-black text-black flex-1 h-full">
+                          <div className="flex flex-col items-center justify-center py-2">
+                            <p className="font-semibold">RetroVentures</p>
+                            <p className="text-xs">Fleetwood Warehouse</p>
+                          </div>
+                          <div className="grid grid-cols-3 text-center border-y border-black overflow-hidden">
+                            <p className="col-span-3 py-2 text-sm font-semibold tracking-[0.35em]">
+                              {(loc.type || "").toUpperCase()}
+                            </p>
+                          </div>
+                          <div className="grid grid-cols-2 border-b text-sm border-black">
+                            <p className="px-2 py-2.5 border-r border-black font-medium">
+                              Zone
+                            </p>
+                            <p className="px-2 py-2.5">{zoneName || ""}</p>
+                          </div>
+                          <div className="grid grid-cols-2 border-b text-sm border-black">
+                            <p className="px-2 py-2.5 border-r border-black font-medium">
+                              LABEL
+                            </p>
+                            <p className="px-2 py-2.5">{loc.code}</p>
+                          </div>
+                          <div className="grid grid-cols-2 text-sm h-fit">
+                            <p className="px-2 py-3 border-r border-black font-medium">
+                              STATUS
+                            </p>
+                            <p className="px-2 py-3"></p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </div>
           </div>
-        </form>
-      </Modal>
+        </Modal>
+      </div>
 
       {/* Hidden file input */}
       <input
