@@ -26,6 +26,7 @@ import {
   deleteZone as apiDeleteZone,
 } from "../../api/warehouse";
 import Swal from "sweetalert2";
+import Modal from "../../components/Modal.jsx";
 
 export default function Warehouses() {
   const { token } = useAuth();
@@ -666,145 +667,126 @@ export default function Warehouses() {
             </div>
           </section>
         </div>
-        {/* Clean Tailwind-only Zone Modal */}
-        {znModalOpen && (
-          <div
-            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) {
-                closeZn(); // Close modal when clicking overlay
-              }
-            }}
-          >
-            <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-xl">
-              <h3 className="text-lg font-semibold">
-                {znEdit ? "Edit Zone" : "New Zone"}
-              </h3>
-              <form onSubmit={saveZn} className="mt-4 space-y-3">
-                {znFormError && (
-                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                    {znFormError}
-                  </div>
-                )}
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700">
-                    Name
-                  </label>
-                  <input
-                    type="text"
-                    autoFocus
-                    className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-                    value={znName}
-                    onChange={(e) => setZnName(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700">
-                    Description
-                  </label>
-                  <textarea
-                    className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-                    rows={3}
-                    value={znDesc}
-                    onChange={(e) => setZnDesc(e.target.value)}
-                  />
-                </div>
-                <div className="mt-6 flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={closeZn}
-                    className="rounded-lg border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={znLoading}
-                    className={`rounded-lg bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700 ${
-                      znLoading ? "opacity-50 cursor-not-allowed" : ""
-                    }`}
-                  >
-                    {znLoading ? "Saving…" : "Save"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
 
-        {/* Clean Tailwind-only Warehouse Modal */}
-        {whModalOpen && (
-          <div
-            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) {
-                closeWh(); // Close modal when clicking overlay
-              }
-            }}
-          >
-            <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-xl">
-              <h3 className="text-lg font-semibold">
-                {whEdit ? "Edit Warehouse" : "New Warehouse"}
-              </h3>
-              <form onSubmit={saveWh} className="mt-4 space-y-3">
-                {whFormError && (
-                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                    {whFormError}
-                  </div>
-                )}
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700">
-                    Name
-                  </label>
-                  <input
-                    type="text"
-                    autoFocus
-                    className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-                    value={whName}
-                    onChange={(e) => setWhName(e.target.value)}
-                  />
+        <Modal open={znModalOpen} onClose={() => closeZn(false)}>
+          <div className="w-full max-w-md">
+            <h3 className="text-lg font-semibold">
+              {znEdit ? "Edit Zone" : "New Zone"}
+            </h3>
+            <form onSubmit={saveZn} className="mt-4 space-y-3">
+              {znFormError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {znFormError}
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700">
-                    Country
-                  </label>
-                  <select
-                    className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-                    value={whCountry}
-                    onChange={(e) => setWhCountry(e.target.value)}
-                  >
-                    <option value="" disabled>
-                      Select country
-                    </option>
-                    {countryOptions.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="mt-6 flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={closeWh}
-                    className="rounded-lg border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={whLoading}
-                    className={`rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 ${
-                      whLoading ? "opacity-50 cursor-not-allowed" : ""
-                    }`}
-                  >
-                    {whLoading ? "Saving…" : "Save"}
-                  </button>
-                </div>
-              </form>
-            </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-zinc-700">
+                  Name
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+                  value={znName}
+                  onChange={(e) => setZnName(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700">
+                  Description
+                </label>
+                <textarea
+                  className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+                  rows={3}
+                  value={znDesc}
+                  onChange={(e) => setZnDesc(e.target.value)}
+                />
+              </div>
+              <div className="mt-6 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closeZn}
+                  className="rounded-lg border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={znLoading}
+                  className={`rounded-lg bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700 ${
+                    znLoading ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
+                >
+                  {znLoading ? "Saving…" : "Save"}
+                </button>
+              </div>
+            </form>
           </div>
-        )}
+        </Modal>
+        <Modal open={whModalOpen} onClose={() => closeWh(false)}>
+          {/* Clean Tailwind-only Warehouse Modal */}
+          <div className="w-full max-w-md">
+            <h3 className="text-lg font-semibold">
+              {whEdit ? "Edit Warehouse" : "New Warehouse"}
+            </h3>
+            <form onSubmit={saveWh} className="mt-4 space-y-3">
+              {whFormError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {whFormError}
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-zinc-700">
+                  Name
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+                  value={whName}
+                  onChange={(e) => setWhName(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700">
+                  Country
+                </label>
+                <select
+                  className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+                  value={whCountry}
+                  onChange={(e) => setWhCountry(e.target.value)}
+                >
+                  <option value="" disabled>
+                    Select country
+                  </option>
+                  {countryOptions.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="mt-6 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closeWh}
+                  className="rounded-lg border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={whLoading}
+                  className={`rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 ${
+                    whLoading ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
+                >
+                  {whLoading ? "Saving…" : "Save"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </Modal>
       </div>
     </div>
   );
