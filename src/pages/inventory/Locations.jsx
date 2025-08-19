@@ -43,6 +43,9 @@ export default function Locations() {
   const zoneId = useSelector((s) => s.app.selectedZoneId);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(30);
+  const [sortField, setSortField] = useState("code");
+  const [sortOrder, setSortOrder] = useState("asc");
+  const [searchQuery, setSearchQuery] = useState("");
   // New location fields
   const [newRow, setNewRow] = useState("");
   const [newBay, setNewBay] = useState("");
@@ -115,12 +118,30 @@ export default function Locations() {
 
   const allLocations = locationsRes || [];
   const total = allLocations.length;
-  const totalPages = Math.max(1, Math.ceil(total / limit));
   
+  // Handle search and sorting
+  const filteredLocations = allLocations.filter((location) => {
+    if (!searchQuery) return true;
+    return location.code?.toLowerCase().includes(searchQuery.toLowerCase());
+  });
+
+  const sortedLocations = [...filteredLocations].sort((a, b) => {
+    const aValue = a[sortField] || "";
+    const bValue = b[sortField] || "";
+    
+    if (sortOrder === "asc") {
+      return aValue.toString().localeCompare(bValue.toString());
+    } else {
+      return bValue.toString().localeCompare(aValue.toString());
+    }
+  });
+
   // Handle frontend pagination
+  const filteredTotal = filteredLocations.length;
+  const totalPages = Math.max(1, Math.ceil(filteredTotal / limit));
   const startIndex = (page - 1) * limit;
   const endIndex = startIndex + limit;
-  const locations = allLocations.slice(startIndex, endIndex);
+  const locations = sortedLocations.slice(startIndex, endIndex);
   console.log(locations.map((l) => l.id));
 
   // compute shelf set and helpers for validations
@@ -140,6 +161,34 @@ export default function Locations() {
     locations.some((l) => String(l.code) === String(code));
 
   const existsShelfBase = (base) => shelfCodesSet.has(String(base));
+
+  // Handle sorting
+  const handleSort = (field) => {
+    if (sortField === field) {
+      // If clicking the same field, toggle order
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      // If clicking a new field, set it as sort field and default to ascending
+      setSortField(field);
+      setSortOrder("asc");
+    }
+    // Reset to first page when sorting
+    setPage(1);
+  };
+
+  // Get sort icon
+  const getSortIcon = (field) => {
+    if (sortField !== field) {
+      return "⇅"; // Neutral icon
+    }
+    return sortOrder === "asc" ? "↑" : "↓";
+  };
+
+  // Handle search
+  const handleSearch = (value) => {
+    setSearchQuery(value);
+    setPage(1); // Reset to first page when searching
+  };
 
   // Create/Edit state
   const [showNew, setShowNew] = useState(false);
@@ -751,6 +800,29 @@ export default function Locations() {
         )}
       </div>
 
+      {/* Search Bar */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div className="flex items-center gap-4">
+          <div className="flex-1">
+            <input
+              type="text"
+              placeholder="Search locations by code..."
+              value={searchQuery}
+              onChange={(e) => handleSearch(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-colors"
+            />
+          </div>
+          {searchQuery && (
+            <button
+              onClick={() => handleSearch("")}
+              className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Print Preview Modal */}
 
       {/* Locations Grid */}
@@ -860,8 +932,18 @@ export default function Locations() {
                   <th className="px-4 py-2 text-left text-sm font-semibold text-gray-600">
                     QR Code
                   </th>
-                  <th className="px-4 py-2 text-left text-sm font-semibold text-gray-600">
-                    Code
+                  <th 
+                    className={`px-4 py-2 text-left text-sm font-semibold cursor-pointer transition-colors select-none ${
+                      sortField === "code" 
+                        ? "text-blue-600 bg-blue-50" 
+                        : "text-gray-600 hover:bg-gray-100"
+                    }`}
+                    onClick={() => handleSort("code")}
+                  >
+                    <div className="flex items-center gap-1">
+                      Code
+                      <span className="text-xs">{getSortIcon("code")}</span>
+                    </div>
                   </th>
                   <th className="px-4 py-2 text-left text-sm font-semibold text-gray-600">
                     Type
@@ -955,14 +1037,19 @@ export default function Locations() {
             <div className="text-center sm:text-left text-sm text-gray-600 font-medium mb-4 sm:mb-2">
               Showing{" "}
               <span className="font-semibold text-gray-900">
-                {Math.min((page - 1) * limit + 1, total)}
+                {filteredTotal > 0 ? Math.min((page - 1) * limit + 1, filteredTotal) : 0}
               </span>{" "}
               to{" "}
               <span className="font-semibold text-gray-900">
-                {Math.min(page * limit, total)}
+                {Math.min(page * limit, filteredTotal)}
               </span>{" "}
-              of <span className="font-semibold text-gray-900">{total}</span>{" "}
+              of <span className="font-semibold text-gray-900">{filteredTotal}</span>{" "}
               locations
+              {searchQuery && (
+                <span className="text-gray-500">
+                  {" "}(filtered from {total} total)
+                </span>
+              )}
             </div>
 
             {/* Desktop Pagination */}
