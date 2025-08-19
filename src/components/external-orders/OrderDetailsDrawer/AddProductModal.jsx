@@ -10,6 +10,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import apiClient from "../../../api/client";
 import Swal from "sweetalert2";
+import useFullscreen from "../../useFullscreen";
 
 const { Search } = Input;
 const { Option } = Select;
@@ -30,7 +31,7 @@ export default function AddProductModal({
   const [platforms, setPlatforms] = useState([]);
   const [platformsLoading, setPlatformsLoading] = useState(false);
   const [mergedProducts, setMergedProducts] = useState([]);
-
+  const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
   console.log("mergedProducts:", mergedProducts);
 
   // Fetch platforms for the modal
@@ -512,7 +513,10 @@ export default function AddProductModal({
   }, [visible, activeTab, selectedOrder?.plateform_id, selectedLineItemId]);
 
   return (
+    <div ref={fullscreenRef}>
     <Modal
+      getContainer={getContainer}
+      key={String(isFullscreen)}
       title="Add Products to Order"
       open={visible}
       onCancel={handleModalClose}
@@ -690,8 +694,9 @@ export default function AddProductModal({
               ))}
             </div>
           </div>
-        )}
-      </div>
-    </Modal>
+          )}
+        </div>
+      </Modal>
+    </div>
   );
 }

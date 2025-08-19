@@ -17,6 +17,7 @@ import { motion } from "framer-motion";
 import Swal from "sweetalert2";
 import apiClient from "../api/client";
 import { useAuth } from "../contexts/AuthContext";
+import useFullscreen from "../components/useFullscreen";
 
 const { Option } = Select;
 const { Title } = Typography;
@@ -49,7 +50,7 @@ const AdminUsersPage = () => {
   const [form] = Form.useForm();
   const { user: currentUser } = useAuth();
   const [rolesOptions, setRolesOptions] = useState([]);
-
+  const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
   const loadRoles = useCallback(async () => {
     setLoading(true);
     try {
@@ -518,141 +519,159 @@ const AdminUsersPage = () => {
         />
       </div>
 
-      <Modal
-        className="max-h-[95vh] overflow-y-auto"
-        title={
-          <Title level={4} style={{ margin: 0 }}>
-            {editingUser ? "Edit User" : "Add New User"}
-          </Title>
-        }
-        open={isModalOpen}
-        onCancel={formSubmitting ? undefined : handleCloseModal}
-        footer={null}
-        centered
-        bodyStyle={{ paddingTop: "1rem" }}
-        maskClosable={!formSubmitting}
-        closable={!formSubmitting}
-      >
-        <Form form={form} layout="vertical" onFinish={handleFormSubmit}>
-          <Form.Item
-            label="First Name"
-            name="first_name"
-            rules={[{ required: true, message: "Please enter the first name" }]}
-          >
-            <Input
-              onChange={(e) => handleFieldChange("first_name", e.target.value)}
-              style={
-                changedFields.has("first_name")
-                  ? { borderColor: "#1890ff" }
-                  : {}
-              }
-            />
-          </Form.Item>
-          <Form.Item
-            label="Last Name"
-            name="last_name"
-            rules={[{ required: true, message: "Please enter the last name" }]}
-          >
-            <Input
-              onChange={(e) => handleFieldChange("last_name", e.target.value)}
-              style={
-                changedFields.has("last_name") ? { borderColor: "#1890ff" } : {}
-              }
-            />
-          </Form.Item>
-          <Form.Item
-            label="Email"
-            name="email"
-            rules={[{ required: true, type: "email" }]}
-          >
-            <Input
-              onChange={(e) => handleFieldChange("email", e.target.value)}
-              style={
-                changedFields.has("email") ? { borderColor: "#1890ff" } : {}
-              }
-            />
-          </Form.Item>
-          <Form.Item
-            label="Password"
-            name="password"
-            rules={[
-              {
-                required: !editingUser,
-                message: "Password is required for new users",
-              },
-              {
-                min: 6,
-                message: "Password must be at least 6 characters",
-                validator: (_, value) => {
-                  if (!value || value.length >= 6) {
-                    return Promise.resolve();
-                  }
-                  return Promise.reject(
-                    new Error("Password must be at least 6 characters")
-                  );
+      <div ref={fullscreenRef}>
+        <Modal
+          getContainer={getContainer}
+          key={String(isFullscreen)}
+          className="max-h-[95vh] overflow-y-auto"
+          title={
+            <Title level={4} style={{ margin: 0 }}>
+              {editingUser ? "Edit User" : "Add New User"}
+            </Title>
+          }
+          open={isModalOpen}
+          onCancel={formSubmitting ? undefined : handleCloseModal}
+          footer={null}
+          centered
+          bodyStyle={{ paddingTop: "1rem" }}
+          maskClosable={!formSubmitting}
+          closable={!formSubmitting}
+        >
+          <Form form={form} layout="vertical" onFinish={handleFormSubmit}>
+            <Form.Item
+              label="First Name"
+              name="first_name"
+              rules={[
+                { required: true, message: "Please enter the first name" },
+              ]}
+            >
+              <Input
+                onChange={(e) =>
+                  handleFieldChange("first_name", e.target.value)
+                }
+                style={
+                  changedFields.has("first_name")
+                    ? { borderColor: "#1890ff" }
+                    : {}
+                }
+              />
+            </Form.Item>
+            <Form.Item
+              label="Last Name"
+              name="last_name"
+              rules={[
+                { required: true, message: "Please enter the last name" },
+              ]}
+            >
+              <Input
+                onChange={(e) => handleFieldChange("last_name", e.target.value)}
+                style={
+                  changedFields.has("last_name")
+                    ? { borderColor: "#1890ff" }
+                    : {}
+                }
+              />
+            </Form.Item>
+            <Form.Item
+              label="Email"
+              name="email"
+              rules={[{ required: true, type: "email" }]}
+            >
+              <Input
+                onChange={(e) => handleFieldChange("email", e.target.value)}
+                style={
+                  changedFields.has("email") ? { borderColor: "#1890ff" } : {}
+                }
+              />
+            </Form.Item>
+            <Form.Item
+              label="Password"
+              name="password"
+              rules={[
+                {
+                  required: !editingUser,
+                  message: "Password is required for new users",
                 },
-              },
-            ]}
-            help={
-              editingUser
-                ? "Enter new password to update, or leave blank to keep existing password."
-                : "Password is required for new users"
-            }
-          >
-            <Input.Password
-              onChange={(e) => handleFieldChange("password", e.target.value)}
-              style={
-                changedFields.has("password") ? { borderColor: "#1890ff" } : {}
-              }
-            />
-          </Form.Item>
-          <Form.Item label="Role" name="role" rules={[{ required: true }]}>
-            <Select
-              onChange={(value) => handleFieldChange("role", value)}
-              style={
-                changedFields.has("role") ? { borderColor: "#1890ff" } : {}
+                {
+                  min: 6,
+                  message: "Password must be at least 6 characters",
+                  validator: (_, value) => {
+                    if (!value || value.length >= 6) {
+                      return Promise.resolve();
+                    }
+                    return Promise.reject(
+                      new Error("Password must be at least 6 characters")
+                    );
+                  },
+                },
+              ]}
+              help={
+                editingUser
+                  ? "Enter new password to update, or leave blank to keep existing password."
+                  : "Password is required for new users"
               }
             >
-              <Option value="sourcer">Sourcer</Option>
-              <Option value="purchaser">Purchaser</Option>
-              <Option value="manager">Manager</Option>
-              <Option value="admin">Admin</Option>
-            </Select>
-          </Form.Item>
-          <Form.Item label="Roles" name="roles" rules={[{ required: true }]}>
-            <Select
-              onChange={(value) => handleFieldChange("roles", value)}
-              style={
-                changedFields.has("roles") ? { borderColor: "#1890ff" } : {}
-              }
-            >
-              {rolesOptions.map((role) => (
-                <Option key={role._id} value={role._id}>
-                  {role?.role}
-                </Option>
-              ))}
-            </Select>
-          </Form.Item>
+              <Input.Password
+                onChange={(e) => handleFieldChange("password", e.target.value)}
+                style={
+                  changedFields.has("password")
+                    ? { borderColor: "#1890ff" }
+                    : {}
+                }
+              />
+            </Form.Item>
+            <Form.Item label="Role" name="role" rules={[{ required: true }]}>
+              <Select
+                onChange={(value) => handleFieldChange("role", value)}
+                style={
+                  changedFields.has("role") ? { borderColor: "#1890ff" } : {}
+                }
+              >
+                <Option value="sourcer">Sourcer</Option>
+                <Option value="purchaser">Purchaser</Option>
+                <Option value="manager">Manager</Option>
+                <Option value="admin">Admin</Option>
+              </Select>
+            </Form.Item>
+            <Form.Item label="Roles" name="roles" rules={[{ required: true }]}>
+              <Select
+                onChange={(value) => handleFieldChange("roles", value)}
+                style={
+                  changedFields.has("roles") ? { borderColor: "#1890ff" } : {}
+                }
+              >
+                {rolesOptions.map((role) => (
+                  <Option key={role._id} value={role._id}>
+                    {role?.role}
+                  </Option>
+                ))}
+              </Select>
+            </Form.Item>
 
-          <Form.Item label="Is Active" name="is_active" valuePropName="checked">
-            <Switch
-              onChange={(checked) => handleFieldChange("is_active", checked)}
-            />
-          </Form.Item>
-          <Form.Item style={{ textAlign: "right", marginTop: "1rem" }}>
-            <Button
-              onClick={handleCloseModal}
-              style={{ marginRight: 8 }}
-              disabled={formSubmitting}
+            <Form.Item
+              label="Is Active"
+              name="is_active"
+              valuePropName="checked"
             >
-              Cancel
-            </Button>
-            <Button type="primary" htmlType="submit" loading={formSubmitting}>
-              {editingUser ? "Save Changes" : "Create User"}
-            </Button>
-          </Form.Item>
-        </Form>
-      </Modal>
+              <Switch
+                onChange={(checked) => handleFieldChange("is_active", checked)}
+              />
+            </Form.Item>
+            <Form.Item style={{ textAlign: "right", marginTop: "1rem" }}>
+              <Button
+                onClick={handleCloseModal}
+                style={{ marginRight: 8 }}
+                disabled={formSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button type="primary" htmlType="submit" loading={formSubmitting}>
+                {editingUser ? "Save Changes" : "Create User"}
+              </Button>
+            </Form.Item>
+          </Form>
+        </Modal>
+      </div>
     </motion.div>
   );
 };

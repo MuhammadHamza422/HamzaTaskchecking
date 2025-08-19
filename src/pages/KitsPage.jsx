@@ -18,6 +18,7 @@ import {
 } from "@ant-design/icons";
 import apiClient from "../api/client";
 import Swal from "sweetalert2";
+import useFullscreen from "../components/useFullscreen";
 
 const { Text, Title } = Typography;
 
@@ -42,7 +43,7 @@ const showErrorToast = (message) => {
 export default function KitsPage() {
   const [selectedKit, setSelectedKit] = useState(null);
   const [drawerVisible, setDrawerVisible] = useState(false);
-
+  const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
   // Fetch kits
   const fetchKits = async () => {
     const response = await apiClient.get("/api/v1/kit/all");
@@ -270,196 +271,202 @@ export default function KitsPage() {
         </div>
 
         {/* Kit Details Drawer */}
-        <Drawer
-          title={
-            <div>
-              <Title level={4} className="mb-0">
-                Kit Details
-              </Title>
-              <Text className="text-gray-500">
-                {selectedKit?.kit_id} - {selectedKit?.plateform_id?.plt_name}
-              </Text>
-            </div>
-          }
-          placement="right"
-          width={700}
-          open={drawerVisible}
-          onClose={() => setDrawerVisible(false)}
-          footer={
-            <div className="flex justify-end">
-              <Button onClick={() => setDrawerVisible(false)}>Close</Button>
-            </div>
-          }
-        >
-          {selectedKit && (
-            <div className="space-y-6">
-              {/* Kit Summary */}
-              <Card size="small" className="bg-blue-50 border-blue-200">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-blue-600">
-                      {selectedKit?.skus?.length}
-                    </p>
-                    <p className="text-sm text-gray-600">Products</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-green-600">
-                      {calculateKitQuantity(selectedKit?.skus)}
-                    </p>
-                    <p className="text-sm text-gray-600">Total Qty</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-purple-600">
-                      ${calculateKitValue(selectedKit?.skus).toFixed(2)}
-                    </p>
-                    <p className="text-sm text-gray-600">Total Value</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-lg font-semibold text-gray-800">
-                      {selectedKit?.plateform_id?.plt_prefix}
-                    </p>
-                    <p className="text-sm text-gray-600">Platform</p>
-                  </div>
-                </div>
-              </Card>
-              {/* Kit Information */}
-              <Card
-                size="small"
-                title="Kit Information"
-                className="border-gray-200"
-              >
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="font-semibold text-gray-700">Kit ID:</span>
-                    <span className="font-mono text-sm">
-                      {selectedKit?.kit_id}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-semibold text-gray-700">
-                      Product ID:
-                    </span>
-                    <span className="font-mono text-sm">
-                      {selectedKit?.productId}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-semibold text-gray-700">
-                      Platform:
-                    </span>
-                    <span className="text-sm">
-                      {selectedKit?.plateform_id?.plt_name}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-semibold text-gray-700">
-                      Created By:
-                    </span>
-                    <span className="text-sm">
-                      {selectedKit?.user?.firstName}{" "}
-                      {selectedKit?.user?.lastName}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-semibold text-gray-700">
-                      Created At:
-                    </span>
-                    <span className="text-sm">
-                      {formatDate(selectedKit?.createdAt)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-semibold text-gray-700">
-                      Updated At:
-                    </span>
-                    <span className="text-sm">
-                      {formatDate(selectedKit?.updatedAt)}
-                    </span>
-                  </div>
-                </div>
-              </Card>
-
-              {/* Product Title */}
-              <Card
-                size="small"
-                title="Product Title"
-                className="border-gray-200"
-              >
-                <Text className="text-gray-900">
-                  {selectedKit?.product_title}
+        <div ref={fullscreenRef}>
+          <Drawer
+            getContainer={getContainer}
+            key={String(isFullscreen)}
+            title={
+              <div>
+                <Title level={4} className="mb-0">
+                  Kit Details
+                </Title>
+                <Text className="text-gray-500">
+                  {selectedKit?.kit_id} - {selectedKit?.plateform_id?.plt_name}
                 </Text>
-              </Card>
+              </div>
+            }
+            placement="right"
+            width={700}
+            open={drawerVisible}
+            onClose={() => setDrawerVisible(false)}
+            footer={
+              <div className="flex justify-end">
+                <Button onClick={() => setDrawerVisible(false)}>Close</Button>
+              </div>
+            }
+          >
+            {selectedKit && (
+              <div className="space-y-6">
+                {/* Kit Summary */}
+                <Card size="small" className="bg-blue-50 border-blue-200">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-blue-600">
+                        {selectedKit?.skus?.length}
+                      </p>
+                      <p className="text-sm text-gray-600">Products</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-green-600">
+                        {calculateKitQuantity(selectedKit?.skus)}
+                      </p>
+                      <p className="text-sm text-gray-600">Total Qty</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-purple-600">
+                        ${calculateKitValue(selectedKit?.skus).toFixed(2)}
+                      </p>
+                      <p className="text-sm text-gray-600">Total Value</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-lg font-semibold text-gray-800">
+                        {selectedKit?.plateform_id?.plt_prefix}
+                      </p>
+                      <p className="text-sm text-gray-600">Platform</p>
+                    </div>
+                  </div>
+                </Card>
+                {/* Kit Information */}
+                <Card
+                  size="small"
+                  title="Kit Information"
+                  className="border-gray-200"
+                >
+                  <div className="space-y-3">
+                    <div className="flex justify-between">
+                      <span className="font-semibold text-gray-700">
+                        Kit ID:
+                      </span>
+                      <span className="font-mono text-sm">
+                        {selectedKit?.kit_id}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-semibold text-gray-700">
+                        Product ID:
+                      </span>
+                      <span className="font-mono text-sm">
+                        {selectedKit?.productId}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-semibold text-gray-700">
+                        Platform:
+                      </span>
+                      <span className="text-sm">
+                        {selectedKit?.plateform_id?.plt_name}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-semibold text-gray-700">
+                        Created By:
+                      </span>
+                      <span className="text-sm">
+                        {selectedKit?.user?.firstName}{" "}
+                        {selectedKit?.user?.lastName}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-semibold text-gray-700">
+                        Created At:
+                      </span>
+                      <span className="text-sm">
+                        {formatDate(selectedKit?.createdAt)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-semibold text-gray-700">
+                        Updated At:
+                      </span>
+                      <span className="text-sm">
+                        {formatDate(selectedKit?.updatedAt)}
+                      </span>
+                    </div>
+                  </div>
+                </Card>
 
-              {/* SKUs Details */}
-              <Card
-                size="small"
-                title="Products in Kit"
-                className="border-gray-200"
-              >
-                <div className="space-y-4">
-                  {selectedKit?.skus?.map((sku, index) => (
-                    <div
-                      key={sku._id}
-                      className="border border-gray-200 rounded-lg p-4 bg-gray-50"
-                    >
-                      <div className="flex justify-between items-start mb-3">
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-gray-900 mb-1">
-                            {sku?.pId?.pro_title}
-                          </h4>
-                          <div className="flex items-center gap-4 text-sm text-gray-600">
-                            <span className="font-mono">{sku?.pId?.sku}</span>
-                            <Tag color="blue" size="small">
-                              {sku?.pId?.type_code}
-                            </Tag>
-                            <Tag color="green" size="small">
-                              {sku?.pId?.brnd_code}
-                            </Tag>
+                {/* Product Title */}
+                <Card
+                  size="small"
+                  title="Product Title"
+                  className="border-gray-200"
+                >
+                  <Text className="text-gray-900">
+                    {selectedKit?.product_title}
+                  </Text>
+                </Card>
+
+                {/* SKUs Details */}
+                <Card
+                  size="small"
+                  title="Products in Kit"
+                  className="border-gray-200"
+                >
+                  <div className="space-y-4">
+                    {selectedKit?.skus?.map((sku, index) => (
+                      <div
+                        key={sku._id}
+                        className="border border-gray-200 rounded-lg p-4 bg-gray-50"
+                      >
+                        <div className="flex justify-between items-start mb-3">
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-gray-900 mb-1">
+                              {sku?.pId?.pro_title}
+                            </h4>
+                            <div className="flex items-center gap-4 text-sm text-gray-600">
+                              <span className="font-mono">{sku?.pId?.sku}</span>
+                              <Tag color="blue" size="small">
+                                {sku?.pId?.type_code}
+                              </Tag>
+                              <Tag color="green" size="small">
+                                {sku?.pId?.brnd_code}
+                              </Tag>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-lg font-semibold text-green-600">
+                              ${parseFloat(sku?.price).toFixed(2)}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              Qty: {sku?.quantity}
+                            </p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-lg font-semibold text-green-600">
-                            ${parseFloat(sku?.price).toFixed(2)}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            Qty: {sku?.quantity}
-                          </p>
-                        </div>
-                      </div>
 
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                        <div>
-                          <span className="font-semibold text-gray-700">
-                            Sale Price:
-                          </span>
-                          <p className="text-green-600">
-                            ${sku?.pId?.sale_price}
-                          </p>
-                        </div>
-                        <div>
-                          <span className="font-semibold text-gray-700">
-                            Model:
-                          </span>
-                          <p className="text-gray-900">
-                            {sku?.pId?.model_code}
-                          </p>
-                        </div>
-                        <div>
-                          <span className="font-semibold text-gray-700">
-                            Storage:
-                          </span>
-                          <p className="text-gray-900">
-                            {sku?.pId?.storage_code}
-                          </p>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                          <div>
+                            <span className="font-semibold text-gray-700">
+                              Sale Price:
+                            </span>
+                            <p className="text-green-600">
+                              ${sku?.pId?.sale_price}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="font-semibold text-gray-700">
+                              Model:
+                            </span>
+                            <p className="text-gray-900">
+                              {sku?.pId?.model_code}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="font-semibold text-gray-700">
+                              Storage:
+                            </span>
+                            <p className="text-gray-900">
+                              {sku?.pId?.storage_code}
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            </div>
-          )}
-        </Drawer>
+                    ))}
+                  </div>
+                </Card>
+              </div>
+            )}
+          </Drawer>
+        </div>
       </div>
     </motion.div>
   );
