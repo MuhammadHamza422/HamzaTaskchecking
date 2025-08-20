@@ -337,7 +337,9 @@ export default function InventoryList() {
   // expanded into expandedShelves. We *add* matches to the current expanded sets so
   // user-expanded bins remain open.
   useEffect(() => {
-    const term = String(searchTerm || "").trim().toLowerCase();
+    const term = String(searchTerm || "")
+      .trim()
+      .toLowerCase();
     if (!term) return; // leave existing expansions untouched when search is cleared
 
     const binsToOpen = new Set();
@@ -348,9 +350,10 @@ export default function InventoryList() {
 
       // check shelfRows
       if (
-        shelfRows.some((r) =>
-          (r.productTitle || "").toLowerCase().includes(term) ||
-          (r.sku || "").toLowerCase().includes(term)
+        shelfRows.some(
+          (r) =>
+            (r.productTitle || "").toLowerCase().includes(term) ||
+            (r.sku || "").toLowerCase().includes(term)
         )
       ) {
         shelvesToOpen.add(shelfCode);
@@ -359,9 +362,10 @@ export default function InventoryList() {
       // check bins inside shelf
       for (const [binCode, rows] of bins.entries()) {
         if (
-          rows.some((r) =>
-            (r.productTitle || "").toLowerCase().includes(term) ||
-            (r.sku || "").toLowerCase().includes(term)
+          rows.some(
+            (r) =>
+              (r.productTitle || "").toLowerCase().includes(term) ||
+              (r.sku || "").toLowerCase().includes(term)
           )
         ) {
           binsToOpen.add(binCode);
@@ -415,7 +419,9 @@ export default function InventoryList() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-zinc-200 bg-white p-6">
           <div>
             <h1 className="text-2xl font-semibold">Inventory by location</h1>
-            <p className="mt-1 text-sm text-zinc-600">View and manage stock items.</p>
+            <p className="mt-1 text-sm text-zinc-600">
+              View and manage stock items.
+            </p>
           </div>
 
           <div className="flex gap-3">
@@ -464,7 +470,9 @@ export default function InventoryList() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-zinc-200 bg-white p-6">
         <div>
           <h1 className="text-2xl font-semibold">Inventory by location</h1>
-          <p className="mt-1 text-sm text-zinc-600">View and manage stock items.</p>
+          <p className="mt-1 text-sm text-zinc-600">
+            View and manage stock items.
+          </p>
         </div>
 
         <div className="flex gap-3">
@@ -488,11 +496,16 @@ export default function InventoryList() {
         ) : (
           <div className="space-y-6">
             {groupedByShelf.map(({ shelfCode, shelfRows, bins }) => (
-              <div key={shelfCode} className="rounded-lg border overflow-hidden">
+              <div
+                key={shelfCode}
+                className="rounded-lg border overflow-hidden"
+              >
                 {/* shelf header */}
                 <div className="flex items-center justify-between gap-4 px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200">
                   <div>
-                    <p className="font-bold text-xl uppercase tracking-wide">{shelfCode}</p>
+                    <p className="font-bold text-xl uppercase tracking-wide">
+                      {shelfCode}
+                    </p>
                     <p className="text-sm text-gray-500 mt-0.5">{`Items on shelf: ${shelfRows.length} · BIN groups: ${bins.size}`}</p>
                   </div>
 
@@ -518,19 +531,35 @@ export default function InventoryList() {
                         <table className="min-w-full bg-white rounded-lg">
                           <thead className="border-b">
                             <tr>
-                              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700">Product</th>
-                              <th className="px-3 py-2 text-left text-xs font-mono text-gray-700">SKU</th>
-                              <th className="px-3 py-2 text-left text-xs text-gray-700">Warehouse</th>
-                              <th className="px-3 py-2 text-left text-xs text-gray-700">Qty</th>
+                              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700">
+                                Product
+                              </th>
+                              <th className="px-3 py-2 text-left text-xs font-mono text-gray-700">
+                                SKU
+                              </th>
+                              <th className="px-3 py-2 text-left text-xs text-gray-700">
+                                Warehouse
+                              </th>
+                              <th className="px-3 py-2 text-left text-xs text-gray-700">
+                                Qty
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
                             {shelfRows.map((r) => (
                               <tr key={r.id} className="border-t">
-                                <td className="px-3 py-2 text-sm font-medium">{r.productTitle}</td>
-                                <td className="px-3 py-2 text-xs font-mono">{r.sku || "N/A"}</td>
-                                <td className="px-3 py-2 text-sm text-gray-500">{r.name}</td>
-                                <td className="px-3 py-2 text-sm text-gray-700">{r.quantity}</td>
+                                <td className="px-3 py-2 text-sm font-medium">
+                                  {r.productTitle}
+                                </td>
+                                <td className="px-3 py-2 text-xs font-mono">
+                                  {r.sku || "N/A"}
+                                </td>
+                                <td className="px-3 py-2 text-sm text-gray-500">
+                                  {r.name}
+                                </td>
+                                <td className="px-3 py-2 text-sm text-gray-700">
+                                  {r.quantity}
+                                </td>
                               </tr>
                             ))}
                           </tbody>
@@ -543,29 +572,41 @@ export default function InventoryList() {
                   {Array.from(bins.entries()).map(([binCode, rows]) => {
                     const isOpen = expandedBins.has(binCode);
                     return (
-                      <div key={binCode} className="mb-4 last:mb-0 bg-white p-0 rounded-lg">
+                      <div
+                        key={binCode}
+                        className="mb-4 last:mb-0 bg-white p-0 rounded-lg"
+                      >
                         <div
                           className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50"
                           onClick={() => toggleBin(binCode)}
                           role="button"
                           tabIndex={0}
                           onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") toggleBin(binCode);
+                            if (e.key === "Enter" || e.key === " ")
+                              toggleBin(binCode);
                           }}
                         >
                           <div className="flex items-center gap-3">
                             <span
-                              className={`transform transition-transform duration-200 ${isOpen ? "rotate-180" : "rotate-0"}`}
+                              className={`transform transition-transform duration-200 ${
+                                isOpen ? "rotate-180" : "rotate-0"
+                              }`}
                             >
                               <FiChevronDown />
                             </span>
                             <div>
-                              <p className="text-base font-semibold">{binCode}</p>
-                              <p className="text-sm text-gray-500">{rows.length} item{rows.length !== 1 ? "s" : ""}</p>
+                              <p className="text-base font-semibold">
+                                {binCode}
+                              </p>
+                              <p className="text-sm text-gray-500">
+                                {rows.length} item{rows.length !== 1 ? "s" : ""}
+                              </p>
                             </div>
                           </div>
 
-                          <div className="text-sm text-gray-500">{isOpen ? "Collapse" : "Expand"}</div>
+                          <div className="text-sm text-gray-500">
+                            {isOpen ? "Collapse" : "Expand"}
+                          </div>
                         </div>
 
                         {/* products inside bin - only render when open to keep DOM small */}
@@ -575,19 +616,35 @@ export default function InventoryList() {
                               <table className="min-w-full bg-white rounded-lg">
                                 <thead className="border-b">
                                   <tr>
-                                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700">Product</th>
-                                    <th className="px-3 py-2 text-left text-xs font-mono text-gray-700">SKU</th>
-                                    <th className="px-3 py-2 text-left text-xs text-gray-700">Warehouse</th>
-                                    <th className="px-3 py-2 text-left text-xs text-gray-700">Qty</th>
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700">
+                                      Product
+                                    </th>
+                                    <th className="px-3 py-2 text-left text-xs font-mono text-gray-700">
+                                      SKU
+                                    </th>
+                                    <th className="px-3 py-2 text-left text-xs text-gray-700">
+                                      Warehouse
+                                    </th>
+                                    <th className="px-3 py-2 text-left text-xs text-gray-700">
+                                      Qty
+                                    </th>
                                   </tr>
                                 </thead>
                                 <tbody>
                                   {rows.map((r) => (
                                     <tr key={r.id} className="border-t">
-                                      <td className="px-3 py-2 text-sm font-medium">{r.productTitle}</td>
-                                      <td className="px-3 py-2 text-xs font-mono">{r.sku || "N/A"}</td>
-                                      <td className="px-3 py-2 text-sm text-gray-500">{r.name}</td>
-                                      <td className="px-3 py-2 text-sm text-gray-700">{r.quantity}</td>
+                                      <td className="px-3 py-2 text-sm font-medium">
+                                        {r.productTitle}
+                                      </td>
+                                      <td className="px-3 py-2 text-xs font-mono">
+                                        {r.sku || "N/A"}
+                                      </td>
+                                      <td className="px-3 py-2 text-sm text-gray-500">
+                                        {r.name}
+                                      </td>
+                                      <td className="px-3 py-2 text-sm text-gray-700">
+                                        {r.quantity}
+                                      </td>
                                     </tr>
                                   ))}
                                 </tbody>
@@ -601,7 +658,9 @@ export default function InventoryList() {
 
                   {/* when shelf has nothing at all */}
                   {shelfRows.length === 0 && bins.size === 0 && (
-                    <div className="px-4 py-8 text-center bg-white text-gray-500">No items in this shelf</div>
+                    <div className="px-4 py-8 text-center bg-white text-gray-500">
+                      No items in this shelf
+                    </div>
                   )}
                 </div>
               </div>
