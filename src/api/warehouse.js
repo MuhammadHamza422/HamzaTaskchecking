@@ -83,6 +83,7 @@ export async function getLocations({
   search = "",
   warehouseId,
   zoneId,
+  sortOrder,
 } = {}) {
   const params = new URLSearchParams();
   params.set("page", String(page));
@@ -90,8 +91,11 @@ export async function getLocations({
   if (search) params.set("search", String(search));
   if (warehouseId) params.set("warehouse", String(warehouseId));
   if (zoneId) params.set("zone", String(zoneId));
-  
-  const { data } = await apiClient.get(`/api/v1/location/all?${params.toString()}`);
+  if (sortOrder) params.set("sortOrder", String(sortOrder));
+
+  const { data } = await apiClient.get(
+    `/api/v1/location/all?${params.toString()}`
+  );
   return data;
 }
 
@@ -206,21 +210,26 @@ export async function moveInventoryItem(inventoryId, movedLocationId) {
     inventoryId,
     movedLocationId,
     endpoint: `/api/v1/inventry/move/${inventoryId}`,
-    payload: { movedLocationId }
+    payload: { movedLocationId },
   });
-  
-  const { data } = await apiClient.patch(`/api/v1/inventry/move/${inventoryId}`, {
-    movedLocationId,
-  });
-  
+
+  const { data } = await apiClient.patch(
+    `/api/v1/inventry/move/${inventoryId}`,
+    {
+      movedLocationId,
+    }
+  );
+
   console.log("Move API response:", data);
   return data;
 }
 
-
 // POST /api/v1/manualOrder/create
 // Body: { customerId, orderNumber, orderDate, orderStatus, orderTotal, orderItems }
 export async function createManualOrder(orderData) {
-  const { data } = await apiClient.post("/api/v1/manualOrder/create", orderData);
+  const { data } = await apiClient.post(
+    "/api/v1/manualOrder/create",
+    orderData
+  );
   return data;
 }

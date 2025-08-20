@@ -100,7 +100,15 @@ export default function Locations() {
     isLoading,
     error,
   } = useQuery({
-    queryKey: ["locations", warehouseId, zoneId, page, limit, debouncedSearchQuery],
+    queryKey: [
+      "locations",
+      warehouseId,
+      zoneId,
+      page,
+      limit,
+      debouncedSearchQuery,
+      sortOrder,
+    ],
     enabled: !!warehouseId && !!zoneId,
     staleTime: 60 * 1000,
     queryFn: async () => {
@@ -110,28 +118,30 @@ export default function Locations() {
         search: debouncedSearchQuery,
         warehouseId,
         zoneId,
+        sortOrder,
       });
-      
+
       const list = Array.isArray(res?.locations)
         ? res.locations
         : Array.isArray(res)
         ? res
         : [];
-        
-             return {
-         locations: list.map((l) => ({
-           id: l._id,
-           code: l.code,
-           type: String(l.type || "").toLowerCase(),
-           warehouseId:
-             typeof l.warehouse === "string"
-               ? l?.warehouse
-               : l?.warehouse?._id ?? null,
-           zoneId: typeof l?.zone === "string" ? l?.zone : l?.zone?._id ?? null,
-           qrcode: l?.qrcode || l?.qrPath || null,
-         })),
-         total: res?.totalCount || res?.total || res?.totalLocations || list.length,
-       };
+
+      return {
+        locations: list.map((l) => ({
+          id: l._id,
+          code: l.code,
+          type: String(l.type || "").toLowerCase(),
+          warehouseId:
+            typeof l.warehouse === "string"
+              ? l?.warehouse
+              : l?.warehouse?._id ?? null,
+          zoneId: typeof l?.zone === "string" ? l?.zone : l?.zone?._id ?? null,
+          qrcode: l?.qrcode || l?.qrPath || null,
+        })),
+        total:
+          res?.totalCount || res?.total || res?.totalLocations || list.length,
+      };
     },
   });
 
@@ -179,8 +189,6 @@ export default function Locations() {
     }
     return sortOrder === "asc" ? "↑" : "↓";
   };
-
-
 
   // Create/Edit state
   const [showNew, setShowNew] = useState(false);
@@ -796,28 +804,28 @@ export default function Locations() {
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
         <div className="flex items-center gap-4">
           <div className="flex-1">
-                          <input
-                type="text"
-                placeholder="Search locations by code..."
-                value={searchQuery}
-                onChange={(e) => {
-                  setPage(1);
-                  setSearchQuery(e.target.value);
-                }}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-colors"
-              />
+            <input
+              type="text"
+              placeholder="Search locations by code..."
+              value={searchQuery}
+              onChange={(e) => {
+                setPage(1);
+                setSearchQuery(e.target.value);
+              }}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-colors"
+            />
           </div>
-                      {searchQuery && (
-              <button
-                onClick={() => {
-                  setSearchQuery("");
-                  setPage(1);
-                }}
-                className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
-              >
-                Clear
-              </button>
-            )}
+          {searchQuery && (
+            <button
+              onClick={() => {
+                setSearchQuery("");
+                setPage(1);
+              }}
+              className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+            >
+              Clear
+            </button>
+          )}
         </div>
       </div>
 
@@ -928,10 +936,10 @@ export default function Locations() {
                   <th className="px-4 py-2 text-left text-sm font-semibold text-gray-600">
                     QR Code
                   </th>
-                  <th 
+                  <th
                     className={`px-4 py-2 text-left text-sm font-semibold cursor-pointer transition-colors select-none ${
-                      sortField === "code" 
-                        ? "text-blue-600 bg-blue-50" 
+                      sortField === "code"
+                        ? "text-blue-600 bg-blue-50"
                         : "text-gray-600 hover:bg-gray-100"
                     }`}
                     onClick={() => handleSort("code")}
@@ -1042,9 +1050,7 @@ export default function Locations() {
               of <span className="font-semibold text-gray-900">{total}</span>{" "}
               locations
               {searchQuery && (
-                <span className="text-gray-500">
-                  {" "}(filtered results)
-                </span>
+                <span className="text-gray-500"> (filtered results)</span>
               )}
             </div>
 
@@ -1687,10 +1693,7 @@ export default function Locations() {
     </div>
   );
 }
-
-// src/utils/generatePdf.js
-// Usage: import { generatePDFFromNode } from '../utils/generatePdf'
-// Then call generatePDFFromNode({ node, fileName, scale, html2canvas, jsPDF, onProgress })
+// Generate pdf
 
 export async function generatePDFFromNode({
   node,
