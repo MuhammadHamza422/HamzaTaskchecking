@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   FiArrowLeft,
   FiPlus,
@@ -42,10 +42,11 @@ export default function Locations() {
   const warehouseId = useSelector((s) => s.app.selectedWarehouseId);
   const zoneId = useSelector((s) => s.app.selectedZoneId);
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(30);
+  const [limit, setLimit] = useState(10);
   const [sortField, setSortField] = useState("code");
   const [sortOrder, setSortOrder] = useState("asc");
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   // New location fields
   const [newRow, setNewRow] = useState("");
   const [newBay, setNewBay] = useState("");
@@ -59,6 +60,15 @@ export default function Locations() {
   const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
   const { user } = useAuth();
   const role = user?.roles.role;
+
+  // Debounced search effect
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // Fetch warehouse for breadcrumb
   const { data: warehouseRes } = useQuery({
@@ -84,64 +94,50 @@ export default function Locations() {
     return match?.name || "";
   }, [zonesRes, zoneId]);
 
-  // Fetch all locations for selected warehouse+zone
+  // Fetch locations with backend pagination and search
   const {
     data: locationsRes,
     isLoading,
     error,
   } = useQuery({
-    queryKey: ["locations", warehouseId, zoneId],
+    queryKey: ["locations", warehouseId, zoneId, page, limit, debouncedSearchQuery],
     enabled: !!warehouseId && !!zoneId,
     staleTime: 60 * 1000,
     queryFn: async () => {
-      const res = await getLocations(); // Fetch all locations
+      const res = await getLocations({
+        page,
+        limit,
+        search: debouncedSearchQuery,
+        warehouseId,
+        zoneId,
+      });
+      
       const list = Array.isArray(res?.locations)
         ? res.locations
         : Array.isArray(res)
         ? res
         : [];
-      return list
-        .map((l) => ({
-          id: l._id,
-          code: l.code,
-          type: String(l.type || "").toLowerCase(),
-          warehouseId:
-            typeof l.warehouse === "string"
-              ? l?.warehouse
-              : l?.warehouse?._id ?? null,
-          zoneId: typeof l?.zone === "string" ? l?.zone : l?.zone?._id ?? null,
-          qrcode: l?.qrcode || l?.qrPath || null,
-        }))
-        .filter((l) => l?.warehouseId === warehouseId && l?.zoneId === zoneId);
+        
+             return {
+         locations: list.map((l) => ({
+           id: l._id,
+           code: l.code,
+           type: String(l.type || "").toLowerCase(),
+           warehouseId:
+             typeof l.warehouse === "string"
+               ? l?.warehouse
+               : l?.warehouse?._id ?? null,
+           zoneId: typeof l?.zone === "string" ? l?.zone : l?.zone?._id ?? null,
+           qrcode: l?.qrcode || l?.qrPath || null,
+         })),
+         total: res?.totalCount || res?.total || res?.totalLocations || list.length,
+       };
     },
   });
 
-  const allLocations = locationsRes || [];
-  const total = allLocations.length;
-  
-  // Handle search and sorting
-  const filteredLocations = allLocations.filter((location) => {
-    if (!searchQuery) return true;
-    return location.code?.toLowerCase().includes(searchQuery.toLowerCase());
-  });
-
-  const sortedLocations = [...filteredLocations].sort((a, b) => {
-    const aValue = a[sortField] || "";
-    const bValue = b[sortField] || "";
-    
-    if (sortOrder === "asc") {
-      return aValue.toString().localeCompare(bValue.toString());
-    } else {
-      return bValue.toString().localeCompare(aValue.toString());
-    }
-  });
-
-  // Handle frontend pagination
-  const filteredTotal = filteredLocations.length;
-  const totalPages = Math.max(1, Math.ceil(filteredTotal / limit));
-  const startIndex = (page - 1) * limit;
-  const endIndex = startIndex + limit;
-  const locations = sortedLocations.slice(startIndex, endIndex);
+  const locations = locationsRes?.locations || [];
+  const total = locationsRes?.total || 0;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
   console.log(locations.map((l) => l.id));
 
   // compute shelf set and helpers for validations
@@ -184,11 +180,7 @@ export default function Locations() {
     return sortOrder === "asc" ? "↑" : "↓";
   };
 
-  // Handle search
-  const handleSearch = (value) => {
-    setSearchQuery(value);
-    setPage(1); // Reset to first page when searching
-  };
+
 
   // Create/Edit state
   const [showNew, setShowNew] = useState(false);
@@ -804,22 +796,28 @@ export default function Locations() {
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
         <div className="flex items-center gap-4">
           <div className="flex-1">
-            <input
-              type="text"
-              placeholder="Search locations by code..."
-              value={searchQuery}
-              onChange={(e) => handleSearch(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-colors"
-            />
+                          <input
+                type="text"
+                placeholder="Search locations by code..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setPage(1);
+                  setSearchQuery(e.target.value);
+                }}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-colors"
+              />
           </div>
-          {searchQuery && (
-            <button
-              onClick={() => handleSearch("")}
-              className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
-            >
-              Clear
-            </button>
-          )}
+                      {searchQuery && (
+              <button
+                onClick={() => {
+                  setSearchQuery("");
+                  setPage(1);
+                }}
+                className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                Clear
+              </button>
+            )}
         </div>
       </div>
 
@@ -899,11 +897,9 @@ export default function Locations() {
             </p>
             <button
               onClick={() =>
-                queryClient.invalidateQueries([
-                  "locations",
-                  warehouseId,
-                  zoneId,
-                ])
+                queryClient.invalidateQueries({
+                  queryKey: ["locations", warehouseId, zoneId],
+                })
               }
               className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700"
             >
@@ -1037,17 +1033,17 @@ export default function Locations() {
             <div className="text-center sm:text-left text-sm text-gray-600 font-medium mb-4 sm:mb-2">
               Showing{" "}
               <span className="font-semibold text-gray-900">
-                {filteredTotal > 0 ? Math.min((page - 1) * limit + 1, filteredTotal) : 0}
+                {total > 0 ? Math.min((page - 1) * limit + 1, total) : 0}
               </span>{" "}
               to{" "}
               <span className="font-semibold text-gray-900">
-                {Math.min(page * limit, filteredTotal)}
+                {Math.min(page * limit, total)}
               </span>{" "}
-              of <span className="font-semibold text-gray-900">{filteredTotal}</span>{" "}
+              of <span className="font-semibold text-gray-900">{total}</span>{" "}
               locations
               {searchQuery && (
                 <span className="text-gray-500">
-                  {" "}(filtered from {total} total)
+                  {" "}(filtered results)
                 </span>
               )}
             </div>

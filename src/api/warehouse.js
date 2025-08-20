@@ -77,8 +77,21 @@ export async function deleteZone(zoneId) {
 
 // LOCATIONS
 // GET /api/v1/location/all
-export async function getLocations(page = 1, limit = 1000) {
-  const { data } = await apiClient.get(`/api/v1/location/all?page=${page}&limit=${limit}`);
+export async function getLocations({
+  page = 1,
+  limit = 30,
+  search = "",
+  warehouseId,
+  zoneId,
+} = {}) {
+  const params = new URLSearchParams();
+  params.set("page", String(page));
+  params.set("limit", String(limit));
+  if (search) params.set("search", String(search));
+  if (warehouseId) params.set("warehouse", String(warehouseId));
+  if (zoneId) params.set("zone", String(zoneId));
+  
+  const { data } = await apiClient.get(`/api/v1/location/all?${params.toString()}`);
   return data;
 }
 
@@ -170,8 +183,8 @@ export async function getInventory({
 }
 
 // PATCH /api/v1/inventry/quantity/:inventoryId
-export async function updateInventoryQuantity(inventoryId, quantity) {
-  const body = { quantity: String(quantity) };
+export async function updateInventoryQuantity(inventoryId, quantity, key) {
+  const body = { quantity: Number(quantity), key };
   const { data } = await apiClient.patch(
     `/api/v1/inventry/quantity/${inventoryId}`,
     body
@@ -180,9 +193,27 @@ export async function updateInventoryQuantity(inventoryId, quantity) {
 }
 
 // POST /api/v1/inventry/create
-// Body: { productId, locationId, quantity }
+// Body: { productId, locationId, quantity, key }
 export async function createInventory(body) {
   const { data } = await apiClient.post(`/api/v1/inventry/create`, body);
+  return data;
+}
+
+// PATCH /api/v1/inventry/move/:id
+// Body: { movedLocationId }
+export async function moveInventoryItem(inventoryId, movedLocationId) {
+  console.log("Move API call:", {
+    inventoryId,
+    movedLocationId,
+    endpoint: `/api/v1/inventry/move/${inventoryId}`,
+    payload: { movedLocationId }
+  });
+  
+  const { data } = await apiClient.patch(`/api/v1/inventry/move/${inventoryId}`, {
+    movedLocationId,
+  });
+  
+  console.log("Move API response:", data);
   return data;
 }
 

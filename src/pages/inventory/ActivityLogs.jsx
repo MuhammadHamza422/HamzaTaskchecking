@@ -77,9 +77,11 @@ const ActivityLogs = () => {
   }, [usersData]);
 
   const colors = {
-    added: "green",
+    add: "green",
     update: "blue",
     delete: "red",
+    move: "yellow",
+    remove: "red",
   };
 
   // Function to render text with colored words
@@ -113,7 +115,11 @@ const ActivityLogs = () => {
         dataIndex: "action",
         key: "action",
         width: 160,
-        render: (text) => renderColoredText(text),
+        render: (text) => (
+          <p className="flex items-center gap-2 capitalize">
+            {renderColoredText(text)}
+          </p>
+        ),
       },
       {
         title: "Performed By",
