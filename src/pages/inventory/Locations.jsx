@@ -41,6 +41,11 @@ export default function Locations() {
   const queryClient = useQueryClient();
   const warehouseId = useSelector((s) => s.app.selectedWarehouseId);
   const zoneId = useSelector((s) => s.app.selectedZoneId);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(30);
+  const [sortField, setSortField] = useState("code");
+  const [sortOrder, setSortOrder] = useState("asc");
+  const [searchQuery, setSearchQuery] = useState("");
   // New location fields
   const [newRow, setNewRow] = useState("");
   const [newBay, setNewBay] = useState("");
@@ -79,7 +84,7 @@ export default function Locations() {
     return match?.name || "";
   }, [zonesRes, zoneId]);
 
-  // Fetch locations for selected warehouse+zone
+  // Fetch all locations for selected warehouse+zone
   const {
     data: locationsRes,
     isLoading,
@@ -89,7 +94,7 @@ export default function Locations() {
     enabled: !!warehouseId && !!zoneId,
     staleTime: 60 * 1000,
     queryFn: async () => {
-      const res = await getLocations();
+      const res = await getLocations(); // Fetch all locations
       const list = Array.isArray(res?.locations)
         ? res.locations
         : Array.isArray(res)
@@ -111,7 +116,32 @@ export default function Locations() {
     },
   });
 
-  const locations = locationsRes || [];
+  const allLocations = locationsRes || [];
+  const total = allLocations.length;
+  
+  // Handle search and sorting
+  const filteredLocations = allLocations.filter((location) => {
+    if (!searchQuery) return true;
+    return location.code?.toLowerCase().includes(searchQuery.toLowerCase());
+  });
+
+  const sortedLocations = [...filteredLocations].sort((a, b) => {
+    const aValue = a[sortField] || "";
+    const bValue = b[sortField] || "";
+    
+    if (sortOrder === "asc") {
+      return aValue.toString().localeCompare(bValue.toString());
+    } else {
+      return bValue.toString().localeCompare(aValue.toString());
+    }
+  });
+
+  // Handle frontend pagination
+  const filteredTotal = filteredLocations.length;
+  const totalPages = Math.max(1, Math.ceil(filteredTotal / limit));
+  const startIndex = (page - 1) * limit;
+  const endIndex = startIndex + limit;
+  const locations = sortedLocations.slice(startIndex, endIndex);
   console.log(locations.map((l) => l.id));
 
   // compute shelf set and helpers for validations
@@ -131,6 +161,34 @@ export default function Locations() {
     locations.some((l) => String(l.code) === String(code));
 
   const existsShelfBase = (base) => shelfCodesSet.has(String(base));
+
+  // Handle sorting
+  const handleSort = (field) => {
+    if (sortField === field) {
+      // If clicking the same field, toggle order
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      // If clicking a new field, set it as sort field and default to ascending
+      setSortField(field);
+      setSortOrder("asc");
+    }
+    // Reset to first page when sorting
+    setPage(1);
+  };
+
+  // Get sort icon
+  const getSortIcon = (field) => {
+    if (sortField !== field) {
+      return "⇅"; // Neutral icon
+    }
+    return sortOrder === "asc" ? "↑" : "↓";
+  };
+
+  // Handle search
+  const handleSearch = (value) => {
+    setSearchQuery(value);
+    setPage(1); // Reset to first page when searching
+  };
 
   // Create/Edit state
   const [showNew, setShowNew] = useState(false);
@@ -742,6 +800,29 @@ export default function Locations() {
         )}
       </div>
 
+      {/* Search Bar */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div className="flex items-center gap-4">
+          <div className="flex-1">
+            <input
+              type="text"
+              placeholder="Search locations by code..."
+              value={searchQuery}
+              onChange={(e) => handleSearch(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-colors"
+            />
+          </div>
+          {searchQuery && (
+            <button
+              onClick={() => handleSearch("")}
+              className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Print Preview Modal */}
 
       {/* Locations Grid */}
@@ -851,8 +932,18 @@ export default function Locations() {
                   <th className="px-4 py-2 text-left text-sm font-semibold text-gray-600">
                     QR Code
                   </th>
-                  <th className="px-4 py-2 text-left text-sm font-semibold text-gray-600">
-                    Code
+                  <th 
+                    className={`px-4 py-2 text-left text-sm font-semibold cursor-pointer transition-colors select-none ${
+                      sortField === "code" 
+                        ? "text-blue-600 bg-blue-50" 
+                        : "text-gray-600 hover:bg-gray-100"
+                    }`}
+                    onClick={() => handleSort("code")}
+                  >
+                    <div className="flex items-center gap-1">
+                      Code
+                      <span className="text-xs">{getSortIcon("code")}</span>
+                    </div>
                   </th>
                   <th className="px-4 py-2 text-left text-sm font-semibold text-gray-600">
                     Type
@@ -938,6 +1029,257 @@ export default function Locations() {
               </tbody>
             </table>
           </>
+        )}
+        {/* Pagination Section */}
+        {total > 0 && (
+          <div className="mt-6 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-6">
+            {/* Results Info */}
+            <div className="text-center sm:text-left text-sm text-gray-600 font-medium mb-4 sm:mb-2">
+              Showing{" "}
+              <span className="font-semibold text-gray-900">
+                {filteredTotal > 0 ? Math.min((page - 1) * limit + 1, filteredTotal) : 0}
+              </span>{" "}
+              to{" "}
+              <span className="font-semibold text-gray-900">
+                {Math.min(page * limit, filteredTotal)}
+              </span>{" "}
+              of <span className="font-semibold text-gray-900">{filteredTotal}</span>{" "}
+              locations
+              {searchQuery && (
+                <span className="text-gray-500">
+                  {" "}(filtered from {total} total)
+                </span>
+              )}
+            </div>
+
+            {/* Desktop Pagination */}
+            <div className="hidden lg:flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {/* First & Previous */}
+                <button
+                  onClick={() => setPage(1)}
+                  disabled={page === 1}
+                  className="px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  First
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Previous
+                </button>
+
+                {/* Page Numbers */}
+                {(() => {
+                  const nums = [];
+                  const windowSize = 2;
+                  const start = Math.max(1, page - windowSize);
+                  const end = Math.min(totalPages, page + windowSize);
+
+                  if (start > 1) {
+                    nums.push(1);
+                    if (start > 2) nums.push("...");
+                  }
+
+                  for (let n = start; n <= end; n++) nums.push(n);
+
+                  if (end < totalPages) {
+                    if (end < totalPages - 1) nums.push("...");
+                    nums.push(totalPages);
+                  }
+
+                  return nums.map((n, idx) =>
+                    n === "..." ? (
+                      <span
+                        key={`ellipsis-${idx}`}
+                        className="px-3 py-2 text-sm text-gray-400"
+                      >
+                        ...
+                      </span>
+                    ) : (
+                      <button
+                        key={n}
+                        onClick={() => setPage(n)}
+                        className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                          n === page
+                            ? "bg-blue-600 text-white border border-blue-600 shadow-lg"
+                            : "text-gray-600 bg-white border border-gray-300 hover:bg-gray-50"
+                        }`}
+                      >
+                        {n}
+                      </button>
+                    )
+                  );
+                })()}
+
+                {/* Next & Last */}
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                </button>
+                <button
+                  onClick={() => setPage(totalPages)}
+                  disabled={page >= totalPages}
+                  className="px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Last
+                </button>
+              </div>
+
+              {/* Items per page - Desktop */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600">Show:</span>
+                <select
+                  value={limit}
+                  onChange={(e) => {
+                    setPage(1);
+                    setLimit(Number(e.target.value));
+                  }}
+                  className="px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none"
+                >
+                  {[10, 20, 30, 50, 100, 200, 500].map((n) => (
+                    <option key={n} value={n}>
+                      {n} per page
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Tablet Pagination */}
+            <div className="hidden sm:flex lg:hidden flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    className="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    ← Previous
+                  </button>
+                  <button
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages}
+                    className="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Next →
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600">
+                    Page {page} of {totalPages}
+                  </span>
+                </div>
+              </div>
+
+              {/* Page selector and items per page - Tablet */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600">Go to page:</span>
+                  <select
+                    value={page}
+                    onChange={(e) => setPage(Number(e.target.value))}
+                    className="px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none"
+                  >
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                      (n) => (
+                        <option key={n} value={n}>
+                          Page {n}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600">Show:</span>
+                  <select
+                    value={limit}
+                    onChange={(e) => {
+                      setPage(1);
+                      setLimit(Number(e.target.value));
+                    }}
+                    className="px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none"
+                  >
+                    {[10, 20, 30, 50, 100, 200, 500].map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Mobile Pagination */}
+            <div className="flex sm:hidden flex-col gap-3 mt-4">
+              {/* Page info and navigation */}
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <span>←</span>
+                  <span className="hidden xs:inline">Previous</span>
+                </button>
+
+                <div className="text-sm text-gray-600 font-medium">
+                  Page {page} of {totalPages}
+                </div>
+
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <span className="hidden xs:inline">Next</span>
+                  <span>→</span>
+                </button>
+              </div>
+
+              {/* Quick page jump and items per page */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-600">Jump to:</span>
+                  <select
+                    value={page}
+                    onChange={(e) => setPage(Number(e.target.value))}
+                    className="px-2 py-1 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-100 outline-none"
+                  >
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                      (n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-600">Show:</span>
+                  <select
+                    value={limit}
+                    onChange={(e) => {
+                      setPage(1);
+                      setLimit(Number(e.target.value));
+                    }}
+                    className="px-2 py-1 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-100 outline-none"
+                  >
+                    {[10, 20, 30, 50, 100].map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
