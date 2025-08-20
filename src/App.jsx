@@ -6,7 +6,6 @@ import PurchaserPendingPage from "./pages/PurchaserPendingPage";
 // Layouts and Pages
 import MainLayout from "./components/layout/MainLayout";
 import LoginPage from "./pages/LoginPage";
-import DashboardPage from "./pages/DashboardPage";
 import SourcerPage from "./pages/SourcerPage";
 import SourcingPage from "./pages/SourcingPage";
 import PurchaserPage from "./pages/PurchaserPage";
