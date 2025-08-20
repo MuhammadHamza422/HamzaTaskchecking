@@ -32,6 +32,9 @@ export default function ScanProduct() {
   const [barcodeDetected, setBarcodeDetected] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [activeLocationCode, setActiveLocationCode] = useState("");
+  const scanSound = new Audio("/scansound.mp3");
+  scanSound.preload = "auto";
+  const lastScannedDataRef = useRef(null);
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -149,6 +152,83 @@ export default function ScanProduct() {
     }
   };
 
+  // const startQRScanning = async () => {
+  //   try {
+  //     if (!jsQRRef.current) {
+  //       jsQRRef.current = (await import("jsqr")).default;
+  //     }
+
+  //     scanningActiveRef.current = true;
+
+  //     const scanQRCode = () => {
+  //       if (
+  //         !videoRef.current ||
+  //         !canvasRef.current ||
+  //         !scanningActiveRef.current
+  //       ) {
+  //         return;
+  //       }
+
+  //       const video = videoRef.current;
+  //       const canvas = canvasRef.current;
+  //       const context = canvas.getContext("2d");
+
+  //       if (!context || video.readyState < 2 || video.videoWidth === 0) {
+  //         return;
+  //       }
+
+  //       const now = Date.now();
+  //       if (now - lastScanTimeRef.current < 50) {
+  //         return;
+  //       }
+  //       lastScanTimeRef.current = now;
+
+  //       canvas.width = video.videoWidth;
+  //       canvas.height = video.videoHeight;
+
+  //       try {
+  //         context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  //         const imageData = context.getImageData(
+  //           0,
+  //           0,
+  //           canvas.width,
+  //           canvas.height
+  //         );
+
+  //         const code = jsQRRef.current(
+  //           imageData.data,
+  //           imageData.width,
+  //           imageData.height,
+  //           {
+  //             inversionAttempts: "dontInvert",
+  //           }
+  //         );
+
+  //         if (code && code.data && scanningActiveRef.current) {
+  //           console.log("Auto QR Code detected:", code.data);
+  //           handleQRDetection(code.data);
+  //         }
+  //       } catch (error) {
+  //         console.error("Error processing frame:", error);
+  //       }
+  //     };
+
+  //     const animationFrame = () => {
+  //       if (scanningActiveRef.current) {
+  //         scanQRCode();
+  //         requestAnimationFrame(animationFrame);
+  //       }
+  //     };
+
+  //     requestAnimationFrame(animationFrame);
+  //   } catch (error) {
+  //     console.error("Error loading jsQR:", error);
+  //     setCameraError(
+  //       "QR scanner failed to load. Please refresh and try again."
+  //     );
+  //   }
+  // };
+
   const startQRScanning = async () => {
     try {
       if (!jsQRRef.current) {
@@ -202,8 +282,17 @@ export default function ScanProduct() {
           );
 
           if (code && code.data && scanningActiveRef.current) {
-            console.log("Auto QR Code detected:", code.data);
-            handleQRDetection(code.data);
+            if (lastScannedDataRef.current !== code.data) {
+              lastScannedDataRef.current = code.data;
+
+              console.log("Auto QR Code detected:", code.data);
+              scanSound.currentTime = 0; // rewind if needed
+              scanSound
+                .play()
+                .catch((err) => console.warn("Sound play failed:", err));
+
+              handleQRDetection(code.data);
+            }
           }
         } catch (error) {
           console.error("Error processing frame:", error);
@@ -225,7 +314,6 @@ export default function ScanProduct() {
       );
     }
   };
-
   const stopCamera = () => {
     scanningActiveRef.current = false;
 
