@@ -86,7 +86,13 @@ const ActivityLogs = () => {
 
   // Function to render text with colored words
   const renderColoredText = (text) => {
-    const key = Object.keys(colors).find((k) => text.toLowerCase().includes(k));
+    const words = text.toLowerCase().split(/\s+/).filter(Boolean);
+
+    const key = Object.keys(colors).find((k) =>
+      words.includes(k.toLowerCase())
+    );
+
+    console.log("Found key:", key);
 
     const bgColor = key ? colors[key] : "default";
 
