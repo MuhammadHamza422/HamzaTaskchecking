@@ -34,6 +34,7 @@ import ScanProduct from "./pages/inventory/Scan";
 import ActivityLogs from "./pages/inventory/ActivityLogs";
 import RoleManagement from "./pages/Roles";
 import ManualOrdersPage from "./pages/ManualOrdersPage/ManualOrdersPage";
+import DashboardCards from "./components/DashboardHome";
 
 function App() {
   return (
@@ -49,7 +50,7 @@ function App() {
           }
         >
           {/* Child routes of MainLayout */}
-          <Route index element={<DashboardPage />} />
+          <Route index element={<DashboardCards />} />
           <Route path="sourcing/orders" element={<SourcingPage />} />
           <Route path="sourcing/new" element={<SourcerPage />} />
           <Route path="requests/pending" element={<PurchaserPendingPage />} />
