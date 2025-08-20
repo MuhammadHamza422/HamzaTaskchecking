@@ -6,11 +6,14 @@ import {
   getProducts,
   createInventory,
   getInventory,
+  moveInventoryItem,
+  getLocations,
 } from "../../api/warehouse";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Swal from "sweetalert2";
 import { useAuth } from "../../contexts/AuthContext";
-import Modal from "../../components/Modal";
+import { Modal } from "antd";
+import useFullscreen from "../../components/useFullscreen";
 
 const productTypes = [
   { label: "Consoles", code: "CON" },
@@ -32,6 +35,11 @@ export default function InventoryDisplay({
 }) {
   const [search, setSearch] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isMoveOpen, setIsMoveOpen] = useState(false);
+  const [selectedItemForMove, setSelectedItemForMove] = useState(null);
+  const [moveLocationSearch, setMoveLocationSearch] = useState("");
+  const [selectedMoveLocation, setSelectedMoveLocation] = useState(null);
+  const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const [activeLocationCode, setActiveLocationCode] = useState("");
   const [form, setForm] = useState({
     productId: "",
@@ -48,6 +56,7 @@ export default function InventoryDisplay({
   const dropdownRef = useRef(null);
   const { user } = useAuth();
   console.log("User Role:", user?.roles.role);
+  const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
   // console.log("Location Id", locationid);
 
   // Handle click outside to close dropdown
@@ -157,13 +166,14 @@ export default function InventoryDisplay({
   };
 
   // Helper function to handle immediate quantity updates for newly created items
-  const handleImmediateQuantityUpdate = async (item, newQty) => {
+  const handleImmediateQuantityUpdate = async (item, newQty, key) => {
     try {
       // Try to create a new inventory entry with the updated quantity
       const createData = await createInventory({
         productId: item.productId,
         locationId: item.locationId,
         quantity: String(newQty),
+        key,
       });
 
       if (createData?.inventory?._id && isObjectId(createData.inventory._id)) {
@@ -189,7 +199,7 @@ export default function InventoryDisplay({
   };
 
   // Update the handleUpdateQty function
-  const handleUpdateQty = async (id, nextQty) => {
+  const handleUpdateQty = async (id, nextQty, key) => {
     const currentItem = items.find((item) => item._id === id);
     if (!currentItem) return;
 
@@ -209,6 +219,7 @@ export default function InventoryDisplay({
 
     // Find a valid inventory id to send to backend
     let inventoryId = id;
+    console.log("InventoryId", inventoryId);
 
     // Try alternative places where a backend id may exist
     if (!isObjectId(inventoryId)) {
@@ -245,7 +256,8 @@ export default function InventoryDisplay({
 
           const result = await handleImmediateQuantityUpdate(
             currentItem,
-            newQty
+            newQty,
+            key
           );
 
           if (result.success) {
@@ -298,7 +310,7 @@ export default function InventoryDisplay({
       applyLocalQty(id, newQty);
 
       // IMPORTANT: pass the *valid* inventoryId to your API
-      await updateInventoryQuantity(inventoryId, newQty);
+      await updateInventoryQuantity(inventoryId, newQty, key);
 
       // Remove from pending changes
       setPendingQtyChanges((prev) => {
@@ -393,6 +405,32 @@ export default function InventoryDisplay({
     staleTime: 5 * 60 * 1000,
   });
 
+  // Query for locations in move modal
+  const { data: locationsData } = useQuery({
+    queryKey: ["locations", moveLocationSearch],
+    queryFn: async () => {
+      const res = await getLocations({
+        page: 1,
+        limit: 100,
+        search: moveLocationSearch,
+      });
+
+      // Transform the locations to include both _id and id for compatibility
+      if (res?.locations) {
+        return {
+          ...res,
+          locations: res.locations.map((loc) => ({
+            ...loc,
+            id: loc._id, // Add id field for compatibility
+          })),
+        };
+      }
+      return res;
+    },
+    enabled: isMoveOpen, // Only run query when move modal is open
+    staleTime: 5 * 60 * 1000,
+  });
+
   const createInv = useMutation({
     mutationFn: async (body) => {
       if (!body.productId || !body.locationId || !body.quantity) {
@@ -402,6 +440,7 @@ export default function InventoryDisplay({
         productId: body.productId,
         locationId: body.locationId,
         quantity: String(body.quantity),
+        key: body.key,
       });
       return data;
     },
@@ -540,6 +579,65 @@ export default function InventoryDisplay({
     },
   });
 
+  console.log("InventoryItems", items);
+
+  // Move inventory item mutation
+  const moveItem = useMutation({
+    mutationFn: async ({ inventoryId, movedLocationId }) => {
+      console.log("Move item mutation started", {
+        inventoryId,
+        movedLocationId,
+      });
+      const result = await moveInventoryItem(inventoryId, movedLocationId);
+      console.log("Move item mutation completed", result);
+      return result;
+    },
+    onSuccess: async (data, variables) => {
+      try {
+        // Refetch inventory to update the table
+        const res = await getInventory({
+          search: activeLocationCode || scannedData,
+        });
+        if (Array.isArray(res?.inventry)) {
+          setItems(res.inventry);
+        }
+
+        // Close modal and reset state
+        setIsMoveOpen(false);
+        setSelectedItemForMove(null);
+        setMoveLocationSearch("");
+        setSelectedMoveLocation(null);
+
+        Swal.fire({
+          icon: "success",
+          title: "Product Moved Successfully",
+          text: "The product has been moved to the new location.",
+          toast: true,
+          position: "top-end",
+          showConfirmButton: false,
+          timer: 3000,
+          background: "#10b981",
+          color: "#fff",
+        });
+      } catch (error) {
+        console.error("Error refetching inventory after move:", error);
+      }
+    },
+    onError: (error) => {
+      Swal.fire({
+        icon: "error",
+        title: "Move Failed",
+        text: error.message || "Failed to move product to new location",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        background: "#ef4444",
+        color: "#fff",
+      });
+    },
+  });
+
   useEffect(() => {
     if (scannedData) {
       setForm((prev) => ({
@@ -643,6 +741,7 @@ export default function InventoryDisplay({
       locationId: locationid,
       quantity: String(quantity),
       type: form.typeCode,
+      key: "add", // Since we're creating new inventory, it's an "add" operation
     });
   };
 
@@ -757,7 +856,7 @@ export default function InventoryDisplay({
                         {r?.quantity}
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex flex-col items-center gap-y-1">
+                        <div className="flex items-center gap-1">
                           {/* Quantity Controls */}
                           <div className="flex items-center rounded-lg overflow-hidden border border-gray-200 shadow-sm bg-gray-50 h-9">
                             <button
@@ -811,9 +910,16 @@ export default function InventoryDisplay({
                                     r?._id
                                   );
                                   if (pendingChange) {
+                                    // Determine key based on whether quantity increased or decreased
+                                    const key =
+                                      pendingChange.newQty >
+                                      pendingChange.currentQty
+                                        ? "add"
+                                        : "remove";
                                     handleUpdateQty(
                                       r?._id,
-                                      pendingChange.newQty
+                                      pendingChange.newQty,
+                                      key
                                     );
                                   }
                                 }
@@ -855,50 +961,66 @@ export default function InventoryDisplay({
                               </button>
                             )}
                           </div>
-                          {/* Pending Changes Display */}
-                          {pendingQtyChanges.has(r?._id) && (
-                            <div className="fixed left-0 bottom-0 w-full p-5 bg-white flex flex-col sm:flex-row sm:items-center gap-y-2 justify-between duration-300 ease-in-out">
-                              <h2 className="text-xl sm:text-2xl font-bold">
-                                {r?.productData?.pro_title}
-                              </h2>
-                              <div className="flex items-center max-sm:justify-end space-x-2 b">
-                                <p className="text-sm font-medium text-blue-700">
-                                  New qty:{" "}
-                                  {pendingQtyChanges.get(r?._id)?.newQty}
-                                </p>
-                                <button
-                                  onClick={() => {
-                                    const pendingChange = pendingQtyChanges.get(
-                                      r?._id
-                                    );
-
-                                    if (pendingChange) {
-                                      handleUpdateQty(
-                                        r?._id,
-                                        pendingChange.newQty
-                                      );
-                                    }
-                                  }}
-                                  className="px-3 py-2 text-sm tracking-wide bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
-                                >
-                                  Validate
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setPendingQtyChanges((prev) => {
-                                      const newMap = new Map(prev);
-                                      newMap.delete(r?._id);
-                                      return newMap;
-                                    });
-                                  }}
-                                  className="px-3 py-2 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                          )}
+                          <button
+                            onClick={() => {
+                              setSelectedItemForMove(r);
+                              setIsMoveOpen(true);
+                            }}
+                            className="px-3 py-2 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
+                          >
+                            Move
+                          </button>
                         </div>
+
+                        {/* Pending Changes Display */}
+                        {pendingQtyChanges.has(r?._id) && (
+                          <div className="fixed left-0 bottom-0 w-full p-5 bg-white flex flex-col sm:flex-row sm:items-center gap-y-2 justify-between duration-300 ease-in-out">
+                            <h2 className="text-xl sm:text-2xl font-bold">
+                              {r?.productData?.pro_title}
+                            </h2>
+                            <div className="flex items-center max-sm:justify-end space-x-2 b">
+                              <p className="text-sm font-medium text-blue-700">
+                                New qty: {pendingQtyChanges.get(r?._id)?.newQty}
+                              </p>
+                              <button
+                                onClick={() => {
+                                  const pendingChange = pendingQtyChanges.get(
+                                    r?._id
+                                  );
+
+                                  if (pendingChange) {
+                                    // Determine key based on whether quantity increased or decreased
+                                    const key =
+                                      pendingChange.newQty >
+                                      pendingChange.currentQty
+                                        ? "add"
+                                        : "remove";
+                                    handleUpdateQty(
+                                      r?._id,
+                                      pendingChange.newQty,
+                                      key
+                                    );
+                                  }
+                                }}
+                                className="px-3 py-2 text-sm tracking-wide bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+                              >
+                                Validate
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setPendingQtyChanges((prev) => {
+                                    const newMap = new Map(prev);
+                                    newMap.delete(r?._id);
+                                    return newMap;
+                                  });
+                                }}
+                                className="px-3 py-2 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -1001,64 +1123,70 @@ export default function InventoryDisplay({
         )}
       </div>
 
-      <Modal open={isCreateOpen} onClose={() => setIsCreateOpen(false)}>
-        <div className="w-full max-w-lg rounded-xl bg-white max-h-[95vh] overflow-y-auto">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Create Inventory</h3>
-            <button
-              onClick={() => setIsCreateOpen(false)}
-              className="text-gray-500 hover:text-gray-700"
-            >
-              ✕
-            </button>
-          </div>
-          <form onSubmit={handleFormSubmit} className="space-y-4">
-            {/* Location */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Location
-              </label>
-              <div className="w-full rounded-md border px-3 py-2 text-sm bg-gray-50 text-gray-600">
-                {activeLocationCode || scannedData}
-              </div>
+      <div ref={fullscreenRef}>
+        <Modal
+          getContainer={getContainer}
+          key={String(isFullscreen)}
+          open={isCreateOpen}
+          onCancel={() => setIsCreateOpen(false)}
+          centered
+          footer={null}
+          width={600}
+          closable={true}
+          title={null}
+          className="max-h-[95vh] overflow-y-auto"
+        >
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Create Inventory</h3>
             </div>
+            <form onSubmit={handleFormSubmit} className="space-y-4">
+              {/* Location */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Location
+                </label>
+                <div className="w-full rounded-md border px-3 py-2 text-sm bg-gray-50 text-gray-600">
+                  {activeLocationCode || scannedData}
+                </div>
+              </div>
 
-            {/* Type Selection - Add this before Product Selection */}
-            <div className="relative">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Product Type
-              </label>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {productTypes.map((type) => (
-                  <button
-                    key={type.code}
-                    type="button"
-                    onClick={() => {
-                      // If clicking the already selected type, deselect it
-                      if (form.typeCode === type.code) {
-                        setForm((prev) => ({
-                          ...prev,
-                          type: "",
-                          typeCode: "",
-                          productId: "",
-                          productSearch: "",
-                          showProductDropdown: false,
-                          selectedProduct: null,
-                        }));
-                      } else {
-                        // Select the new type
-                        setForm((prev) => ({
-                          ...prev,
-                          type: type.label,
-                          typeCode: type.code,
-                          productId: "",
-                          productSearch: "",
-                          showProductDropdown: false,
-                          selectedProduct: null,
-                        }));
-                      }
-                    }}
-                    className={`
+              {/* Type Selection - Add this before Product Selection */}
+              <div className="relative">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Product Type
+                </label>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {productTypes.map((type) => (
+                    <button
+                      key={type.code}
+                      type="button"
+                      onClick={() => {
+                        // If clicking the already selected type, deselect it
+                        if (form.typeCode === type.code) {
+                          setForm((prev) => ({
+                            ...prev,
+                            type: "",
+                            typeCode: "",
+                            productId: "",
+                            productSearch: "",
+                            showProductDropdown: false,
+                            selectedProduct: null,
+                          }));
+                        } else {
+                          // Select the new type
+                          setForm((prev) => ({
+                            ...prev,
+                            type: type.label,
+                            typeCode: type.code,
+                            productId: "",
+                            productSearch: "",
+                            showProductDropdown: false,
+                            selectedProduct: null,
+                          }));
+                        }
+                      }}
+                      className={`
           p-2 rounded-lg border text-sm font-medium transition-all duration-200
           ${
             form.typeCode === type.code
@@ -1066,113 +1194,280 @@ export default function InventoryDisplay({
               : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
           }
         `}
-                  >
-                    {type.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {/* Product Selection - Only show if type is selected */}
-            {form.typeCode ? (
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Product
-                </label>
-                <div className="relative" ref={dropdownRef}>
-                  <input
-                    type="text"
-                    placeholder="Search products..."
-                    value={form.productSearch}
-                    onChange={(e) => {
-                      setForm((prev) => ({
-                        ...prev,
-                        productSearch: e.target.value,
-                        showProductDropdown: true,
-                        productId: "",
-                      }));
-                    }}
-                    onFocus={() =>
-                      setForm((prev) => ({
-                        ...prev,
-                        showProductDropdown: true,
-                      }))
-                    }
-                    className="w-full rounded-md border px-3 py-2 text-sm"
-                    required
-                  />
-                  {form.showProductDropdown && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
-                      {productsData?.products?.length > 0 ? (
-                        productsData.products.map((p) => (
-                          <div
-                            key={p._id}
-                            onClick={() => {
-                              setForm((prev) => ({
-                                ...prev,
-                                productId: p._id,
-                                productSearch: p.pro_title || p.sku,
-                                showProductDropdown: false,
-                                selectedProduct: p, // Store the selected product
-                              }));
-                            }}
-                            className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-                          >
-                            {p.pro_title} ({p.sku})
-                          </div>
-                        ))
-                      ) : (
-                        <div className="px-3 py-2 text-gray-500 text-sm">
-                          {productsData?.products
-                            ? "No products found"
-                            : "Loading products..."}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    >
+                      {type.label}
+                    </button>
+                  ))}
                 </div>
               </div>
-            ) : null}
-            {/* Quantity */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Quantity
-              </label>
-              <input
-                type="number"
-                min={0}
-                value={form.quantity}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    quantity: e.target.value.replace(/[^0-9]/g, ""),
-                  }))
-                }
-                className="w-full rounded-md border px-3 py-2 text-sm"
-                placeholder="e.g., 5"
-                required
-              />
+              {/* Product Selection - Only show if type is selected */}
+              {form.typeCode ? (
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Product
+                  </label>
+                  <div className="relative" ref={dropdownRef}>
+                    <input
+                      type="text"
+                      placeholder="Search products..."
+                      value={form.productSearch}
+                      onChange={(e) => {
+                        setForm((prev) => ({
+                          ...prev,
+                          productSearch: e.target.value,
+                          showProductDropdown: true,
+                          productId: "",
+                        }));
+                      }}
+                      onFocus={() =>
+                        setForm((prev) => ({
+                          ...prev,
+                          showProductDropdown: true,
+                        }))
+                      }
+                      className="w-full rounded-md border px-3 py-2 text-sm"
+                      required
+                    />
+                    {form.showProductDropdown && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
+                        {productsData?.products?.length > 0 ? (
+                          productsData.products.map((p) => (
+                            <div
+                              key={p._id}
+                              onClick={() => {
+                                setForm((prev) => ({
+                                  ...prev,
+                                  productId: p._id,
+                                  productSearch: p.pro_title || p.sku,
+                                  showProductDropdown: false,
+                                  selectedProduct: p, // Store the selected product
+                                }));
+                              }}
+                              className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                            >
+                              {p.pro_title} ({p.sku})
+                            </div>
+                          ))
+                        ) : (
+                          <div className="px-3 py-2 text-gray-500 text-sm">
+                            {productsData?.products
+                              ? "No products found"
+                              : "Loading products..."}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+              {/* Quantity */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Quantity
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.quantity}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      quantity: e.target.value.replace(/[^0-9]/g, ""),
+                    }))
+                  }
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  placeholder="e.g., 5"
+                  required
+                />
+              </div>
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateOpen(false)}
+                  className="px-4 py-2 text-sm rounded-lg border"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={
+                    createInv.isLoading || !form.productId || !form.quantity
+                  }
+                  className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white disabled:opacity-60"
+                >
+                  {createInv.isLoading ? "Saving…" : "Save"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </Modal>
+      </div>
+
+      {/* Move Modal */}
+      <div ref={fullscreenRef}>
+        <Modal
+          getContainer={getContainer}
+          key={String(isFullscreen)}
+          open={isMoveOpen}
+          onCancel={() => {
+            setIsMoveOpen(false);
+            setSelectedItemForMove(null);
+            setMoveLocationSearch("");
+            setSelectedMoveLocation(null);
+            setShowLocationDropdown(false);
+          }}
+          centered
+          footer={null}
+          width={500}
+          closable={true}
+          title="Move Product"
+          className="max-h-[95vh] overflow-y-auto"
+        >
+          <div className="space-y-4">
+            {/* Product Info */}
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <p className="text-sm text-gray-700">
+                <span className="font-medium">Product:</span>{" "}
+                {selectedItemForMove?.productData?.pro_title}
+              </p>
             </div>
-            <div className="flex items-center justify-end gap-3 pt-2">
+
+            {/* Location Selection */}
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Select New Location
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search locations..."
+                  value={moveLocationSearch}
+                  onChange={(e) => {
+                    setMoveLocationSearch(e.target.value);
+                    setShowLocationDropdown(true);
+                  }}
+                  onFocus={() => setShowLocationDropdown(true)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-colors"
+                />
+                {showLocationDropdown &&
+                  locationsData?.locations &&
+                  locationsData.locations.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {locationsData.locations
+                        .filter(
+                          (loc) =>
+                            loc.code !== selectedItemForMove?.locationData?.code
+                        ) // Exclude current location
+                        .map((loc) => (
+                          <div
+                            key={loc?.id}
+                            onClick={() => {
+                              setSelectedMoveLocation(loc);
+                              setMoveLocationSearch(loc.code);
+                              setShowLocationDropdown(false);
+                            }}
+                            className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm border-b last:border-b-0"
+                          >
+                            <div className="font-medium">{loc.code}</div>
+                            <div className="text-xs text-gray-500 capitalize">
+                              {loc.type}
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+              </div>
+            </div>
+
+            {/* Selected Location Display */}
+            {selectedMoveLocation && (
+              <div className="bg-blue-50 p-3 rounded-lg">
+                <p className="text-sm font-medium text-blue-900">
+                  Moving to:{" "}
+                  <span className="font-bold">{selectedMoveLocation.code}</span>
+                </p>
+                <p className="text-xs text-blue-700 capitalize">
+                  {selectedMoveLocation.type}
+                </p>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-3 pt-4 border-t">
               <button
                 type="button"
-                onClick={() => setIsCreateOpen(false)}
-                className="px-4 py-2 text-sm rounded-lg border"
+                onClick={() => {
+                  setIsMoveOpen(false);
+                  setSelectedItemForMove(null);
+                  setMoveLocationSearch("");
+                  setSelectedMoveLocation(null);
+                  setShowLocationDropdown(false);
+                }}
+                className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
-                type="submit"
-                disabled={
-                  createInv.isLoading || !form.productId || !form.quantity
-                }
-                className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white disabled:opacity-60"
+                onClick={() => {
+                  if (!selectedMoveLocation) {
+                    Swal.fire({
+                      icon: "warning",
+                      title: "No Location Selected",
+                      text: "Please select a location to move the product to.",
+                      toast: true,
+                      position: "top-end",
+                      showConfirmButton: false,
+                      timer: 3000,
+                      background: "#f59e0b",
+                      color: "#fff",
+                    });
+                    return;
+                  }
+
+                  // Find the valid inventory ID
+                  let inventoryId = selectedItemForMove._id;
+                  if (!isObjectId(inventoryId)) {
+                    if (
+                      selectedItemForMove.inventoryId &&
+                      isObjectId(selectedItemForMove.inventoryId)
+                    ) {
+                      inventoryId = selectedItemForMove.inventoryId;
+                    } else {
+                      Swal.fire({
+                        icon: "error",
+                        title: "Invalid Item",
+                        text: "This item doesn't have a valid server ID. Please refresh and try again.",
+                        toast: true,
+                        position: "top-end",
+                        showConfirmButton: false,
+                        timer: 3000,
+                        background: "#ef4444",
+                        color: "#fff",
+                      });
+                      return;
+                    }
+                  }
+
+                  console.log("Calling move mutation with:", {
+                    inventoryId,
+                    movedLocationId: selectedMoveLocation.id,
+                    selectedMoveLocation,
+                  });
+
+                  moveItem.mutate({
+                    inventoryId,
+                    movedLocationId: selectedMoveLocation.id,
+                  });
+                }}
+                disabled={moveItem.isLoading || !selectedMoveLocation}
+                className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
               >
-                {createInv.isLoading ? "Saving…" : "Save"}
+                {moveItem.isLoading ? "Moving..." : "Move"}
               </button>
             </div>
-          </form>
-        </div>
-      </Modal>
+          </div>
+        </Modal>
+      </div>
     </div>
   );
 }

@@ -340,6 +340,7 @@ export default function ScanProduct() {
     setTotalInventory(0);
     setScannedData("");
     setBarcodeDetected(false);
+    setLocationId(""); // Reset location ID when going back
   };
 
   const manualScanQR = async () => {
@@ -469,6 +470,11 @@ export default function ScanProduct() {
                 <div
                   className="p-6 bg-white rounded-xl border-2 border-slate-200 hover:border-blue-300 hover:shadow-lg transition-all duration-200 cursor-pointer group"
                   onClick={() => {
+                    // Reset search state when switching to camera mode
+                    setSearchResults([]);
+                    setTotalInventory(0);
+                    setLocationId("");
+                    setScannedData("");
                     setMode("camera");
                     setTimeout(startCamera, 100);
                   }}
@@ -683,8 +689,7 @@ export default function ScanProduct() {
               </>
             )}
 
-            {/* Scanned Results */}
-            {/* {searchResults.length > 0 && ( */}
+            {/* Scanned Results - Always show InventoryDisplay for camera mode after search */}
             <div className="space-y-4">
               {scannedData && (
                 <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
@@ -704,7 +709,6 @@ export default function ScanProduct() {
                 locationid={locationId}
               />
             </div>
-            {/* )} */}
           </div>
         )}
 
@@ -751,27 +755,26 @@ export default function ScanProduct() {
               </form>
             </div>
 
-            {searchResults.length > 0 && (
-              <div className="space-y-4">
-                {searchQuery && (
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-sm text-blue-700 font-sans">
-                      <span className="font-semibold">Search Query:</span>{" "}
-                      {searchQuery}
-                    </p>
-                  </div>
-                )}
+            {/* Always show InventoryDisplay for manual mode - for loading states and results */}
+            <div className="space-y-4">
+              {searchQuery && (searchResults.length > 0 || isSearching) && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-700 font-sans">
+                    <span className="font-semibold">Search Query:</span>{" "}
+                    {searchQuery}
+                  </p>
+                </div>
+              )}
 
-                <InventoryDisplay
-                  items={searchResults}
-                  setItems={setSearchResults}
-                  totalCount={totalInventory}
-                  isLoading={isSearching}
-                  scannedData={searchQuery}
-                  locationid={locationId}
-                />
-              </div>
-            )}
+              <InventoryDisplay
+                items={searchResults}
+                setItems={setSearchResults}
+                totalCount={totalInventory}
+                isLoading={isSearching}
+                scannedData={searchQuery}
+                locationid={locationId}
+              />
+            </div>
           </div>
         )}
       </div>
