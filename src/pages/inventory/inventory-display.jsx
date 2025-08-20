@@ -914,8 +914,8 @@ export default function InventoryDisplay({
                                     const key =
                                       pendingChange.newQty >
                                       pendingChange.currentQty
-                                        ? "add"
-                                        : "remove";
+                                        ? "added"
+                                        : "removed";
                                     handleUpdateQty(
                                       r?._id,
                                       pendingChange.newQty,
@@ -993,8 +993,8 @@ export default function InventoryDisplay({
                                     const key =
                                       pendingChange.newQty >
                                       pendingChange.currentQty
-                                        ? "add"
-                                        : "remove";
+                                        ? "added"
+                                        : "removed";
                                     handleUpdateQty(
                                       r?._id,
                                       pendingChange.newQty,
