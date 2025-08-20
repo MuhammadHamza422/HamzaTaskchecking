@@ -6,7 +6,7 @@ import Swal from "sweetalert2";
 import CustomerInfoStep from "./CustomerInfoStep";
 import ProductsStep from "./ProductsStep";
 import ShippingBillingStep from "./ShippingBillingStep";
-import { createManualOrder } from "../../api/warehouse";
+import { createManualOrder } from "../../api/manualOrders";
 
 const { Step } = Steps;
 

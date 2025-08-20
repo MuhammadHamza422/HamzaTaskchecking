@@ -11,6 +11,8 @@ import {
 } from "antd";
 import { useMediaQuery } from "react-responsive";
 import { EyeOutlined, EditOutlined } from "@ant-design/icons";
+import { useQuery } from "@tanstack/react-query";
+import apiClient from "../../api/client";
 
 export default function ManualOrderTable({
   orders,
@@ -22,6 +24,11 @@ export default function ManualOrderTable({
   onRowClick,
   onEditClick,
   showPagination = true,
+  showCheckboxes = false,
+  selectedOrders = [],
+  onOrderSelect,
+  selectAll = false,
+  onSelectAll,
 }) {
   const isMobile = useMediaQuery({ maxWidth: 768 });
   const isTablet = useMediaQuery({ minWidth: 769, maxWidth: 1024 });
@@ -43,7 +50,11 @@ export default function ManualOrderTable({
       `${pad(date.getMinutes())}:` +
       `${pad(date.getSeconds())}`;
 
-    return <span className="text-sm text-gray-600 whitespace-nowrap">{formatted}</span>;
+    return (
+      <span className="text-sm text-gray-600 whitespace-nowrap">
+        {formatted}
+      </span>
+    );
   };
 
   // Helper function to format currency
@@ -62,37 +73,80 @@ export default function ManualOrderTable({
   const getStatusColor = (status) => {
     switch (status?.toLowerCase()) {
       case "processing":
-        return "blue";
+        return "bg-blue-100 text-blue-800";
       case "completed":
-        return "green";
+        return "bg-green-100 text-green-800";
       case "cancelled":
-        return "red";
+        return "bg-red-100 text-red-800";
       case "pending":
-        return "orange";
+        return "bg-orange-100 text-orange-800";
       default:
-        return "default";
+        return "bg-gray-100 text-gray-800";
     }
   };
+  
+
+  // Fetch platforms from API
+  const { data: platformsData } = useQuery({
+    queryKey: ["platforms"],
+    queryFn: async () => {
+      const response = await apiClient.get("/api/v1/plateforms/all");
+      return response.data;
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
 
   // Get platform name
   const getPlatformName = (platformId) => {
-    // This would typically come from a platforms list
-    const platformMap = {
-      "6890cc6719f58a04b3f95a47": "WooCommerce",
-      "6890cc6719f58a04b3f95a48": "Walmart",
-      "6890cc6719f58a04b3f95a49": "Amazon",
-    };
-    return platformMap[platformId] || "Unknown Platform";
+    if (!platformsData?.platforms) return "Unknown Platform";
+
+    const platform = platformsData.platforms.find((p) => p._id === platformId);
+    return platform?.plt_name || "Unknown Platform";
   };
 
   const columns = [
+    ...(showCheckboxes
+      ? [
+          {
+            title: (
+              <input
+                type="checkbox"
+                checked={selectAll}
+                onChange={(e) => onSelectAll?.(e.target.checked)}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+            ),
+            key: "selection",
+            width: 50,
+            render: (_, record) => {
+              const isDisabled = record?.shipStation_OrderId;
+              const isSelected = selectedOrders.includes(record._id);
+              return (
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  disabled={isDisabled}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) =>
+                    onOrderSelect?.(record._id, e.target.checked)
+                  }
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                />
+              );
+            },
+          },
+        ]
+      : []),
     {
       title: "Order Number",
       dataIndex: "orderNumber",
       key: "orderNumber",
       width: isMobile ? 120 : 150,
       render: (text, record) => (
-        <div className="cursor-pointer hover:text-blue-600" onClick={() => onRowClick(record)}>
+        <div
+          className="cursor-pointer hover:text-blue-600"
+          onClick={() => onRowClick(record)}
+        >
           <div className="font-medium text-gray-900">{text}</div>
           <div className="text-xs text-gray-500">ID: {record.customerId}</div>
         </div>
@@ -115,22 +169,40 @@ export default function ManualOrderTable({
       dataIndex: "plateform",
       key: "plateform",
       width: isMobile ? 100 : 120,
-      render: (platformId) => (
-        <Tag color="blue" className="text-xs">
-          {getPlatformName(platformId)}
-        </Tag>
-      ),
+      render: (platform) => {
+        const platformId = platform?._id || platform;
+        return (
+          <Tag color="blue" className="text-xs">
+            {getPlatformName(platformId)}
+          </Tag>
+        );
+      },
     },
     {
       title: "Status",
       dataIndex: "status",
       key: "status",
       width: isMobile ? 100 : 120,
-      render: (status) => (
-        <Tag color={getStatusColor(status)} className="text-xs">
-          {status}
-        </Tag>
-      ),
+      render: (status, record) => {
+        const isShipStation = record?.shipStation_OrderId;
+        return (
+          <div className="flex flex-col gap-1">
+            <p
+              className={`text-xs capitalize flex items-center justify-center px-2 py-1 rounded-md ${getStatusColor(
+                status
+              )}`}
+            >
+              {status}
+            </p>
+
+            {isShipStation && (
+              <Tag color="green" className="text-xs">
+                ShipStation
+              </Tag>
+            )}
+          </div>
+        );
+      },
     },
     {
       title: "Order Total",
@@ -138,17 +210,6 @@ export default function ManualOrderTable({
       key: "order_total",
       width: isMobile ? 100 : 120,
       render: (amount) => formatCurrency(amount),
-    },
-    {
-      title: "Items",
-      dataIndex: "items",
-      key: "items",
-      width: isMobile ? 80 : 100,
-      render: (items) => (
-        <span className="text-sm text-gray-600">
-          {Array.isArray(items) ? items.length : 0} items
-        </span>
-      ),
     },
     {
       title: "Created",
@@ -175,7 +236,7 @@ export default function ManualOrderTable({
               className="text-blue-600 hover:text-blue-800"
             />
           </Tooltip>
-          <Tooltip title="Edit Order">
+          {/* <Tooltip title="Edit Order">
             <Button
               type="text"
               size="small"
@@ -186,7 +247,7 @@ export default function ManualOrderTable({
               }}
               className="text-green-600 hover:text-green-800"
             />
-          </Tooltip>
+          </Tooltip> */}
         </div>
       ),
     },
@@ -194,6 +255,37 @@ export default function ManualOrderTable({
 
   // Mobile responsive columns
   const mobileColumns = [
+    ...(showCheckboxes
+      ? [
+          {
+            title: (
+              <input
+                type="checkbox"
+                checked={selectAll}
+                onChange={(e) => onSelectAll?.(e.target.checked)}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+            ),
+            key: "selection",
+            width: 50,
+            render: (_, record) => {
+              const isDisabled = record?.shipStation_OrderId;
+              const isSelected = selectedOrders.includes(record._id);
+              return (
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  disabled={isDisabled}
+                  onChange={(e) =>
+                    onOrderSelect?.(record._id, e.target.checked)
+                  }
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                />
+              );
+            },
+          },
+        ]
+      : []),
     {
       title: "Order Info",
       key: "orderInfo",
@@ -201,23 +293,40 @@ export default function ManualOrderTable({
         <div className="space-y-2">
           <div className="flex justify-between items-start">
             <div>
-              <div className="font-medium text-gray-900">{record.orderNumber}</div>
-              <div className="text-xs text-gray-500">ID: {record.customerId}</div>
+              <div className="font-medium text-gray-900">
+                {record.orderNumber}
+              </div>
+              <div className="text-xs text-gray-500">
+                ID: {record.customerId}
+              </div>
             </div>
-            <Tag color={getStatusColor(record.status)} className="text-xs">
-              {record.status}
-            </Tag>
+            <div className="flex flex-col gap-1">
+              <Tag color={getStatusColor(record.status)} className="text-xs">
+                {record.status}
+              </Tag>
+              {record?.shipStation_OrderId && (
+                <Tag color="green" className="text-xs">
+                  ShipStation
+                </Tag>
+              )}
+            </div>
           </div>
           <div className="text-sm text-gray-600">
             <div>{record.customerUsername}</div>
             <div className="text-xs">{record.customerEmail}</div>
           </div>
           <div className="flex justify-between items-center text-sm">
-            <span>{getPlatformName(record.plateform)}</span>
-            <span className="font-medium">{formatCurrency(record.order_total)}</span>
+            <span>
+              {getPlatformName(record.plateform?._id || record.plateform)}
+            </span>
+            <span className="font-medium">
+              {formatCurrency(record.order_total)}
+            </span>
           </div>
           <div className="flex justify-between items-center text-xs text-gray-500">
-            <span>{Array.isArray(record.items) ? record.items.length : 0} items</span>
+            <span>
+              {Array.isArray(record.items) ? record.items.length : 0} items
+            </span>
             <span>{formatDate(record.orderDate)}</span>
           </div>
         </div>
@@ -239,7 +348,7 @@ export default function ManualOrderTable({
             }}
             className="text-blue-600 hover:text-blue-800"
           />
-          <Button
+          {/* <Button
             type="text"
             size="small"
             icon={<EditOutlined />}
@@ -248,7 +357,7 @@ export default function ManualOrderTable({
               onEditClick(record);
             }}
             className="text-green-600 hover:text-green-800"
-          />
+          /> */}
         </div>
       ),
     },
@@ -274,18 +383,26 @@ export default function ManualOrderTable({
             />
           ),
         }}
-        onRow={(record) => ({
-          onClick: () => onRowClick(record),
-          className: "cursor-pointer hover:bg-gray-50 transition-colors duration-150",
-        })}
+        onRow={(record) => {
+          const isDisabled = record?.shipStation_OrderId;
+          return {
+            onClick: () => !isDisabled && onRowClick(record),
+            className: `transition-colors duration-150 ${
+              isDisabled
+                ? "opacity-50 cursor-not-allowed bg-gray-100"
+                : "cursor-pointer hover:bg-gray-50"
+            }`,
+          };
+        }}
       />
 
       {/* Pagination */}
       {showPagination && (
         <div className="flex justify-between items-center p-4 border-t border-gray-200">
           <div className="text-sm text-gray-600">
-            Showing {((currentPage - 1) * pageSize) + 1} to{" "}
-            {Math.min(currentPage * pageSize, totalOrders)} of {totalOrders} orders
+            Showing {(currentPage - 1) * pageSize + 1} to{" "}
+            {Math.min(currentPage * pageSize, totalOrders)} of {totalOrders}{" "}
+            orders
           </div>
           <Pagination
             current={currentPage}

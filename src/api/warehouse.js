@@ -224,12 +224,4 @@ export async function moveInventoryItem(inventoryId, movedLocationId) {
   return data;
 }
 
-// POST /api/v1/manualOrder/create
-// Body: { customerId, orderNumber, orderDate, orderStatus, orderTotal, orderItems }
-export async function createManualOrder(orderData) {
-  const { data } = await apiClient.post(
-    "/api/v1/manualOrder/create",
-    orderData
-  );
-  return data;
-}
+
