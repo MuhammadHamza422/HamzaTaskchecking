@@ -18,6 +18,7 @@ export default function PlatformsPage() {
     plt_id: "",
     plt_name: "",
     plt_prefix: "",
+    tagId: "",
   });
 
   // Fetch platforms from API
@@ -41,7 +42,10 @@ export default function PlatformsPage() {
       Swal.fire({
         icon: "error",
         title: "Failed to fetch platforms",
-        text: error.response?.data?.message || error.message || "An error occurred while fetching platforms",
+        text:
+          error.response?.data?.message ||
+          error.message ||
+          "An error occurred while fetching platforms",
         toast: true,
         position: "top-end",
         showConfirmButton: false,
@@ -66,12 +70,13 @@ export default function PlatformsPage() {
     setModalMode(mode);
     setSelectedPlatform(platform);
     if (mode === "add") {
-      setFormData({ plt_id: "", plt_name: "", plt_prefix: "" });
+      setFormData({ plt_id: "", plt_name: "", plt_prefix: "", tagId: "" });
     } else if (platform) {
       setFormData({
         plt_id: platform.plt_id,
         plt_name: platform.plt_name,
         plt_prefix: platform.plt_prefix,
+        tagId: platform.tagId || "",
       });
     }
     setIsModalOpen(true);
@@ -80,7 +85,7 @@ export default function PlatformsPage() {
   const closeModal = () => {
     setIsModalOpen(false);
     setSelectedPlatform(null);
-    setFormData({ plt_id: "", plt_name: "", plt_prefix: "" });
+    setFormData({ plt_id: "", plt_name: "", plt_prefix: "", tagId: "" });
   };
 
   const handleInputChange = (e) => {
@@ -98,8 +103,11 @@ export default function PlatformsPage() {
     try {
       if (modalMode === "add") {
         // Add new platform
-        const response = await apiClient.post("/api/v1/plateforms/add", formData);
-        
+        const response = await apiClient.post(
+          "/api/v1/plateforms/add",
+          formData
+        );
+
         if (response.data.success) {
           Swal.fire({
             icon: "success",
@@ -116,7 +124,7 @@ export default function PlatformsPage() {
               popup: "rounded-lg",
             },
           });
-          
+
           // Refresh the platforms list
           await fetchPlatforms();
         } else {
@@ -124,8 +132,11 @@ export default function PlatformsPage() {
         }
       } else if (modalMode === "edit") {
         // Update existing platform
-        const response = await apiClient.patch(`/api/v1/plateforms/update/${selectedPlatform._id}`, formData);
-        
+        const response = await apiClient.patch(
+          `/api/v1/plateforms/update/${selectedPlatform._id}`,
+          formData
+        );
+
         if (response.data.success) {
           Swal.fire({
             icon: "success",
@@ -142,7 +153,7 @@ export default function PlatformsPage() {
               popup: "rounded-lg",
             },
           });
-          
+
           // Refresh the platforms list
           await fetchPlatforms();
         } else {
@@ -154,7 +165,10 @@ export default function PlatformsPage() {
       Swal.fire({
         icon: "error",
         title: "Failed to save platform",
-        text: error.response?.data?.message || error.message || "An error occurred while saving the platform",
+        text:
+          error.response?.data?.message ||
+          error.message ||
+          "An error occurred while saving the platform",
         toast: true,
         position: "top-end",
         showConfirmButton: false,
@@ -181,16 +195,6 @@ export default function PlatformsPage() {
       minute: "2-digit",
     });
   };
-
-  if (fetching) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <Spin size="large" />
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen">
@@ -224,63 +228,71 @@ export default function PlatformsPage() {
 
         {/* Mobile Cards Layout */}
         <div className="block md:hidden space-y-4">
-          {platforms.map((platform, index) => (
-            <motion.div
-              key={platform._id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className="border border-blue-300/20 rounded-2xl p-6 shadow-lg"
-            >
-              {/* Card Header */}
-              <div className="flex justify-between items-start mb-4">
-                <p className="text-black font-mono text-lg font-semibold">
-                  #{platform.plt_id}
-                </p>
-                <div className="flex gap-2">
-                  {/* <button
-                    onClick={() => openModal("view", platform)}
-                    className="p-2 text-white hover:text-black hover:bg-black/10 rounded-lg transition-all duration-200"
-                  >
-                    <Eye className="w-4 h-4" />
-                  </button> */}
-                  <button
-                    onClick={() => openModal("edit", platform)}
-                    className="p-2 text-white bg-black hover:text-black hover:bg-black/10 rounded-lg transition-all duration-200"
-                  >
-                    <Edit className="w-4 h-4" />
-                  </button>
+          {fetching ? (
+            <div className="flex justify-center items-center py-10">
+              <Spin size="large" />
+            </div>
+          ) : platforms.length > 0 ? (
+            platforms.map((platform, index) => (
+              <motion.div
+                key={platform._id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.1 }}
+                className="border border-blue-300/20 rounded-2xl p-6 shadow-lg"
+              >
+                {/* Card Header */}
+                <div className="flex justify-between items-start mb-4">
+                  <p className="text-black font-mono text-lg font-semibold">
+                    #{platform.plt_id}
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => openModal("edit", platform)}
+                      className="p-2 text-white bg-black hover:text-black hover:bg-black/10 rounded-lg transition-all duration-200"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              {/* Platform Name */}
-              <div className="mb-3">
-                <h3 className="text-black font-semibold text-lg mb-1">
-                  {platform.plt_name}
-                </h3>
-                <div className="flex items-center gap-2">
-                  <Tag className="w-4 h-4 text-black" />
-                  <span className="px-3 py-1 bg-blue-300/20 text-black rounded-full text-sm font-medium">
-                    {platform.plt_prefix}
-                  </span>
+                {/* Platform Name */}
+                <div className="mb-3">
+                  <h3 className="text-black font-semibold text-lg mb-1">
+                    {platform.plt_name}
+                  </h3>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Tag className="w-4 h-4 text-black" />
+                    <span className="px-3 py-1 bg-blue-300/20 text-black rounded-full text-sm font-medium">
+                      {platform.plt_prefix}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Hash className="w-4 h-4 text-black" />
+                    <span className="px-3 py-1 bg-green-300/20 text-black rounded-full text-sm font-medium">
+                      Tag ID: {platform.tagId}
+                    </span>
+                  </div>
                 </div>
-              </div>
 
-              {/* Dates */}
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center gap-2 text-black">
-                  <Calendar className="w-4 h-4" />
-                  <span className="text-black">Created:</span>
-                  <span>{formatDate(platform.createdAt)}</span>
+                {/* Dates */}
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2 text-black">
+                    <Calendar className="w-4 h-4" />
+                    <span className="text-black">Created:</span>
+                    <span>{formatDate(platform.createdAt)}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-black">
+                    <Calendar className="w-4 h-4" />
+                    <span className="text-black">Updated:</span>
+                    <span>{formatDate(platform.updatedAt)}</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 text-black">
-                  <Calendar className="w-4 h-4" />
-                  <span className="text-black">Updated:</span>
-                  <span>{formatDate(platform.updatedAt)}</span>
-                </div>
-              </div>
-            </motion.div>
-          ))}
+              </motion.div>
+            ))
+          ) : (
+            <p className="text-center text-black py-6">No platforms found</p>
+          )}
         </div>
 
         {/* Desktop Table Layout */}
@@ -297,70 +309,83 @@ export default function PlatformsPage() {
                   <th className="text-left p-6 font-semibold">ID</th>
                   <th className="text-left p-6 font-semibold">Platform Name</th>
                   <th className="text-left p-6 font-semibold">Prefix</th>
+                  <th className="text-left p-6 font-semibold">Tag ID</th>
                   <th className="text-left p-6 font-semibold">Created</th>
                   <th className="text-left p-6 font-semibold">Updated</th>
                   <th className="text-center p-6 font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {platforms.map((platform, index) => (
-                  <motion.tr
-                    key={platform._id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.1 }}
-                    className="border-b border-yellow-300/10 transition-colors duration-200"
-                  >
-                    <td className="p-6">
-                      <div className="flex items-center gap-2">
-                        <Hash className="w-4 h-4 text-black" />
-                        <span className="text-black font-mono">
-                          {platform.plt_id}
-                        </span>
-                      </div>
+                {fetching ? (
+                  <tr>
+                    <td colSpan={7} className="p-32 text-center">
+                      <Spin size="large" />
                     </td>
-                    <td className="p-6">
-                      <div className="text-black font-medium">
+                  </tr>
+                ) : platforms.length > 0 ? (
+                  platforms.map((platform, index) => (
+                    <motion.tr
+                      key={platform._id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      className="border-b border-yellow-300/10 transition-colors duration-200"
+                    >
+                      <td className="p-6">
+                        <div className="flex items-center gap-2">
+                          <Hash className="w-4 h-4 text-black" />
+                          <span className="text-black font-mono">
+                            {platform.plt_id}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="p-6 text-black font-medium">
                         {platform.plt_name}
-                      </div>
-                    </td>
-                    <td className="p-6">
-                      <div className="flex items-center gap-2">
-                        <Tag className="w-4 h-4 text-black" />
-                        <span className="px-3 py-1 bg-yellow-300/20 text-black rounded-full text-sm font-medium">
-                          {platform.plt_prefix}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="p-6">
-                      <div className="flex items-center gap-2 text-black text-sm">
-                        <Calendar className="w-4 h-4" />
-                        {formatDate(platform.createdAt)}
-                      </div>
-                    </td>
-                    <td className="p-6">
-                      <div className="text-black text-sm">
+                      </td>
+                      <td className="p-6">
+                        <div className="flex items-center gap-2">
+                          <Tag className="w-4 h-4 text-black" />
+                          <span className="px-3 py-1 bg-yellow-300/20 text-black rounded-full text-sm font-medium">
+                            {platform.plt_prefix}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="p-6">
+                        <div className="flex items-center gap-2">
+                          <Hash className="w-4 h-4 text-black" />
+                          <span className="px-3 py-1 bg-green-300/20 text-black rounded-full text-sm font-medium">
+                            {platform.tagId}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="p-6">
+                        <div className="flex items-center gap-2 text-black text-sm">
+                          <Calendar className="w-4 h-4" />
+                          {formatDate(platform.createdAt)}
+                        </div>
+                      </td>
+                      <td className="p-6 text-black text-sm">
                         {formatDate(platform.updatedAt)}
-                      </div>
+                      </td>
+                      <td className="p-6">
+                        <div className="flex justify-center gap-2">
+                          <button
+                            onClick={() => openModal("edit", platform)}
+                            className="p-2 text-white bg-black hover:text-black hover:bg-black/10 rounded-lg transition-all duration-200"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </motion.tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={7} className="p-10 text-center text-black">
+                      No platforms found
                     </td>
-                    <td className="p-6">
-                      <div className="flex justify-center gap-2">
-                        {/* <button
-                          onClick={() => openModal("view", platform)}
-                          className="p-2 text-white hover:text-black hover:bg-black/10 rounded-lg transition-all duration-200"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button> */}
-                        <button
-                          onClick={() => openModal("edit", platform)}
-                          className="p-2 text-white bg-black hover:text-black hover:bg-black/10 rounded-lg transition-all duration-200"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </motion.tr>
-                ))}
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -436,6 +461,14 @@ export default function PlatformsPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-black mb-2">
+                      Tag ID
+                    </label>
+                    <div className="p-3 bg-black/20 border border-blue-300/20 rounded-lg text-black">
+                      {selectedPlatform?.tagId}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-black mb-2">
                       Created At
                     </label>
                     <div className="p-3 bg-black/20 border border-blue-300/20 rounded-lg text-black">
@@ -464,7 +497,7 @@ export default function PlatformsPage() {
                       value={formData.plt_id}
                       onChange={handleInputChange}
                       required
-                      className="w-full px-4 py-3 border-2 border-blue-300/20 text-white rounded-xl transition-all hover:border-blue-300/40 focus:border-blue-300/60 outline-none duration-300"
+                      className="w-full px-4 py-3 border-2 border-blue-300/20 rounded-xl transition-all hover:border-blue-300/40 focus:border-blue-300/60 outline-none duration-300"
                       placeholder="Enter platform id"
                     />
                   </div>
@@ -478,7 +511,7 @@ export default function PlatformsPage() {
                       value={formData.plt_name}
                       onChange={handleInputChange}
                       required
-                      className="w-full px-4 py-3 border-2 border-blue-300/20 text-white rounded-xl transition-all hover:border-blue-300/40 focus:border-blue-300/60 outline-none duration-300"
+                      className="w-full px-4 py-3 border-2 border-blue-300/20 rounded-xl transition-all hover:border-blue-300/40 focus:border-blue-300/60 outline-none duration-300"
                       placeholder="Enter platform name"
                     />
                   </div>
@@ -493,8 +526,22 @@ export default function PlatformsPage() {
                       onChange={handleInputChange}
                       required
                       maxLength="5"
-                      className="w-full px-4 py-3 border-2 border-blue-300/20 text-white rounded-xl transition-all hover:border-blue-300/40 focus:border-blue-300/60 outline-none duration-300"
+                      className="w-full px-4 py-3 border-2 border-blue-300/20 rounded-xl transition-all hover:border-blue-300/40 focus:border-blue-300/60 outline-none duration-300"
                       placeholder="Enter prefix (e.g., WLC)"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-black mb-2">
+                      Tag ID
+                    </label>
+                    <input
+                      type="number"
+                      name="tagId"
+                      value={formData.tagId}
+                      onChange={handleInputChange}
+                      required
+                      className="w-full px-4 py-3 border-2 border-blue-300/20 rounded-xl transition-all hover:border-blue-300/40 focus:border-blue-300/60 outline-none duration-300"
+                      placeholder="Enter tag ID (e.g., 123455)"
                     />
                   </div>
                   <div className="flex gap-4 pt-4">

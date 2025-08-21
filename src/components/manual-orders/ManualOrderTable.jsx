@@ -10,7 +10,7 @@ import {
   Popover,
 } from "antd";
 import { useMediaQuery } from "react-responsive";
-import { EyeOutlined, EditOutlined } from "@ant-design/icons";
+import { EyeOutlined, EditOutlined, CloseOutlined } from "@ant-design/icons";
 import { useQuery } from "@tanstack/react-query";
 import apiClient from "../../api/client";
 
@@ -113,24 +113,32 @@ export default function ManualOrderTable({
                 type="checkbox"
                 checked={selectAll}
                 onChange={(e) => onSelectAll?.(e.target.checked)}
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
               />
             ),
             key: "selection",
             width: 50,
-            render: (_, record) => {
-              const isDisabled = record?.shipStation_OrderId;
+                        render: (_, record) => {
+              const isShipStationSent = record?.shipstation_status === true || record?.shipStation_OrderId;
               const isSelected = selectedOrders.includes(record._id);
+              
+              if (isShipStationSent) {
+                return (
+                  <Tooltip title="Already sent to ShipStation">
+                    <CloseOutlined className="text-red-500 text-sm" />
+                  </Tooltip>
+                );
+              }
+              
               return (
                 <input
                   type="checkbox"
                   checked={isSelected}
-                  disabled={isDisabled}
                   onClick={(e) => e.stopPropagation()}
                   onChange={(e) =>
                     onOrderSelect?.(record._id, e.target.checked)
                   }
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
               );
             },
@@ -184,7 +192,7 @@ export default function ManualOrderTable({
       key: "status",
       width: isMobile ? 100 : 120,
       render: (status, record) => {
-        const isShipStation = record?.shipStation_OrderId;
+        const isShipStation = record?.shipstation_status === true || record?.shipStation_OrderId;
         return (
           <div className="flex flex-col gap-1">
             <p
@@ -195,11 +203,11 @@ export default function ManualOrderTable({
               {status}
             </p>
 
-            {isShipStation && (
+            {/* {isShipStation && (
               <Tag color="green" className="text-xs">
                 ShipStation
               </Tag>
-            )}
+            )} */}
           </div>
         );
       },
@@ -263,23 +271,31 @@ export default function ManualOrderTable({
                 type="checkbox"
                 checked={selectAll}
                 onChange={(e) => onSelectAll?.(e.target.checked)}
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
               />
             ),
             key: "selection",
             width: 50,
             render: (_, record) => {
-              const isDisabled = record?.shipStation_OrderId;
+              const isShipStationSent = record?.shipstation_status === true || record?.shipStation_OrderId;
               const isSelected = selectedOrders.includes(record._id);
+              
+              if (isShipStationSent) {
+                return (
+                  <Tooltip title="Already sent to ShipStation">
+                    <CloseOutlined className="text-red-500 text-sm" />
+                  </Tooltip>
+                );
+              }
+              
               return (
                 <input
                   type="checkbox"
                   checked={isSelected}
-                  disabled={isDisabled}
                   onChange={(e) =>
                     onOrderSelect?.(record._id, e.target.checked)
                   }
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
               );
             },
@@ -304,7 +320,7 @@ export default function ManualOrderTable({
               <Tag color={getStatusColor(record.status)} className="text-xs">
                 {record.status}
               </Tag>
-              {record?.shipStation_OrderId && (
+              {(record?.shipstation_status === true || record?.shipStation_OrderId) && (
                 <Tag color="green" className="text-xs">
                   ShipStation
                 </Tag>
@@ -384,12 +400,12 @@ export default function ManualOrderTable({
           ),
         }}
         onRow={(record) => {
-          const isDisabled = record?.shipStation_OrderId;
+          const isShipStationSent = record?.shipstation_status === true || record?.shipStation_OrderId;
           return {
-            onClick: () => !isDisabled && onRowClick(record),
+            onClick: () => onRowClick(record), // Always allow opening details drawer
             className: `transition-colors duration-150 ${
-              isDisabled
-                ? "opacity-50 cursor-not-allowed bg-gray-100"
+              isShipStationSent
+                ? "opacity-75 cursor-pointer hover:bg-gray-50 bg-gray-50"
                 : "cursor-pointer hover:bg-gray-50"
             }`,
           };
