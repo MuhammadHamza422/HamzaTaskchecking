@@ -62,7 +62,7 @@ const CustomerInfoStep = ({ form, onNext }) => {
           className="mb-0"
         >
           <Input 
-            placeholder="e.g., CUST12345" 
+            placeholder="e.g., 12345" 
             size="large"
             className="rounded-lg"
           />

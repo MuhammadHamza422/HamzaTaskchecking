@@ -1,47 +1,68 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Button, Card, Typography, Space, notification, message, Input, Select, DatePicker, Row, Col, Form } from 'antd';
-import { PlusOutlined, ShoppingCartOutlined, SearchOutlined, ReloadOutlined } from '@ant-design/icons';
-import { motion } from 'framer-motion';
-import { useQuery } from '@tanstack/react-query';
-import CreateManualOrderModal from '../../components/manual-orders/CreateManualOrderModal';
-import ManualOrderTable from '../../components/manual-orders/ManualOrderTable';
-import ManualOrderDetailsDrawer from '../../components/manual-orders/ManualOrderDetailsDrawer';
-import { getManualOrders, getManualOrderDetails } from '../../api/manualOrders';
-import Swal from 'sweetalert2';
-import apiClient from '../../api/client';
-import dayjs from 'dayjs';
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import {
+  Button,
+  Card,
+  Typography,
+  notification,
+  message,
+  Input,
+  Select,
+  DatePicker,
+  Row,
+  Col,
+  Form,
+} from "antd";
+import {
+  PlusOutlined,
+  SearchOutlined,
+  ReloadOutlined,
+} from "@ant-design/icons";
+import { motion } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
+import CreateManualOrderModal from "../../components/manual-orders/CreateManualOrderModal";
+import ManualOrderTable from "../../components/manual-orders/ManualOrderTable";
+import ManualOrderDetailsDrawer from "../../components/manual-orders/ManualOrderDetailsDrawer";
+import { getManualOrders, getManualOrderDetails } from "../../api/manualOrders";
+import Swal from "sweetalert2";
+import apiClient from "../../api/client";
 
 const { Title, Text } = Typography;
 
+// Constants
+const INITIAL_FILTERS = {
+  search: "",
+  dateRange: null,
+  platform: null,
+};
 
+const DEFAULT_PAGE_SIZE = 30;
 
 const ManualOrdersPage = () => {
+  // Modal and drawer states
   const [isModalVisible, setIsModalVisible] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(30);
   const [open, setOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [editingOrder, setEditingOrder] = useState(null);
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+
+  // Selection states
   const [selectedOrders, setSelectedOrders] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
   const [isMovingToShipStation, setIsMovingToShipStation] = useState(false);
 
   // Filter state
-  const [filters, setFilters] = useState({
-    search: "",
-    dateRange: null,
-    platform: null,
-  });
+  const [filters, setFilters] = useState(INITIAL_FILTERS);
 
-  // Real API call for fetching manual orders
-  const fetchOrders = async () => {
+  // Memoized fetch function
+  const fetchOrders = useCallback(async () => {
     const response = await getManualOrders({
       page: currentPage,
       limit: pageSize,
       search: filters.search,
     });
-    
+
     return {
       success: response.success,
       orders: response.data || [],
@@ -49,179 +70,44 @@ const ManualOrdersPage = () => {
       page: response.page || currentPage,
       perPage: response.limit || pageSize,
     };
-  };
+  }, [currentPage, pageSize, filters.search]);
 
-  // Use React Query for data fetching
+  // React Query hooks
   const {
     data: ordersData,
     isLoading,
     error,
     refetch,
   } = useQuery({
-    queryKey: ['manualOrders', currentPage, pageSize, filters.search],
+    queryKey: ["manualOrders", currentPage, pageSize, filters.search],
     queryFn: fetchOrders,
     keepPreviousData: true,
   });
 
-  // Fetch platforms for filter dropdown
   const { data: platformsData } = useQuery({
-    queryKey: ['platforms'],
+    queryKey: ["platforms"],
     queryFn: async () => {
       const response = await apiClient.get("/api/v1/plateforms/all");
       return response.data;
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
 
-  // Order details query
   const {
     data: orderDetails,
     isLoading: orderDetailsLoading,
     error: orderDetailsError,
-    refetch: refetchOrderDetails,
   } = useQuery({
-    queryKey: ['manualOrderDetails', selectedOrder?._id],
+    queryKey: ["manualOrderDetails", selectedOrder?._id],
     queryFn: () => getManualOrderDetails(selectedOrder._id),
     enabled: !!selectedOrder?._id && open,
   });
 
-  const handleCreateOrder = () => {
-    setIsModalVisible(true);
-  };
-
-  const handleModalCancel = () => {
-    setIsModalVisible(false);
-  };
-
-  const handleOrderSuccess = (response) => {
-    console.log('Order created successfully:', response);
-    refetch(); // Refresh the orders list
-  };
-
-  // Handle pagination change
-  const handlePageChange = (page, size) => {
-    setCurrentPage(page);
-    setPageSize(size);
-  };
-
-  // Handle drawer open
-  const handleDrawerOpen = (order) => {
-    setSelectedOrder(order);
-    setOpen(true);
-  };
-
-  // Handle drawer close
-  const handleDrawerClose = () => {
-    setOpen(false);
-    setSelectedOrder(null);
-  };
-
-  // Handle edit modal open
-  const handleEditClick = (order) => {
-    setEditingOrder(order);
-    setEditModalVisible(true);
-  };
-
-  // Handle edit modal close
-  const handleEditModalClose = () => {
-    setEditModalVisible(false);
-    setEditingOrder(null);
-  };
-
-  // Handle edit success
-  const handleEditSuccess = () => {
-    refetch();
-  };
-
-  // Handle bulk selection
-  const handleSelectAll = (checked) => {
-    setSelectAll(checked);
-    if (checked) {
-      const allOrderIds = filteredOrders
-        .filter((order) => !order?.shipStation_OrderId)
-        .map((order) => order._id);
-      setSelectedOrders(allOrderIds);
-    } else {
-      setSelectedOrders([]);
-    }
-  };
-
-  // Handle individual order selection
-  const handleOrderSelect = (orderId, checked) => {
-    if (checked) {
-      setSelectedOrders((prev) => [...prev, orderId]);
-    } else {
-      setSelectedOrders((prev) => prev.filter((id) => id !== orderId));
-    }
-  };
-
-  // Handle filters change
-  const handleFiltersChange = (newFilters, resetPagination = false) => {
-    setFilters(newFilters);
-    if (resetPagination) {
-      setCurrentPage(1);
-    }
-    setSelectedOrders([]);
-    setSelectAll(false);
-  };
-
-  // Handle filters reset
-  const handleFiltersReset = () => {
-    setFilters({
-      search: "",
-      dateRange: null,
-      platform: null,
-    });
-    setCurrentPage(1);
-    setSelectedOrders([]);
-    setSelectAll(false);
-  };
-
-  // Compute filtered orders with stable identity
-  const filteredOrders = useMemo(() => {
-    if (!ordersData?.orders) return [];
-    let filtered = ordersData.orders;
-    
-    // Search filter
-    if (filters.search) {
-      const q = String(filters.search).toLowerCase();
-      filtered = filtered.filter((order) =>
-        order.orderNumber?.toString().toLowerCase().includes(q) ||
-        order.customerId?.toString().toLowerCase().includes(q) ||
-        order.customerUsername?.toLowerCase().includes(q)
-      );
-    }
-    
-    // Platform filter
-    if (filters.platform) {
-      const platformId = filters.platform;
-      filtered = filtered.filter((order) => {
-        const orderPlatformId = order.plateform?._id || order.plateform;
-        return String(orderPlatformId) === String(platformId);
-      });
-    }
-    
-    // Date range filter
-    if (filters.dateRange && filters.dateRange.length === 2) {
-      const startDate = new Date(filters.dateRange[0]);
-      startDate.setHours(0, 0, 0, 0);
-      const endDate = new Date(filters.dateRange[1]);
-      endDate.setHours(23, 59, 59, 999);
-      filtered = filtered.filter((order) => {
-        const orderDate = new Date(order.orderDate || order.createdAt);
-        return orderDate >= startDate && orderDate <= endDate;
-      });
-    }
-    
-    return filtered;
-  }, [ordersData?.orders, filters.search, filters.platform, filters.dateRange]);
-  const totalFilteredOrders = filteredOrders.length;
-
-  // Helper to normalize country to 2-letter ISO code for ShipStation
-  const normalizeCountryCode = (value) => {
+  // Utility functions
+  const normalizeCountryCode = useCallback((value) => {
     if (!value) return null;
     const upper = String(value).trim().toUpperCase();
-    const map = {
+    const countryMap = {
       US: "US",
       USA: "US",
       "UNITED STATES": "US",
@@ -232,159 +118,302 @@ const ManualOrdersPage = () => {
       MX: "MX",
       MEX: "MX",
       MEXICO: "MX",
+      PK: "PK",
+      PAK: "PK",
+      PAKISTAN: "PK",
     };
-    if (map[upper]) return map[upper];
-    if (upper.length === 2) return upper;
-    return null;
-  };
+    return countryMap[upper] || (upper.length === 2 ? upper : null);
+  }, []);
 
-  // Format date to ISO 8601 acceptable by ShipStation
-  const formatDateForShipStation = (value) => {
+  const formatDateForShipStation = useCallback((value) => {
     try {
       if (!value) return new Date().toISOString();
-      let d;
+
+      let date;
       if (typeof value === "number") {
-        d = new Date(value);
+        date = new Date(value);
       } else if (typeof value === "string") {
         const hasZone = /Z|[+-]\d{2}:\d{2}$/.test(value);
-        d = new Date(hasZone ? value : `${value}Z`);
+        date = new Date(hasZone ? value : `${value}Z`);
       } else if (value instanceof Date) {
-        d = value;
+        date = value;
       } else {
-        d = new Date(value);
+        date = new Date(value);
       }
-      if (isNaN(d.getTime())) return new Date().toISOString();
-      return d.toISOString();
+
+      return isNaN(date.getTime())
+        ? new Date().toISOString()
+        : date.toISOString();
     } catch {
       return new Date().toISOString();
     }
-  };
+  }, []);
 
-  // Build ShipStation order payload for Manual Orders
-  const buildShipStationOrderFromManual = (order) => {
-    const items = [];
-    const productTitles = [];
-    
-    if (order.items && Array.isArray(order.items)) {
-      for (const item of order.items) {
-        if (item.product?.pro_title) {
-          productTitles.push(item.product.pro_title);
-        }
-        items.push({
-          lineItemKey: item.product?._id || `item-${item.product?._id}`,
-          sku: item.product?.sku || String(item.product?._id || ""),
-          name: item.product?.pro_title || "Product",
-          imageUrl: null,
-          quantity: Number(item.quantity || 1),
-          unitPrice: Number(item.product?.sale_price || 0),
-          taxAmount: null,
-          shippingAmount: null,
-          productId: Number(item.product?.uid) || undefined,
+  const removeUndefinedValues = useCallback((obj) => {
+    return Object.keys(obj).reduce((acc, key) => {
+      if (obj[key] !== undefined) {
+        acc[key] = obj[key];
+      }
+      return acc;
+    }, {});
+  }, []);
+
+  const buildShipStationOrder = useCallback(
+    (order, orderDetails) => {
+      const details = orderDetails?.data || order;
+      const items = [];
+      const productTitles = [];
+
+      // Process items
+      if (details.items && Array.isArray(details.items)) {
+        details.items.forEach((item) => {
+          if (item.product?.pro_title) {
+            productTitles.push(item.product.pro_title);
+          }
+          items.push({
+            lineItemKey:
+              item.product?.wc_id ||
+              item.product?._id ||
+              `item-${item.product?._id}`,
+            sku: item.product?.sku || String(item.product?._id || ""),
+            name: item.product?.pro_title || "Product",
+            quantity: Number(item.quantity || 1),
+            unitPrice: Number(item.product?.sale_price || 0),
+            productId: Number(item.product?.uid) || undefined,
+          });
         });
       }
+
+      const shipTo = details.shipTo || {};
+      const billTo = details.billTo || {};
+
+      // Build advanced options
+      const advancedOptions = {};
+      productTitles.slice(0, 3).forEach((title, index) => {
+        advancedOptions[`customField${index + 1}`] = title;
+      });
+
+      const payload = {
+        orderNumber: String(details.orderNumber || details._id || ""),
+        orderKey: String(details._id || details.orderNumber || ""),
+        orderDate: formatDateForShipStation(
+          details.orderDate || details.createdAt
+        ),
+        orderStatus: "awaiting_shipment",
+        customerId: Number(details.customerId),
+        customerUsername: details.customerUsername || undefined,
+        customerEmail: details.customerEmail || undefined,
+        tagIds: details.plateform?.tagId
+          ? [Number(details.plateform.tagId)]
+          : undefined,
+        billTo: {
+          name: billTo.name,
+          company: billTo.company,
+          street1: billTo.street1,
+          street2: billTo.street2,
+          city: billTo.city,
+          state: billTo.state,
+          postalCode: billTo.postalCode,
+          country: normalizeCountryCode(billTo.country),
+          phone: billTo.phone,
+          residential: billTo.residential,
+        },
+        shipTo: {
+          name: shipTo.name,
+          company: shipTo.company,
+          street1: shipTo.street1,
+          street2: shipTo.street2,
+          city: shipTo.city,
+          state: shipTo.state,
+          postalCode: shipTo.postalCode,
+          country: normalizeCountryCode(shipTo.country),
+          phone: shipTo.phone,
+          residential: shipTo.residential,
+        },
+        items,
+        requestedShippingService: details.requestedShippingService || null,
+        amountPaid: Number(details.order_total) || undefined,
+        taxAmount: Number(details.tax_amount) || undefined,
+        shippingAmount: Number(details.shipping_amount) || undefined,
+        gift: false,
+        ...(Object.keys(advancedOptions).length > 0 && { advancedOptions }),
+      };
+
+      return removeUndefinedValues(payload);
+    },
+    [normalizeCountryCode, formatDateForShipStation, removeUndefinedValues]
+  );
+
+  // Computed values
+  const filteredOrders = useMemo(() => {
+    if (!ordersData?.orders) return [];
+    let filtered = ordersData.orders;
+
+    // Search filter
+    if (filters.search) {
+      const query = filters.search.toLowerCase();
+      filtered = filtered.filter(
+        (order) =>
+          order.orderNumber?.toString().toLowerCase().includes(query) ||
+          order.customerId?.toString().toLowerCase().includes(query) ||
+          order.customerUsername?.toLowerCase().includes(query)
+      );
     }
 
-    const orderDate = formatDateForShipStation(order.orderDate || order.createdAt || new Date());
-    const shipTo = order.shipTo || {};
-    const billTo = order.billTo || {};
+    // Platform filter
+    if (filters.platform) {
+      filtered = filtered.filter((order) => {
+        const orderPlatformId = order.plateform?._id || order.plateform;
+        return String(orderPlatformId) === String(filters.platform);
+      });
+    }
 
-    const advancedOptions = {};
-    if (productTitles[0]) advancedOptions.customField1 = productTitles[0];
-    if (productTitles[1]) advancedOptions.customField2 = productTitles[1];
-    if (productTitles[2]) advancedOptions.customField3 = productTitles[2];
+    // Date range filter
+    if (filters.dateRange?.length === 2) {
+      const [startDate, endDate] = filters.dateRange.map(
+        (date) => new Date(date)
+      );
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
 
-    return {
-      orderNumber: String(order.orderNumber || order._id || ""),
-      orderKey: String(order._id || order.orderNumber || ""),
-      orderDate: orderDate,
-      orderStatus: "awaiting_shipment",
-      customerId: order.customerId || undefined,
-      customerUsername: order.customerUsername || undefined,
-      customerEmail: order.customerEmail || undefined,
-      billTo: {
-        name: billTo.name || null,
-        company: billTo.company || null,
-        street1: billTo.street1 || null,
-        street2: billTo.street2 || null,
-        street3: billTo.street3 || null,
-        city: billTo.city || null,
-        state: billTo.state || null,
-        postalCode: billTo.postalCode || null,
-        country: normalizeCountryCode(billTo.country) || null,
-        phone: billTo.phone || null,
-        residential: billTo.residential || null,
-      },
-      shipTo: {
-        name: shipTo.name || null,
-        company: shipTo.company || null,
-        street1: shipTo.street1 || null,
-        street2: shipTo.street2 || null,
-        street3: shipTo.street3 || null,
-        city: shipTo.city || null,
-        state: shipTo.state || null,
-        postalCode: shipTo.postalCode || null,
-        country: normalizeCountryCode(shipTo.country) || null,
-        phone: shipTo.phone || null,
-        residential: shipTo.residential || true,
-      },
-      items,
-      requestedShippingService: order.requestedShippingService || null,
-      amountPaid: Number(order.order_total) || undefined,
-      taxAmount: Number(order.tax_amount) || undefined,
-      shippingAmount: Number(order.shipping_amount) || undefined,
-      gift: false,
-      paymentMethod: undefined,
-      advancedOptions,
-    };
-  };
+      filtered = filtered.filter((order) => {
+        const orderDate = new Date(order.orderDate || order.createdAt);
+        return orderDate >= startDate && orderDate <= endDate;
+      });
+    }
 
-  const handleMoveToShipStation = async () => {
+    return filtered;
+  }, [ordersData?.orders, filters]);
+
+  const selectableOrders = useMemo(
+    () => filteredOrders.filter((order) => 
+      !(order?.shipstation_status === true || order?.shipStation_OrderId)
+    ),
+    [filteredOrders]
+  );
+
+  // Event handlers
+  const handleCreateOrder = useCallback(() => {
+    setIsModalVisible(true);
+  }, []);
+
+  const handleModalCancel = useCallback(() => {
+    setIsModalVisible(false);
+  }, []);
+
+  const handleOrderSuccess = useCallback(() => {
+    refetch();
+  }, [refetch]);
+
+  const handlePageChange = useCallback((page, size) => {
+    setCurrentPage(page);
+    setPageSize(size);
+  }, []);
+
+  const handleDrawerOpen = useCallback((order) => {
+    setSelectedOrder(order);
+    setOpen(true);
+  }, []);
+
+  const handleDrawerClose = useCallback(() => {
+    setOpen(false);
+    setSelectedOrder(null);
+  }, []);
+
+  const handleFiltersChange = useCallback(
+    (newFilters, resetPagination = false) => {
+      setFilters(newFilters);
+      if (resetPagination) {
+        setCurrentPage(1);
+      }
+      setSelectedOrders([]);
+      setSelectAll(false);
+    },
+    []
+  );
+
+  const handleFiltersReset = useCallback(() => {
+    setFilters(INITIAL_FILTERS);
+    setCurrentPage(1);
+    setSelectedOrders([]);
+    setSelectAll(false);
+  }, []);
+
+  const handleSelectAll = useCallback(
+    (checked) => {
+      setSelectAll(checked);
+      setSelectedOrders(
+        checked ? selectableOrders.map((order) => order._id) : []
+      );
+    },
+    [selectableOrders]
+  );
+
+  const handleOrderSelect = useCallback((orderId, checked) => {
+    setSelectedOrders((prev) =>
+      checked ? [...prev, orderId] : prev.filter((id) => id !== orderId)
+    );
+  }, []);
+
+  const handleMoveToShipStation = useCallback(async () => {
+    if (selectedOrders.length === 0) {
+      message.warning("Please select at least one order.");
+      return;
+    }
+
+    setIsMovingToShipStation(true);
+
     try {
-      const ordersToProcess = selectedOrders.length > 0 ? selectedOrders : [];
-      if (ordersToProcess.length === 0) {
-        message.warning("Please select at least one order.");
-        return;
-      }
-      setIsMovingToShipStation(true);
+      // Group orders by platform
+      const orderMap = new Map(filteredOrders.map((o) => [o._id, o]));
+      const platformGroups = new Map();
 
-      // Build a map of platformId (as string) => orders
-      const idToOrder = new Map(filteredOrders.map((o) => [o._id, o]));
-      const platformToOrders = new Map();
-      for (const id of ordersToProcess) {
-        const ord = idToOrder.get(id);
-        if (!ord) continue;
-        const rawPid = ord?.plateform?._id ?? ord?.plateform ?? "";
-        const pid = typeof rawPid === "object" ? rawPid?._id : String(rawPid);
-        if (!pid) continue;
-        if (!platformToOrders.has(pid)) platformToOrders.set(pid, []);
-        platformToOrders.get(pid).push(ord);
-      }
+      selectedOrders.forEach((orderId) => {
+        const order = orderMap.get(orderId);
+        if (!order) return;
 
-      for (const [platformId, orders] of platformToOrders.entries()) {
-        if (!platformId) {
-          console.warn(
-            "Skipping ShipStation post due to missing platformId for orders",
-            orders?.map((o) => o?.orderNumber)
-          );
-          continue;
+        const platformId = String(
+          order?.plateform?._id || order?.plateform || ""
+        );
+        if (!platformId) return;
+
+        if (!platformGroups.has(platformId)) {
+          platformGroups.set(platformId, []);
         }
+        platformGroups.get(platformId).push(order);
+      });
 
-        // Build orderData list
-        let orderData = orders
-          .map((ord) => buildShipStationOrderFromManual(ord))
-          .filter(Boolean);
-
-        // Ensure we don't send orders without items
-        orderData = orderData.filter(
-          (od) => Array.isArray(od?.items) && od.items.length > 0
+      // Process each platform group
+      for (const [platformId, orders] of platformGroups) {
+        const orderDetailsResults = await Promise.all(
+          orders.map(async (order) => {
+            try {
+              const details = await getManualOrderDetails(order._id);
+              return { order, details };
+            } catch (error) {
+              console.error(
+                `Failed to fetch details for order ${order._id}:`,
+                error
+              );
+              return { order, details: null };
+            }
+          })
         );
 
-        const payload = { plateformId: String(platformId), orders: orderData };
-        console.log("Posting ShipStation payload", payload);
+        const orderData = orderDetailsResults
+          .map(({ order, details }) => buildShipStationOrder(order, details))
+          .filter((order) => order?.items?.length > 0);
 
-        // POST to ShipStation API for this platform group
+        if (orderData.length === 0) continue;
+
+        const payload = {
+          plateformId: platformId,
+          orderData,
+        };
+        console.log("payload", JSON.stringify(payload, null, 2));
+
         await apiClient.post(
-          `/api/v1/shipstation/create/shipstation/order`,
+          "/api/v1/shipstation/create/shipstation/order",
           payload
         );
       }
@@ -392,7 +421,7 @@ const ManualOrdersPage = () => {
       Swal.fire({
         icon: "success",
         title: "Moved to ShipStation",
-        text: `Successfully sent ${ordersToProcess.length} order(s) to ShipStation`,
+        text: `Successfully sent ${selectedOrders.length} order(s) to ShipStation`,
         toast: true,
         position: "top-end",
         showConfirmButton: false,
@@ -402,26 +431,20 @@ const ManualOrdersPage = () => {
         color: "#fff",
         customClass: { popup: "rounded-lg" },
       });
-      console.log("Items Moved to ShipStation for", ordersToProcess);
-      // Refresh and clear selections
+
       setSelectedOrders([]);
       setSelectAll(false);
       await refetch();
-    } catch (err) {
-      console.error("Move to ShipStation failed", err);
-      if (err?.response?.data) {
-        console.error(
-          "ShipStation create order error response:",
-          err.response.data
-        );
-      }
+    } catch (error) {
+      console.error("Move to ShipStation failed:", error);
+
       Swal.fire({
         icon: "error",
         title: "Failed to Move",
         text:
-          err?.response?.data?.error ||
-          err?.response?.data?.message ||
-          err?.message ||
+          error?.response?.data?.error ||
+          error?.response?.data?.message ||
+          error?.message ||
           "Move to ShipStation failed",
         toast: true,
         position: "top-end",
@@ -432,46 +455,24 @@ const ManualOrdersPage = () => {
         color: "#fff",
         customClass: { popup: "rounded-lg" },
       });
-      console.error(
-        err?.response?.data?.error ||
-          err?.response?.data?.message ||
-          err?.message ||
-          "Move to ShipStation failed"
-      );
     } finally {
       setIsMovingToShipStation(false);
     }
-  };
+  }, [selectedOrders, filteredOrders, buildShipStationOrder, refetch]);
 
-  // Update select all state when orders change
+  // Effects
   useEffect(() => {
-    if (
-      filteredOrders.filter((o) => !o?.shipStation_OrderId).length > 0 &&
-      selectedOrders.length ===
-        filteredOrders.filter((o) => !o?.shipStation_OrderId).length
-    ) {
-      setSelectAll(true);
-    } else {
-      setSelectAll(false);
-    }
-  }, [selectedOrders, filteredOrders]);
+    setSelectAll(
+      selectableOrders.length > 0 &&
+        selectedOrders.length === selectableOrders.length
+    );
+  }, [selectedOrders.length, selectableOrders.length]);
 
-  // Ensure no disabled (ShipStation) orders remain selected when data updates
   useEffect(() => {
-    setSelectedOrders((prev) => {
-      const allowedIds = new Set(
-        filteredOrders.filter((o) => !o?.shipStation_OrderId).map((o) => o._id)
-      );
-      const next = prev.filter((id) => allowedIds.has(id));
-      if (next.length !== prev.length) return next;
-      for (let i = 0; i < next.length; i += 1) {
-        if (next[i] !== prev[i]) return next;
-      }
-      return prev;
-    });
-  }, [filteredOrders]);
+    const allowedIds = new Set(selectableOrders.map((o) => o._id));
+    setSelectedOrders((prev) => prev.filter((id) => allowedIds.has(id)));
+  }, [selectableOrders]);
 
-  // Error handling
   useEffect(() => {
     if (error) {
       notification.error({
@@ -527,34 +528,48 @@ const ManualOrdersPage = () => {
           <Card className="shadow-sm">
             <Form layout="vertical">
               <Row gutter={[16, 16]}>
-                {/* Search Input */}
                 <Col xs={24} sm={24} md={12} lg={10}>
                   <Form.Item label="Search">
                     <Input
                       placeholder="Search by order number or customer name..."
                       value={filters.search}
-                      onChange={(e) => handleFiltersChange({ ...filters, search: e.target.value }, true)}
+                      onChange={(e) =>
+                        handleFiltersChange(
+                          { ...filters, search: e.target.value },
+                          true
+                        )
+                      }
                       prefix={<SearchOutlined />}
                       allowClear
                     />
                   </Form.Item>
                 </Col>
 
-                {/* Platform Filter */}
                 <Col xs={24} sm={12} md={6} lg={6}>
                   <Form.Item label="Platform">
                     <Select
                       placeholder="All Platforms"
                       value={filters.platform}
-                      onChange={(value) => handleFiltersChange({ ...filters, platform: value }, true)}
+                      onChange={(value) =>
+                        handleFiltersChange(
+                          { ...filters, platform: value },
+                          true
+                        )
+                      }
                       allowClear
                       showSearch
                       filterOption={(input, option) =>
-                        (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                        (option?.label ?? "")
+                          .toLowerCase()
+                          .includes(input.toLowerCase())
                       }
                     >
                       {platformsData?.platforms?.map((platform) => (
-                        <Select.Option key={platform._id} value={platform._id} label={platform.plt_name}>
+                        <Select.Option
+                          key={platform._id}
+                          value={platform._id}
+                          label={platform.plt_name}
+                        >
                           {platform.plt_name}
                         </Select.Option>
                       ))}
@@ -562,26 +577,29 @@ const ManualOrdersPage = () => {
                   </Form.Item>
                 </Col>
 
-                {/* Date Range Filter */}
                 <Col xs={24} sm={12} md={6} lg={6}>
                   <Form.Item label="Date Range">
                     <DatePicker.RangePicker
                       value={filters.dateRange}
-                      onChange={(dates) => handleFiltersChange({ ...filters, dateRange: dates }, true)}
+                      onChange={(dates) =>
+                        handleFiltersChange(
+                          { ...filters, dateRange: dates },
+                          true
+                        )
+                      }
                       format="YYYY-MM-DD"
-                      placeholder={['Start Date', 'End Date']}
-                      style={{ width: '100%' }}
+                      placeholder={["Start Date", "End Date"]}
+                      style={{ width: "100%" }}
                     />
                   </Form.Item>
                 </Col>
 
-                {/* Reset Filters Button */}
                 <Col xs={24} sm={24} md={6} lg={2}>
                   <Form.Item label=" " style={{ marginBottom: 0 }}>
                     <Button
                       icon={<ReloadOutlined />}
                       onClick={handleFiltersReset}
-                      style={{ width: '100%' }}
+                      style={{ width: "100%" }}
                     >
                       Reset
                     </Button>
@@ -592,30 +610,32 @@ const ManualOrdersPage = () => {
           </Card>
         </div>
 
-          {/* Bulk Actions */}
-          {selectedOrders.length > 0 && (
-            <Card className="mb-4" style={{ backgroundColor: '#f0f9ff', borderColor: '#3b82f6' }}>
-              <Row justify="space-between" align="middle">
-                <Col>
-                  <Typography.Text strong style={{ color: '#1e40af' }}>
-                    {selectedOrders.length} order(s) selected
-                  </Typography.Text>
-                </Col>
-                <Col>
-                  <Button
-                    type="primary"
-                    size="small"
-                    style={{ backgroundColor: '#059669', borderColor: '#059669' }}
-                    loading={isMovingToShipStation}
-                    disabled={isMovingToShipStation}
-                    onClick={handleMoveToShipStation}
-                  >
-                    Move to ShipStation
-                  </Button>
-                </Col>
-              </Row>
-            </Card>
-          )}
+        {/* Bulk Actions */}
+        {selectedOrders.length > 0 && (
+          <Card
+            className="mb-4"
+            style={{ backgroundColor: "#f0f9ff", borderColor: "#3b82f6" }}
+          >
+            <Row justify="space-between" align="middle">
+              <Col>
+                <Typography.Text strong style={{ color: "#1e40af" }}>
+                  {selectedOrders.length} order(s) selected
+                </Typography.Text>
+              </Col>
+              <Col>
+                <Button
+                  type="primary"
+                  size="small"
+                  style={{ backgroundColor: "#059669", borderColor: "#059669" }}
+                  loading={isMovingToShipStation}
+                  onClick={handleMoveToShipStation}
+                >
+                  Move to ShipStation
+                </Button>
+              </Col>
+            </Row>
+          </Card>
+        )}
 
         {/* Orders Table */}
         <motion.div
@@ -628,10 +648,9 @@ const ManualOrdersPage = () => {
             loading={isLoading}
             currentPage={currentPage}
             pageSize={pageSize}
-            totalOrders={ordersData?.totalOrders || totalFilteredOrders}
+            totalOrders={ordersData?.totalOrders || filteredOrders.length}
             onPageChange={handlePageChange}
             onRowClick={handleDrawerOpen}
-            onEditClick={handleEditClick}
             showPagination={true}
             showCheckboxes={true}
             selectedOrders={selectedOrders}
