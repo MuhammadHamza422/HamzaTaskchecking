@@ -490,21 +490,10 @@ const AdminUsersPage = () => {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
     >
-      <Card
-        style={{
-          background: "linear-gradient(to right, #f0f4ff, #dbeafe)",
-          borderRadius: "12px",
-          boxShadow: "0 8px 24px rgba(0,0,0,0.06)",
-          padding: "2rem",
-          marginBottom: "2rem",
-        }}
+      <Card className="bg-gradient-to-r from-blue-50 to-purple-50 mb-2 p-2 sm:mb-4 sm:p-4 rounded-lg shadow-lg"
+       
       >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
+        <div className="flex sm:flex-row flex-col gap-3 sm:justify-between sm:items-center"
         >
           <Title level={3} style={{ margin: 0 }}>
             Manage Users
