@@ -283,6 +283,10 @@ export default function ScanProduct() {
         console.log("Search results:", data.locations[0]._id);
         setSearchResults(data.inventry);
         setTotalInventory(data.totalInventry);
+        scanSound.currentTime = 0;
+        scanSound
+          .play()
+          .catch((err) => console.warn("Sound play failed:", err));
         return { items: data.inventry, total: data.totalInventry };
       } else {
         throw new Error("Invalid response format");
