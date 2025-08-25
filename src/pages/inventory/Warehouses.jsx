@@ -451,7 +451,7 @@ export default function Warehouses() {
           className=" h-[2.2rem] border border-gray-400 outline-none rounded-md cursor-pointer text-sm"
         >
           <option value="shelf">Shelf</option>
-          <option value="not_shelf">Not Shelf</option>
+          <option value="not_shelf">Without Shelf</option>
         </select>
       </div>
       {/* handleTypeChange */}
