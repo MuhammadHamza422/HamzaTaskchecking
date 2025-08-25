@@ -433,7 +433,7 @@ export default function Warehouses() {
   const handleTypeChange = (type) => {
     localStorage.setItem("zoneType", type);
     setType(type);
-    // window.location.reload();
+    window.location.reload();
   };
   return (
     <div
