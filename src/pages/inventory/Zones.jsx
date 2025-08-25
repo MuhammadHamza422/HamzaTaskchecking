@@ -15,6 +15,7 @@ import Swal from "sweetalert2";
 import useFullscreen from "../../components/useFullscreen.jsx";
 import { Modal } from "antd";
 import { useAuth } from "../../contexts/AuthContext.jsx";
+import { useEffect } from "react";
 
 export default function Zones() {
   const navigate = useNavigate();
@@ -40,13 +41,22 @@ export default function Zones() {
   const [znEdit, setZnEdit] = useState(null);
   const [znName, setZnName] = useState("");
   const [znDesc, setZnDesc] = useState("");
+  const [znType, setZnType] = useState("shelf");
   const [znLoading, setZnLoading] = useState(false);
   const [znFormError, setZnFormError] = useState("");
+  const [type, setType] = useState("shelf");
+
+  useEffect(() => {
+    const zoneType = localStorage.getItem("zoneType");
+    setType(zoneType);
+  }, []);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["zones", selectedWarehouseId],
+    queryKey: ["zones", selectedWarehouseId, type],
     queryFn: () =>
-      selectedWarehouseId ? getZonesByWarehouse(selectedWarehouseId) : null,
+      selectedWarehouseId
+        ? getZonesByWarehouse(selectedWarehouseId, type)
+        : null,
     enabled: !!selectedWarehouseId,
     staleTime: 60 * 1000,
   });
@@ -67,6 +77,7 @@ export default function Zones() {
       name: z.name,
       description: z.description,
       warehouseId: z.warehouse?.id ?? z.warehouse?._id ?? selectedWarehouseId,
+      type: z.type || "shelf",
     }));
   }, [data, selectedWarehouseId]);
 
@@ -104,6 +115,7 @@ export default function Zones() {
     setZnEdit(z);
     setZnName(z.name || "");
     setZnDesc(z.description || "");
+    setZnType(z.type || "shelf");
     setZnFormError("");
     setZnModalOpen(true);
   }
@@ -129,6 +141,7 @@ export default function Zones() {
     const payload = {
       name,
       description: (znDesc || "").trim(),
+      type: znType,
       warehouse: String(selectedWarehouseId),
     };
 
@@ -379,6 +392,19 @@ export default function Zones() {
                   value={znDesc}
                   onChange={(e) => setZnDesc(e.target.value)}
                 />
+              </div>
+              <div className=" w-full">
+                <label className="block text-sm font-medium text-zinc-700">
+                  Type
+                </label>
+                <select
+                  value={znType}
+                  onChange={(e) => setZnType(e.target.value)}
+                  className=" h-[2.2rem] border w-full mt-2 border-gray-400 outline-none rounded-md cursor-pointer text-sm"
+                >
+                  <option value="shelf">Shelf</option>
+                  <option value="not_shelf">Not Shelf</option>
+                </select>
               </div>
               <div className="mt-6 flex justify-end gap-2">
                 <button

@@ -7,11 +7,13 @@ export async function getWarehouses({
   page = 1,
   limit = 50,
   search = "",
+  type,
 } = {}) {
   const params = new URLSearchParams();
   if (page) params.set("page", String(page));
   if (limit) params.set("limit", String(limit));
   if (search) params.set("search", String(search));
+  if (type) params.set("type", String(type));
   const { data } = await apiClient.get(
     `/api/v1/warehouse/all?${params.toString()}`
   );
@@ -46,8 +48,10 @@ export async function deleteWarehouse(id) {
 }
 
 // GET /api/v1/warehouse/zone/:warehouseId
-export async function getZonesByWarehouse(warehouseId) {
-  const { data } = await apiClient.get(`/api/v1/warehouse/zone/${warehouseId}`);
+export async function getZonesByWarehouse(warehouseId, type) {
+  const { data } = await apiClient.get(
+    `/api/v1/warehouse/zone/${warehouseId}?type=${type}`
+  );
   return data;
 }
 
@@ -223,5 +227,3 @@ export async function moveInventoryItem(inventoryId, movedLocationId) {
   console.log("Move API response:", data);
   return data;
 }
-
-

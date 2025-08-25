@@ -933,9 +933,8 @@ export default function InventoryDisplay({
                               {user?.roles.role !== "Picker" && (
                                 <button
                                   onClick={() => {
-                                    const currentPending = pendingQtyChanges.get(
-                                      r?._id
-                                    );
+                                    const currentPending =
+                                      pendingQtyChanges.get(r?._id);
                                     const baseQty = currentPending
                                       ? currentPending.newQty
                                       : Number(r?.quantity);
@@ -978,7 +977,8 @@ export default function InventoryDisplay({
                               </h2>
                               <div className="flex items-center max-sm:justify-end space-x-2 b">
                                 <p className="text-sm font-medium text-blue-700">
-                                  New qty: {pendingQtyChanges.get(r?._id)?.newQty}
+                                  New qty:{" "}
+                                  {pendingQtyChanges.get(r?._id)?.newQty}
                                 </p>
                                 <button
                                   onClick={() => {
@@ -1047,7 +1047,9 @@ export default function InventoryDisplay({
                             {r?.productData.sku || "N/A"}
                           </div>
                         </div>
-                        <div className="text-xs text-gray-600">Qty: {r?.quantity}</div>
+                        <div className="text-xs text-gray-600">
+                          Qty: {r?.quantity}
+                        </div>
                       </div>
 
                       <div className="mt-3 flex items-center justify-between">
@@ -1055,7 +1057,9 @@ export default function InventoryDisplay({
                           <button
                             disabled={Number(r?.quantity) <= 0}
                             onClick={() => {
-                              const currentPending = pendingQtyChanges.get(r?._id);
+                              const currentPending = pendingQtyChanges.get(
+                                r?._id
+                              );
                               const baseQty = currentPending
                                 ? currentPending.newQty
                                 : Number(r?.quantity);
@@ -1092,13 +1096,20 @@ export default function InventoryDisplay({
                             }
                             onKeyDown={(e) => {
                               if (e.key === "Enter") {
-                                const pendingChange = pendingQtyChanges.get(r?._id);
+                                const pendingChange = pendingQtyChanges.get(
+                                  r?._id
+                                );
                                 if (pendingChange) {
                                   const key =
-                                    pendingChange.newQty > pendingChange.currentQty
+                                    pendingChange.newQty >
+                                    pendingChange.currentQty
                                       ? "added"
                                       : "removed";
-                                  handleUpdateQty(r?._id, pendingChange.newQty, key);
+                                  handleUpdateQty(
+                                    r?._id,
+                                    pendingChange.newQty,
+                                    key
+                                  );
                                 }
                               }
                             }}
@@ -1111,7 +1122,9 @@ export default function InventoryDisplay({
                           {user?.roles.role !== "Picker" && (
                             <button
                               onClick={() => {
-                                const currentPending = pendingQtyChanges.get(r?._id);
+                                const currentPending = pendingQtyChanges.get(
+                                  r?._id
+                                );
                                 const baseQty = currentPending
                                   ? currentPending.newQty
                                   : Number(r?.quantity);
@@ -1157,13 +1170,20 @@ export default function InventoryDisplay({
                             </p>
                             <button
                               onClick={() => {
-                                const pendingChange = pendingQtyChanges.get(r?._id);
+                                const pendingChange = pendingQtyChanges.get(
+                                  r?._id
+                                );
                                 if (pendingChange) {
                                   const key =
-                                    pendingChange.newQty > pendingChange.currentQty
+                                    pendingChange.newQty >
+                                    pendingChange.currentQty
                                       ? "added"
                                       : "removed";
-                                  handleUpdateQty(r?._id, pendingChange.newQty, key);
+                                  handleUpdateQty(
+                                    r?._id,
+                                    pendingChange.newQty,
+                                    key
+                                  );
                                 }
                               }}
                               className="px-3 py-2 text-sm bg-green-600 text-white rounded-lg"
@@ -1409,7 +1429,9 @@ export default function InventoryDisplay({
                               className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm border-b last:border-b-0"
                             >
                               <div className="font-medium">{p.pro_title}</div>
-                              <div className="text-xs text-gray-500">{p.sku}</div>
+                              <div className="text-xs text-gray-500">
+                                {p.sku}
+                              </div>
                             </div>
                           ))
                         ) : (

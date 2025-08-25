@@ -49,17 +49,25 @@ export default function Warehouses() {
   const [whName, setWhName] = useState("");
   const [whCountry, setWhCountry] = useState("");
   const [whLoading, setWhLoading] = useState(false);
+  const [whType, setWhType] = useState("shelf");
 
   const [znModalOpen, setZnModalOpen] = useState(false);
   const [znEdit, setZnEdit] = useState(null);
   const [znName, setZnName] = useState("");
   const [znDesc, setZnDesc] = useState("");
+  const [znType, setZnType] = useState("shelf");
   const [znLoading, setZnLoading] = useState(false);
   const [whFormError, setWhFormError] = useState("");
   const [znFormError, setZnFormError] = useState("");
   const [copied, setCopied] = useState(false);
   const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
   const role = user?.roles.role;
+  const [type, setType] = useState("shelf");
+
+  useEffect(() => {
+    const zoneType = localStorage.getItem("zoneType");
+    setType(zoneType);
+  }, []);
 
   const countryOptions = [
     "uae",
@@ -82,9 +90,9 @@ export default function Warehouses() {
     isLoading: warehousesLoading,
     error: warehousesError,
   } = useQuery({
-    queryKey: ["warehouses"],
+    queryKey: ["warehouses", type],
     queryFn: async () => {
-      const ws = await apiGetWarehouses({ page: 1, limit: 50 });
+      const ws = await apiGetWarehouses({ page: 1, limit: 50, type });
       return ws;
     },
     staleTime: 5 * 60 * 1000,
@@ -115,10 +123,10 @@ export default function Warehouses() {
 
   // Fetch zones for selected warehouse using TanStack React Query
   const { data: zonesResponse, isFetching: zonesFetching } = useQuery({
-    queryKey: ["zones", selectedWarehouseId],
+    queryKey: ["zones", selectedWarehouseId, type],
     queryFn: async () => {
       if (!selectedWarehouseId) return null;
-      return await getZonesByWarehouse(selectedWarehouseId);
+      return await getZonesByWarehouse(selectedWarehouseId, type);
     },
     enabled: !!selectedWarehouseId,
     staleTime: 60 * 1000,
@@ -131,6 +139,7 @@ export default function Warehouses() {
       id: z.id ?? z._id,
       name: z.name,
       description: z.description,
+      type: z.type,
       warehouseId: z.warehouse?.id ?? z.warehouse?._id ?? selectedWarehouseId,
     }));
   }, [zonesResponse, selectedWarehouseId]);
@@ -140,12 +149,14 @@ export default function Warehouses() {
     setWhEdit(null);
     setWhName("");
     setWhCountry("");
+    setWhType("shelf");
     setWhModalOpen(true);
   }
   function openEditWh(w) {
     setWhEdit(w);
     setWhName(w.name);
     setWhCountry(w.country);
+    setWhType(w.type);
     setWhModalOpen(true);
   }
   function closeWh() {
@@ -196,12 +207,13 @@ export default function Warehouses() {
     setWhFormError("");
     const name = whName.trim();
     const country = whCountry.trim();
+    const type = whType.trim();
     if (!name || !country) {
       setWhFormError("Both name and country are required.");
       return;
     }
     setWhLoading(true);
-    const payload = { name, country };
+    const payload = { name, country, type };
     try {
       if (whEdit && whEdit.id) {
         await apiUpdateWarehouse(whEdit.id, payload);
@@ -251,12 +263,14 @@ export default function Warehouses() {
     setZnEdit(null);
     setZnName("");
     setZnDesc("");
+    setZnType("shelf");
     setZnModalOpen(true);
   }
   function openEditZn(z) {
     setZnEdit(z);
     setZnName(z.name);
     setZnDesc(z.description || "");
+    setZnType(z.type || "shelf");
     setZnModalOpen(true);
   }
   function closeZn() {
@@ -276,6 +290,7 @@ export default function Warehouses() {
       name,
       description: znDesc.trim(),
       warehouse: String(selectedWarehouseId),
+      type: znType,
     };
     try {
       setZnLoading(true);
@@ -413,13 +428,33 @@ export default function Warehouses() {
       navigate("/inventory/zones");
     }
   };
+
+  // Handle type
+  const handleTypeChange = (type) => {
+    localStorage.setItem("zoneType", type);
+    setType(type);
+    // window.location.reload();
+  };
   return (
     <div
       ref={fullscreenRef}
       className="rounded-xl border border-zinc-200 bg-white p-5"
     >
-      <h1 className="text-2xl font-semibold">Warehouses</h1>
-      <p className="mt-1 text-sm text-zinc-600">Manage your warehouses.</p>
+      <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-1">
+          <h1 className=" text-xl sm:text-2xl font-semibold">Warehouses</h1>
+          <p className="mt-1 text-sm text-zinc-600">Manage your warehouses.</p>
+        </div>
+        <select
+          value={type}
+          onChange={(e) => handleTypeChange(e.target.value)}
+          className=" h-[2.2rem] border border-gray-400 outline-none rounded-md cursor-pointer text-sm"
+        >
+          <option value="shelf">Shelf</option>
+          <option value="not_shelf">Not Shelf</option>
+        </select>
+      </div>
+      {/* handleTypeChange */}
 
       <div className="space-y-6">
         {warehousesError && (
@@ -716,6 +751,19 @@ export default function Warehouses() {
                     onChange={(e) => setZnName(e.target.value)}
                   />
                 </div>
+                <div className="w-full">
+                  <label className="block text-sm font-medium text-zinc-700">
+                    Type
+                  </label>
+                  <select
+                    value={znType}
+                    onChange={(e) => setZnType(e.target.value)}
+                    className=" h-[2.2rem] border mt-2 w-full border-gray-400 outline-none rounded-md cursor-pointer text-sm"
+                  >
+                    <option value="shelf">Shelf</option>
+                    <option value="not_shelf">Not Shelf</option>
+                  </select>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-zinc-700">
                     Description
@@ -802,6 +850,19 @@ export default function Warehouses() {
                         {c}
                       </option>
                     ))}
+                  </select>
+                </div>
+                <div className="w-full">
+                  <label className="block text-sm font-medium text-zinc-700">
+                    Type
+                  </label>
+                  <select
+                    value={whType}
+                    onChange={(e) => setWhType(e.target.value)}
+                    className=" h-[2.2rem] w-full mt-2 border border-gray-400 outline-none rounded-md cursor-pointer text-sm"
+                  >
+                    <option value="shelf">Shelf</option>
+                    <option value="not_shelf">Not Shelf</option>
                   </select>
                 </div>
                 <div className="mt-6 flex justify-end gap-2">

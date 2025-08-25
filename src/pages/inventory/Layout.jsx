@@ -5,6 +5,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import Swal from "sweetalert2";
 import { MdFullscreen, MdFullscreenExit } from "react-icons/md";
 import useFullscreen from "../../components/useFullscreen";
+import { useMemo } from "react";
 
 function Icon({ name, active }) {
   const common = "h-5 w-5";
@@ -248,26 +249,46 @@ function Icon({ name, active }) {
   }
 }
 
-const navItems = [
-  { to: "/", label: "App", icon: "app" },
-  { to: "/inventory", label: "Home", icon: "home", exact: true },
-  { to: "/inventory/warehouses", label: "Warehouse", icon: "warehouse" },
-  { to: "/inventory/zones", label: "Zone", icon: "zones" },
-  { to: "/inventory/locations", label: "Location", icon: "locations" },
-  { to: "/inventory/inventory", label: "Inventory", icon: "inventory" },
-  { to: "/inventory/products", label: "Products", icon: "products" },
-  { to: "/inventory/scan", label: "Scan", icon: "scan" },
-  { to: "/inventory/activity-logs", label: "Activity Log", icon: "activity" },
-];
-
 export default function InventoryLayout() {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrollTop, setScrollTop] = useState(0);
   const { user, logout } = useAuth();
   const { ref, isFullscreen, toggle } = useFullscreen();
+  const [type, setType] = useState("shelf");
 
-  console.log("user", user);
+  useEffect(() => {
+    const zoneType = localStorage.getItem("zoneType");
+    setType(zoneType);
+  }, []);
+
+  const navItems = useMemo(() => {
+    return [
+      { to: "/", label: "App", icon: "app" },
+      { to: "/inventory", label: "Home", icon: "home", exact: true },
+      { to: "/inventory/warehouses", label: "Warehouse", icon: "warehouse" },
+      { to: "/inventory/zones", label: "Zone", icon: "zones" },
+      ...(type === "shelf"
+        ? [
+            {
+              to: "/inventory/locations",
+              label: "Location",
+              icon: "locations",
+            },
+          ]
+        : []),
+      { to: "/inventory/inventory", label: "Inventory", icon: "inventory" },
+      { to: "/inventory/products", label: "Products", icon: "products" },
+      ...(type === "shelf"
+        ? [{ to: "/inventory/scan", label: "Scan", icon: "scan" }]
+        : []),
+      {
+        to: "/inventory/activity-logs",
+        label: "Activity Log",
+        icon: "activity",
+      },
+    ];
+  }, [type]);
 
   const isActive = (to, exact) => {
     if (exact) return location.pathname === to;
