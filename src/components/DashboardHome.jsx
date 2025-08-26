@@ -4,7 +4,9 @@ import {
   Users,
   ClipboardList,
   ShoppingCart,
+  CalendarDays,
 } from "lucide-react";
+
 import { Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -43,6 +45,38 @@ export default function DashboardCards() {
       bgColor: "bg-pink-50",
       border: "border-pink-500",
     },
+    {
+      title: "Attendance",
+      icon: CalendarDays,
+      color: "text-teal-500",
+      hoverColor: "group-hover:text-teal-600",
+      link: "/attendance",
+      bgColor: "bg-teal-50",
+      border: "border-teal-500",
+    },
+    {
+      title: "Time Off",
+      icon: CalendarDays,
+      color: "text-teal-500",
+      hoverColor: "group-hover:text-teal-600",
+      link: "/timeoff", // 🔹 single entry point
+      bgColor: "bg-teal-50",
+      border: "border-teal-500",
+    },
+    // {
+    //   title: "Products",
+    //   icon: Package,
+    //   color: "text-orange-500",
+    //   hoverColor: "group-hover:text-orange-600",
+    //   link: "/products",
+    // },
+    // {
+    //   title: "New Orders",
+    //   icon: ShoppingCart,
+    //   color: "text-blue-500",
+    //   hoverColor: "group-hover:text-blue-600",
+    //   link: "/new-orders",
+    // },
     {
       title: "Products",
       icon: Package,

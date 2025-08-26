@@ -490,11 +490,8 @@ const AdminUsersPage = () => {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
     >
-      <Card className="bg-gradient-to-r from-blue-50 to-purple-50 mb-2 p-2 sm:mb-4 sm:p-4 rounded-lg shadow-lg"
-       
-      >
-        <div className="flex sm:flex-row flex-col gap-3 sm:justify-between sm:items-center"
-        >
+      <Card className="bg-gradient-to-r from-blue-50 to-purple-50 mb-2 p-2 sm:mb-4 sm:p-4 rounded-lg shadow-lg">
+        <div className="flex sm:flex-row flex-col gap-3 sm:justify-between sm:items-center">
           <Title level={3} style={{ margin: 0 }}>
             Manage Users
           </Title>

@@ -37,3 +37,5 @@
 .shidden::-webkit-scrollbar {
   display: none;
 }
+
+/* Lock the viewport when kiosk is active */
