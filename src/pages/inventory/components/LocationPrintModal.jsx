@@ -134,7 +134,7 @@ export default function LocationPrintModal({
                             </div>
                             <div className="border-l border-black text-black flex-1 h-full">
                               <div className="grid grid-cols-3 text-center border-b border-black overflow-hidden">
-                                <p className="col-span-3 py-2.5 uppercase text-lg font-bold tracking-[0.35em]">
+                                <p className="col-span-3 py-[9px] uppercase text-lg font-bold tracking-[0.35em]">
                                   {(loc.type || "").toUpperCase()}
                                 </p>
                               </div>
@@ -142,7 +142,7 @@ export default function LocationPrintModal({
                                 <p className="px-2 py-3 uppercase border-r border-black font-medium">
                                   Zone
                                 </p>
-                                <p className="px-2 py-3">{zoneName || ""}</p>
+                                <p className="px-2 py-3">{loc.zone?.name || zoneName || ""}</p>
                               </div>
                               <div className="grid grid-cols-2 border-b text-sm border-black">
                                 <p className="px-2 py-3 uppercase border-r border-black font-medium">

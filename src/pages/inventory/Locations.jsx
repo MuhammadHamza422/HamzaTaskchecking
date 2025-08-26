@@ -31,6 +31,8 @@ export default function Locations() {
   const { user } = useAuth();
   const role = user?.roles.role;
 
+  console.log("zoneId", zoneId);
+
   // State management
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -74,11 +76,9 @@ export default function Locations() {
     staleTime: 60 * 1000,
   });
 
-  const zoneName = useMemo(() => {
-    const list = Array.isArray(zonesRes?.zones) ? zonesRes.zones : [];
-    const match = list.find((z) => (z.id ?? z._id) === zoneId);
-    return match?.name || "";
-  }, [zonesRes, zoneId]);
+  console.log("zonesRes", zonesRes);
+
+
 
   // Fetch locations with backend pagination and search
   const {
@@ -124,6 +124,9 @@ export default function Locations() {
               : l?.warehouse?._id ?? null,
           zoneId: typeof l?.zone === "string" ? l?.zone : l?.zone?._id ?? null,
           qrcode: l?.qrcode || l?.qrPath || null,
+          // Include zone and warehouse details for print labels
+          zone: l.zone,
+          warehouse: l.warehouse,
         })),
         total:
           res?.totalCount || res?.total || res?.totalLocations || list.length,
@@ -133,6 +136,18 @@ export default function Locations() {
 
   const locations = locationsRes?.locations || [];
   const total = locationsRes?.total || 0;
+
+    // Get zone name from locations data (more reliable than separate zones query)
+    const zoneName = useMemo(() => {
+      if (locations.length > 0) {
+        // Get zone name from the first location's zone data
+        const firstLocation = locations[0];
+        return firstLocation?.zone?.name || "";
+      }
+      return "";
+    }, [locations]);
+  
+    console.log("zoneName from locations:", zoneName);
 
   // compute shelf set and helpers for validations
   const shelfCodesSet = useMemo(() => {
