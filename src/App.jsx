@@ -34,6 +34,22 @@ import ActivityLogs from "./pages/inventory/ActivityLogs";
 import RoleManagement from "./pages/Roles";
 import ManualOrdersPage from "./pages/ManualOrdersPage/ManualOrdersPage";
 import DashboardCards from "./components/DashboardHome";
+import CompanyManager from "./pages/CompanyManager";
+import AttendancePage from "./pages/attendance/AttendancePage";
+import TimeOffLayout from "./pages/timeoff/Layout";
+import MyTimeOffPage from "./pages/timeoff/MyTimeOffPage";
+import AdminTimeOffRequestsPage from "./pages/timeoff/AdminTimeOffRequestsPage";
+import TimeOffTypesPage from "./pages/timeoff/TimeOffTypesPage";
+import AdminTimeOffAllocationsPage from "./pages/timeoff/AdminTimeOffAllocationsPage";
+
+// 🔹 Role guard for specific routes
+const RequireRoles = ({ allow, children }) => {
+  const { token, user } = useAuth();
+  if (!token) return <Navigate to="/login" replace />;
+  if (allow && (!user || !allow.includes(user.role))) return <Navigate to="/" replace />;
+  return children;
+};
+
 
 function App() {
   return (
@@ -60,6 +76,16 @@ function App() {
           <Route path="admin/user-activity" element={<UserActivityPage />} />
           <Route path="admin/roles" element={<RoleManagement />} />
 
+              {/* 🔹 Admin Companies Route (new) */}
+          <Route
+            path="admin/companies"
+            element={
+              <RequireRoles allow={["admin"]}>
+                <CompanyManager />
+              </RequireRoles>
+            }
+          />
+
           {/* Orders Routes */}
           <Route path="orders/admin/products" element={<AdminProductsPage />} />
           <Route
@@ -80,6 +106,45 @@ function App() {
           />
           <Route path="orders/platforms" element={<PlatformsPage />} />
           <Route path="orders/kits" element={<KitsPage />} />
+
+           {/* Attendance entry */}
+          <Route path="/attendance" element={<AttendancePage />} />
+          <Route path="timeoff" element={<TimeOffLayout />}>
+            <Route
+              path="me"
+              element={
+                <RequireRoles allow={["admin", "manager", "user", "purchaser", "sourcer"]}>
+                  <MyTimeOffPage />
+                </RequireRoles>
+              }
+            />
+            <Route
+              path="requests"
+              element={
+                <RequireRoles allow={["admin", "manager"]}>
+                  <AdminTimeOffRequestsPage />
+                </RequireRoles>
+              }
+            />
+          </Route>
+
+          {/* Admin TimeOff Types (separate since it’s under /admin) */}
+          <Route
+            path="admin/timeoff/types"
+            element={
+              <RequireRoles allow={["admin"]}>
+                <TimeOffTypesPage />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="admin/timeoff/allocation"
+            element={
+              <RequireRoles allow={["admin"]}>
+                <AdminTimeOffAllocationsPage />
+              </RequireRoles>
+            }
+          />
 
           {/* Inventory Routes */}
           <Route path="inventory" element={<InventoryLayout />}>
