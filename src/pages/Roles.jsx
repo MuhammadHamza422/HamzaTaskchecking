@@ -52,6 +52,21 @@ const rolesOptions = [
     label: "User Management",
     menu: ["users", "user activity", "role management"],
   },
+  {
+    app: "attendance",
+    label: "Attendance",
+    menu: ["attendance","Kiosk"],
+  },
+  {
+    app: "timeoff",
+    label: "Time Off Management",
+    menu: [
+      "my requests",
+      "requests",
+      "types",
+      "allocation",
+    ],
+  },
 ];
 
 const CustomButton = ({

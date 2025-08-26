@@ -30,6 +30,7 @@ const initialFormState = {
   role: "sourcer",
   is_active: true,
   roles: "",
+  kioskPinHash: "",
 };
 
 const roleColors = {
@@ -67,6 +68,7 @@ const AdminUsersPage = () => {
       setLoading(false);
     }
   }, []);
+  console.log("Form Data:", form.getFieldsValue());
 
   // Check if current user is admin
   const isAdmin = currentUser?.role === "admin";
@@ -85,6 +87,13 @@ const AdminUsersPage = () => {
           role: user.role,
           is_active: user.isActive,
           roles: user.roles,
+          // Accept several common backend field names
+          // kiosk_pin:
+          //   user?.kioskPin ??
+          //   user?.pin ??
+          //   user?.attendancePin ??
+          //   "",
+          kioskPinHash: user?.kioskPinHash || "",
           createdAt: user.createdAt,
           updatedAt: user.updatedAt,
         }));
@@ -124,7 +133,8 @@ const AdminUsersPage = () => {
         role: user.role,
         is_active: user.is_active,
         password: "",
-        roles: user.roles,
+        roles: user.roles?._id || "",
+        kioskPinHash: user.kioskPinHash,
       };
       form.setFieldsValue(formData);
     } else {
@@ -171,6 +181,10 @@ const AdminUsersPage = () => {
         break;
       case "roles":
         hasChanged = value !== originalUser.roles;
+        break;
+      case "kioskPinHash":
+        hasChanged =
+          String(value || "") !== String(originalUser.kioskPinHash || "");
         break;
       default:
         break;
@@ -230,6 +244,9 @@ const AdminUsersPage = () => {
         if (values.roles !== originalUser.roles) {
           dataToSubmit.roles = values.roles;
         }
+       if (String(values.kioskPinHash || "") !== String(originalUser.kioskPinHash || "")) {
+    dataToSubmit.kioskPinHash = values.kioskPinHash || ""; // Changed from kioskPin to kioskPinHash
+  }
       } else {
         // For new users, include all required fields
         dataToSubmit = {
@@ -239,6 +256,8 @@ const AdminUsersPage = () => {
           // role: values.role,
           password: values.password,
           roles: values.roles,
+          // isActive: values.is_active,
+           kioskPinHash: values.kioskPinHash || "",
         };
       }
 
@@ -615,6 +634,41 @@ const AdminUsersPage = () => {
                 }
               />
             </Form.Item>
+            <Form.Item
+            label="Kiosk PIN"
+            name="kioskPinHash"
+            tooltip="Optional 4–6 digit PIN for kiosk/clock-in."
+            rules={[
+              {
+                validator: (_, value) => {
+                  if (!value || /^\d{4,6}$/.test(String(value))) {
+                    return Promise.resolve();
+                  }
+                  return Promise.reject(
+                    new Error("PIN must be 4–6 digits (numbers only)")
+                  );
+                },
+              },
+            ]}
+            help={
+              editingUser
+                ? "Enter a new PIN to update, leave blank to keep existing, or clear to remove."
+                : "Optional, but must be 4–6 digits if set."
+            }
+          >
+            <Input.Password
+              maxLength={6}
+              inputMode="numeric"
+              placeholder="e.g., 1234"
+              onChange={(e) => handleFieldChange("kioskPinHash", e.target.value)}
+              style={
+                changedFields.has("kioskPinHash")
+                  ? { borderColor: "#1890ff" }
+                  : {}
+              }
+            />
+          </Form.Item>
+
             {/* <Form.Item label="Role" name="role" rules={[{ required: true }]}>
               <Select
                 onChange={(value) => handleFieldChange("role", value)}

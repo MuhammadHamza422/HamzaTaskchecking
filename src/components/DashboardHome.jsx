@@ -49,6 +49,7 @@ export default function DashboardCards() {
       title: "Attendance",
       icon: CalendarDays,
       color: "text-teal-500",
+      accessKey: "users",
       hoverColor: "group-hover:text-teal-600",
       link: "/attendance",
       bgColor: "bg-teal-50",
@@ -58,6 +59,7 @@ export default function DashboardCards() {
       title: "Time Off",
       icon: CalendarDays,
       color: "text-teal-500",
+      accessKey: "timeoff",
       hoverColor: "group-hover:text-teal-600",
       link: "/timeoff", // 🔹 single entry point
       bgColor: "bg-teal-50",
@@ -106,7 +108,12 @@ export default function DashboardCards() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
       {cards
-        .filter((card) => userAccess.includes(card.accessKey.toLowerCase()))
+        .filter(
+          (card) =>
+            card.accessKey &&
+            userAccess.includes(card.accessKey.toLowerCase())
+        )
+
         .map((card, index) => (
           <Link
             key={index}
