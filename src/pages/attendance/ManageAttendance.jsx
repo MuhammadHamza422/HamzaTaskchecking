@@ -7,6 +7,7 @@ import {
   adminDeleteAttendance,
 } from "../../api/attendance";
 import { fetchAllUsers } from "../../api/auth";
+import { useAuth } from "../../contexts/AuthContext";
 
 import {
   Card,
@@ -129,6 +130,14 @@ export default function ManageAttendance({ canEdit = false }) {
         limit: pageSize,
       });
       setRows(data?.items || []);
+    } catch (error) {
+      console.error("Failed to fetch attendance data:", error);
+      if (error?.response?.status === 403) {
+        message.error("You don't have permission to view attendance data. Please contact an administrator.");
+      } else {
+        message.error("Failed to load attendance data. Please try again.");
+      }
+      setRows([]);
     } finally {
       setLoading(false);
     }
@@ -493,7 +502,11 @@ export default function ManageAttendance({ canEdit = false }) {
                 allowClear={false}
                 value={dateRange}
                 onChange={(v) => setDateRange(v)}
-                ranges={quickRanges}
+                presets={[
+                  { label: 'Today', value: quickRanges.Today },
+                  { label: 'This Week', value: quickRanges['This Week'] },
+                  { label: 'This Month', value: quickRanges['This Month'] },
+                ]}
                 style={{ width: "100%" }}
               />
             </Col>

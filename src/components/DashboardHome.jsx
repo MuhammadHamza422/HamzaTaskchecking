@@ -7,11 +7,22 @@ import {
   CalendarDays,
 } from "lucide-react";
 
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useEffect } from "react";
 
 export default function DashboardCards() {
   const { user } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user?.role === "attendance") {
+      navigate("/attendance", { replace: true });
+    }
+  }, [user, navigate]);
+  if (user?.role === "attendance") {
+    return null;
+  }
 
   // Example structure of your cards with required access
   const cards = [
@@ -49,7 +60,7 @@ export default function DashboardCards() {
       title: "Attendance",
       icon: CalendarDays,
       color: "text-teal-500",
-      accessKey: "users",
+      accessKey: "attendance",
       hoverColor: "group-hover:text-teal-600",
       link: "/attendance",
       bgColor: "bg-teal-50",
@@ -58,12 +69,12 @@ export default function DashboardCards() {
     {
       title: "Time Off",
       icon: CalendarDays,
-      color: "text-teal-500",
+      color: "text-red-500",
       accessKey: "timeoff",
-      hoverColor: "group-hover:text-teal-600",
+      hoverColor: "group-hover:text-red-600",
       link: "/timeoff", // 🔹 single entry point
-      bgColor: "bg-teal-50",
-      border: "border-teal-500",
+      bgColor: "bg-red-50",
+      border: "border-red-500",
     },
     // {
     //   title: "Products",

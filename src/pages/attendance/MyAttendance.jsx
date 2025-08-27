@@ -323,7 +323,11 @@ export default function MyAttendance() {
                   setDateRange(v);
                   setPage(1);
                 }}
-                ranges={quickRanges}
+                presets={[
+                  { label: 'Today', value: quickRanges.Today },
+                  { label: 'This Week', value: quickRanges['This Week'] },
+                  { label: 'This Month', value: quickRanges['This Month'] },
+                ]}
                 style={{ width: "100%" }}
               />
             </Col>
