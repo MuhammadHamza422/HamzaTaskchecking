@@ -44,6 +44,7 @@ const LoginPage = () => {
 
     try {
       const response = await apiClient.post("/api/v1/auth/login", formValues);
+      console.log("response", response.data);
       if (response.data.success) {
         await login(response.data.token, response.data.user);
         showToast("success", "Login Successful!", "Welcome back!", "#10b981");

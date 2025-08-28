@@ -103,7 +103,7 @@ const MainLayout = () => {
   /* ✅ Filter top-level links by role + app permission */
   const filteredLinks = navLinks.filter(
     (link) =>
-      link.roles?.includes(user.role) &&
+      link.roles?.includes(user.roles.role) &&
       hasAppAccess(user, link.app) &&
       ((pathName.startsWith("/admin") &&
         ["Users", "Dashboard"].includes(link.label)) ||

@@ -114,6 +114,19 @@ export default function Warehouses() {
     return list.map((w) => ({ ...w, id: w.id ?? w._id }));
   }, [warehousesResponse]);
 
+  // ✅ Filter warehouses based on role
+  const warehouseData = useMemo(() => {
+    if (!warehouses?.length) return [];
+
+    // If role is admin -> show all
+    if (user?.roles?.role?.toLowerCase() === "admin") {
+      return warehouses;
+    }
+
+    // Otherwise -> only show warehouses user has access to
+    return warehouses.filter((w) => user?.warehouse?.includes(w.id));
+  }, [warehouses, user]);
+
   // Ensure a default selected warehouse when none is chosen
   // useEffect(() => {
   //   if (!selectedWarehouseId && warehouses.length > 0) {
@@ -399,13 +412,13 @@ export default function Warehouses() {
   // Derived
   const filteredWarehouses = useMemo(() => {
     const t = q.trim().toLowerCase();
-    if (!t) return warehouses;
-    return warehouses.filter(
+    if (!t) return warehouseData;
+    return warehouseData.filter(
       (w) =>
         w.name.toLowerCase().includes(t) ||
         (w.country || "").toLowerCase().includes(t)
     );
-  }, [q, warehouses]);
+  }, [q, warehouseData]);
 
   const filteredZones = useMemo(
     () => zones.filter((z) => z.warehouseId === selectedWarehouseId),
@@ -484,7 +497,7 @@ export default function Warehouses() {
                 onClick={() => {
                   if (!selectedWarehouseId) return;
                   // Persist is automatic via redux-persist; show toast
-                  const w = warehouses.find(
+                  const w = warehouseData.find(
                     (x) => x.id === selectedWarehouseId
                   );
                   if (w) {
@@ -613,7 +626,7 @@ export default function Warehouses() {
               <h2 className="text-base font-semibold">
                 {selectedWarehouseId
                   ? `Zones — ${
-                      warehouses.find((w) => w.id === selectedWarehouseId)
+                      warehouseData.find((w) => w.id === selectedWarehouseId)
                         ?.name || ""
                     }`
                   : "Zones"}

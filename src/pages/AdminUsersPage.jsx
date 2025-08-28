@@ -31,6 +31,7 @@ const initialFormState = {
   is_active: true,
   roles: "",
   kioskPinHash: "",
+  warehouse: [],
 };
 
 const roleColors = {
@@ -56,6 +57,10 @@ const AdminUsersPage = () => {
   const { user: currentUser } = useAuth();
   const [rolesOptions, setRolesOptions] = useState([]);
   const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
+  const [warehouses, setWarehouses] = useState([]);
+
+  console.log("users", users);
+
   const loadRoles = useCallback(async () => {
     setLoading(true);
     try {
@@ -68,10 +73,9 @@ const AdminUsersPage = () => {
       setLoading(false);
     }
   }, []);
-  console.log("Form Data:", form.getFieldsValue());
 
   // Check if current user is admin
-  const isAdmin = currentUser?.role === "admin";
+  const isAdmin = currentUser?.roles.role === "admin";
 
   const fetchUsers = useCallback(() => {
     setLoading(true);
@@ -96,6 +100,7 @@ const AdminUsersPage = () => {
           kioskPinHash: user?.kioskPinHash || "",
           createdAt: user.createdAt,
           updatedAt: user.updatedAt,
+          warehouse: user.warehouse,
         }));
         setUsers(transformedUsers);
       })
@@ -110,22 +115,39 @@ const AdminUsersPage = () => {
     fetchUsers();
   }, [fetchUsers]);
 
+  // Fetch warehouses
+  const fetchWarehouses = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await apiClient.get("/api/v1/warehouse/all");
+      setWarehouses(data?.warehouses || []);
+    } catch (error) {
+      console.error("Error fetching warehouses:", error);
+      message.error("Failed to fetch warehouses.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchWarehouses();
+  }, [fetchWarehouses]);
+
   useEffect(() => {
     loadRoles();
   }, [loadRoles]);
 
+  // Handle user edit
   const handleOpenModal = (user = null) => {
-    // Check if user is admin before allowing edit
     if (user && !isAdmin) {
       message.error("Only admin users can edit user information.");
       return;
     }
 
     setEditingUser(user);
-    setChangedFields(new Set()); // Reset changed fields
+    setChangedFields(new Set());
 
     if (user) {
-      // Transform user data to match form field names
       const formData = {
         first_name: user.first_name,
         last_name: user.last_name,
@@ -135,7 +157,10 @@ const AdminUsersPage = () => {
         password: "",
         roles: user.roles?._id || "",
         kioskPinHash: user.kioskPinHash,
+        warehouse: user.warehouse,
       };
+
+      console.log("formData", formData);
       form.setFieldsValue(formData);
     } else {
       // Reset form for new user
@@ -153,7 +178,9 @@ const AdminUsersPage = () => {
   };
 
   const handleFieldChange = (fieldName, value) => {
-    if (!editingUser) return; // Only track changes for editing
+    if (!editingUser) return;
+
+    console.log("value", value);
 
     const originalUser = users.find((u) => u.id === editingUser.id);
     if (!originalUser) return;
@@ -181,6 +208,9 @@ const AdminUsersPage = () => {
         break;
       case "roles":
         hasChanged = value !== originalUser.roles;
+        break;
+      case "warehouse":
+        hasChanged = value !== originalUser.warehouse;
         break;
       case "kioskPinHash":
         hasChanged =
@@ -244,9 +274,15 @@ const AdminUsersPage = () => {
         if (values.roles !== originalUser.roles) {
           dataToSubmit.roles = values.roles;
         }
-       if (String(values.kioskPinHash || "") !== String(originalUser.kioskPinHash || "")) {
-    dataToSubmit.kioskPinHash = values.kioskPinHash || ""; // Changed from kioskPin to kioskPinHash
-  }
+        if (
+          String(values.kioskPinHash || "") !==
+          String(originalUser.kioskPinHash || "")
+        ) {
+          dataToSubmit.kioskPinHash = values.kioskPinHash || ""; // Changed from kioskPin to kioskPinHash
+        }
+        if (values.warehouse !== originalUser.warehouse) {
+          dataToSubmit.warehouse = values.warehouse;
+        }
       } else {
         // For new users, include all required fields
         dataToSubmit = {
@@ -257,7 +293,8 @@ const AdminUsersPage = () => {
           password: values.password,
           roles: values.roles,
           // isActive: values.is_active,
-           kioskPinHash: values.kioskPinHash || "",
+          kioskPinHash: values.kioskPinHash || "",
+          warehouse: values.warehouse,
         };
       }
 
@@ -445,6 +482,7 @@ const AdminUsersPage = () => {
       key: "actions",
       render: (_, record) => {
         const isDeleting = deletingUsers.has(record.id);
+        console.log(record);
         return (
           <Space size="middle">
             <Button
@@ -635,39 +673,41 @@ const AdminUsersPage = () => {
               />
             </Form.Item>
             <Form.Item
-            label="Kiosk PIN"
-            name="kioskPinHash"
-            tooltip="Optional 4–6 digit PIN for kiosk/clock-in."
-            rules={[
-              {
-                validator: (_, value) => {
-                  if (!value || /^\d{4,6}$/.test(String(value))) {
-                    return Promise.resolve();
-                  }
-                  return Promise.reject(
-                    new Error("PIN must be 4–6 digits (numbers only)")
-                  );
+              label="Kiosk PIN"
+              name="kioskPinHash"
+              tooltip="Optional 4–6 digit PIN for kiosk/clock-in."
+              rules={[
+                {
+                  validator: (_, value) => {
+                    if (!value || /^\d{4,6}$/.test(String(value))) {
+                      return Promise.resolve();
+                    }
+                    return Promise.reject(
+                      new Error("PIN must be 4–6 digits (numbers only)")
+                    );
+                  },
                 },
-              },
-            ]}
-            help={
-              editingUser
-                ? "Enter a new PIN to update, leave blank to keep existing, or clear to remove."
-                : "Optional, but must be 4–6 digits if set."
-            }
-          >
-            <Input.Password
-              maxLength={6}
-              inputMode="numeric"
-              placeholder="e.g., 1234"
-              onChange={(e) => handleFieldChange("kioskPinHash", e.target.value)}
-              style={
-                changedFields.has("kioskPinHash")
-                  ? { borderColor: "#1890ff" }
-                  : {}
+              ]}
+              help={
+                editingUser
+                  ? "Enter a new PIN to update, leave blank to keep existing, or clear to remove."
+                  : "Optional, but must be 4–6 digits if set."
               }
-            />
-          </Form.Item>
+            >
+              <Input.Password
+                maxLength={6}
+                inputMode="numeric"
+                placeholder="e.g., 1234"
+                onChange={(e) =>
+                  handleFieldChange("kioskPinHash", e.target.value)
+                }
+                style={
+                  changedFields.has("kioskPinHash")
+                    ? { borderColor: "#1890ff" }
+                    : {}
+                }
+              />
+            </Form.Item>
 
             {/* <Form.Item label="Role" name="role" rules={[{ required: true }]}>
               <Select
@@ -706,6 +746,33 @@ const AdminUsersPage = () => {
                 onChange={(checked) => handleFieldChange("is_active", checked)}
               />
             </Form.Item>
+
+            {/*Warehouses Assign*/}
+            <Form.Item
+              label="Assign Warehouses"
+              name="warehouse"
+              // rules={[
+              //   { required: true, message: "Please select at least one ware" },
+              // ]}
+            >
+              <Select
+                mode="multiple"
+                onChange={(value) => handleFieldChange("warehouse", value)}
+                style={
+                  changedFields.has("warehouse")
+                    ? { borderColor: "#1890ff" }
+                    : {}
+                }
+                placeholder="Assign Warehouses"
+              >
+                {warehouses.map((warehouse) => (
+                  <Select.Option key={warehouse._id} value={warehouse._id}>
+                    {warehouse?.name}
+                  </Select.Option>
+                ))}
+              </Select>
+            </Form.Item>
+
             <Form.Item style={{ textAlign: "right", marginTop: "1rem" }}>
               <Button
                 onClick={handleCloseModal}
