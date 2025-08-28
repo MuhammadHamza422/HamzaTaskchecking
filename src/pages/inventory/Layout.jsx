@@ -6,6 +6,7 @@ import Swal from "sweetalert2";
 import { MdFullscreen, MdFullscreenExit } from "react-icons/md";
 import useFullscreen from "../../components/useFullscreen";
 import { useMemo } from "react";
+import { useSelector } from "react-redux";
 
 function Icon({ name, active }) {
   const common = "h-5 w-5";
@@ -256,11 +257,17 @@ export default function InventoryLayout() {
   const { user, logout } = useAuth();
   const { ref, isFullscreen, toggle } = useFullscreen();
   const [type, setType] = useState("shelf");
+  const selectedWarehouseId = useSelector((s) => s.app.selectedWarehouseId);
+  const [warehouseId, setWarehouseId] = useState(selectedWarehouseId);
 
   useEffect(() => {
     const zoneType = localStorage.getItem("zoneType");
     setType(zoneType);
   }, []);
+
+  useEffect(() => {
+    setWarehouseId(selectedWarehouseId);
+  }, [selectedWarehouseId]);
 
   const navItems = useMemo(() => {
     return [
@@ -277,7 +284,11 @@ export default function InventoryLayout() {
             },
           ]
         : []),
-      { to: "/inventory/inventory", label: "Inventory", icon: "inventory" },
+      {
+        to: warehouseId ? "/inventory/inventory" : "#",
+        label: "Inventory",
+        icon: "inventory",
+      },
       { to: "/inventory/products", label: "Products", icon: "products" },
       ...(type === "shelf"
         ? [{ to: "/inventory/scan", label: "Scan", icon: "scan" }]
@@ -390,6 +401,20 @@ export default function InventoryLayout() {
                     <Link
                       key={item.to}
                       to={item.to}
+                      onClick={() => {
+                        if (item.to === "#") {
+                          Swal.fire({
+                            icon: "warning",
+                            title: "Select a warehouse to view inventory",
+                            toast: true,
+                            position: "top-end",
+                            timer: 2000,
+                            showConfirmButton: false,
+                            background: "#ef4444",
+                            color: "#fff",
+                          });
+                        }
+                      }}
                       className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 ${
                         active
                           ? "bg-white/15 text-white hover:text-white"

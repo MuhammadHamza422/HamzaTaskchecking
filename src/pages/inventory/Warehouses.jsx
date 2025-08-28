@@ -115,11 +115,11 @@ export default function Warehouses() {
   }, [warehousesResponse]);
 
   // Ensure a default selected warehouse when none is chosen
-  useEffect(() => {
-    if (!selectedWarehouseId && warehouses.length > 0) {
-      dispatch(setSelectedWarehouseId(warehouses[0].id));
-    }
-  }, [warehouses, selectedWarehouseId, dispatch]);
+  // useEffect(() => {
+  //   if (!selectedWarehouseId && warehouses.length > 0) {
+  //     dispatch(setSelectedWarehouseId(warehouses[0].id));
+  //   }
+  // }, [warehouses, selectedWarehouseId, dispatch]);
 
   // Fetch zones for selected warehouse using TanStack React Query
   const { data: zonesResponse, isFetching: zonesFetching } = useQuery({
@@ -426,6 +426,7 @@ export default function Warehouses() {
         color: "#fff",
       });
       navigate("/inventory/zones");
+      window.location.reload();
     }
   };
 
@@ -467,14 +468,16 @@ export default function Warehouses() {
           <section className="rounded-xl border border-zinc-200 bg-white">
             <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
               <h2 className="text-base font-semibold">Warehouses</h2>
-              {role !== "Technician" && role !== "Picker" && (
-                <button
-                  onClick={openNewWh}
-                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700"
-                >
-                  <FiPlus /> New
-                </button>
-              )}
+              {role !== "Technician" &&
+                role !== "Picker" &&
+                role !== "Inventory Supervisor" && (
+                  <button
+                    onClick={openNewWh}
+                    className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700"
+                  >
+                    <FiPlus /> New
+                  </button>
+                )}
             </div>
             <div className="px-4 py-3 border-b border-zinc-200">
               <button
@@ -571,18 +574,20 @@ export default function Warehouses() {
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
-                          {role !== "Technician" && role !== "Picker" && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openEditWh(w);
-                              }}
-                              className="rounded p-1 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
-                              title="Edit"
-                            >
-                              <FiEdit2 />
-                            </button>
-                          )}
+                          {/* {role !== "Technician" &&
+                            role !== "Picker" &&
+                            role !== "Inventory Supervisor" && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openEditWh(w);
+                                }}
+                                className="rounded p-1 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+                                title="Edit"
+                              >
+                                <FiEdit2 />
+                              </button>
+                            )} */}
                           {/* <button
                             onClick={async (e) => {
                               e.stopPropagation();
@@ -613,15 +618,17 @@ export default function Warehouses() {
                     }`
                   : "Zones"}
               </h2>
-              {role !== "Technician" && role !== "Picker" && (
-                <button
-                  onClick={openNewZn}
-                  disabled={!selectedWarehouseId}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-sm text-white disabled:opacity-50 hover:enabled:bg-green-700"
-                >
-                  <FiPlus /> New Zone
-                </button>
-              )}
+              {role !== "Technician" &&
+                role !== "Picker" &&
+                role !== "Inventory Supervisor" && (
+                  <button
+                    onClick={openNewZn}
+                    disabled={!selectedWarehouseId}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-sm text-white disabled:opacity-50 hover:enabled:bg-green-700"
+                  >
+                    <FiPlus /> New Zone
+                  </button>
+                )}
             </div>
 
             <div className="p-4">
@@ -672,19 +679,21 @@ export default function Warehouses() {
                             )}
                           </div>
                         </div>
-                        {role !== "Technician" && role !== "Picker" && (
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openEditZn(z);
-                              }}
-                              className="rounded p-1 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
-                              title="Edit"
-                            >
-                              <FiEdit2 />
-                            </button>
-                            {/* <button
+                        {/* {role !== "Technician" &&
+                          role !== "Picker" &&
+                          role !== "Inventory Supervisor" && (
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openEditZn(z);
+                                }}
+                                className="rounded p-1 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+                                title="Edit"
+                              >
+                                <FiEdit2 />
+                              </button>
+                              <button
                             onClick={async (e) => {
                               e.stopPropagation();
                               await handleDeleteZone(z.id);
@@ -693,9 +702,9 @@ export default function Warehouses() {
                             title="Delete"
                           >
                             <FiTrash2 />
-                          </button> */}
-                          </div>
-                        )}
+                          </button>
+                            </div>
+                          )} */}
                       </div>
                     );
                   })}
