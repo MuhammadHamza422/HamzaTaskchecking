@@ -43,13 +43,132 @@ export default function LocationPrintModal({
     }
   };
 
+  const handlePrint = () => {
+    const printContent = printRef.current?.innerHTML ?? "";
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Print Labels</title>
+          <style>
+            @page { size: 4in 2in; margin: 0 4px; }
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { margin: 0; padding: 0; font-family: Arial, sans-serif; background: white; }
+            .print-page { width: 4in !important; height: 2in !important; page-break-after: always; margin: 0 !important; padding: 0 !important; display: flex !important; align-items: center !important; justify-content: center !important; background: white !important; }
+            .print-page:last-child { page-break-after: auto; }
+            .label-card { width: 100% !important; height: 100% !important; border: 1px solid black !important; display: flex !important; background: white !important; }
+            .qr-container { width: 1.8in !important; height: 100% !important; display: flex !important; align-items: center !important; justify-content: center !important; }
+            .info-container { flex: 1 !important; border-left: 1px solid black !important; height: 100% !important; display: flex !important; flex-direction: column !important; }
+            .type-header { text-align: center !important; padding: 0.10in 0.05in !important; text-transform: uppercase !important; font-weight: bold !important; font-size: 16px !important; letter-spacing: 1px !important; background: #f8f8f8 !important; color: black !important; }
+            .info-row { display: flex !important; border-top: 1px solid black !important; font-size: 16px !important; height: 0.45in !important; color: black !important; }
+            .info-row:last-child { border-bottom: none !important; flex: 1 !important; }
+            .info-label { width: 0.8in !important; padding: 0.05in !important; text-transform: uppercase !important; font-weight: 600 !important; border-right: 1px solid black !important; background: #f8f8f8 !important; display: flex !important; align-items: center !important; font-size: 12px !important; color: black !important; }
+            .info-value { flex: 1 !important; padding: 0.05in !important; display: flex !important; align-items: center !important; font-size: 14px !important; color: black !important; }
+            .no-print { display: none !important; }
+          </style>
+        </head>
+        <body>
+          ${printContent}
+        </body>
+      </html>
+    `;
+
+    try {
+      // create hidden iframe
+      const iframe = document.createElement("iframe");
+      iframe.style.position = "fixed";
+      iframe.style.right = "0";
+      iframe.style.bottom = "0";
+      iframe.style.width = "0";
+      iframe.style.height = "0";
+      iframe.style.border = "0";
+      iframe.setAttribute("aria-hidden", "true");
+      document.body.appendChild(iframe);
+
+      const idoc = iframe.contentDocument || iframe.contentWindow.document;
+      idoc.open();
+      idoc.write(html);
+      idoc.close();
+
+      // helper to actually print and then cleanup
+      const doPrintAndCleanup = () => {
+        try {
+          // focus the iframe window then print
+          iframe.contentWindow.focus();
+          // calling print()
+          iframe.contentWindow.print();
+        } catch (err) {
+          console.error("Print error (iframe):", err);
+        } finally {
+          // remove iframe after small delay so print dialog can use it
+          setTimeout(() => {
+            try {
+              document.body.removeChild(iframe);
+            } catch (e) {
+              /* ignore */
+            }
+          }, 1000);
+        }
+      };
+
+      // Wait for images inside iframe to load (helps with QR codes)
+      const imgs = idoc.images || [];
+      if (imgs.length > 0) {
+        let loaded = 0;
+        for (let i = 0; i < imgs.length; i++) {
+          const img = imgs[i];
+          if (img.complete) {
+            loaded++;
+          } else {
+            img.addEventListener("load", () => {
+              loaded++;
+              if (loaded === imgs.length) doPrintAndCleanup();
+            });
+            img.addEventListener("error", () => {
+              loaded++;
+              if (loaded === imgs.length) doPrintAndCleanup();
+            });
+          }
+        }
+        if (loaded === imgs.length) {
+          // all already loaded
+          setTimeout(doPrintAndCleanup, 150);
+        }
+      } else {
+        // no images — small delay to ensure rendering, then print
+        // some browsers fire onload not reliably for dynamically written iframes, so use timeout
+        setTimeout(doPrintAndCleanup, 200);
+      }
+    } catch (e) {
+      console.error("Iframe print failed, falling back to window.open:", e);
+      // fallback: open in new window like original (if iframe blocked)
+      const printWindow = window.open("", "_blank");
+      if (!printWindow) {
+        alert(
+          "Unable to open print window — please allow popups for this site or try printing from the page."
+        );
+        return;
+      }
+      printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+        try {
+      printWindow.print();
+      printWindow.close();
+        } catch (err) {
+          console.error(err);
+        }
+    }, 1000);
+    }
+  };
+
   const filteredLocations = locations.filter(
     (l) => selectedIds.size === 0 || selectedIds.has(l.id)
   );
 
-  // Calculate pagination info
-  const itemsPerPage = 10;
-  const totalPages = Math.ceil(filteredLocations.length / itemsPerPage);
+  const itemsPerPage = 1;
+  const totalPages = filteredLocations.length;
 
   return (
     <div ref={fullscreenRef}>
@@ -66,104 +185,131 @@ export default function LocationPrintModal({
         className="max-h-[95vh] overflow-y-auto"
       >
         <div className="bg-white w-full">
-          <div className="flex items-center justify-between border-b px-4 pb-2">
+          <div className="flex items-center justify-between border-b px-4 pb-2 no-print">
             <div>
-              <h3 className="text-lg font-semibold">Print Preview</h3>
+              <h3 className="text-lg font-semibold">Print Preview (4" × 2")</h3>
               <p className="text-sm text-gray-600">
-                {filteredLocations.length} items • {totalPages} pages • {itemsPerPage} items per page
+                {filteredLocations.length} labels • {totalPages} pages • 1 label
+                per page
               </p>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={onClose}
-                className="rounded border px-3 py-1.5 text-sm"
+                className="rounded border border-gray-300 hover:border-gray-400 px-3 py-1.5 text-sm bg-white hover:bg-gray-50 transition-colors"
               >
                 Close
               </button>
               <button
+                onClick={handlePrint}
+                className="rounded bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 text-sm transition-colors"
+              >
+                Print Labels
+              </button>
+              {/* <button
                 onClick={generatePDF}
                 disabled={downloading}
-                className="rounded bg-blue-600 text-white px-3 py-1.5 text-sm disabled:opacity-60"
+                className="rounded bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-sm disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
               >
                 {downloading ? "Generating…" : "Download PDF"}
-              </button>
+              </button> */}
             </div>
           </div>
-          <div className="overflow-auto p-3">
-            {/* Preview all pages */}
-            <div ref={printRef}>
-              {Array.from({ length: totalPages }, (_, pageIndex) => {
-                const startIndex = pageIndex * itemsPerPage;
-                const endIndex = Math.min(startIndex + itemsPerPage, filteredLocations.length);
-                const pageLocations = filteredLocations.slice(startIndex, endIndex);
-
-                return (
-                  // NOTE: .pdf-page is important — generator will render each .pdf-page individually
-                  <div key={pageIndex} className="mb-8">
-                    <div
-                      className="pdf-page mx-auto bg-whiteshadow-sm"
-                      // style={{
-                      //   width: "210mm", // A4 width
-                      //   minHeight: "297mm", // A4 height
-                      //   padding: "22mm",
-                      //   pageBreakAfter: pageIndex < totalPages - 1 ? "always" : "auto",
-                      //   boxSizing: "border-box",
-                      // }}
-                      style={{ 
-                        width: "282mm", 
-                        minHeight: "300mm", 
-                        padding: "22mm",
-                        pageBreakAfter: pageIndex < totalPages - 1 ? "always" : "auto"
-                      }}
-                    >
-                      {/* Grid: two per row, max 10 items */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-[2.6rem]">
-                        {pageLocations.map((loc) => (
+          
+          <div className="overflow-auto p-4 max-w-4xl mx-auto">
+            <div ref={printRef} className="grid grid-cols-2 gap-4">
+              {filteredLocations.map((loc, pageIndex) => (
+                <div key={pageIndex} className="mb-6">
+                  <div
+                    className="print-page mx-auto bg-white shadow-lg border border-gray-200 flex items-center justify-center"
+                    style={{ 
+                      width: "4in", 
+                      height: "2in",
+                      transformOrigin: "center top",
+                    }}
+                  >
+                    {/* Single label container */}
+                    <div className="label-card w-full h-full border border-black flex bg-white">
+                      {/* QR Code Section */}
+                      <div
+                        className="qr-container flex items-center justify-center bg-white"
+                        style={{ width: "2in" }}
+                      >
+                        <QRCodeSVG
+                          value={String(loc.code || "")}
+                          level="H"
+                          size={250}
+                        />
+                      </div>
+                      
+                      {/* Info Section */}
+                      <div className="info-container border-l border-black text-black flex-1 h-full flex flex-col">
+                        {/* Type Header */}
+                        <div className="type-header text-center border-b border-black bg-gray-50 py-3 px-1">
+                          <p className="uppercase text-base font-semibold tracking-widest text-black">
+                            {(loc.type || "").toUpperCase()}
+                          </p>
+                        </div>
+                        
+                        {/* Zone Row */}
+                        <div
+                          className="info-row flex border-b border-black"
+                          style={{ height: "0.35in" }}
+                        >
                           <div
-                            key={loc.id}
-                            className="border border-black flex items-center"
-                            // fixed height to ensure rows are consistent and don't overflow/split
-                            style={{ height: "48mm", boxSizing: "border-box" }}
+                            className="info-label border-r border-black bg-gray-50 flex items-center justify-center text-center"
+                            style={{ width: "0.8in" }}
                           >
-                            <div className="flex items-center justify-center p-2">
-                              <QRCodeSVG
-                                value={String(loc.code || "")}
-                                size={174}
-                                level="L"
-                              />
-                            </div>
-                            <div className="border-l border-black text-black flex-1 h-full">
-                              <div className="grid grid-cols-3 text-center border-b border-black overflow-hidden">
-                                <p className="col-span-3 py-[9px] uppercase text-lg font-bold tracking-[0.35em]">
-                                  {(loc.type || "").toUpperCase()}
-                                </p>
-                              </div>
-                              <div className="grid grid-cols-2 border-b text-sm border-black">
-                                <p className="px-2 py-3 uppercase border-r border-black font-medium">
-                                  Zone
-                                </p>
-                                <p className="px-2 py-3">{loc.zone?.name || zoneName || ""}</p>
-                              </div>
-                              <div className="grid grid-cols-2 border-b text-sm border-black">
-                                <p className="px-2 py-3 uppercase border-r border-black font-medium">
-                                  LABEL
-                                </p>
-                                <p className="px-2 py-3">{loc.code}</p>
-                              </div>
-                              <div className="grid grid-cols-2 text-sm h-fit">
-                                <p className="px-2 py-3 uppercase border-r border-black font-medium">
-                                  STATUS
-                                </p>
-                                <p className="px-2 py-3"></p>
-                              </div>
-                            </div>
+                            <span className="uppercase text-sm font-semibold text-black">
+                              Zone
+                            </span>
                           </div>
-                        ))}
+                          <div className="info-value flex items-center px-1">
+                            <span className="text-sm text-black">
+                              {loc.zone?.name || zoneName || ""}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {/* Label Row */}
+                        <div
+                          className="info-row flex border-b border-black"
+                          style={{ height: "0.35in" }}
+                        >
+                          <div
+                            className="info-label border-r border-black bg-gray-50 flex items-center justify-center text-center"
+                            style={{ width: "0.8in" }}
+                          >
+                            <span className="uppercase text-sm font-semibold text-black">
+                              Label
+                            </span>
+                          </div>
+                          <div className="info-value flex items-center px-1">
+                            <span className="text-sm font-medium text-black">
+                              {loc.code}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {/* Status Row */}
+                        <div className="info-row flex flex-1">
+                          <div
+                            className="info-label border-r border-black bg-gray-50 flex items-center justify-center text-center"
+                            style={{ width: "0.8in" }}
+                          >
+                            <span className="uppercase text-sm font-semibold text-black">
+                              Status
+                            </span>
+                          </div>
+                          <div className="info-value flex items-center px-1">
+                            <span className="text-sm text-black"></span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -172,17 +318,15 @@ export default function LocationPrintModal({
   );
 }
 
-// New PDF generation: render each .pdf-page separately (prevents items from being cut)
-// - Added compression and optional maxWidthPx downscale to reduce file size.
-// - Exports JPEGs (smaller than PNG) and optionally downsamples very large canvases.
+// Modified PDF generation for 4x2 inch pages
 export async function generatePDFFromNodePaginated({
   node,
   fileName = "locations_labels.pdf",
-  scale = 1.2,                 // <-- reduce to ~1.0-1.5 for smaller PDFs
+  scale = 3, // Increased for better quality
   html2canvas,
   jsPDF,
-  compression = 0.7,           // <-- JPEG quality 0.0 - 1.0 (lower = smaller file)
-  maxWidthPx = 2000,           // <-- max canvas width in pixels before downscale
+  compression = 0.8,
+  maxWidthPx = 1200,
   onProgress = () => {},
 }) {
   if (!node) throw new Error("No DOM node provided");
@@ -190,29 +334,41 @@ export async function generatePDFFromNodePaginated({
   if (!jsPDF) throw new Error("jsPDF constructor required");
 
   const notify = (payload) => {
-    try { onProgress(payload); } catch (e) { /* ignore callback errors */ }
+    try {
+      onProgress(payload);
+    } catch (e) {
+      /* ignore callback errors */
+    }
   };
 
   notify({ downloading: true });
 
   try {
-    // Inline images (same as before)
+    // Inline images
     await convertImagesToDataUrl(node);
-    await new Promise((r) => setTimeout(r, 200)); // allow DOM to update
+    await new Promise((r) => setTimeout(r, 300));
 
-    const pageEls = Array.from(node.querySelectorAll(".pdf-page"));
-    if (!pageEls.length) throw new Error("No .pdf-page elements found");
+    const pageEls = Array.from(node.querySelectorAll(".print-page"));
+    if (!pageEls.length) throw new Error("No .print-page elements found");
 
-    // Create PDF
-    const pdf = new jsPDF("p", "mm", "a4");
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
+    // Create PDF with custom 4x2 inch page size
+    const pdf = new jsPDF({
+      orientation: "landscape", // 4 inch width > 2 inch height
+      unit: "in",
+      format: [4, 2], // width, height in inches
+    });
+    
+    const pageWidth = 4; // inches
+    const pageHeight = 2; // inches
 
     for (let i = 0; i < pageEls.length; i++) {
       const pageEl = pageEls[i];
-      notify({ downloading: true, progress: (i / pageEls.length) });
+      notify({ downloading: true, progress: i / pageEls.length });
 
-      // render this page element only
+      // Temporarily remove transform for capturing
+      const originalTransform = pageEl.style.transform;
+      pageEl.style.transform = "none";
+
       const canvas = await html2canvas(pageEl, {
         scale,
         useCORS: true,
@@ -221,54 +377,21 @@ export async function generatePDFFromNodePaginated({
         logging: false,
         imageTimeout: 0,
         removeContainer: true,
-        onclone: (clonedDoc) => {
-          // keep image srcs consistent between original and cloned
-          const clonedImages = clonedDoc.querySelectorAll("img");
-          const originalImages = pageEl.querySelectorAll("img");
-          clonedImages.forEach((cImg, idx) => {
-            if (originalImages[idx]) cImg.src = originalImages[idx].src;
-          });
-        },
+        width: 288, // 4 inches * 72 DPI
+        height: 144, // 2 inches * 72 DPI
       });
 
-      // If the rendered canvas is very large, downscale it before encoding to JPEG
-      let finalDataUrl;
-      if (canvas.width > maxWidthPx) {
-        const downscale = maxWidthPx / canvas.width;
-        const tmp = document.createElement("canvas");
-        tmp.width = Math.round(canvas.width * downscale);
-        tmp.height = Math.round(canvas.height * downscale);
-        const ctx = tmp.getContext("2d");
-        // White background to avoid JPEG artifacts on transparent areas
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, tmp.width, tmp.height);
-        ctx.drawImage(canvas, 0, 0, tmp.width, tmp.height);
-        finalDataUrl = tmp.toDataURL("image/jpeg", compression);
-      } else {
-        // directly export canvas to JPEG with compression
-        finalDataUrl = canvas.toDataURL("image/jpeg", compression);
-      }
+      // Restore transform
+      pageEl.style.transform = originalTransform;
 
-      // compute image size in mm to fit page width
-      let imgWidth = pageWidth;
-      let imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      // if image is slightly taller than page, scale down to fit
-      if (imgHeight > pageHeight) {
-        const scaleFactor = pageHeight / imgHeight;
-        imgWidth *= scaleFactor;
-        imgHeight *= scaleFactor;
-      }
-
-      // center horizontally
-      const x = (pageWidth - imgWidth) / 2;
-      const y = 0;
+      let finalDataUrl = canvas.toDataURL("image/jpeg", compression);
 
       if (i > 0) pdf.addPage();
-      // IMPORTANT: use 'JPEG' so jsPDF knows the format
-      pdf.addImage(finalDataUrl, "JPEG", x, y, imgWidth, imgHeight);
+      
+      // Add image to fill entire page
+      pdf.addImage(finalDataUrl, "JPEG", 0, 0, pageWidth, pageHeight);
 
-      notify({ downloading: true, progress: ((i + 1) / pageEls.length) });
+      notify({ downloading: true, progress: (i + 1) / pageEls.length });
     }
 
     pdf.save(fileName);
@@ -281,8 +404,7 @@ export async function generatePDFFromNodePaginated({
   }
 }
 
-
-// helper functions unchanged (copied from your file)
+// Helper functions (unchanged)
 async function fetchImageAsDataUrl(src) {
   if (!src) return null;
   if (src.startsWith("data:")) return src;
