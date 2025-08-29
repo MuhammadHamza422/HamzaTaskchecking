@@ -57,7 +57,7 @@ export default function LocationPrintModal({
             .print-page { width: 4in !important; height: 2in !important; page-break-after: always; margin: 0 !important; padding: 0 !important; display: flex !important; align-items: center !important; justify-content: center !important; background: white !important; }
             .print-page:last-child { page-break-after: auto; }
             .label-card { width: 100% !important; height: 100% !important; border: 1px solid black !important; display: flex !important; background: white !important; }
-            .qr-container { width: 1.8in !important; height: 100% !important; display: flex !important; align-items: center !important; justify-content: center !important; }
+            .qr-container { width: 1.8in !important; height: 100% !important; padding:8px !important; display: flex !important; align-items: center !important; justify-content: center !important; }
             .info-container { flex: 1 !important; border-left: 1px solid black !important; height: 100% !important; display: flex !important; flex-direction: column !important; }
             .type-header { text-align: center !important; padding: 0.10in 0.05in !important; text-transform: uppercase !important; font-weight: bold !important; font-size: 16px !important; letter-spacing: 1px !important; background: #f8f8f8 !important; color: black !important; }
             .info-row { display: flex !important; border-top: 1px solid black !important; font-size: 16px !important; height: 0.45in !important; color: black !important; }
@@ -232,7 +232,7 @@ export default function LocationPrintModal({
                     <div className="label-card w-full h-full border border-black flex bg-white">
                       {/* QR Code Section */}
                       <div
-                        className="qr-container flex items-center justify-center bg-white"
+                        className="qr-container flex items-center justify-center bg-white p-2"
                         style={{ width: "2in" }}
                       >
                         <QRCodeSVG
