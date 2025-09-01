@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { FiSearch } from "react-icons/fi";
-import { Minus, Package, Plus } from "lucide-react";
+import { Minus, Package, Plus, Loader2 } from "lucide-react";
 import {
   updateInventoryQuantity,
   getProducts,
@@ -53,6 +53,7 @@ export default function InventoryDisplay({
   });
   const [pendingQtyChanges, setPendingQtyChanges] = useState(new Map()); // Track multiple pending changes
   const [isRefreshing, setIsRefreshing] = useState(false); // disable add buttons while refetching
+  const [isSaving, setIsSaving] = useState(false); // control modal Save button spinner
   const queryClient = useQueryClient();
   const dropdownRef = useRef(null);
   const { user } = useAuth();
@@ -451,6 +452,9 @@ export default function InventoryDisplay({
       });
       return data;
     },
+    onMutate: () => {
+      setIsSaving(true);
+    },
     onSuccess: async (data, variables) => {
       try {
         // If no id in response, fallback to refetching inventory and update UI from server
@@ -573,6 +577,7 @@ export default function InventoryDisplay({
           selectedProduct: null,
         });
       }
+      setIsSaving(false);
     },
     onError: (error) => {
       Swal.fire({
@@ -586,6 +591,7 @@ export default function InventoryDisplay({
         background: "#ef4444",
         color: "#fff",
       });
+      setIsSaving(false);
     },
   });
 
@@ -1494,11 +1500,18 @@ export default function InventoryDisplay({
                 <button
                   type="submit"
                   disabled={
-                    createInv.isLoading || !form.productId || !form.quantity
+                    isSaving || createInv.isLoading || !form.productId || !form.quantity
                   }
-                  className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white disabled:opacity-60"
+                  className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white disabled:opacity-60 flex items-center gap-2"
                 >
-                  {createInv.isLoading ? "Saving…" : "Save"}
+                  {isSaving || createInv.isLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Saving…
+                    </>
+                  ) : (
+                    "Save"
+                  )}
                 </button>
               </div>
             </form>

@@ -16,7 +16,7 @@ import { useDispatch, useSelector } from "react-redux";
 import Swal from "sweetalert2";
 import { Modal } from "antd";
 import useFullscreen from "../../components/useFullscreen";
-import { Minus, Plus } from "lucide-react";
+import { Minus, Plus, Loader2 } from "lucide-react";
 
 const productTypes = [
   { label: "Consoles", code: "CON" },
@@ -36,6 +36,7 @@ export default function InventoryList() {
   const [pendingQtyChanges, setPendingQtyChanges] = useState(new Map());
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [form, setForm] = useState({
     productId: "",
     locationId: "",
@@ -87,6 +88,9 @@ export default function InventoryList() {
         key: body.key,
       });
       return data;
+    },
+    onMutate: () => {
+      setIsSaving(true);
     },
     onSuccess: async (data, variables) => {
       try {
@@ -148,6 +152,7 @@ export default function InventoryList() {
           selectedProduct: null,
         });
       }
+      setIsSaving(false);
     },
     onError: (error) => {
       Swal.fire({
@@ -161,6 +166,7 @@ export default function InventoryList() {
         background: "#ef4444",
         color: "#fff",
       });
+      setIsSaving(false);
     },
   });
 
@@ -631,7 +637,7 @@ export default function InventoryList() {
         </nav>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-zinc-200 bg-white p-6">
           <div>
-            <h1 className="text-2xl font-semibold">Inventory by location</h1>
+            <h1 className="text-2xl font-semibold">Inventory</h1>
             <p className="mt-1 text-sm text-zinc-600">
               View and manage stock items.
             </p>
@@ -1258,11 +1264,18 @@ export default function InventoryList() {
                 <button
                   type="submit"
                   disabled={
-                    createInv.isLoading || !form.productId || !form.quantity
+                    isSaving || createInv.isLoading || !form.productId || !form.quantity
                   }
-                  className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white disabled:opacity-60"
+                  className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white disabled:opacity-60 flex items-center gap-2"
                 >
-                  {createInv.isLoading ? "Saving…" : "Save"}
+                  {isSaving || createInv.isLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Saving…
+                    </>
+                  ) : (
+                    "Save"
+                  )}
                 </button>
               </div>
             </form>
