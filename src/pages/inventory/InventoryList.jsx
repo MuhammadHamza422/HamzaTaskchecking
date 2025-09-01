@@ -61,7 +61,7 @@ export default function InventoryList() {
   const warehouseId = useSelector((s) => s.app.selectedWarehouseId);
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: ["inventory", page, limit, searchTerm, warehouseId],
     queryFn: () =>
       getInventory({
@@ -657,6 +657,9 @@ export default function InventoryList() {
     );
   }
 
+  const isAddDisabled = createInv.isLoading || isFetching;
+  const addButtonLabel = createInv.isLoading ? "Adding..." : isFetching ? "Updating..." : "Add Inventory";
+
   return (
     <>
       <nav className="text-sm text-gray-600 flex items-center space-x-2 py-4">
@@ -702,9 +705,11 @@ export default function InventoryList() {
           {warehouseType === "not_shelf" && (
             <button
               onClick={() => setIsCreateOpen(true)}
-              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md"
+              // disabled inventory button during create inventory and while table refetching
+              disabled={isAddDisabled}
+              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md disabled:opacity-60"
             >
-              Add Inventory
+              {addButtonLabel}
             </button>
           )}
         </div>
