@@ -95,8 +95,7 @@ export default function Warehouses() {
       const ws = await apiGetWarehouses({ page: 1, limit: 50, type });
       return ws;
     },
-    staleTime: 5 * 60 * 1000,
-    gcTime: 30 * 60 * 1000,
+    staleTime: 0,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     refetchOnMount: false,
@@ -587,7 +586,7 @@ export default function Warehouses() {
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
-                          {/* {role !== "Technician" &&
+                          {role !== "Technician" &&
                             role !== "Picker" &&
                             role !== "Inventory Supervisor" && (
                               <button
@@ -600,7 +599,7 @@ export default function Warehouses() {
                               >
                                 <FiEdit2 />
                               </button>
-                            )} */}
+                            )}
                           {/* <button
                             onClick={async (e) => {
                               e.stopPropagation();
