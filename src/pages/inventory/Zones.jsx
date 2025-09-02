@@ -58,7 +58,10 @@ export default function Zones() {
         ? getZonesByWarehouse(selectedWarehouseId, type)
         : null,
     enabled: !!selectedWarehouseId,
-    staleTime: 60 * 1000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: true,
   });
 
   const { data: warehouseDetail } = useQuery({
@@ -66,7 +69,10 @@ export default function Zones() {
     queryFn: () =>
       selectedWarehouseId ? getWarehouse(selectedWarehouseId) : null,
     enabled: !!selectedWarehouseId,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: true,
   });
 
   const zones = useMemo(() => {

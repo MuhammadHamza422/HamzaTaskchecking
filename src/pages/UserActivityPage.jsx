@@ -29,7 +29,6 @@ const UserActivityPage = () => {
   const { data: usersData } = useQuery({
     queryKey: ["users-all"],
     queryFn: fetchAllUsers,
-    staleTime: 1000 * 60 * 10,
   });
 
   const { data, isLoading, error } = useQuery({

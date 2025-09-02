@@ -28,7 +28,10 @@ const ActivityLogs = () => {
   const { data: usersData } = useQuery({
     queryKey: ["users-all"],
     queryFn: fetchAllUsers,
-    staleTime: 1000 * 60 * 10,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: true,
   });
 
   const { data, isLoading, error } = useQuery({

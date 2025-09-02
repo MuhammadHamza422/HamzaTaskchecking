@@ -71,8 +71,11 @@ export default function InventoryList() {
         search: searchTerm,
         warehouseId,
       }),
-    keepPreviousData: true,
-    staleTime: 60 * 1000,
+    keepPreviousData: false,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: true,
     enabled: !!warehouseId,
   });
 
@@ -265,7 +268,10 @@ export default function InventoryList() {
     queryKey: ["warehouse", warehouseId],
     queryFn: () => (warehouseId ? getWarehouse(warehouseId) : null),
     enabled: !!warehouseId,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: true,
     onSuccess: (data) => {
       const warehouseName = data?.warehouse?.name || data?.name || "";
       setSearchTerm(warehouseName);
@@ -283,13 +289,19 @@ export default function InventoryList() {
         type: form.typeCode,
       }),
     enabled: !!form.typeCode, // Only run query when type is selected
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: true,
   });
 
   const { data: locationsRes } = useQuery({
     queryKey: ["locations", warehouseId],
     enabled: !!warehouseId,
-    staleTime: 60 * 1000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: true,
     queryFn: async () => {
       const res = await getLocations();
       const list = Array.isArray(res?.locations)

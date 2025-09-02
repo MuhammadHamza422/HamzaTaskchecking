@@ -25,8 +25,11 @@ export default function Products() {
   const { data, isLoading } = useQuery({
     queryKey: ["products", page, limit, search, filters.type],
     queryFn: () => getProducts({ page, limit, search, type: filters.type }),
-    keepPreviousData: true,
-    staleTime: 60 * 1000,
+    keepPreviousData: false,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: true,
   });
 
   const products = useMemo(() => {

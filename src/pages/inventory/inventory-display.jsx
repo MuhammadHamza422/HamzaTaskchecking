@@ -410,7 +410,10 @@ export default function InventoryDisplay({
         type: form.typeCode,
       }),
     enabled: !!form.typeCode, // Only run query when type is selected
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: true,
   });
 
   // Query for locations in move modal
@@ -436,7 +439,10 @@ export default function InventoryDisplay({
       return res;
     },
     enabled: isMoveOpen, // Only run query when move modal is open
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: true,
   });
 
   const createInv = useMutation({

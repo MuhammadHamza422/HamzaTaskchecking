@@ -98,7 +98,6 @@ const AdminProductsPage = () => {
         brand: filters.brand,
       }),
     keepPreviousData: true,
-    staleTime: 60 * 1000,
   });
 
   const products = useMemo(() => {
