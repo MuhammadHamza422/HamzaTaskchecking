@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { FiSearch } from "react-icons/fi";
-import { Minus, Package, Plus } from "lucide-react";
+import { Minus, Package, Plus, Loader2 } from "lucide-react";
 import {
   updateInventoryQuantity,
   getProducts,
@@ -52,6 +52,8 @@ export default function InventoryDisplay({
     selectedProduct: null, // Store the selected product data
   });
   const [pendingQtyChanges, setPendingQtyChanges] = useState(new Map()); // Track multiple pending changes
+  const [isRefreshing, setIsRefreshing] = useState(false); // disable add buttons while refetching
+  const [isSaving, setIsSaving] = useState(false); // control modal Save button spinner
   const queryClient = useQueryClient();
   const dropdownRef = useRef(null);
   const { user } = useAuth();
@@ -108,15 +110,6 @@ export default function InventoryDisplay({
       locationCode,
       rows,
     }));
-
-    // Debug logging
-    // console.log("Inventory groups:", {
-    //   totalItems: filtered.length,
-    //   groups: result,
-    //   scannedData,
-    //   activeLocationCode,
-    //   locationid,
-    // });
 
     return result;
   }, [filtered, scannedData, activeLocationCode, locationid]);
@@ -203,8 +196,6 @@ export default function InventoryDisplay({
     const currentItem = items.find((item) => item._id === id);
     if (!currentItem) return;
 
-    // console.log("Attempting update for item:", currentItem);
-
     const currentQty = Number(currentItem.quantity) || 0;
     const newQty = Math.max(0, Number(nextQty) || 0);
 
@@ -237,7 +228,6 @@ export default function InventoryDisplay({
         inventoryId = currentItem.inventoryId;
       } else {
         // For newly created items, try to find the real inventory ID from the server
-        // by searching through the current items to see if we have a matching item with a real ID
         const matchingItem = items.find(
           (item) =>
             item.productId === currentItem.productId &&
@@ -247,13 +237,7 @@ export default function InventoryDisplay({
 
         if (matchingItem && isObjectId(matchingItem._id)) {
           inventoryId = matchingItem._id;
-          // console.log("Found matching item with real ID:", inventoryId);
         } else {
-          // If this is a newly created item, try to handle immediate quantity update
-          // console.log(
-          //   "Newly created item, attempting immediate quantity update"
-          // );
-
           const result = await handleImmediateQuantityUpdate(
             currentItem,
             newQty,
@@ -261,8 +245,6 @@ export default function InventoryDisplay({
           );
 
           if (result.success) {
-            // Successfully updated the quantity for the newly created item
-            // Remove from pending changes
             setPendingQtyChanges((prev) => {
               const newMap = new Map(prev);
               newMap.delete(id);
@@ -280,9 +262,23 @@ export default function InventoryDisplay({
               color: "#fff",
             });
 
+            // Refetch latest inventory to reflect server-calculated changes
+            try {
+              setIsRefreshing(true);
+              const res = await getInventory({
+                search: activeLocationCode || scannedData,
+              });
+              if (Array.isArray(res?.inventry)) {
+                setItems(res.inventry);
+              }
+            } catch (e) {
+              console.warn("Refetch after qty update (new item) failed:", e);
+            } finally {
+              setIsRefreshing(false);
+            }
+
             return;
           } else {
-            // If we still don't have a valid ID, show error
             Swal.fire({
               icon: "error",
               title: "Update Failed",
@@ -329,6 +325,20 @@ export default function InventoryDisplay({
         background: "#10b981",
         color: "#fff",
       });
+      // Refetch latest inventory to ensure UI matches server (deletions, merges, etc.)
+      try {
+        setIsRefreshing(true);
+        const res = await getInventory({
+          search: activeLocationCode || scannedData,
+        });
+        if (Array.isArray(res?.inventry)) {
+          setItems(res.inventry);
+        }
+      } catch (e) {
+        console.warn("Refetch after qty update failed:", e);
+      } finally {
+        setIsRefreshing(false);
+      }
     } catch (error) {
       // revert
       applyLocalQty(id, currentQty);
@@ -349,8 +359,6 @@ export default function InventoryDisplay({
   };
 
   const handleQuantityInputChange = (itemId, inputValue) => {
-    // console.log("Manual input change:", { itemId, inputValue }); // Debug log
-
     // Find the current item to get the original quantity
     const currentItem = items.find((item) => item._id === itemId);
     if (!currentItem) {
@@ -444,6 +452,9 @@ export default function InventoryDisplay({
       });
       return data;
     },
+    onMutate: () => {
+      setIsSaving(true);
+    },
     onSuccess: async (data, variables) => {
       try {
         // If no id in response, fallback to refetching inventory and update UI from server
@@ -451,7 +462,8 @@ export default function InventoryDisplay({
           data?.inventory?._id && isObjectId(data.inventory._id);
 
         if (!hasValidId) {
-          // Attempt to refetch inventory for current location code
+          // show updating state while we fetch the latest list
+          setIsRefreshing(true);
           try {
             const res = await getInventory({
               search: activeLocationCode || scannedData,
@@ -483,6 +495,8 @@ export default function InventoryDisplay({
             }
           } catch (e) {
             console.warn("Refetch after create failed:", e);
+          } finally {
+            setIsRefreshing(false);
           }
         }
 
@@ -563,6 +577,7 @@ export default function InventoryDisplay({
           selectedProduct: null,
         });
       }
+      setIsSaving(false);
     },
     onError: (error) => {
       Swal.fire({
@@ -576,6 +591,7 @@ export default function InventoryDisplay({
         background: "#ef4444",
         color: "#fff",
       });
+      setIsSaving(false);
     },
   });
 
@@ -758,6 +774,10 @@ export default function InventoryDisplay({
     );
   }
 
+  const isAddDisabled = createInv.isLoading || isRefreshing;
+  const addBtnLabel = createInv.isLoading ? "Adding..." : isRefreshing ? "Updating..." : "Add Product";
+  const addFirstBtnLabel = createInv.isLoading ? "Adding..." : isRefreshing ? "Updating..." : "Add first Product";
+
   return (
     <div className="space-y-6 pb-12">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-zinc-200 bg-white p-4">
@@ -809,10 +829,11 @@ export default function InventoryDisplay({
 
                     setIsCreateOpen(true);
                   }}
-                  className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-2 py-1.5 rounded-xl font-medium transition-all duration-200 transform shadow-lg hover:shadow-xl whitespace-nowrap"
+                  disabled={isAddDisabled}
+                  className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-2 py-1.5 rounded-xl font-medium transition-all duration-200 transform shadow-lg hover:shadow-xl whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <Plus className="h-4 w-4" />
-                  Add Product
+                  {addBtnLabel}
                 </button>
               )}
             </div>
@@ -1231,10 +1252,11 @@ export default function InventoryDisplay({
                           }));
                           setIsCreateOpen(true);
                         }}
-                        className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-medium transition-all duration-200 transform shadow-lg hover:shadow-xl"
+                        disabled={isAddDisabled}
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-medium transition-all duration-200 transform shadow-lg hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed"
                       >
                         <Plus className="h-4 w-4" />
-                        Add first Product
+                        {addFirstBtnLabel}
                       </button>
                     )}
                   </div>
@@ -1280,10 +1302,11 @@ export default function InventoryDisplay({
                     }));
                     setIsCreateOpen(true);
                   }}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-medium transition-all duration-200 transform shadow-lg hover:shadow-xl"
+                  disabled={isAddDisabled}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-medium transition-all duration-200 transform shadow-lg hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <Plus className="h-4 w-4" />
-                  Add first Product
+                  {addFirstBtnLabel}
                 </button>
               )}
             </div>
@@ -1477,11 +1500,18 @@ export default function InventoryDisplay({
                 <button
                   type="submit"
                   disabled={
-                    createInv.isLoading || !form.productId || !form.quantity
+                    isSaving || createInv.isLoading || !form.productId || !form.quantity
                   }
-                  className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white disabled:opacity-60"
+                  className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white disabled:opacity-60 flex items-center gap-2"
                 >
-                  {createInv.isLoading ? "Saving…" : "Save"}
+                  {isSaving || createInv.isLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Saving…
+                    </>
+                  ) : (
+                    "Save"
+                  )}
                 </button>
               </div>
             </form>
