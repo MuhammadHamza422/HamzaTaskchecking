@@ -50,7 +50,7 @@ export async function deleteWarehouse(id) {
 // GET /api/v1/warehouse/zone/:warehouseId
 export async function getZonesByWarehouse(warehouseId, type = "shelf") {
   const { data } = await apiClient.get(
-    `/api/v1/warehouse/zone/${warehouseId}?type=${type}`
+    `/api/v1/warehouse/zone/${warehouseId}?type=${type ? type : "shelf"}`
   );
   return data;
 }
