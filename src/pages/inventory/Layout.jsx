@@ -262,7 +262,7 @@ export default function InventoryLayout() {
 
   useEffect(() => {
     const zoneType = localStorage.getItem("zoneType");
-    setType(zoneType);
+      setType(zoneType || "shelf");
   }, []);
 
   useEffect(() => {
