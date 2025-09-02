@@ -577,7 +577,7 @@ export default function ScanProduct() {
                       className="w-full h-64 object-cover"
                       playsInline
                       muted
-                      style={{ transform: "scaleX(-1)" }}
+                      // style={{ transform: "scaleX(-1)" }}
                     />
 
                     <canvas ref={canvasRef} className="hidden" />
