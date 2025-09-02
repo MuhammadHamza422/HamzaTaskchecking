@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FiCheck,
   FiCopy,
@@ -63,6 +63,7 @@ export default function Warehouses() {
   const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
   const role = user?.roles.role;
   const [type, setType] = useState("shelf");
+  const [zones, setZones] = useState([]);
 
   useEffect(() => {
     const zoneType = localStorage.getItem("zoneType");
@@ -134,27 +135,23 @@ export default function Warehouses() {
   // }, [warehouses, selectedWarehouseId, dispatch]);
 
   // Fetch zones for selected warehouse using TanStack React Query
-  const { data: zonesResponse, isFetching: zonesFetching } = useQuery({
-    queryKey: ["zones", selectedWarehouseId, type],
-    queryFn: async () => {
-      if (!selectedWarehouseId) return null;
-      return await getZonesByWarehouse(selectedWarehouseId, type);
-    },
-    enabled: !!selectedWarehouseId,
-    staleTime: 60 * 1000,
-    gcTime: 5 * 60 * 1000,
-  });
-
-  const zones = useMemo(() => {
+  const fetchZones = useCallback(async () => {
+    if (!selectedWarehouseId) return;
+    const zonesResponse = await getZonesByWarehouse(selectedWarehouseId, type);
     const list = Array.isArray(zonesResponse?.zones) ? zonesResponse.zones : [];
-    return list.map((z) => ({
+    const zoneList = list.map((z) => ({
       id: z.id ?? z._id,
       name: z.name,
       description: z.description,
       type: z.type,
       warehouseId: z.warehouse?.id ?? z.warehouse?._id ?? selectedWarehouseId,
     }));
-  }, [zonesResponse, selectedWarehouseId]);
+    setZones(zoneList);
+  }, [selectedWarehouseId, type]);
+
+  useEffect(() => {
+    fetchZones();
+  }, [fetchZones]);
 
   // Warehouse CRUD
   function openNewWh() {

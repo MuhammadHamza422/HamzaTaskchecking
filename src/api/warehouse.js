@@ -7,7 +7,7 @@ export async function getWarehouses({
   page = 1,
   limit = 50,
   search = "",
-  type,
+  type = "shelf",
 } = {}) {
   const params = new URLSearchParams();
   if (page) params.set("page", String(page));
@@ -48,7 +48,7 @@ export async function deleteWarehouse(id) {
 }
 
 // GET /api/v1/warehouse/zone/:warehouseId
-export async function getZonesByWarehouse(warehouseId, type) {
+export async function getZonesByWarehouse(warehouseId, type = "shelf") {
   const { data } = await apiClient.get(
     `/api/v1/warehouse/zone/${warehouseId}?type=${type}`
   );
