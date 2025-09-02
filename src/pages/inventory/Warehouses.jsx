@@ -97,9 +97,9 @@ export default function Warehouses() {
       return ws;
     },
     staleTime: 0,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    refetchOnMount: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: true,
   });
 
   const warehouses = useMemo(() => {

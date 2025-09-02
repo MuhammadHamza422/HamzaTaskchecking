@@ -23,7 +23,7 @@ export default function ManualOrderDetailsDrawer({
       const response = await apiClient.get("/api/v1/plateforms/all");
       return response.data;
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    
   });
 
   // Get platform name

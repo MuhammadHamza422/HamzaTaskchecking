@@ -63,7 +63,10 @@ export default function Locations() {
     queryKey: ["warehouse", warehouseId],
     queryFn: () => (warehouseId ? getWarehouse(warehouseId) : null),
     enabled: !!warehouseId,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: true,
   });
   const warehouseName =
     warehouseRes?.warehouse?.name || warehouseRes?.name || "";
@@ -73,7 +76,10 @@ export default function Locations() {
     queryKey: ["zones", warehouseId],
     queryFn: () => (warehouseId ? getZonesByWarehouse(warehouseId) : null),
     enabled: !!warehouseId,
-    staleTime: 60 * 1000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: true,
   });
 
   console.log("zonesRes", zonesRes);
@@ -96,7 +102,10 @@ export default function Locations() {
       sortOrder,
     ],
     enabled: !!warehouseId && !!zoneId,
-    staleTime: 60 * 1000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: true,
     queryFn: async () => {
       const res = await getLocations({
         page,
