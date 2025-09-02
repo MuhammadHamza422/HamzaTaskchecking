@@ -299,7 +299,7 @@ export default function InventoryLayout() {
         icon: "activity",
       },
     ];
-  }, [type]);
+  }, [type, warehouseId]);
 
   const isActive = (to, exact) => {
     if (exact) return location.pathname === to;
@@ -500,13 +500,27 @@ export default function InventoryLayout() {
                 </button>
               </div>
               <nav className="space-y-1">
-                {navItems.map((item) => {
+                {filteredNavItems.map((item) => {
                   const active = isActive(item.to, item.exact);
                   return (
                     <Link
                       key={item.to}
                       to={item.to}
-                      onClick={() => setMobileOpen(false)}
+                      onClick={() => {
+                        setMobileOpen(false);
+                        if (item.to === "#") {
+                          Swal.fire({
+                            icon: "warning",
+                            title: "Select a warehouse to view inventory",
+                            toast: true,
+                            position: "top-end",
+                            timer: 2000,
+                            showConfirmButton: false,
+                            background: "#ef4444",
+                            color: "#fff",
+                          });
+                        }
+                      }}
                       className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 ${
                         active
                           ? "bg-white/15 text-white hover:text-white"
