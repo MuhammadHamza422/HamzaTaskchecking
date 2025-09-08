@@ -177,6 +177,7 @@ export async function getInventory({
   limit = 30,
   search = "",
   warehouseId,
+  zoneId,
 } = {}) {
   const params = new URLSearchParams({
     page: String(page),
@@ -185,7 +186,11 @@ export async function getInventory({
 
   if (search) params.append("search", search);
   if (warehouseId) params.append("warehouse", warehouseId);
-
+  // Prefer explicit zoneId param for backend; keep legacy 'zone' for compatibility
+  if (zoneId) {
+    params.append("zoneId", zoneId);
+    // params.append("zone", zoneId);
+  }
   const response = await apiClient.get(`/api/v1/inventry/all?${params}`);
   return response.data;
 }
@@ -225,5 +230,17 @@ export async function moveInventoryItem(inventoryId, movedLocationId) {
   );
 
   console.log("Move API response:", data);
+  return data;
+}
+
+// PATCH /api/v1/inventry/move-zone/:id
+// Body: { movedZoneId }
+export async function moveInventoryToZone(inventoryId, movedZoneId) {
+  const { data } = await apiClient.patch(
+    `/api/v1/inventry/move-zone/${inventoryId}`,
+    {
+      movedZoneId,
+    }
+  );
   return data;
 }

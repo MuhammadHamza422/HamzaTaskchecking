@@ -8,6 +8,8 @@ import {
   getWarehouse,
   getLocations,
   updateInventoryQuantity,
+  getZonesByWarehouse,
+  moveInventoryToZone,
 } from "../../api/warehouse";
 import InventoryTableSkeleton from "./components/InventoryTableSkeleton";
 import EmptyInventory from "./components/EmptyInventory";
@@ -37,6 +39,10 @@ export default function InventoryList() {
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [moveModalOpen, setMoveModalOpen] = useState(false);
+  const [moveTargetId, setMoveTargetId] = useState(null);
+  const [selectedMoveZoneId, setSelectedMoveZoneId] = useState("");
+  const [isMoveSubmitting, setIsMoveSubmitting] = useState(false);
   const [form, setForm] = useState({
     productId: "",
     locationId: "",
@@ -60,24 +66,46 @@ export default function InventoryList() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const warehouseId = useSelector((s) => s.app.selectedWarehouseId);
+  const zoneId = useSelector((s) => s.app.selectedZoneId);
+  console.log("Zone Id", zoneId);
   const queryClient = useQueryClient();
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ["inventory", page, limit, searchTerm, warehouseId],
+    queryKey: ["inventory", page, limit, searchTerm, zoneId],
     queryFn: () =>
       getInventory({
         page,
         limit,
         search: searchTerm,
-        warehouseId,
+        // warehouseId,
+        zoneId,
       }),
     keepPreviousData: false,
     staleTime: 0,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
     refetchOnMount: true,
-    enabled: !!warehouseId,
+    enabled: !!zoneId,
   });
+
+  // Fetch zones to resolve selected zone name for breadcrumb
+  const { data: zonesRes } = useQuery({
+    queryKey: ["zones", warehouseId, warehouseType],
+    queryFn: () =>
+      warehouseId ? getZonesByWarehouse(warehouseId, warehouseType) : null,
+    enabled: !!warehouseId,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: true,
+  });
+
+  console.log("zonesRes", zonesRes);
+
+  const zonesOptions = useMemo(() => {
+    const list = Array.isArray(zonesRes?.zones) ? zonesRes.zones : [];
+    return list.map((z) => ({ id: z._id ?? z.id, name: z.name }));
+  }, [zonesRes]);
 
   const createInv = useMutation({
     mutationFn: async (body) => {
@@ -89,6 +117,7 @@ export default function InventoryList() {
         warehouseId: body.warehouseId,
         quantity: String(body.quantity),
         key: body.key,
+        zoneId: String(zoneId),
       });
       return data;
     },
@@ -104,6 +133,7 @@ export default function InventoryList() {
           limit,
           searchTerm,
           warehouseId,
+          zoneId,
         ]);
 
         setIsCreateOpen(false);
@@ -296,14 +326,19 @@ export default function InventoryList() {
   });
 
   const { data: locationsRes } = useQuery({
-    queryKey: ["locations", warehouseId],
+    queryKey: ["locations", warehouseId, zoneId],
     enabled: !!warehouseId,
     staleTime: 0,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
     refetchOnMount: true,
     queryFn: async () => {
-      const res = await getLocations();
+      const res = await getLocations({
+        warehouseId,
+        zoneId,
+        page: 1,
+        limit: 50,
+      });
       const list = Array.isArray(res?.locations)
         ? res.locations
         : Array.isArray(res)
@@ -318,6 +353,8 @@ export default function InventoryList() {
             typeof l.warehouse === "string"
               ? l.warehouse
               : l.warehouse?.id ?? l.warehouse?._id ?? null,
+          zoneId: typeof l?.zone === "string" ? l.zone : l.zone?._id ?? null,
+          zone: l.zone,
           qrcode: l.qrcode || l.qrPath || null,
         }))
         .filter((l) => l.warehouseId === warehouseId);
@@ -477,6 +514,54 @@ export default function InventoryList() {
     });
   };
 
+  // Move inventory to another zone
+  const moveInvToZone = useMutation({
+    mutationFn: async ({ inventoryId, movedZoneId }) => {
+      if (!inventoryId || !movedZoneId) {
+        throw new Error("Inventory and target zone are required");
+      }
+      return moveInventoryToZone(inventoryId, movedZoneId);
+    },
+    onSuccess: () => {
+      setMoveModalOpen(false);
+      setMoveTargetId(null);
+      setSelectedMoveZoneId("");
+      queryClient.invalidateQueries([
+        "inventory",
+        page,
+        limit,
+        searchTerm,
+        zoneId,
+      ]);
+      Swal.fire({
+        icon: "success",
+        title: "Item moved",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 2000,
+        background: "#10b981",
+        color: "#fff",
+      });
+    },
+    onError: (error) => {
+      Swal.fire({
+        icon: "error",
+        title: "Move failed",
+        text:
+          error?.response?.data?.message ||
+          error?.message ||
+          "Unable to move item",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        background: "#ef4444",
+        color: "#fff",
+      });
+    },
+  });
+
   const handleFormSubmit = (e) => {
     e.preventDefault();
 
@@ -623,6 +708,19 @@ export default function InventoryList() {
     }
   }, [searchTerm, groupedByShelf]);
 
+  // Resolve zone name: prefer zones list (selected zoneId), fallback to locations data
+  const zoneName = useMemo(() => {
+    const list = Array.isArray(zonesRes?.zones) ? zonesRes.zones : [];
+    const found = list.find((z) => (z._id ?? z.id) === zoneId);
+    if (found?.name) return found.name;
+    if (locations.length > 0) {
+      const firstLocation = locations[0];
+      return firstLocation?.zone?.name || "";
+    }
+    return "";
+  }, [zonesRes, zoneId, locations]);
+  console.log("zoneName", zoneName);
+
   if (isLoading) {
     return (
       <>
@@ -634,6 +732,7 @@ export default function InventoryList() {
             <FiArrowLeft /> <span>Warehouses</span>
           </button>
           <span>/</span>
+
           {warehouseName && (
             <>
               <span
@@ -641,6 +740,20 @@ export default function InventoryList() {
                 className="cursor-pointer hover:underline"
               >
                 {warehouseName}
+              </span>
+              <span>/</span>
+            </>
+          )}
+          {zoneName && (
+            <>
+              <span
+                onClick={() => {
+                  // dispatch(setSelectedZoneId(zoneId));
+                  navigate("/inventory/zones");
+                }}
+                className="cursor-pointer hover:underline"
+              >
+                {zoneName}
               </span>
               <span>/</span>
             </>
@@ -676,7 +789,11 @@ export default function InventoryList() {
   }
 
   const isAddDisabled = createInv.isLoading || isFetching;
-  const addButtonLabel = createInv.isLoading ? "Adding..." : isFetching ? "Updating..." : "Add Inventory";
+  const addButtonLabel = createInv.isLoading
+    ? "Adding..."
+    : isFetching
+    ? "Updating..."
+    : "Add Inventory";
 
   return (
     <>
@@ -688,6 +805,7 @@ export default function InventoryList() {
           <FiArrowLeft /> <span>Warehouses</span>
         </button>
         <span>/</span>
+
         {warehouseName && (
           <>
             <span
@@ -695,6 +813,20 @@ export default function InventoryList() {
               className="cursor-pointer hover:underline"
             >
               {warehouseName}
+            </span>
+            <span>/</span>
+          </>
+        )}
+        {zoneName && (
+          <>
+            <span
+              onClick={() => {
+                // dispatch(setSelectedZoneId(zoneId));
+                navigate("/inventory/zones");
+              }}
+              className="cursor-pointer hover:underline"
+            >
+              {zoneName}
             </span>
             <span>/</span>
           </>
@@ -870,6 +1002,17 @@ export default function InventoryList() {
                               <Plus className="w-4 h-4" />
                             </button>
                           </div>
+                          <button
+                            onClick={() => {
+                              setMoveTargetId(item.id);
+                              setSelectedMoveZoneId("");
+                              setMoveModalOpen(true);
+                            }}
+                            className="ml-2 h-9 px-3 rounded-md bg-purple-600 text-white text-sm hover:bg-purple-700"
+                            title="Move to another zone"
+                          >
+                            Move
+                          </button>
                         </div>
 
                         {pendingQtyChanges.has(item.id) && (
@@ -994,7 +1137,129 @@ export default function InventoryList() {
                                   {r.name}
                                 </td>
                                 <td className="px-3 py-2 text-sm text-gray-700">
-                                  {r.quantity}
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex items-center rounded-lg overflow-hidden border border-gray-200 shadow-sm bg-gray-50 h-9">
+                                      <button
+                                        disabled={Number(r.quantity) <= 0}
+                                        onClick={() => {
+                                          const currentPending = pendingQtyChanges.get(r.id);
+                                          const baseQty = currentPending ? currentPending.newQty : Number(r.quantity);
+                                          const newQty = Math.max(0, baseQty - 1);
+                                          setPendingQtyChanges((prev) => {
+                                            const newMap = new Map(prev);
+                                            newMap.set(r.id, {
+                                              currentQty: Number(r.quantity),
+                                              newQty,
+                                              type: "decrease",
+                                            });
+                                            return newMap;
+                                          });
+                                        }}
+                                        className={`px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors ${
+                                          Number(r.quantity) <= 0
+                                            ? "text-gray-300 bg-gray-50 cursor-not-allowed"
+                                            : "text-red-400 bg-red-100 hover:bg-red-800 hover:text-white"
+                                        }`}
+                                        title="Decrease by 1"
+                                      >
+                                        <Minus className="w-4 h-4" />
+                                      </button>
+                                      <input
+                                        value={
+                                          pendingQtyChanges.has(r.id)
+                                            ? pendingQtyChanges.get(r.id).newQty
+                                            : r.quantity || ""
+                                        }
+                                        onChange={(e) =>
+                                          handleQuantityInputChange(r.id, e.target.value)
+                                        }
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") {
+                                            const pendingChange = pendingQtyChanges.get(r.id);
+                                            if (pendingChange) {
+                                              const key =
+                                                pendingChange.newQty > pendingChange.currentQty
+                                                  ? "added"
+                                                  : "removed";
+                                              handleUpdateQty(r.id, pendingChange.newQty, key);
+                                            }
+                                          }
+                                        }}
+                                        className="w-14 text-center px-3 py-2 text-sm bg-white border-l border-r outline-none focus:ring-2 focus:ring-blue-500 focus:bg-blue-50 transition-colors"
+                                        inputMode="numeric"
+                                        pattern="[0-9]*"
+                                        placeholder="0"
+                                      />
+                                      <button
+                                        onClick={() => {
+                                          const currentPending = pendingQtyChanges.get(r.id);
+                                          const baseQty = currentPending ? currentPending.newQty : Number(r.quantity);
+                                          const newQty = baseQty + 1;
+                                          setPendingQtyChanges((prev) => {
+                                            const newMap = new Map(prev);
+                                            newMap.set(r.id, {
+                                              currentQty: Number(r.quantity),
+                                              newQty,
+                                              type: "increase",
+                                            });
+                                            return newMap;
+                                          });
+                                        }}
+                                        className="px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors bg-green-100 text-green-600 hover:bg-green-900 hover:text-white"
+                                        title="Increase by 1"
+                                      >
+                                        <Plus className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                    <button
+                                      onClick={() => {
+                                        setMoveTargetId(r.id);
+                                        setSelectedMoveZoneId("");
+                                        setMoveModalOpen(true);
+                                      }}
+                                      className="p-2 h-9 rounded-md bg-purple-600 text-white text-xs hover:bg-purple-700"
+                                    >
+                                      Move
+                                    </button>
+                                  </div>
+
+                                  {pendingQtyChanges.has(r.id) && (
+                                    <div className="fixed left-0 bottom-0 w-full p-5 bg-white flex flex-col sm:flex-row sm:items-center gap-y-2 justify-between duration-300 ease-in-out">
+                                      <h2 className="text-xl sm:text-2xl font-bold">{r.productTitle}</h2>
+                                      <div className="flex items-center max-sm:justify-end space-x-2">
+                                        <p className="text-sm font-medium text-blue-700">
+                                          New qty: {pendingQtyChanges.get(r.id)?.newQty}
+                                        </p>
+                                        <button
+                                          onClick={() => {
+                                            const pendingChange = pendingQtyChanges.get(r.id);
+                                            if (pendingChange) {
+                                              const key =
+                                                pendingChange.newQty > pendingChange.currentQty
+                                                  ? "added"
+                                                  : "removed";
+                                              handleUpdateQty(r.id, pendingChange.newQty, key);
+                                            }
+                                          }}
+                                          className="px-3 py-2 text-sm tracking-wide bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+                                        >
+                                          Validate
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            setPendingQtyChanges((prev) => {
+                                              const newMap = new Map(prev);
+                                              newMap.delete(r.id);
+                                              return newMap;
+                                            });
+                                          }}
+                                          className="px-3 py-2 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
                                 </td>
                               </tr>
                             ))}
@@ -1079,7 +1344,129 @@ export default function InventoryList() {
                                         {r.name}
                                       </td>
                                       <td className="px-3 py-2 text-sm text-gray-700">
-                                        {r.quantity}
+                                        <div className="flex items-center gap-2">
+                                          <div className="flex items-center rounded-lg overflow-hidden border border-gray-200 shadow-sm bg-gray-50 h-9">
+                                            <button
+                                              disabled={Number(r.quantity) <= 0}
+                                              onClick={() => {
+                                                const currentPending = pendingQtyChanges.get(r.id);
+                                                const baseQty = currentPending ? currentPending.newQty : Number(r.quantity);
+                                                const newQty = Math.max(0, baseQty - 1);
+                                                setPendingQtyChanges((prev) => {
+                                                  const newMap = new Map(prev);
+                                                  newMap.set(r.id, {
+                                                    currentQty: Number(r.quantity),
+                                                    newQty,
+                                                    type: "decrease",
+                                                  });
+                                                  return newMap;
+                                                });
+                                              }}
+                                              className={`px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors ${
+                                                Number(r.quantity) <= 0
+                                                  ? "text-gray-300 bg-gray-50 cursor-not-allowed"
+                                                  : "text-red-400 bg-red-100 hover:bg-red-800 hover:text-white"
+                                              }`}
+                                              title="Decrease by 1"
+                                            >
+                                              <Minus className="w-4 h-4" />
+                                            </button>
+                                            <input
+                                              value={
+                                                pendingQtyChanges.has(r.id)
+                                                  ? pendingQtyChanges.get(r.id).newQty
+                                                  : r.quantity || ""
+                                              }
+                                              onChange={(e) =>
+                                                handleQuantityInputChange(r.id, e.target.value)
+                                              }
+                                              onKeyDown={(e) => {
+                                                if (e.key === "Enter") {
+                                                  const pendingChange = pendingQtyChanges.get(r.id);
+                                                  if (pendingChange) {
+                                                    const key =
+                                                      pendingChange.newQty > pendingChange.currentQty
+                                                        ? "added"
+                                                        : "removed";
+                                                    handleUpdateQty(r.id, pendingChange.newQty, key);
+                                                  }
+                                                }
+                                              }}
+                                              className="w-14 text-center px-3 py-2 text-sm bg-white border-l border-r outline-none focus:ring-2 focus:ring-blue-500 focus:bg-blue-50 transition-colors"
+                                              inputMode="numeric"
+                                              pattern="[0-9]*"
+                                              placeholder="0"
+                                            />
+                                            <button
+                                              onClick={() => {
+                                                const currentPending = pendingQtyChanges.get(r.id);
+                                                const baseQty = currentPending ? currentPending.newQty : Number(r.quantity);
+                                                const newQty = baseQty + 1;
+                                                setPendingQtyChanges((prev) => {
+                                                  const newMap = new Map(prev);
+                                                  newMap.set(r.id, {
+                                                    currentQty: Number(r.quantity),
+                                                    newQty,
+                                                    type: "increase",
+                                                  });
+                                                  return newMap;
+                                                });
+                                              }}
+                                              className="px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors bg-green-100 text-green-600 hover:bg-green-900 hover:text-white"
+                                              title="Increase by 1"
+                                            >
+                                              <Plus className="w-4 h-4" />
+                                            </button>
+                                          </div>
+                                          <button
+                                            onClick={() => {
+                                              setMoveTargetId(r.id);
+                                              setSelectedMoveZoneId("");
+                                              setMoveModalOpen(true);
+                                            }}
+                                            className="p-2 h-9 rounded-md bg-purple-600 text-white text-xs hover:bg-purple-700"
+                                          >
+                                            Move
+                                          </button>
+                                        </div>
+
+                                        {pendingQtyChanges.has(r.id) && (
+                                          <div className="fixed left-0 bottom-0 w-full p-5 bg-white flex flex-col sm:flex-row sm:items-center gap-y-2 justify-between duration-300 ease-in-out">
+                                            <h2 className="text-xl sm:text-2xl font-bold">{r.productTitle}</h2>
+                                            <div className="flex items-center max-sm:justify-end space-x-2">
+                                              <p className="text-sm font-medium text-blue-700">
+                                                New qty: {pendingQtyChanges.get(r.id)?.newQty}
+                                              </p>
+                                              <button
+                                                onClick={() => {
+                                                  const pendingChange = pendingQtyChanges.get(r.id);
+                                                  if (pendingChange) {
+                                                    const key =
+                                                      pendingChange.newQty > pendingChange.currentQty
+                                                        ? "added"
+                                                        : "removed";
+                                                    handleUpdateQty(r.id, pendingChange.newQty, key);
+                                                  }
+                                                }}
+                                                className="px-3 py-2 text-sm tracking-wide bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+                                              >
+                                                Validate
+                                              </button>
+                                              <button
+                                                onClick={() => {
+                                                  setPendingQtyChanges((prev) => {
+                                                    const newMap = new Map(prev);
+                                                    newMap.delete(r.id);
+                                                    return newMap;
+                                                  });
+                                                }}
+                                                className="px-3 py-2 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
+                                              >
+                                                Cancel
+                                              </button>
+                                            </div>
+                                          </div>
+                                        )}
                                       </td>
                                     </tr>
                                   ))}
@@ -1126,10 +1513,11 @@ export default function InventoryList() {
               {/* Warehouse */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Warehouse
+                  ZoneName
                 </label>
                 <div className="w-full rounded-md border px-3 py-2 text-sm bg-gray-50 text-gray-600">
-                  {warehouseName}
+                  {/* {warehouseName} */}
+                  {zoneName}
                 </div>
               </div>
 
@@ -1276,7 +1664,10 @@ export default function InventoryList() {
                 <button
                   type="submit"
                   disabled={
-                    isSaving || createInv.isLoading || !form.productId || !form.quantity
+                    isSaving ||
+                    createInv.isLoading ||
+                    !form.productId ||
+                    !form.quantity
                   }
                   className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white disabled:opacity-60 flex items-center gap-2"
                 >
@@ -1287,6 +1678,95 @@ export default function InventoryList() {
                     </>
                   ) : (
                     "Save"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </Modal>
+        {/* Move to Zone Modal */}
+        <Modal
+          getContainer={getContainer}
+          key={`move-${String(isFullscreen)}`}
+          open={moveModalOpen}
+          onCancel={() => {
+            setMoveModalOpen(false);
+            setMoveTargetId(null);
+            setSelectedMoveZoneId("");
+          }}
+          centered
+          footer={null}
+          width={420}
+          title={null}
+          className="max-h-[95vh] overflow-y-auto"
+        >
+          <div>
+            <h3 className="text-lg font-semibold">Move Inventory to Zone</h3>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!moveTargetId || !selectedMoveZoneId) return;
+                setIsMoveSubmitting(true);
+                moveInvToZone.mutate(
+                  {
+                    inventoryId: moveTargetId,
+                    movedZoneId: selectedMoveZoneId,
+                  },
+                  {
+                    onSettled: () => setIsMoveSubmitting(false),
+                  }
+                );
+              }}
+              className="mt-4 space-y-3"
+            >
+              <div>
+                <label className="block text-sm font-medium text-zinc-700">
+                  Select Zone
+                </label>
+                <select
+                  value={selectedMoveZoneId}
+                  onChange={(e) => setSelectedMoveZoneId(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black focus:border-zinc-400"
+                >
+                  <option value="" disabled>
+                    Choose a zone
+                  </option>
+                  {zonesOptions.map((z) => (
+                    <option key={z.id} value={z.id}>
+                      {z.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="mt-6 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMoveModalOpen(false);
+                    setMoveTargetId(null);
+                    setSelectedMoveZoneId("");
+                  }}
+                  className="rounded-lg border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!selectedMoveZoneId || moveInvToZone.isLoading || isMoveSubmitting}
+                  className={`rounded-lg bg-purple-600 px-4 py-2 text-sm text-white hover:bg-purple-700 flex items-center gap-2 ${
+                    moveInvToZone.isLoading || isMoveSubmitting
+                      ? "opacity-50 cursor-not-allowed"
+                      : ""
+                  }`}
+                >
+                  {moveInvToZone.isLoading || isMoveSubmitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Moving…
+                    </>
+                  ) : (
+                    "Move"
                   )}
                 </button>
               </div>
