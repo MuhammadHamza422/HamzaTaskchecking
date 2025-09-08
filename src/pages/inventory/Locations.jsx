@@ -146,17 +146,17 @@ export default function Locations() {
   const locations = locationsRes?.locations || [];
   const total = locationsRes?.total || 0;
 
-    // Get zone name from locations data (more reliable than separate zones query)
-    const zoneName = useMemo(() => {
-      if (locations.length > 0) {
-        // Get zone name from the first location's zone data
-        const firstLocation = locations[0];
-        return firstLocation?.zone?.name || "";
-      }
-      return "";
-    }, [locations]);
-  
-    console.log("zoneName from locations:", zoneName);
+  // Resolve zone name: prefer zones list (selected zoneId), fallback to locations data
+  const zoneName = useMemo(() => {
+    const list = Array.isArray(zonesRes?.zones) ? zonesRes.zones : [];
+    const found = list.find((z) => (z._id ?? z.id) === zoneId);
+    if (found?.name) return found.name;
+    if (locations.length > 0) {
+      const firstLocation = locations[0];
+      return firstLocation?.zone?.name || "";
+    }
+    return "";
+  }, [zonesRes, zoneId, locations]);
 
   // compute shelf set and helpers for validations
   const shelfCodesSet = useMemo(() => {
