@@ -762,7 +762,7 @@ export default function InventoryList() {
         </nav>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-zinc-200 bg-white p-6">
           <div>
-            <h1 className="text-2xl font-semibold">Inventory</h1>
+            <h1 className="text-2xl font-semibold">Inventory of {zoneName} </h1>
             <p className="mt-1 text-sm text-zinc-600">
               View and manage stock items.
             </p>
@@ -835,7 +835,7 @@ export default function InventoryList() {
       </nav>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-zinc-200 bg-white p-6">
         <div>
-          <h1 className="text-2xl font-semibold">Inventory</h1>
+          <h1 className="text-2xl font-semibold">Inventory of {zoneName}</h1>
           <p className="mt-1 text-sm text-zinc-600">
             View and manage stock items.
           </p>
