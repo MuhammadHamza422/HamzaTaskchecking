@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { FiArrowLeft, FiSearch, FiChevronDown } from "react-icons/fi";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createInventory,
@@ -16,23 +15,23 @@ import EmptyInventory from "./components/EmptyInventory";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import Swal from "sweetalert2";
-import { Modal } from "antd";
 import useFullscreen from "../../components/useFullscreen";
-import { Minus, Plus, Loader2 } from "lucide-react";
+import InventoryBreadcrumb from "./components/InventoryBreadcrumb";
+import InventoryHeader from "./components/InventoryHeader";
+import NotShelfTable from "./components/NotShelfTable";
+import ShelfGroupedView from "./components/ShelfGroupedView";
+import CreateInventoryModal from "./components/CreateInventoryModal";
+import MoveToZoneModal from "./components/MoveToZoneModal";
+import InventoryPagination from "./components/InventoryPagination";
 
-const productTypes = [
-  { label: "Consoles", code: "CON" },
-  { label: "Handhelds", code: "HAN" },
-  { label: "Accessories", code: "ACC" },
-  { label: "Games", code: "GAM" },
-];
+// product types moved to CreateInventoryModal
 
 // utility: test for a 24-char Mongo ObjectId
 const isObjectId = (id) => /^[a-f\d]{24}$/i.test(String(id));
 
 export default function InventoryList() {
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(30);
+  const [limit, setLimit] = useState(50);
   const [searchTerm, setSearchTerm] = useState("");
   const [warehouseType, setWarehouseType] = useState("shelf");
   const [pendingQtyChanges, setPendingQtyChanges] = useState(new Map());
@@ -234,6 +233,48 @@ export default function InventoryList() {
 
     return mapped;
   }, [data, warehouseId]);
+
+  // Total items for pagination (fallback to items length)
+  const totalInventory = useMemo(() => {
+    const total = Number(data?.totalInventry ?? data?.total ?? 0);
+    return Number.isFinite(total) && total > 0 ? total : items.length;
+  }, [data, items.length]);
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, limit, zoneId]);
+
+  // Build CSV headers from backend fields (prefer original keys; map from our shaped items)
+  const csvHeaders = useMemo(() => {
+    // Expected backend fields from original inventory response
+    return [
+      { label: "ID", key: "id" },
+      { label: "Product Title", key: "productTitle" },
+      { label: "SKU", key: "sku" },
+      { label: "Quantity", key: "quantity" },
+      { label: "Location Code", key: "locationCode" },
+      { label: "Warehouse Name", key: "name" },
+      { label: "Warehouse Country", key: "country" },
+      { label: "Model Code", key: "modelCode" },
+      { label: "Updated At", key: "updatedAt" },
+    ];
+  }, []);
+
+  // Use current page items only for CSV (no checkbox selection)
+  const csvData = useMemo(() => {
+    return items.map((r) => ({
+      id: r.id,
+      productTitle: r.productTitle,
+      sku: r.sku,
+      quantity: r.quantity,
+      locationCode: r.locationCode,
+      name: r.name,
+      country: r.country,
+      modelCode: r.modelCode,
+      updatedAt: r.updatedAt,
+    }));
+  }, [items]);
 
   // Group inventory items by shelf base, nest BINs under their parent shelf
   const groupedByShelf = useMemo(() => {
@@ -721,66 +762,32 @@ export default function InventoryList() {
   }, [zonesRes, zoneId, locations]);
   console.log("zoneName", zoneName);
 
+  // CSV filename based on current zone name and page
+  const csvFilename = useMemo(() => {
+    const base = String(zoneName || "inventory").trim().toLowerCase();
+    const slug = base
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/^-+|-+$/g, "");
+    return `${slug || "inventory"}-page-${page}.csv`;
+  }, [zoneName, page]);
+
   if (isLoading) {
     return (
       <>
-        <nav className="text-sm text-gray-600 flex items-center space-x-2 py-4">
-          <button
-            onClick={() => navigate("/inventory/warehouses")}
-            className="flex items-center space-x-1 hover:underline"
-          >
-            <FiArrowLeft /> <span>Warehouses</span>
-          </button>
-          <span>/</span>
-
-          {warehouseName && (
-            <>
-              <span
-                onClick={() => navigate("/inventory/warehouses")}
-                className="cursor-pointer hover:underline"
-              >
-                {warehouseName}
-              </span>
-              <span>/</span>
-            </>
-          )}
-          {zoneName && (
-            <>
-              <span
-                onClick={() => {
-                  // dispatch(setSelectedZoneId(zoneId));
-                  navigate("/inventory/zones");
-                }}
-                className="cursor-pointer hover:underline"
-              >
-                {zoneName}
-              </span>
-              <span>/</span>
-            </>
-          )}
-          <span className="font-medium">Inventory</span>
-        </nav>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-zinc-200 bg-white p-6">
-          <div>
-            <h1 className="text-2xl font-semibold">Inventory of {zoneName} </h1>
-            <p className="mt-1 text-sm text-zinc-600">
-              View and manage stock items.
-            </p>
-          </div>
-
-          <div className="flex gap-3">
-            <div className="relative w-full sm:w-80">
-              <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search product, location, or warehouse…"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-3 py-2 border rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 outline-none duration-300 ease-in-out"
-              />
-            </div>
-          </div>
-        </div>
+        <InventoryBreadcrumb
+          navigate={navigate}
+          warehouseName={warehouseName}
+          zoneName={zoneName}
+        />
+        <InventoryHeader
+          zoneName={zoneName}
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          warehouseType={warehouseType}
+          onAddNew={() => setIsCreateOpen(true)}
+          isAddDisabled={true}
+          addButtonLabel={"Add Inventory"}
+        />
         <div className="max-w-7xl mx-auto py-6">
           <InventoryTableSkeleton />
         </div>
@@ -797,73 +804,23 @@ export default function InventoryList() {
 
   return (
     <>
-      <nav className="text-sm text-gray-600 flex items-center space-x-2 py-4">
-        <button
-          onClick={() => navigate("/inventory/warehouses")}
-          className="flex items-center space-x-1 hover:underline"
-        >
-          <FiArrowLeft /> <span>Warehouses</span>
-        </button>
-        <span>/</span>
-
-        {warehouseName && (
-          <>
-            <span
-              onClick={() => navigate("/inventory/warehouses")}
-              className="cursor-pointer hover:underline"
-            >
-              {warehouseName}
-            </span>
-            <span>/</span>
-          </>
-        )}
-        {zoneName && (
-          <>
-            <span
-              onClick={() => {
-                // dispatch(setSelectedZoneId(zoneId));
-                navigate("/inventory/zones");
-              }}
-              className="cursor-pointer hover:underline"
-            >
-              {zoneName}
-            </span>
-            <span>/</span>
-          </>
-        )}
-        <span className="font-medium">Inventory</span>
-      </nav>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-zinc-200 bg-white p-6">
-        <div>
-          <h1 className="text-2xl font-semibold">Inventory of {zoneName}</h1>
-          <p className="mt-1 text-sm text-zinc-600">
-            View and manage stock items.
-          </p>
-        </div>
-
-        <div className="flex gap-3">
-          <div className="relative w-full sm:w-80">
-            <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search product, location, or warehouse…"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-3 py-2 border rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 outline-none duration-300 ease-in-out"
-            />
-          </div>
-          {warehouseType === "not_shelf" && (
-            <button
-              onClick={() => setIsCreateOpen(true)}
-              // disabled inventory button during create inventory and while table refetching
-              disabled={isAddDisabled}
-              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md disabled:opacity-60"
-            >
-              {addButtonLabel}
-            </button>
-          )}
-        </div>
-      </div>
+      <InventoryBreadcrumb
+        navigate={navigate}
+        warehouseName={warehouseName}
+        zoneName={zoneName}
+      />
+      <InventoryHeader
+        zoneName={zoneName}
+        searchTerm={searchTerm}
+        setSearchTerm={setSearchTerm}
+        warehouseType={warehouseType}
+        onAddNew={() => setIsCreateOpen(true)}
+        isAddDisabled={isAddDisabled}
+        addButtonLabel={addButtonLabel}
+        csvData={csvData}
+        csvHeaders={csvHeaders}
+        csvFilename={csvFilename}
+      />
       <div className="max-w-7xl mx-auto py-6">
         {isLoading ? (
           <InventoryTableSkeleton />
@@ -872,907 +829,92 @@ export default function InventoryList() {
           items.length === 0 ? (
             <EmptyInventory onAddNew={() => setIsCreateOpen(true)} />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full bg-white rounded-lg border">
-                <thead className="border-b bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
-                      Product
-                    </th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
-                      SKU
-                    </th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
-                      Quantity
-                    </th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item, idx) => (
-                    <tr
-                      key={item.id}
-                      className={`border-t ${
-                        idx % 2 !== 0 ? "bg-gray-50" : "bg-white"
-                      }`}
-                    >
-                      <td className="px-4 py-3 text-sm font-medium">
-                        {item.productTitle}
-                      </td>
-                      <td className="px-4 py-3 text-xs font-mono">
-                        {item.sku || "N/A"}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700">
-                        {item.quantity}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1">
-                          <div className="flex items-center rounded-lg overflow-hidden border border-gray-200 shadow-sm bg-gray-50 h-9">
-                            <button
-                              disabled={Number(item.quantity) <= 0}
-                              onClick={() => {
-                                const currentPending = pendingQtyChanges.get(
-                                  item.id
-                                );
-                                const baseQty = currentPending
-                                  ? currentPending.newQty
-                                  : Number(item.quantity);
-                                const newQty = Math.max(0, baseQty - 1);
-
-                                setPendingQtyChanges((prev) => {
-                                  const newMap = new Map(prev);
-                                  newMap.set(item.id, {
-                                    currentQty: Number(item.quantity),
-                                    newQty,
-                                    type: "decrease",
-                                  });
-                                  return newMap;
-                                });
-                              }}
-                              className={`px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors ${
-                                Number(item.quantity) <= 0
-                                  ? "text-gray-300 bg-gray-50 cursor-not-allowed"
-                                  : "text-red-400 bg-red-100 hover:bg-red-800 hover:text-white"
-                              }`}
-                              title="Decrease by 1"
-                            >
-                              <Minus className="w-4 h-4" />
-                            </button>
-                            <input
-                              value={
-                                pendingQtyChanges.has(item.id)
-                                  ? pendingQtyChanges.get(item.id).newQty
-                                  : item.quantity || ""
-                              }
-                              onChange={(e) =>
-                                handleQuantityInputChange(
-                                  item.id,
-                                  e.target.value
-                                )
-                              }
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  const pendingChange = pendingQtyChanges.get(
-                                    item.id
-                                  );
-                                  if (pendingChange) {
-                                    const key =
-                                      pendingChange.newQty >
-                                      pendingChange.currentQty
-                                        ? "added"
-                                        : "removed";
-                                    handleUpdateQty(
-                                      item.id,
-                                      pendingChange.newQty,
-                                      key
-                                    );
-                                  }
-                                }
-                              }}
-                              className="w-14 text-center px-3 py-2 text-sm bg-white border-l border-r outline-none focus:ring-2 focus:ring-blue-500 focus:bg-blue-50 transition-colors"
-                              inputMode="numeric"
-                              pattern="[0-9]*"
-                              placeholder="0"
-                            />
-                            <button
-                              onClick={() => {
-                                const currentPending = pendingQtyChanges.get(
-                                  item.id
-                                );
-                                const baseQty = currentPending
-                                  ? currentPending.newQty
-                                  : Number(item.quantity);
-                                const newQty = baseQty + 1;
-
-                                setPendingQtyChanges((prev) => {
-                                  const newMap = new Map(prev);
-                                  newMap.set(item.id, {
-                                    currentQty: Number(item.quantity),
-                                    newQty,
-                                    type: "increase",
-                                  });
-                                  return newMap;
-                                });
-                              }}
-                              className="px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors bg-green-100 text-green-600 hover:bg-green-900 hover:text-white"
-                              title="Increase by 1"
-                            >
-                              <Plus className="w-4 h-4" />
-                            </button>
-                          </div>
-                          <button
-                            onClick={() => {
-                              setMoveTargetId(item.id);
-                              setSelectedMoveZoneId("");
-                              setMoveModalOpen(true);
-                            }}
-                            className="ml-2 h-9 px-3 rounded-md bg-purple-600 text-white text-sm hover:bg-purple-700"
-                            title="Move to another zone"
-                          >
-                            Move
-                          </button>
-                        </div>
-
-                        {pendingQtyChanges.has(item.id) && (
-                          <div className="fixed left-0 bottom-0 w-full p-5 bg-white flex flex-col sm:flex-row sm:items-center gap-y-2 justify-between duration-300 ease-in-out">
-                            <h2 className="text-xl sm:text-2xl font-bold">
-                              {item.productTitle}
-                            </h2>
-                            <div className="flex items-center max-sm:justify-end space-x-2">
-                              <p className="text-sm font-medium text-blue-700">
-                                New qty:{" "}
-                                {pendingQtyChanges.get(item.id)?.newQty}
-                              </p>
-                              <button
-                                onClick={() => {
-                                  const pendingChange = pendingQtyChanges.get(
-                                    item.id
-                                  );
-                                  if (pendingChange) {
-                                    const key =
-                                      pendingChange.newQty >
-                                      pendingChange.currentQty
-                                        ? "added"
-                                        : "removed";
-                                    handleUpdateQty(
-                                      item.id,
-                                      pendingChange.newQty,
-                                      key
-                                    );
-                                  }
-                                }}
-                                className="px-3 py-2 text-sm tracking-wide bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
-                              >
-                                Validate
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setPendingQtyChanges((prev) => {
-                                    const newMap = new Map(prev);
-                                    newMap.delete(item.id);
-                                    return newMap;
-                                  });
-                                }}
-                                className="px-3 py-2 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <NotShelfTable
+              items={items}
+              pendingQtyChanges={pendingQtyChanges}
+              setPendingQtyChanges={setPendingQtyChanges}
+              handleQuantityInputChange={handleQuantityInputChange}
+              handleUpdateQty={handleUpdateQty}
+              onOpenMove={(id) => {
+                setMoveTargetId(id);
+                setSelectedMoveZoneId("");
+                setMoveModalOpen(true);
+              }}
+            />
           )
         ) : // Grouped display for shelf warehouses
         groupedByLocation.length === 0 ? (
           <EmptyInventory onAddNew={() => setIsCreateOpen(true)} />
         ) : (
-          <div className="space-y-6">
-            {groupedByShelf.map(({ shelfCode, shelfRows, bins }) => (
-              <div
-                key={shelfCode}
-                className="rounded-lg border overflow-hidden"
-              >
-                {/* shelf header */}
-                <div className="flex items-center justify-between gap-4 px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200">
-                  <div>
-                    <p className="font-bold text-xl uppercase tracking-wide">
-                      {shelfCode}
-                    </p>
-                    <p className="text-sm text-gray-500 mt-0.5">{`Items on shelf: ${shelfRows.length} · BIN groups: ${bins.size}`}</p>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {/* toggle shelf rows (if any) */}
-                    {/* {shelfRows.length > 0 && (
-                        <button
-                          onClick={() => toggleShelf(shelfCode)}
-                          className="text-sm px-3 py-1 rounded-md bg-white shadow-sm"
-                        >
-                          {expandedShelves.has(shelfCode) ? "Hide shelf items" : "Show shelf items"}
-                        </button>
-                      )} */}
-                  </div>
-                </div>
-
-                {/* shelf content */}
-                <div className="p-4 bg-gray-100">
-                  {/* shelf rows (collapsed by default) */}
-                  {shelfRows.length > 0 && (
-                    <div className="mb-4">
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full bg-white rounded-lg">
-                          <thead className="border-b">
-                            <tr>
-                              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700">
-                                Product
-                              </th>
-                              <th className="px-3 py-2 text-left text-xs font-mono text-gray-700">
-                                SKU
-                              </th>
-                              <th className="px-3 py-2 text-left text-xs text-gray-700">
-                                Warehouse
-                              </th>
-                              <th className="px-3 py-2 text-left text-xs text-gray-700">
-                                Qty
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {shelfRows.map((r) => (
-                              <tr key={r.id} className="border-t">
-                                <td className="px-3 py-2 text-sm font-medium">
-                                  {r.productTitle}
-                                </td>
-                                <td className="px-3 py-2 text-xs font-mono">
-                                  {r.sku || "N/A"}
-                                </td>
-                                <td className="px-3 py-2 text-sm text-gray-500">
-                                  {r.name}
-                                </td>
-                                <td className="px-3 py-2 text-sm text-gray-700">
-                                  <div className="flex items-center gap-2">
-                                    <div className="flex items-center rounded-lg overflow-hidden border border-gray-200 shadow-sm bg-gray-50 h-9">
-                                      <button
-                                        disabled={Number(r.quantity) <= 0}
-                                        onClick={() => {
-                                          const currentPending = pendingQtyChanges.get(r.id);
-                                          const baseQty = currentPending ? currentPending.newQty : Number(r.quantity);
-                                          const newQty = Math.max(0, baseQty - 1);
-                                          setPendingQtyChanges((prev) => {
-                                            const newMap = new Map(prev);
-                                            newMap.set(r.id, {
-                                              currentQty: Number(r.quantity),
-                                              newQty,
-                                              type: "decrease",
-                                            });
-                                            return newMap;
-                                          });
-                                        }}
-                                        className={`px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors ${
-                                          Number(r.quantity) <= 0
-                                            ? "text-gray-300 bg-gray-50 cursor-not-allowed"
-                                            : "text-red-400 bg-red-100 hover:bg-red-800 hover:text-white"
-                                        }`}
-                                        title="Decrease by 1"
-                                      >
-                                        <Minus className="w-4 h-4" />
-                                      </button>
-                                      <input
-                                        value={
-                                          pendingQtyChanges.has(r.id)
-                                            ? pendingQtyChanges.get(r.id).newQty
-                                            : r.quantity || ""
-                                        }
-                                        onChange={(e) =>
-                                          handleQuantityInputChange(r.id, e.target.value)
-                                        }
-                                        onKeyDown={(e) => {
-                                          if (e.key === "Enter") {
-                                            const pendingChange = pendingQtyChanges.get(r.id);
-                                            if (pendingChange) {
-                                              const key =
-                                                pendingChange.newQty > pendingChange.currentQty
-                                                  ? "added"
-                                                  : "removed";
-                                              handleUpdateQty(r.id, pendingChange.newQty, key);
-                                            }
-                                          }
-                                        }}
-                                        className="w-14 text-center px-3 py-2 text-sm bg-white border-l border-r outline-none focus:ring-2 focus:ring-blue-500 focus:bg-blue-50 transition-colors"
-                                        inputMode="numeric"
-                                        pattern="[0-9]*"
-                                        placeholder="0"
-                                      />
-                                      <button
-                                        onClick={() => {
-                                          const currentPending = pendingQtyChanges.get(r.id);
-                                          const baseQty = currentPending ? currentPending.newQty : Number(r.quantity);
-                                          const newQty = baseQty + 1;
-                                          setPendingQtyChanges((prev) => {
-                                            const newMap = new Map(prev);
-                                            newMap.set(r.id, {
-                                              currentQty: Number(r.quantity),
-                                              newQty,
-                                              type: "increase",
-                                            });
-                                            return newMap;
-                                          });
-                                        }}
-                                        className="px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors bg-green-100 text-green-600 hover:bg-green-900 hover:text-white"
-                                        title="Increase by 1"
-                                      >
-                                        <Plus className="w-4 h-4" />
-                                      </button>
-                                    </div>
-                                    <button
-                                      onClick={() => {
-                                        setMoveTargetId(r.id);
-                                        setSelectedMoveZoneId("");
-                                        setMoveModalOpen(true);
-                                      }}
-                                      className="p-2 h-9 rounded-md bg-purple-600 text-white text-xs hover:bg-purple-700"
-                                    >
-                                      Move
-                                    </button>
-                                  </div>
-
-                                  {pendingQtyChanges.has(r.id) && (
-                                    <div className="fixed left-0 bottom-0 w-full p-5 bg-white flex flex-col sm:flex-row sm:items-center gap-y-2 justify-between duration-300 ease-in-out">
-                                      <h2 className="text-xl sm:text-2xl font-bold">{r.productTitle}</h2>
-                                      <div className="flex items-center max-sm:justify-end space-x-2">
-                                        <p className="text-sm font-medium text-blue-700">
-                                          New qty: {pendingQtyChanges.get(r.id)?.newQty}
-                                        </p>
-                                        <button
-                                          onClick={() => {
-                                            const pendingChange = pendingQtyChanges.get(r.id);
-                                            if (pendingChange) {
-                                              const key =
-                                                pendingChange.newQty > pendingChange.currentQty
-                                                  ? "added"
-                                                  : "removed";
-                                              handleUpdateQty(r.id, pendingChange.newQty, key);
-                                            }
-                                          }}
-                                          className="px-3 py-2 text-sm tracking-wide bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
-                                        >
-                                          Validate
-                                        </button>
-                                        <button
-                                          onClick={() => {
-                                            setPendingQtyChanges((prev) => {
-                                              const newMap = new Map(prev);
-                                              newMap.delete(r.id);
-                                              return newMap;
-                                            });
-                                          }}
-                                          className="px-3 py-2 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
-                                        >
-                                          Cancel
-                                        </button>
-                                      </div>
-                                    </div>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* bins: show collapsed list of bin codes first; click to expand products */}
-                  {Array.from(bins.entries()).map(([binCode, rows]) => {
-                    const isOpen = expandedBins.has(binCode);
-                    return (
-                      <div
-                        key={binCode}
-                        className="mb-4 last:mb-0 bg-white p-0 rounded-lg"
-                      >
-                        <div
-                          className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50"
-                          onClick={() => toggleBin(binCode)}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ")
-                              toggleBin(binCode);
-                          }}
-                        >
-                          <div className="flex items-center gap-3">
-                            <span
-                              className={`transform transition-transform duration-200 ${
-                                isOpen ? "rotate-180" : "rotate-0"
-                              }`}
-                            >
-                              <FiChevronDown />
-                            </span>
-                            <div>
-                              <p className="text-base font-semibold">
-                                {binCode}
-                              </p>
-                              <p className="text-sm text-gray-500">
-                                {rows.length} item{rows.length !== 1 ? "s" : ""}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="text-sm text-gray-500">
-                            {isOpen ? "Collapse" : "Expand"}
-                          </div>
-                        </div>
-
-                        {/* products inside bin - only render when open to keep DOM small */}
-                        {isOpen && (
-                          <div className="p-4 border-t">
-                            <div className="overflow-x-auto">
-                              <table className="min-w-full bg-white rounded-lg">
-                                <thead className="border-b">
-                                  <tr>
-                                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700">
-                                      Product
-                                    </th>
-                                    <th className="px-3 py-2 text-left text-xs font-mono text-gray-700">
-                                      SKU
-                                    </th>
-                                    <th className="px-3 py-2 text-left text-xs text-gray-700">
-                                      Warehouse
-                                    </th>
-                                    <th className="px-3 py-2 text-left text-xs text-gray-700">
-                                      Qty
-                                    </th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {rows.map((r) => (
-                                    <tr key={r.id} className="border-t">
-                                      <td className="px-3 py-2 text-sm font-medium">
-                                        {r.productTitle}
-                                      </td>
-                                      <td className="px-3 py-2 text-xs font-mono">
-                                        {r.sku || "N/A"}
-                                      </td>
-                                      <td className="px-3 py-2 text-sm text-gray-500">
-                                        {r.name}
-                                      </td>
-                                      <td className="px-3 py-2 text-sm text-gray-700">
-                                        <div className="flex items-center gap-2">
-                                          <div className="flex items-center rounded-lg overflow-hidden border border-gray-200 shadow-sm bg-gray-50 h-9">
-                                            <button
-                                              disabled={Number(r.quantity) <= 0}
-                                              onClick={() => {
-                                                const currentPending = pendingQtyChanges.get(r.id);
-                                                const baseQty = currentPending ? currentPending.newQty : Number(r.quantity);
-                                                const newQty = Math.max(0, baseQty - 1);
-                                                setPendingQtyChanges((prev) => {
-                                                  const newMap = new Map(prev);
-                                                  newMap.set(r.id, {
-                                                    currentQty: Number(r.quantity),
-                                                    newQty,
-                                                    type: "decrease",
-                                                  });
-                                                  return newMap;
-                                                });
-                                              }}
-                                              className={`px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors ${
-                                                Number(r.quantity) <= 0
-                                                  ? "text-gray-300 bg-gray-50 cursor-not-allowed"
-                                                  : "text-red-400 bg-red-100 hover:bg-red-800 hover:text-white"
-                                              }`}
-                                              title="Decrease by 1"
-                                            >
-                                              <Minus className="w-4 h-4" />
-                                            </button>
-                                            <input
-                                              value={
-                                                pendingQtyChanges.has(r.id)
-                                                  ? pendingQtyChanges.get(r.id).newQty
-                                                  : r.quantity || ""
-                                              }
-                                              onChange={(e) =>
-                                                handleQuantityInputChange(r.id, e.target.value)
-                                              }
-                                              onKeyDown={(e) => {
-                                                if (e.key === "Enter") {
-                                                  const pendingChange = pendingQtyChanges.get(r.id);
-                                                  if (pendingChange) {
-                                                    const key =
-                                                      pendingChange.newQty > pendingChange.currentQty
-                                                        ? "added"
-                                                        : "removed";
-                                                    handleUpdateQty(r.id, pendingChange.newQty, key);
-                                                  }
-                                                }
-                                              }}
-                                              className="w-14 text-center px-3 py-2 text-sm bg-white border-l border-r outline-none focus:ring-2 focus:ring-blue-500 focus:bg-blue-50 transition-colors"
-                                              inputMode="numeric"
-                                              pattern="[0-9]*"
-                                              placeholder="0"
-                                            />
-                                            <button
-                                              onClick={() => {
-                                                const currentPending = pendingQtyChanges.get(r.id);
-                                                const baseQty = currentPending ? currentPending.newQty : Number(r.quantity);
-                                                const newQty = baseQty + 1;
-                                                setPendingQtyChanges((prev) => {
-                                                  const newMap = new Map(prev);
-                                                  newMap.set(r.id, {
-                                                    currentQty: Number(r.quantity),
-                                                    newQty,
-                                                    type: "increase",
-                                                  });
-                                                  return newMap;
-                                                });
-                                              }}
-                                              className="px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors bg-green-100 text-green-600 hover:bg-green-900 hover:text-white"
-                                              title="Increase by 1"
-                                            >
-                                              <Plus className="w-4 h-4" />
-                                            </button>
-                                          </div>
-                                          <button
-                                            onClick={() => {
-                                              setMoveTargetId(r.id);
-                                              setSelectedMoveZoneId("");
-                                              setMoveModalOpen(true);
-                                            }}
-                                            className="p-2 h-9 rounded-md bg-purple-600 text-white text-xs hover:bg-purple-700"
-                                          >
-                                            Move
-                                          </button>
-                                        </div>
-
-                                        {pendingQtyChanges.has(r.id) && (
-                                          <div className="fixed left-0 bottom-0 w-full p-5 bg-white flex flex-col sm:flex-row sm:items-center gap-y-2 justify-between duration-300 ease-in-out">
-                                            <h2 className="text-xl sm:text-2xl font-bold">{r.productTitle}</h2>
-                                            <div className="flex items-center max-sm:justify-end space-x-2">
-                                              <p className="text-sm font-medium text-blue-700">
-                                                New qty: {pendingQtyChanges.get(r.id)?.newQty}
-                                              </p>
-                                              <button
-                                                onClick={() => {
-                                                  const pendingChange = pendingQtyChanges.get(r.id);
-                                                  if (pendingChange) {
-                                                    const key =
-                                                      pendingChange.newQty > pendingChange.currentQty
-                                                        ? "added"
-                                                        : "removed";
-                                                    handleUpdateQty(r.id, pendingChange.newQty, key);
-                                                  }
-                                                }}
-                                                className="px-3 py-2 text-sm tracking-wide bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
-                                              >
-                                                Validate
-                                              </button>
-                                              <button
-                                                onClick={() => {
-                                                  setPendingQtyChanges((prev) => {
-                                                    const newMap = new Map(prev);
-                                                    newMap.delete(r.id);
-                                                    return newMap;
-                                                  });
-                                                }}
-                                                className="px-3 py-2 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
-                                              >
-                                                Cancel
-                                              </button>
-                                            </div>
-                                          </div>
-                                        )}
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-
-                  {/* when shelf has nothing at all */}
-                  {shelfRows.length === 0 && bins.size === 0 && (
-                    <div className="px-4 py-8 text-center bg-white text-gray-500">
-                      No items in this shelf
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+          <ShelfGroupedView
+            groupedByShelf={groupedByShelf}
+            pendingQtyChanges={pendingQtyChanges}
+            setPendingQtyChanges={setPendingQtyChanges}
+            handleQuantityInputChange={handleQuantityInputChange}
+            handleUpdateQty={handleUpdateQty}
+            expandedBins={expandedBins}
+            toggleBin={toggleBin}
+            onOpenMove={(id) => {
+              setMoveTargetId(id);
+              setSelectedMoveZoneId("");
+              setMoveModalOpen(true);
+            }}
+          />
         )}
+        {/* Pagination */}
+        <InventoryPagination
+          page={page}
+          setPage={setPage}
+          limit={limit}
+          setLimit={setLimit}
+          total={totalInventory}
+        />
       </div>
 
       <div ref={fullscreenRef}>
-        <Modal
+        <CreateInventoryModal
+          isOpen={isCreateOpen}
+          onClose={() => setIsCreateOpen(false)}
           getContainer={getContainer}
-          key={String(isFullscreen)}
-          open={isCreateOpen}
-          onCancel={() => setIsCreateOpen(false)}
-          centered
-          footer={null}
-          width={600}
-          closable={true}
-          title={null}
-          className="max-h-[95vh] overflow-y-auto"
-        >
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Create Inventory</h3>
-            </div>
-            <form onSubmit={handleFormSubmit} className="space-y-4">
-              {/* Warehouse */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  ZoneName
-                </label>
-                <div className="w-full rounded-md border px-3 py-2 text-sm bg-gray-50 text-gray-600">
-                  {/* {warehouseName} */}
-                  {zoneName}
-                </div>
-              </div>
-
-              {/* Type Selection */}
-              <div className="relative">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Product Type
-                </label>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {productTypes.map((type) => (
-                    <button
-                      key={type.code}
-                      type="button"
-                      onClick={() => {
-                        // If clicking the already selected type, deselect it
-                        if (form.typeCode === type.code) {
-                          setForm((prev) => ({
-                            ...prev,
-                            type: "",
-                            typeCode: "",
-                            productId: "",
-                            productSearch: "",
-                            showProductDropdown: false,
-                            selectedProduct: null,
-                          }));
-                        } else {
-                          // Select the new type
-                          setForm((prev) => ({
-                            ...prev,
-                            type: type.label,
-                            typeCode: type.code,
-                            productId: "",
-                            productSearch: "",
-                            showProductDropdown: false,
-                            selectedProduct: null,
-                          }));
-                        }
-                      }}
-                      className={`
-          p-2 rounded-lg border text-sm font-medium transition-all duration-200
-          ${
-            form.typeCode === type.code
-              ? "border-blue-500 bg-blue-50 text-blue-700 shadow-sm"
-              : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-          }
-        `}
-                    >
-                      {type.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {/* Product Selection - Only show if type is selected */}
-              {form.typeCode ? (
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    Product
-                  </label>
-                  <div className="relative" ref={dropdownRef}>
-                    <input
-                      type="text"
-                      placeholder="Search products..."
-                      value={form.productSearch}
-                      onChange={(e) => {
-                        setForm((prev) => ({
-                          ...prev,
-                          productSearch: e.target.value,
-                          showProductDropdown: true,
-                          productId: "",
-                        }));
-                      }}
-                      onFocus={() =>
-                        setForm((prev) => ({
-                          ...prev,
-                          showProductDropdown: true,
-                        }))
-                      }
-                      className="w-full rounded-md border px-3 py-2 text-sm"
-                      required
-                    />
-                    {form.showProductDropdown && (
-                      <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg h-60 overflow-y-auto">
-                        {productsData?.products?.length > 0 ? (
-                          productsData.products.map((p) => (
-                            <div
-                              key={p._id}
-                              onClick={() => {
-                                setForm((prev) => ({
-                                  ...prev,
-                                  productId: p._id,
-                                  productSearch: p.pro_title || p.sku,
-                                  showProductDropdown: false,
-                                  selectedProduct: p, // Store the selected product
-                                }));
-                              }}
-                              className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm border-b last:border-b-0"
-                            >
-                              <div className="font-medium">{p.pro_title}</div>
-                              <div className="text-xs text-gray-500">
-                                {p.sku}
-                              </div>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="px-3 py-2 text-gray-500 text-sm">
-                            {productsData?.products
-                              ? "No products found"
-                              : "Loading products..."}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : null}
-              {/* Quantity */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Quantity
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.quantity}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      quantity: e.target.value.replace(/[^0-9]/g, ""),
-                    }))
-                  }
-                  className="w-full rounded-md border px-3 py-2 text-sm"
-                  placeholder="e.g., 5"
-                  required
-                />
-              </div>
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateOpen(false)}
-                  className="px-4 py-2 text-sm rounded-lg border"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={
-                    isSaving ||
-                    createInv.isLoading ||
-                    !form.productId ||
-                    !form.quantity
-                  }
-                  className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white disabled:opacity-60 flex items-center gap-2"
-                >
-                  {isSaving || createInv.isLoading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Saving…
-                    </>
-                  ) : (
-                    "Save"
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </Modal>
-        {/* Move to Zone Modal */}
-        <Modal
-          getContainer={getContainer}
-          key={`move-${String(isFullscreen)}`}
-          open={moveModalOpen}
-          onCancel={() => {
+          isFullscreen={isFullscreen}
+          zoneName={zoneName}
+          form={form}
+          setForm={setForm}
+          productsData={productsData}
+          onSubmit={handleFormSubmit}
+          isSaving={isSaving}
+          createInvLoading={createInv.isLoading}
+          dropdownRef={dropdownRef}
+        />
+        <MoveToZoneModal
+          isOpen={moveModalOpen}
+          onClose={() => {
             setMoveModalOpen(false);
             setMoveTargetId(null);
             setSelectedMoveZoneId("");
           }}
-          centered
-          footer={null}
-          width={420}
-          title={null}
-          className="max-h-[95vh] overflow-y-auto"
-        >
-          <div>
-            <h3 className="text-lg font-semibold">Move Inventory to Zone</h3>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!moveTargetId || !selectedMoveZoneId) return;
-                setIsMoveSubmitting(true);
-                moveInvToZone.mutate(
-                  {
-                    inventoryId: moveTargetId,
-                    movedZoneId: selectedMoveZoneId,
-                  },
-                  {
-                    onSettled: () => setIsMoveSubmitting(false),
-                  }
-                );
-              }}
-              className="mt-4 space-y-3"
-            >
-              <div>
-                <label className="block text-sm font-medium text-zinc-700">
-                  Select Zone
-                </label>
-                <select
-                  value={selectedMoveZoneId}
-                  onChange={(e) => setSelectedMoveZoneId(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black focus:border-zinc-400"
-                >
-                  <option value="" disabled>
-                    Choose a zone
-                  </option>
-                  {zonesOptions.map((z) => (
-                    <option key={z.id} value={z.id}>
-                      {z.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="mt-6 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMoveModalOpen(false);
-                    setMoveTargetId(null);
-                    setSelectedMoveZoneId("");
-                  }}
-                  className="rounded-lg border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={!selectedMoveZoneId || moveInvToZone.isLoading || isMoveSubmitting}
-                  className={`rounded-lg bg-purple-600 px-4 py-2 text-sm text-white hover:bg-purple-700 flex items-center gap-2 ${
-                    moveInvToZone.isLoading || isMoveSubmitting
-                      ? "opacity-50 cursor-not-allowed"
-                      : ""
-                  }`}
-                >
-                  {moveInvToZone.isLoading || isMoveSubmitting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Moving…
-                    </>
-                  ) : (
-                    "Move"
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </Modal>
+          getContainer={getContainer}
+          isFullscreen={isFullscreen}
+          zonesOptions={zonesOptions}
+          selectedMoveZoneId={selectedMoveZoneId}
+          setSelectedMoveZoneId={setSelectedMoveZoneId}
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!moveTargetId || !selectedMoveZoneId) return;
+            setIsMoveSubmitting(true);
+            moveInvToZone.mutate(
+              {
+                inventoryId: moveTargetId,
+                movedZoneId: selectedMoveZoneId,
+              },
+              {
+                onSettled: () => setIsMoveSubmitting(false),
+              }
+            );
+          }}
+          isSubmitting={isMoveSubmitting}
+          isLoading={moveInvToZone.isLoading}
+        />
       </div>
     </>
   );
