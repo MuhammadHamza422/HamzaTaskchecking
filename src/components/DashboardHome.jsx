@@ -15,14 +15,14 @@ export default function DashboardCards() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    if (user?.role === "attendance") {
-      navigate("/attendance", { replace: true });
-    }
-  }, [user, navigate]);
-  if (user?.role === "attendance") {
-    return null;
-  }
+  // useEffect(() => {
+  //   if (user?.role === "attendance") {
+  //     navigate("/attendance", { replace: true });
+  //   }
+  // }, [user, navigate]);
+  // if (user?.role === "attendance") {
+  //   return null;
+  // }
 
   // Example structure of your cards with required access
   const cards = [

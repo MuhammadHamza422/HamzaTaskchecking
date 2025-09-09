@@ -126,6 +126,7 @@ export default function AttendanceKiosk() {
 
   const companyId = useMemo(() => {
     const c = currentUser?.company;
+    console.log('Current user company:', c);
     if (!c) return null;
     return typeof c === "object" ? c._id || c.id || null : c;
   }, [currentUser]);
@@ -194,7 +195,7 @@ export default function AttendanceKiosk() {
         document.webkitExitFullscreen ||
         document.mozCancelFullScreen ||
         document.msExitFullscreen;
-      if (document.fullscreenElement && exit) exit.call(document).catch(() => {});
+      if (document.fullscreenElement && exit) exit.call(document).catch(() => { });
     };
   }, []);
 
@@ -262,14 +263,47 @@ export default function AttendanceKiosk() {
     staleTime: 1000 * 60 * 2,
   });
 
+  // const statusQ = useQuery({
+  //   queryKey: ["kiosk-user-status", selected?._id],
+  //   queryFn: () => listAttendance({ user: selected._id, page: 1, limit: 1 }),
+  //   enabled: !!selected,
+  //   staleTime: 30 * 1000,
+  // });
+
   const statusQ = useQuery({
     queryKey: ["kiosk-user-status", selected?._id],
-    queryFn: () => listAttendance({ user: selected._id, page: 1, limit: 1 }),
-    enabled: !!selected,
+    queryFn: async () => {
+      if (!selected?._id) {
+        return { items: [] };
+      }
+      try {
+        return await listAttendance({
+          user: selected._id,
+          page: 1,
+          limit: 1
+        });
+      } catch (error) {
+        console.error('Status fetch error:', error);
+        message.error('Failed to fetch attendance status');
+        return { items: [] };
+      }
+    },
+    enabled: !!selected?._id,
     staleTime: 30 * 1000,
+    retry: 1,
+    onError: (error) => {
+      console.error('Status query error:', error);
+      message.error('Failed to check attendance status');
+    }
   });
 
+  // Add error state handling
   const latest = statusQ.data?.items?.[0] || null;
+  const hasError = statusQ.isError;
+
+
+
+  // const latest = statusQ.data?.items?.[0] || null;
   const selCheckedIn = !!(latest && latest.checkOutAt == null);
   const selOnBreak = !!(latest && latest.checkOutAt == null && latest.onBreak); // <-- NEW
   const lastOpenBreak = useMemo(() => {
@@ -553,11 +587,17 @@ export default function AttendanceKiosk() {
                         <div className="mt-0.5">
                           {statusQ.isFetching ? (
                             <Tag>Checking…</Tag>
+                          ) : statusQ.isError ? (
+                            <Tag color="red">Error checking status</Tag>
                           ) : selCheckedIn ? (
                             selOnBreak ? (
-                              <Tag color="gold">On break{selBreakStartAtText ? ` • ${selBreakStartAtText}` : ""}</Tag>
+                              <Tag color="gold">
+                                On break{selBreakStartAtText ? ` • ${selBreakStartAtText}` : ""}
+                              </Tag>
                             ) : (
-                              <Tag color="green">Checked in{selCheckInAtText ? ` • ${selCheckInAtText}` : ""}</Tag>
+                              <Tag color="green">
+                                Checked in{selCheckInAtText ? ` • ${selCheckInAtText}` : ""}
+                              </Tag>
                             )
                           ) : (
                             <Tag>Not checked in</Tag>
@@ -748,7 +788,7 @@ export default function AttendanceKiosk() {
         />
 
         <div className="grid grid-cols-3 gap-2 mt-4">
-          {["1","2","3","4","5","6","7","8","9"].map((d) => (
+          {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
             <Button key={d} onClick={() => appendDigit(d)}>{d}</Button>
           ))}
           <Button onClick={clearPin}>Clear</Button>
