@@ -6,13 +6,14 @@ import AttendanceKiosk from "../AttendanceKiosk";
 
 export default function AttendancePage() {
   const { user } = useAuth();
-  const role = user?.role;
+  const role = user?.roles.role;
+  console.log('User role in AttendancePage:', role);
 
   if (role === "admin") {
     return <ManageAttendance canEdit={true} canKiosk />;
   }
   
-  if (role === "attendance") {
+  if (role === "Attendance") {
     return <AttendanceKiosk />;
   }
   

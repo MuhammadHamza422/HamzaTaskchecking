@@ -17,7 +17,7 @@ export default function CompanyManager() {
   const [form] = Form.useForm();
 
   useEffect(() => {
-    if (!user || user.role !== "admin") return;
+    if (!user || user.roles?.role !== "admin") return;
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
@@ -79,7 +79,7 @@ export default function CompanyManager() {
   };
 
   // Guard: only admins
-  if (!user || user.role !== "admin") {
+  if (!user || user.roles.role !== "admin") {
     return (
       <div className="page-container">
         <h2>Companies</h2>

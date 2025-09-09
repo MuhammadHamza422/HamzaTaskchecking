@@ -1,7 +1,7 @@
 // src/pages/attendance/AdminAttendance.jsx
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Table, Select, DatePicker, Button, Input, Tag, message, Alert } from "antd";
+import { Table, Select, DatePicker, Button, Input, Tag, message, Alert, Modal } from "antd";
 import dayjs from "dayjs";
 import { listAttendance, kioskCheckIn, kioskCheckOut } from "../../api/attendance";
 import { fetchAllUsers } from "../../api/auth";
@@ -16,9 +16,14 @@ export default function AdminAttendance() {
   const [selectedUser, setSelectedUser] = useState();
   const [dateRange, setDateRange] = useState([]);
   const [note, setNote] = useState("");
-  const [employeeIdManual, setEmployeeIdManual] = useState("");
 
-  const canSeeUsers = me?.role === "admin";
+  // PIN modal state
+  const [pinModalOpen, setPinModalOpen] = useState(false);
+  const [pinMode, setPinMode] = useState("in"); // "in" | "out"
+  const [pin, setPin] = useState("");
+  const pinInputRef = useRef(null);
+
+  const canSeeUsers = me?.roles?.role === "admin";
 
   const usersQ = useQuery({
     queryKey: ["users", "all"],
@@ -42,24 +47,28 @@ export default function AdminAttendance() {
   const attendQ = useQuery({
     queryKey: ["attendance", "admin", params],
     queryFn: () => listAttendance(params),
-    enabled: !!(selectedUser || employeeIdManual || canSeeUsers === false), // load after selection
+    enabled: !!selectedUser, // load after employee is selected
   });
 
   const mKioskIn = useMutation({
-    mutationFn: (employeeId) => kioskCheckIn({ employeeId, note: note.trim() || undefined }),
+    mutationFn: ({ employeeId, note, pin }) => kioskCheckIn({ employeeId, note, pin }),
     onSuccess: () => {
       message.success("Checked in (kiosk)");
       qc.invalidateQueries({ queryKey: ["attendance", "admin"] });
       setNote("");
+      setPin("");
+      setPinModalOpen(false);
     },
     onError: (e) => message.error(e?.response?.data?.message || "Kiosk check-in failed"),
   });
 
   const mKioskOut = useMutation({
-    mutationFn: (employeeId) => kioskCheckOut({ employeeId }),
+    mutationFn: ({ employeeId, pin }) => kioskCheckOut({ employeeId, pin }),
     onSuccess: () => {
       message.success("Checked out (kiosk)");
       qc.invalidateQueries({ queryKey: ["attendance", "admin"] });
+      setPin("");
+      setPinModalOpen(false);
     },
     onError: (e) => message.error(e?.response?.data?.message || "Kiosk check-out failed"),
   });
@@ -91,50 +100,61 @@ export default function AdminAttendance() {
     { title: "Source", dataIndex: "source", key: "source" },
   ];
 
-  const chosenEmployeeId = canSeeUsers ? selectedUser : employeeIdManual.trim();
+  const openPinModal = (mode) => {
+    if (!selectedUser) {
+      message.warning("Select an employee first");
+      return;
+    }
+    setPinMode(mode);
+    setPin("");
+    setPinModalOpen(true);
+    setTimeout(() => pinInputRef.current?.focus?.(), 0);
+  };
+
+  const submitPin = () => {
+    if (!/^\d{4,6}$/.test(pin)) {
+      message.error("PIN must be 4–6 digits");
+      return;
+    }
+    const employeeId = selectedUser;
+    if (pinMode === "in") {
+      mKioskIn.mutate({ employeeId, note: note.trim() || "", pin });
+    } else {
+      mKioskOut.mutate({ employeeId, pin });
+    }
+  };
 
   return (
     <div className="page-container">
       <h2 className="mb-4">Attendance (Admin/Kiosk)</h2>
 
-      {me?.role === "attendance" && (
+      {me?.roles?.role === "attendance" && (
         <Alert
           className="mb-3"
           type="info"
           showIcon
           message="Kiosk mode"
-          description="As an attendance/kiosk user you can check in/out employees by their ID. (Admins also get a dropdown of users.)"
+          description="As an attendance/kiosk user you can check in/out employees by their ID. A PIN from the employee is required."
         />
       )}
 
       <div className="grid md:grid-cols-2 gap-3 mb-4">
-        {canSeeUsers ? (
-          <div>
-            <div className="mb-1 text-sm text-gray-600">Employee</div>
-            <Select
-              showSearch
-              style={{ width: "100%" }}
-              placeholder="Select employee"
-              loading={usersQ.isLoading}
-              options={(usersQ.data || []).map(u => ({
-                value: u._id,
-                label: `${u.firstName ?? ""} ${u.lastName ?? ""} — ${u.email}`,
-              }))}
-              value={selectedUser}
-              onChange={setSelectedUser}
-              optionFilterProp="label"
-            />
-          </div>
-        ) : (
-          <div>
-            <div className="mb-1 text-sm text-gray-600">Employee ID</div>
-            <Input
-              placeholder="Paste employee _id"
-              value={employeeIdManual}
-              onChange={(e) => setEmployeeIdManual(e.target.value)}
-            />
-          </div>
-        )}
+        <div>
+          <div className="mb-1 text-sm text-gray-600">Employee</div>
+          <Select
+            showSearch
+            style={{ width: "100%" }}
+            placeholder="Select employee"
+            loading={usersQ.isLoading}
+            options={(usersQ.data || []).map(u => ({
+              value: u._id,
+              label: `${u.firstName ?? ""} ${u.lastName ?? ""} — ${u.email} (${u.roles?.role ?? 'No Role'})`,
+            }))}
+            value={selectedUser}
+            onChange={setSelectedUser}
+            optionFilterProp="label"
+          />
+        </div>
 
         <div>
           <div className="mb-1 text-sm text-gray-600">Date range</div>
@@ -158,19 +178,21 @@ export default function AdminAttendance() {
             onChange={(e) => setNote(e.target.value)}
           />
         </div>
+
         <Button
           type="primary"
-          disabled={!chosenEmployeeId}
+          disabled={!selectedUser}
           loading={mKioskIn.isPending}
-          onClick={() => mKioskIn.mutate(chosenEmployeeId)}
+          onClick={() => openPinModal("in")}
         >
           Kiosk: Check In
         </Button>
+
         <Button
           danger
-          disabled={!chosenEmployeeId}
+          disabled={!selectedUser}
           loading={mKioskOut.isPending}
-          onClick={() => mKioskOut.mutate(chosenEmployeeId)}
+          onClick={() => openPinModal("out")}
         >
           Kiosk: Check Out
         </Button>
@@ -184,6 +206,30 @@ export default function AdminAttendance() {
         dataSource={rows}
         pagination={{ pageSize: 100, hideOnSinglePage: true }}
       />
+
+      <Modal
+        title={pinMode === "in" ? "Enter PIN to Check In" : "Enter PIN to Check Out"}
+        open={pinModalOpen}
+        onCancel={() => setPinModalOpen(false)}
+        onOk={submitPin}
+        okText={pinMode === "in" ? "Check In" : "Check Out"}
+        okButtonProps={{ loading: mKioskIn.isPending || mKioskOut.isPending }}
+        maskClosable={false}
+        keyboard={false}
+        destroyOnClose
+      >
+        <Input
+          ref={pinInputRef}
+          placeholder="4–6 digit PIN"
+          value={pin}
+          onChange={(e) => setPin(e.target.value.replace(/\D+/g, "").slice(0, 6))}
+          onPressEnter={submitPin}
+          size="large"
+          type="password"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+        />
+      </Modal>
     </div>
   );
 }

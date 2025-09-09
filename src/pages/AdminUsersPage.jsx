@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Table,
   Button,
@@ -29,6 +29,7 @@ const initialFormState = {
   password: "",
   role: "sourcer",
   is_active: true,
+  company: undefined,
   roles: "",
   kioskPinHash: "",
   warehouse: [],
@@ -47,6 +48,8 @@ const roleColors = {
 
 const AdminUsersPage = () => {
   const [users, setUsers] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [companiesLoading, setCompaniesLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
@@ -100,6 +103,7 @@ const AdminUsersPage = () => {
           kioskPinHash: user?.kioskPinHash || "",
           createdAt: user.createdAt,
           updatedAt: user.updatedAt,
+          companyId: user?.company || user?.companyId,
           warehouse: user.warehouse,
         }));
         setUsers(transformedUsers);
@@ -110,6 +114,41 @@ const AdminUsersPage = () => {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  const fetchCompanies = useCallback(() => {
+    if (!isAdmin) return;
+    setCompaniesLoading(true);
+    apiClient
+      .get("/api/v1/company/all")
+      .then((response) => {
+        const list =
+          response?.data?.companies ||
+          response?.data?.data ||
+          response?.data ||
+          [];
+        const normalized = Array.isArray(list)
+          ? list.map((c) => ({
+            _id: c._id || c.id,
+            name: c.name || c.companyName || c.title || "Unnamed",
+            timezone: c.timezone,
+          }))
+          : [];
+        setCompanies(normalized);
+      })
+      .catch((error) => {
+        console.error("Error fetching companies:", error);
+        message.error("Failed to load companies.");
+      })
+      .finally(() => setCompaniesLoading(false));
+  }, [isAdmin]);
+
+  useEffect(() => {
+    fetchCompanies();
+  }, [fetchCompanies]);
+
+  const companyNameById = useMemo(() => {
+    return new Map(companies.map((c) => [String(c._id), c.name || "Unnamed"]));
+  }, [companies]);
 
   useEffect(() => {
     fetchUsers();
@@ -156,6 +195,7 @@ const AdminUsersPage = () => {
         is_active: user.is_active,
         password: "",
         roles: user.roles?._id || "",
+        company: user.companyId || undefined,
         kioskPinHash: user.kioskPinHash,
         warehouse: user.warehouse,
       };
@@ -205,6 +245,10 @@ const AdminUsersPage = () => {
         break;
       case "password":
         hasChanged = value !== ""; // Password is changed if not empty
+        break;
+      case "company":
+        hasChanged =
+          String(value || "") !== String(originalUser.companyId || "");
         break;
       case "roles":
         hasChanged = value !== originalUser.roles;
@@ -271,6 +315,9 @@ const AdminUsersPage = () => {
         if (values.password && values.password.trim() !== "") {
           dataToSubmit.password = values.password.trim();
         }
+        if (values.company !== originalUser.companyId) {
+          dataToSubmit.company = values.company || null;
+        }
         if (values.roles !== originalUser.roles) {
           dataToSubmit.roles = values.roles;
         }
@@ -295,6 +342,7 @@ const AdminUsersPage = () => {
           // isActive: values.is_active,
           kioskPinHash: values.kioskPinHash || "",
           warehouse: values.warehouse,
+          ...(values.company ? { company: values.company } : {}),
         };
       }
 
@@ -465,6 +513,17 @@ const AdminUsersPage = () => {
         );
       },
       width: 100,
+    },
+    {
+      title: "Company",
+      dataIndex: "companyId",
+      key: "company",
+      render: (id) => <span>{companyNameById.get(String(id)) || "—"}</span>,
+      sorter: (a, b) =>
+        (companyNameById.get(String(a.companyId)) || "").localeCompare(
+          companyNameById.get(String(b.companyId)) || ""
+        ),
+      width: 180,
     },
     {
       title: "Active",
@@ -737,6 +796,27 @@ const AdminUsersPage = () => {
               </Select>
             </Form.Item>
 
+            <Form.Item label="Company" name="company">
+              <Select
+                allowClear
+                showSearch
+                placeholder="Select a company"
+                loading={companiesLoading}
+                optionFilterProp="children"
+                onChange={(val) => handleFieldChange("company", val)}
+                style={
+                  changedFields.has("company") ? { borderColor: "#1890ff" } : {}
+                }
+              >
+                {companies.map((c) => (
+                  <Option key={c._id} value={c._id}>
+                    {c.name}
+                    {c.timezone ? ` (${c.timezone})` : ""}
+                  </Option>
+                ))}
+              </Select>
+            </Form.Item>
+
             <Form.Item
               label="Is Active"
               name="is_active"
@@ -751,9 +831,9 @@ const AdminUsersPage = () => {
             <Form.Item
               label="Assign Warehouses"
               name="warehouse"
-              // rules={[
-              //   { required: true, message: "Please select at least one ware" },
-              // ]}
+            // rules={[
+            //   { required: true, message: "Please select at least one ware" },
+            // ]}
             >
               <Select
                 mode="multiple"
