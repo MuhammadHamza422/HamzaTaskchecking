@@ -14,6 +14,7 @@ import Swal from "sweetalert2";
 import { useAuth } from "../../contexts/AuthContext";
 import { Modal } from "antd";
 import useFullscreen from "../../components/useFullscreen";
+import { useSelector } from "react-redux";
 
 const productTypes = [
   { label: "Consoles", code: "CON" },
@@ -60,6 +61,8 @@ export default function InventoryDisplay({
   console.log("User Role:", user?.roles.role);
   const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
   // console.log("Location Id", locationid);
+  const zoneId = useSelector((s) => s.app.selectedZoneId);
+  console.log("Zone Id", zoneId);
 
   // Handle click outside to close dropdown
   useEffect(() => {
@@ -167,6 +170,7 @@ export default function InventoryDisplay({
         locationId: item.locationId,
         quantity: String(newQty),
         key,
+        zoneId: String(zoneId),
       });
 
       if (createData?.inventory?._id && isObjectId(createData.inventory._id)) {
@@ -455,6 +459,7 @@ export default function InventoryDisplay({
         locationId: body.locationId,
         quantity: String(body.quantity),
         key: body.key,
+        zoneId: String(zoneId),
       });
       return data;
     },

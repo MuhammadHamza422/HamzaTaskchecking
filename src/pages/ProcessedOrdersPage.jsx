@@ -294,6 +294,16 @@ export default function ProcessedOrdersPage() {
     refetchOnMount: true, // Always refetch when component mounts
   });
 
+  // Load platforms to pull ShipStation tagIds per platform
+  const { data: platformsData } = useQuery({
+    queryKey: ["platforms"],
+    queryFn: async () => {
+      const response = await apiClient.get("/api/v1/plateforms/all");
+      return response.data;
+    },
+    staleTime: 0,
+  });
+
   // Order details query
   const {
     data: orderDetails,
@@ -493,7 +503,7 @@ export default function ProcessedOrdersPage() {
   };
 
   // Build ShipStation order payload for WooCommerce
-  const buildShipStationOrderFromWoo = ({ kits, details, tableOrder }) => {
+  const buildShipStationOrderFromWoo = ({ kits, details, tableOrder, tagId }) => {
     const wc = details?.order || details; // safety
     const kitsArray = Array.isArray(kits?.allKits) ? kits.allKits : [];
 
@@ -539,6 +549,7 @@ export default function ProcessedOrdersPage() {
       customerId: Number(wc?.customer_id) || undefined,
       customerUsername: billing?.first_name || billing?.email || undefined,
       customerEmail: billing?.email || undefined,
+      tagIds: tagId ? [Number(tagId)] : undefined,
       billTo: {
         name:
           [billing?.first_name, billing?.last_name].filter(Boolean).join(" ") ||
@@ -583,7 +594,7 @@ export default function ProcessedOrdersPage() {
   };
 
   // Build ShipStation order payload for Walmart
-  const buildShipStationOrderFromWalmart = ({ kits, details, tableOrder }) => {
+  const buildShipStationOrderFromWalmart = ({ kits, details, tableOrder, tagId }) => {
     const wm = details?.order?.order || details?.order || details || {};
     const kitsArray = Array.isArray(kits?.allKits) ? kits.allKits : [];
 
@@ -633,6 +644,7 @@ export default function ProcessedOrdersPage() {
       customerId: wm?.customerOrderId,
       customerUsername: wm?.customerEmailId || undefined,
       customerEmail: wm?.customerEmailId || undefined,
+      tagIds: tagId ? [Number(tagId)] : undefined,
       billTo: {
         name: addr?.name || null,
         company: null,
@@ -707,6 +719,10 @@ export default function ProcessedOrdersPage() {
           );
           continue;
         }
+        // Resolve platform tagId for ShipStation tagging
+        const platformTagId = platformsData?.platforms?.find(
+          (p) => String(p?._id) === String(platformId)
+        )?.tagId;
         // Fetch kits and details for each order in parallel
         const results = await Promise.all(
           orders.map(async (ord) => {
@@ -737,12 +753,14 @@ export default function ProcessedOrdersPage() {
                 kits,
                 details,
                 tableOrder: ord,
+                tagId: platformTagId,
               });
             } else if (activeTab === "walmart") {
               return buildShipStationOrderFromWalmart({
                 kits,
                 details,
                 tableOrder: ord,
+                tagId: platformTagId,
               });
             }
             return null;

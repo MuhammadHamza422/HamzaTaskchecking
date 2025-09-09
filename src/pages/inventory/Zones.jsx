@@ -107,6 +107,22 @@ export default function Zones() {
     );
   }, [q, zones]);
 
+  // Confirm selection like warehouses page: show a button and toast when clicked
+  const handleSelectZone = () => {
+    const z = zones?.find((x) => x.id === selectedZoneId);
+    if (!z) return;
+    Swal.fire({
+      icon: "success",
+      title: `Zone "${z.name}" selected!`,
+      toast: true,
+      position: "top-end",
+      timer: 2000,
+      showConfirmButton: false,
+      background: "#9333ea",
+      color: "#fff",
+    });
+  };
+
   // open create modal
   function openCreateZn() {
     setZnEdit(null);
@@ -333,7 +349,17 @@ export default function Zones() {
           </div>
         ))}
       </div>
-
+      {/* Select Zone action */}
+      {selectedZoneId && (
+        <div className="text-right">
+          <button
+            onClick={handleSelectZone}
+            className="inline-flex items-center rounded-lg bg-purple-600 px-4 py-2 text-sm text-white hover:bg-purple-700"
+          >
+            Select Zone
+          </button>
+        </div>
+      )}
       {/* Selected zone details */}
       {selectedZoneId && (
         <div className="rounded-xl border border-zinc-200 bg-white p-5">
