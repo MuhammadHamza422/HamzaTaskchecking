@@ -163,13 +163,31 @@ export async function getProducts({
   return data;
 }
 
-// DELETE /api/v1/inventry/product/delete/:id
-export async function deleteProduct(id) {
-  const { data } = await apiClient.delete(
-    `/api/v1/inventry/product/delete/${id}`
-  );
+// POST /api/v1/products/create
+export async function createProduct(body) {
+  const { data } = await apiClient.post(`/api/v1/products/create`, body);
   return data;
 }
+
+// PATCH /api/v1/products/update/:id
+export async function updateProduct(id, body) {
+  const { data } = await apiClient.patch(`/api/v1/products/update/${id}`, body);
+  return data;
+}
+
+// DELETE /api/v1/products/delete/:id
+export async function deleteProduct(id) {
+  const { data } = await apiClient.delete(`/api/v1/products/delete/${id}`);
+  return data;
+}
+
+// DELETE /api/v1/inventry/product/delete/:id
+// export async function deleteProduct(id) {
+//   const { data } = await apiClient.delete(
+//     `/api/v1/inventry/product/delete/${id}`
+//   );
+//   return data;
+// }
 
 // INVENTORY
 export async function getInventory({
