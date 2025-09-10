@@ -11,16 +11,12 @@ import SourcingPage from "./pages/SourcingPage";
 import PurchaserPage from "./pages/PurchaserPage";
 import RequestDetailPage from "./pages/RequestDetailPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
-import AdminProductsPage from "./pages/AdminProductsPage";
-import ExternalOrdersPage from "./pages/ExternalOrdersPage";
-import ProcessedOrdersPage from "./pages/ProcessedOrdersPage";
 
 // Common Components and Styles
 import ProtectedRoute from "./components/common/ProtectedRoute";
 import "./styles/main.css";
 import PlatformsPage from "./pages/platforms/Platforms";
-import KitsPage from "./pages/KitsPage";
-import MergedProductsPage from "./pages/MergedProductsPage";
+import KitsPage from "./pages/order-processing/KitsPage";
 import UserActivityPage from "./pages/UserActivityPage";
 import Inventory from "./pages/Inventory";
 import InventoryLayout from "./pages/inventory/Layout";
@@ -41,6 +37,10 @@ import MyTimeOffPage from "./pages/timeoff/MyTimeOffPage";
 import AdminTimeOffRequestsPage from "./pages/timeoff/AdminTimeOffRequestsPage";
 import TimeOffTypesPage from "./pages/timeoff/TimeOffTypesPage";
 import AdminTimeOffAllocationsPage from "./pages/timeoff/AdminTimeOffAllocationsPage";
+import AdminProductsPage from "./pages/order-processing/AdminProductsPage";
+import ExternalOrdersPage from "./pages/order-processing/ExternalOrdersPage";
+import MergedProductsPage from "./pages/order-processing/MergedProductsPage";
+import ProcessedOrdersPage from "./pages/order-processing/ProcessedOrdersPage";
 
 // 🔹 Role guard for specific routes
 const RequireRoles = ({ allow, children }) => {

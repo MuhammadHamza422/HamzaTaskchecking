@@ -16,9 +16,9 @@ import {
   ShoppingOutlined,
   CalendarOutlined,
 } from "@ant-design/icons";
-import apiClient from "../api/client";
 import Swal from "sweetalert2";
-import useFullscreen from "../components/useFullscreen";
+import apiClient from "../../api/client";
+import useFullscreen from "../../components/useFullscreen";
 
 const { Text, Title } = Typography;
 

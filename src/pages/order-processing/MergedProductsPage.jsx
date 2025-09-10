@@ -19,8 +19,8 @@ import {
   Tag,
   Spin,
 } from "antd";
-import { fetchMappedProducts } from "../api/products";
-import useFullscreen from "../components/useFullscreen";
+import { fetchMappedProducts } from "../../api/products";
+import useFullscreen from "../../components/useFullscreen";
 
 const { Search } = Input;
 const { Title, Text } = Typography;
