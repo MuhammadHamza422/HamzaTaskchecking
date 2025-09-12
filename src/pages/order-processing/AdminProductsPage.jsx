@@ -60,6 +60,12 @@ const brandOptions = [
   "NEC",
 ];
 
+const conditionOptions = [
+  { value: "N", label: "New" },
+  { value: "R", label: "Refurbished" },
+  { value: "U", label: "Used" },
+];
+
 const AdminProductsPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
@@ -253,8 +259,12 @@ const AdminProductsPage = () => {
           },
         });
       } else {
-        // Create new product
-        await createProduct(values);
+        // Create new product with is_storable set to false by default
+        const productData = {
+          ...values,
+          is_storable: false,
+        };
+        await createProduct(productData);
 
         // Show success message
         Swal.fire({
@@ -312,6 +322,46 @@ const AdminProductsPage = () => {
     setIsModalOpen(false);
     setIsEditModal(false);
     setEditingProduct(null);
+  };
+
+  // Generate SKU based on product components
+  const generateSKU = (formData) => {
+    const {
+      type_code,
+      brnd_code,
+      model_code,
+      storage_code,
+      color_code,
+      cnd_code,
+      uid,
+    } = formData;
+
+    // Filter out empty values and join with hyphens
+    const skuParts = [
+      type_code,
+      brnd_code,
+      model_code,
+      storage_code,
+      color_code,
+      cnd_code,
+      uid,
+    ].filter((part) => part && part.trim() !== "");
+
+    return skuParts.join("-");
+  };
+
+  // Handle form field changes to auto-generate SKU
+  const handleFormFieldChange = (changedFields, allFields) => {
+    const formData = {};
+    allFields.forEach((field) => {
+      formData[field.name[0]] = field.value;
+    });
+
+    // Generate SKU when relevant fields change
+    const sku = generateSKU(formData);
+    if (sku && sku !== "-") {
+      form.setFieldsValue({ sku });
+    }
   };
 
   // Handle edit product
@@ -483,23 +533,31 @@ const AdminProductsPage = () => {
       title: "Condition",
       dataIndex: "cnd_code",
       key: "cnd_code",
-      render: (text) => (
-        <span
-          className={`px-2 py-1 rounded text-xs font-medium ${
-            text?.toLowerCase() === "r" || text?.toLowerCase() === "refurbished"
-              ? "bg-green-100 text-green-800"
-              : text?.toLowerCase() === "n" || text?.toLowerCase() === "new"
-              ? "bg-blue-100 text-blue-800"
-              : "bg-gray-100 text-gray-800"
-          }`}
-        >
-          {text?.toLowerCase() === "n"
-            ? "New"
-            : text?.toLowerCase() === "r"
-            ? "Refurbished"
-            : text || "N/A"}
-        </span>
-      ),
+      render: (text) => {
+        const conditionMap = {
+          N: "New",
+          R: "Refurbished",
+          U: "Used",
+        };
+
+        const conditionLabel = conditionMap[text] || text || "N/A";
+
+        return (
+          <span
+            className={`px-2 py-1 rounded text-xs font-medium ${
+              text === "R"
+                ? "bg-green-100 text-green-800"
+                : text === "N"
+                ? "bg-blue-100 text-blue-800"
+                : text === "U"
+                ? "bg-orange-100 text-orange-800"
+                : "bg-gray-100 text-gray-800"
+            }`}
+          >
+            {conditionLabel}
+          </span>
+        );
+      },
     },
     {
       title: "Actions",
@@ -945,38 +1003,83 @@ const AdminProductsPage = () => {
         <Modal
           getContainer={getContainer}
           key={String(isFullscreen)}
-          title={isEditModal ? "Edit Product" : "Add New Product"}
+          title={
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                  isEditModal ? "bg-blue-100" : "bg-green-100"
+                }`}
+              >
+                <span
+                  className={`text-lg ${
+                    isEditModal ? "text-blue-600" : "text-green-600"
+                  }`}
+                >
+                  {isEditModal ? "✏️" : "➕"}
+                </span>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 m-0">
+                  {isEditModal ? "Edit Product" : "Add New Product"}
+                </h3>
+                <p className="text-sm text-gray-500 m-0">
+                  {isEditModal
+                    ? "Update product information"
+                    : "Create a new product entry"}
+                </p>
+              </div>
+            </div>
+          }
           open={isModalOpen}
           centered
           footer={null}
-          width={800}
+          width={900}
           destroyOnClose
           onCancel={handleModalCancel}
           className="max-h-[90vh] overflow-y-auto"
+          styles={{
+            header: {
+              borderBottom: "1px solid #f0f0f0",
+              paddingBottom: "16px",
+              marginBottom: "24px",
+            },
+          }}
         >
           <Form
             form={form}
             layout="vertical"
             onFinish={handleCreateProduct}
-            className="space-y-4"
+            onFieldsChange={handleFormFieldChange}
+            className="space-y-6"
           >
-            <Row gutter={[16, 16]}>
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  label="UID"
-                  name="uid"
-                  rules={[{ required: true, message: "Please enter UID" }]}
-                >
-                  <Input placeholder="Enter UID" />
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12}>
-                <Form.Item label="WooCommerce ID" name="wc_id">
-                  <Input placeholder="Enter WooCommerce ID" />
-                </Form.Item>
-              </Col>
-            </Row>
-
+            {/* make some space between the UId and the Product Title */}
+            <div className="mb-4">
+              <Row gutter={[16, 16]}>
+                <Col xs={24} sm={12}>
+                  <Form.Item
+                    label="UID"
+                    name="uid"
+                    rules={[{ required: true, message: "Please enter UID" }]}
+                  >
+                    <Input placeholder="Enter UID" size="large" />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={12}>
+                  <Form.Item
+                    label="WooCommerce ID"
+                    name="wc_id"
+                    rules={[
+                      {
+                        required: true,
+                        message: "Please enter WooCommerce ID",
+                      },
+                    ]}
+                  >
+                    <Input placeholder="Enter WooCommerce ID" size="large" />
+                  </Form.Item>
+                </Col>
+              </Row>
+            </div>
             <Form.Item
               label="Product Title"
               name="pro_title"
@@ -984,7 +1087,7 @@ const AdminProductsPage = () => {
                 { required: true, message: "Please enter product title" },
               ]}
             >
-              <Input placeholder="Enter product title" />
+              <Input placeholder="Enter product title" size="large" />
             </Form.Item>
 
             <Row gutter={[16, 16]}>
@@ -993,17 +1096,27 @@ const AdminProductsPage = () => {
                   label="SKU"
                   name="sku"
                   rules={[{ required: true, message: "Please enter SKU" }]}
+                  help={
+                    !isEditModal
+                      ? "SKU will be auto-generated based on other fields"
+                      : ""
+                  }
                 >
-                  <Input placeholder="Enter SKU" />
+                  <Input
+                    placeholder="Auto-generated SKU"
+                    readOnly={!isEditModal}
+                    className={!isEditModal ? "bg-gray-50" : ""}
+                    size="large"
+                  />
                 </Form.Item>
               </Col>
               <Col xs={24} sm={12}>
                 <Form.Item
-                  label="Type Code"
+                  label="Product Code"
                   name="type_code"
                   rules={[{ required: true, message: "Please select type" }]}
                 >
-                  <Select placeholder="Select Type">
+                  <Select placeholder="Select Type" size="large">
                     {typeOptions.map((type) => (
                       <Option key={type} value={type}>
                         {TYPE_CODE_LABELS[type] || type}
@@ -1014,6 +1127,8 @@ const AdminProductsPage = () => {
               </Col>
             </Row>
 
+            {/* Brand & Model Section */}
+
             <Row gutter={[16, 16]}>
               <Col xs={24} sm={12}>
                 <Form.Item
@@ -1021,7 +1136,7 @@ const AdminProductsPage = () => {
                   name="brnd_code"
                   rules={[{ required: true, message: "Please select brand" }]}
                 >
-                  <Select placeholder="Select Brand">
+                  <Select placeholder="Select Brand" size="large">
                     {brandOptions.map((brand) => (
                       <Option key={brand} value={brand}>
                         {brand}
@@ -1032,48 +1147,46 @@ const AdminProductsPage = () => {
               </Col>
               <Col xs={24} sm={12}>
                 <Form.Item label="Model Code" name="model_code">
-                  <Input placeholder="Enter model code" />
+                  <Input placeholder="Enter model code" size="large" />
                 </Form.Item>
               </Col>
             </Row>
 
             <Row gutter={[16, 16]}>
-              <Col xs={24} sm={12}>
+              <Col xs={24} sm={8}>
                 <Form.Item label="Storage Code" name="storage_code">
-                  <Input placeholder="Enter storage code" />
+                  <Input placeholder="Enter storage code" size="large" />
                 </Form.Item>
               </Col>
-              <Col xs={24} sm={12}>
+              <Col xs={24} sm={8}>
                 <Form.Item label="Color Code" name="color_code">
-                  <Input placeholder="Enter color code" />
+                  <Input placeholder="Enter color code" size="large" />
                 </Form.Item>
               </Col>
-            </Row>
-
-            <Row gutter={[16, 16]}>
-              <Col xs={24} sm={12}>
+              <Col xs={24} sm={8}>
                 <Form.Item
-                  label="Condition Code"
+                  label="Condition"
                   name="cnd_code"
                   rules={[
                     { required: false, message: "Please select condition" },
                   ]}
                 >
-                  <Input placeholder="Enter condition code" />
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  label="Is Storable"
-                  name="is_storable"
-                  valuePropName="checked"
-                  initialValue={true}
-                >
-                  <Switch />
+                  <Select
+                    placeholder="Select Condition"
+                    allowClear
+                    size="large"
+                  >
+                    {conditionOptions.map((condition) => (
+                      <Option key={condition.value} value={condition.value}>
+                        {condition.label}
+                      </Option>
+                    ))}
+                  </Select>
                 </Form.Item>
               </Col>
             </Row>
 
+            {/* Pricing Section */}
             <Row gutter={[16, 16]}>
               <Col xs={24} sm={8}>
                 <Form.Item
@@ -1088,6 +1201,7 @@ const AdminProductsPage = () => {
                     min={0}
                     step={0.01}
                     style={{ width: "100%" }}
+                    size="large"
                     formatter={(value) =>
                       `$ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
                     }
@@ -1102,6 +1216,7 @@ const AdminProductsPage = () => {
                     min={0}
                     step={0.01}
                     style={{ width: "100%" }}
+                    size="large"
                     formatter={(value) =>
                       `$ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
                     }
@@ -1116,6 +1231,7 @@ const AdminProductsPage = () => {
                     min={0}
                     step={0.01}
                     style={{ width: "100%" }}
+                    size="large"
                     formatter={(value) =>
                       `$ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
                     }
@@ -1125,16 +1241,40 @@ const AdminProductsPage = () => {
               </Col>
             </Row>
 
-            <Form.Item
-              label="Seller IDs"
-              name="seller_ids"
-              help="Enter seller IDs separated by commas"
-            >
-              <Input placeholder="Enter seller IDs (comma separated)" />
-            </Form.Item>
+            {/* Show Is Storable and Seller IDs only when editing */}
+            {isEditModal && (
+              <>
+                <Row gutter={[16, 16]}>
+                  <Col xs={24} sm={12}>
+                    <Form.Item
+                      label="Is Storable"
+                      name="is_storable"
+                      valuePropName="checked"
+                      initialValue={true}
+                    >
+                      <Switch size="default" />
+                    </Form.Item>
+                  </Col>
+                </Row>
+                <Form.Item
+                  label="Seller IDs"
+                  name="seller_ids"
+                  help="Enter seller IDs separated by commas"
+                >
+                  <Input
+                    placeholder="Enter seller IDs (comma separated)"
+                    size="large"
+                  />
+                </Form.Item>
+              </>
+            )}
 
             <div className="flex justify-end gap-3 pt-4 border-t">
-              <Button onClick={handleModalCancel} disabled={isSubmitting}>
+              <Button
+                onClick={handleModalCancel}
+                disabled={isSubmitting}
+                size="large"
+              >
                 Cancel
               </Button>
               <Button
@@ -1142,6 +1282,7 @@ const AdminProductsPage = () => {
                 htmlType="submit"
                 loading={isSubmitting}
                 className="bg-blue-600 hover:bg-blue-700"
+                size="large"
               >
                 {isSubmitting
                   ? isEditModal
