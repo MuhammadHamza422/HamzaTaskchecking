@@ -32,11 +32,12 @@ const navLinks = [
   {
     label: "Products",
     isDropdown: true,
-    app: "orders",
+    app: "products",
     roles: ["admin"],
     children: [
-      { to: "orders/admin/products", label: "Products", default: true },
-      { to: "orders/merged-products", label: "Merged Products" },
+      { to: "product/admin/products", label: "Products", default: true },
+      { to: "product/inventory/products", label: "Inventory Products" },
+      { to: "product/merged-products", label: "Merged Products" },
     ],
   },
   {
@@ -107,10 +108,10 @@ const MainLayout = () => {
       hasAppAccess(user, link.app) &&
       ((pathName.startsWith("/admin") &&
         ["Users", "Dashboard"].includes(link.label)) ||
+        (pathName.startsWith("/product") &&
+          ["Products", "Dashboard"].includes(link.label)) ||
         (pathName.startsWith("/orders") &&
-          ["Dashboard", "Products", "Orders", "Platforms", "Kits"].includes(
-            link.label
-          )))
+          ["Dashboard", "Orders", "Platforms", "Kits"].includes(link.label)))
   );
 
   //  ||

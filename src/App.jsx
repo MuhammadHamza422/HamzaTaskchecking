@@ -46,10 +46,10 @@ import ProcessedOrdersPage from "./pages/order-processing/ProcessedOrdersPage";
 const RequireRoles = ({ allow, children }) => {
   const { token, user } = useAuth();
   if (!token) return <Navigate to="/login" replace />;
-  if (allow && (!user || !allow.includes(user.role))) return <Navigate to="/" replace />;
+  if (allow && (!user || !allow.includes(user.role)))
+    return <Navigate to="/" replace />;
   return children;
 };
-
 
 function App() {
   return (
@@ -76,7 +76,7 @@ function App() {
           <Route path="admin/user-activity" element={<UserActivityPage />} />
           <Route path="admin/roles" element={<RoleManagement />} />
 
-              {/* 🔹 Admin Companies Route (new) */}
+          {/* 🔹 Admin Companies Route (new) */}
           <Route
             path="admin/companies"
             element={
@@ -87,11 +87,16 @@ function App() {
           />
 
           {/* Orders Routes */}
-          <Route path="orders/admin/products" element={<AdminProductsPage />} />
           <Route
-            path="orders/merged-products"
+            path="product/admin/products"
+            element={<AdminProductsPage />}
+          />
+          <Route
+            path="product/merged-products"
             element={<MergedProductsPage />}
           />
+          <Route path="product/inventory/products" element={<Products />} />
+
           <Route
             path="orders/external/orders/pending"
             element={<ExternalOrdersPage />}
@@ -107,13 +112,15 @@ function App() {
           <Route path="orders/platforms" element={<PlatformsPage />} />
           <Route path="orders/kits" element={<KitsPage />} />
 
-           {/* Attendance entry */}
+          {/* Attendance entry */}
           <Route path="/attendance" element={<AttendancePage />} />
           <Route path="timeoff" element={<TimeOffLayout />}>
             <Route
               path="me"
               element={
-                <RequireRoles allow={["admin", "manager", "user", "purchaser", "sourcer"]}>
+                <RequireRoles
+                  allow={["admin", "manager", "user", "purchaser", "sourcer"]}
+                >
                   <MyTimeOffPage />
                 </RequireRoles>
               }

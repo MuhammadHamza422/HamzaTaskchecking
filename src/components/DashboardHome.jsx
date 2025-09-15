@@ -6,11 +6,10 @@ import {
   ShoppingCart,
   CalendarDays,
 } from "lucide-react";
+import { LuWarehouse } from "react-icons/lu";
 
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { useEffect } from "react";
-
 export default function DashboardCards() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -45,6 +44,16 @@ export default function DashboardCards() {
       link: "/inventory",
       bgColor: "bg-green-50",
       border: "border-green-500",
+    },
+    {
+      title: "Products",
+      icon: LuWarehouse,
+      accessKey: "products",
+      color: "text-sky-500",
+      hoverColor: "group-hover:text-sky-600",
+      link: "/product/admin/products",
+      bgColor: "bg-sky-50",
+      border: "border-sky-500",
     },
     {
       title: "Users & Roles",
@@ -90,26 +99,26 @@ export default function DashboardCards() {
     //   hoverColor: "group-hover:text-blue-600",
     //   link: "/new-orders",
     // },
-    {
-      title: "Products",
-      icon: Package,
-      accessKey: "products",
-      color: "text-orange-500",
-      hoverColor: "group-hover:text-orange-600",
-      link: "/products",
-      bgColor: "bg-orange-50",
-      border: "border-orange-500",
-    },
-    {
-      title: "New Orders",
-      icon: ShoppingCart,
-      accessKey: "newOrders",
-      color: "text-blue-500",
-      hoverColor: "group-hover:text-blue-600",
-      link: "/new-orders",
-      bgColor: "bg-blue-50",
-      border: "border-blue-500",
-    },
+    // {
+    //   title: "Products",
+    //   icon: Package,
+    //   accessKey: "products",
+    //   color: "text-orange-500",
+    //   hoverColor: "group-hover:text-orange-600",
+    //   link: "/products",
+    //   bgColor: "bg-orange-50",
+    //   border: "border-orange-500",
+    // },
+    // {
+    //   title: "New Orders",
+    //   icon: ShoppingCart,
+    //   accessKey: "newOrders",
+    //   color: "text-blue-500",
+    //   hoverColor: "group-hover:text-blue-600",
+    //   link: "/new-orders",
+    //   bgColor: "bg-blue-50",
+    //   border: "border-blue-500",
+    // },
   ];
 
   // Extract user access keys (safe check in case user is null/undefined)
@@ -121,8 +130,7 @@ export default function DashboardCards() {
       {cards
         .filter(
           (card) =>
-            card.accessKey &&
-            userAccess.includes(card.accessKey.toLowerCase())
+            card.accessKey && userAccess.includes(card.accessKey.toLowerCase())
         )
 
         .map((card, index) => (

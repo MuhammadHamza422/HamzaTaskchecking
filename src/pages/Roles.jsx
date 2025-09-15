@@ -29,7 +29,7 @@ const rolesOptions = [
       "zone",
       "location",
       "inventory",
-      "products",
+      // "products",
       "scan",
       "activity log",
     ],
@@ -38,14 +38,19 @@ const rolesOptions = [
     app: "orders",
     label: "Order Processing",
     menu: [
-      "products",
-      "merged products",
+      // "products",
+      // "merged products",
       "pending orders",
       "processed orders",
       "platforms",
       "kits",
       "manual orders",
     ],
+  },
+  {
+    app: "products",
+    label: "Products",
+    menu: ["products", "inventory products", "merged products"],
   },
   {
     app: "users",
@@ -55,17 +60,12 @@ const rolesOptions = [
   {
     app: "attendance",
     label: "Attendance",
-    menu: ["attendance","Kiosk"],
+    menu: ["attendance", "Kiosk"],
   },
   {
     app: "timeoff",
     label: "Time Off Management",
-    menu: [
-      "my requests",
-      "requests",
-      "types",
-      "allocation",
-    ],
+    menu: ["my requests", "requests", "types", "allocation"],
   },
 ];
 
