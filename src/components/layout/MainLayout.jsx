@@ -478,7 +478,7 @@ const MainLayout = () => {
 
       {/* Main Content */}
       <main
-        className={`transition-all bg-white duration-300 ease-in-out ${
+        className={`transition-all bg-white min-h-screen duration-300 ease-in-out ${
           shouldShowNavigation(pathName) ? "p-4 sm:p-6" : "p-0"
         }`}
       >
