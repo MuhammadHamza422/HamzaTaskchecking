@@ -53,6 +53,8 @@ const showErrorToast = (message) => {
   });
 };
 
+// in that orders i added api for shopify orders so we can fetch shopify orders from api
+
 export default function ExternalOrdersPage() {
   // Get initial active tab from localStorage or default to woocommerce
   const getInitialActiveTab = () => {
@@ -80,6 +82,7 @@ export default function ExternalOrdersPage() {
     search: "",
     dateRange: null,
     wc_status: null,
+    wm_status: null,
     status: null,
   });
 
@@ -88,8 +91,9 @@ export default function ExternalOrdersPage() {
     localStorage.setItem("externalOrdersActiveTab", activeTab);
   }, [activeTab]);
 
+  // Fetch orders from API based on the active tab and filters
   const fetchOrders = async ({ queryKey }) => {
-    const [_, tab, page, limit, search, dateRange, wcStatus, status] = queryKey;
+    const [_, tab, page, limit, search, dateRange, wcStatus, wmStatus, status] = queryKey;
     const config = getPlatformConfig(tab);
 
     if (tab === "woocommerce") {
@@ -124,8 +128,30 @@ export default function ExternalOrdersPage() {
       if (search) {
         params.append("search", search);
       }
+      if (wmStatus) {
+        params.append("wm_status", wmStatus); // Use wm_status for Walmart
+      }
+      if (status) {
+        params.append("status", status);
+      }
+      if (dateRange && dateRange.length === 2) {
+        params.append("start_date", dateRange[0].format("YYYY-MM-DD"));
+        params.append("end_date", dateRange[1].format("YYYY-MM-DD"));
+      }
+      const response = await apiClient.get(`${config.api}?${params}`);
+      return response.data;
+    } else if (tab === "shopify") {
+      const params = new URLSearchParams({
+        limit: limit.toString(),
+        page: page.toString(),
+      });
+
+      // Add all filters to API for Shopify
+      if (search) {
+        params.append("search", search);
+      }
       if (wcStatus) {
-        params.append("wm_status", wcStatus); // Use wm_status for Walmart
+        params.append("wc_status", wcStatus); // Use wc_status for Shopify
       }
       if (status) {
         params.append("status", status);
@@ -148,7 +174,7 @@ export default function ExternalOrdersPage() {
     }
   };
 
-  // Fetch latest orders (refresh functionality)
+  // Fetch latest orders (refresh functionality) from API
   const fetchLatestOrders = async () => {
     const config = getPlatformConfig(activeTab);
 
@@ -238,12 +264,56 @@ export default function ExternalOrdersPage() {
     }
   };
 
+  // Update Shopify Order Status - Received from Shipstation
+  const handleShopifyUpdateOrderStatus = async () => {
+    setUpdateOrderStatusLoading(true);
+    try {
+      const { data } = await apiClient.patch(
+        "/api/v1/shipstation/update/shopify/status"
+      );
+      if (data) {
+        Swal.fire({
+          icon: "success",
+          title: "Order Status Updated",
+          text: "Order status updated successfully",
+          toast: true,
+          position: "top-end",
+          showConfirmButton: false,
+          timer: 3000,
+          timerProgressBar: true,
+          background: "#10b981",
+          color: "#fff",
+          customClass: {
+            popup: "rounded-lg",
+          },
+        });
+        refetch();
+      }
+    } catch (error) {
+      console.error("Error updating order status:", error);
+      showErrorToast(
+        error.response?.data?.message || "Failed to update order status"
+      );
+    } finally {
+      setUpdateOrderStatusLoading(false);
+    }
+  };
+
   // Fetch order details
   const fetchOrderDetails = async (orderId) => {
     if (!orderId) return null;
     const config = getPlatformConfig(activeTab);
-    const response = await apiClient.get(`${config.detailsApi}/${orderId}`);
-    return response.data;
+    
+    // Handle different API parameter formats for different platforms
+    if (activeTab === "shopify") {
+      // Shopify uses query parameter: /api/v1/orders/shopify/order?orderId=gid://shopify/Order/6163651690800
+      const response = await apiClient.get(`${config.detailsApi}?orderId=${orderId}`);
+      return response.data;
+    } else {
+      // WooCommerce and Walmart use path parameter: /api/v1/orders/wc/order/{orderId}
+      const response = await apiClient.get(`${config.detailsApi}/${orderId}`);
+      return response.data;
+    }
   };
 
   const {
@@ -260,6 +330,7 @@ export default function ExternalOrdersPage() {
       filters.search,
       filters.dateRange,
       filters.wc_status,
+      filters.wm_status,
       filters.status,
     ],
     queryFn: fetchOrders,
@@ -368,6 +439,7 @@ export default function ExternalOrdersPage() {
       search: "",
       dateRange: null,
       wc_status: null,
+      wm_status: null,
       status: null,
     });
     setCurrentPage(1);
@@ -380,12 +452,18 @@ export default function ExternalOrdersPage() {
 
     // Filter by search (order ID)
     if (filters.search) {
-      filteredOrders = filteredOrders.filter((order) =>
-        order.orderId
-          ?.toString()
-          .toLowerCase()
-          .includes(filters.search.toLowerCase())
-      );
+      filteredOrders = filteredOrders.filter((order) => {
+        let orderIdToSearch = order.orderId?.toString() || "";
+        
+        // For Shopify, also search in the numeric part of the GID
+        if (activeTab === "shopify") {
+          const numericId = orderIdToSearch.replace('gid://shopify/Order/', '');
+          return orderIdToSearch.toLowerCase().includes(filters.search.toLowerCase()) ||
+                 numericId.toLowerCase().includes(filters.search.toLowerCase());
+        }
+        
+        return orderIdToSearch.toLowerCase().includes(filters.search.toLowerCase());
+      });
     }
 
     // Filter by date range
@@ -498,6 +576,8 @@ export default function ExternalOrdersPage() {
                     ? handleUpdateOrderStatus
                     : activeTab === "walmart"
                     ? handleWMUpdateOrderStatus
+                    : activeTab === "shopify"
+                    ? handleShopifyUpdateOrderStatus
                     : ""
                 }
                 disabled={updateOrderStatusLoading}
@@ -516,6 +596,7 @@ export default function ExternalOrdersPage() {
           filters={filters}
           onFiltersChange={handleFiltersChange}
           onReset={handleFiltersReset}
+          activeTab={activeTab}
         />
 
         {/* Platform Tabs */}

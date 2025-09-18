@@ -31,7 +31,8 @@ const showRefreshSuccessToast = () => {
       popup: "rounded-lg",
     },
   });
-};4
+};
+4;
 
 const showErrorToast = (message) => {
   Swal.fire({
@@ -79,6 +80,8 @@ export default function ProcessedOrdersPage() {
     search: "",
     dateRange: null,
     wc_status: null,
+    wm_status: null,
+    sf_status: null,
     status: "processed", // Always filter for processed orders
   });
 
@@ -116,8 +119,9 @@ export default function ProcessedOrdersPage() {
     };
   }, [activeTab]); // Re-run when activeTab changes
 
+  //  also want to add shopify orders
   const fetchProcessedOrders = async ({ queryKey }) => {
-    const [_, tab, page, limit, search, dateRange, wcStatus] = queryKey;
+    const [_, tab, page, limit, search, dateRange, wcStatus, sfStatus, wmStatus, status] = queryKey;
     const config = getPlatformConfig(tab);
 
     if (tab === "woocommerce") {
@@ -151,8 +155,26 @@ export default function ProcessedOrdersPage() {
       if (search) {
         params.append("search", search);
       }
-      if (wcStatus) {
-        params.append("wm_status", wcStatus); // Use wm_status for Walmart
+      if (wmStatus) {
+        params.append("wm_status", wmStatus); // Use wm_status for Walmart
+      }
+      if (dateRange && dateRange.length === 2) {
+        params.append("start_date", dateRange[0].format("YYYY-MM-DD"));
+        params.append("end_date", dateRange[1].format("YYYY-MM-DD"));
+      }
+      const response = await apiClient.get(`${config.api}?${params}`);
+      return response.data;
+    } else if (tab === "shopify") {
+      const params = new URLSearchParams({
+        limit: limit.toString(),
+        page: page.toString(),
+        status: "confirmed", // Always fetch processed orders
+      });
+      if (search) {
+        params.append("search", search);
+      }
+      if (sfStatus) {
+        params.append("sf_status", sfStatus); // Shopify uses wc_status field
       }
       if (dateRange && dateRange.length === 2) {
         params.append("start_date", dateRange[0].format("YYYY-MM-DD"));
@@ -262,6 +284,30 @@ export default function ProcessedOrdersPage() {
     }
   };
 
+  // Update Shopify Order Status - Received from Shipstation
+  const handleShopifyUpdateOrderStatus = async () => {
+    setUpdateOrderStatusLoading(true);
+    try {
+      const { data } = await apiClient.patch(
+        "/api/v1/shipstation/update/shopify/status"
+      );
+      if (data) {
+        Swal.fire({
+          icon: "success",
+          title: "Order Status Updated",
+          text: "Order status updated successfully",
+        });
+        refetch();
+      }
+    } catch (error) {
+      console.error("Error updating order status:", error);
+      showErrorToast(
+        error.response?.data?.message || "Failed to update order status"
+      );
+    } finally {
+      setUpdateOrderStatusLoading(false);
+    }
+  };
   // Fetch order details
   const fetchOrderDetails = async (orderId) => {
     if (!orderId) return null;
@@ -284,6 +330,9 @@ export default function ProcessedOrdersPage() {
       filters.search,
       filters.dateRange,
       filters.wc_status,
+      filters.sf_status,
+      filters.wm_status,
+      filters.status,
     ],
     queryFn: fetchProcessedOrders,
     keepPreviousData: true,
@@ -400,6 +449,8 @@ export default function ProcessedOrdersPage() {
       dateRange: null,
       wc_status: null,
       status: "processed",
+      sf_status: null,
+      wm_status: null,
     });
     setCurrentPage(1);
     setSelectedOrders([]);
@@ -503,7 +554,12 @@ export default function ProcessedOrdersPage() {
   };
 
   // Build ShipStation order payload for WooCommerce
-  const buildShipStationOrderFromWoo = ({ kits, details, tableOrder, tagId }) => {
+  const buildShipStationOrderFromWoo = ({
+    kits,
+    details,
+    tableOrder,
+    tagId,
+  }) => {
     const wc = details?.order || details; // safety
     const kitsArray = Array.isArray(kits?.allKits) ? kits.allKits : [];
 
@@ -594,7 +650,12 @@ export default function ProcessedOrdersPage() {
   };
 
   // Build ShipStation order payload for Walmart
-  const buildShipStationOrderFromWalmart = ({ kits, details, tableOrder, tagId }) => {
+  const buildShipStationOrderFromWalmart = ({
+    kits,
+    details,
+    tableOrder,
+    tagId,
+  }) => {
     const wm = details?.order?.order || details?.order || details || {};
     const kitsArray = Array.isArray(kits?.allKits) ? kits.allKits : [];
 
@@ -985,6 +1046,8 @@ export default function ProcessedOrdersPage() {
                     ? handleUpdateOrderStatus
                     : activeTab === "walmart"
                     ? handleWMUpdateOrderStatus
+                    : activeTab === "shopify"
+                    ? handleShopifyUpdateOrderStatus
                     : ""
                 }
                 disabled={updateOrderStatusLoading}
@@ -1003,6 +1066,7 @@ export default function ProcessedOrdersPage() {
           filters={filters}
           onFiltersChange={handleFiltersChange}
           onReset={handleFiltersReset}
+          activeTab={activeTab}
         />
 
         {/* Platform Tabs */}

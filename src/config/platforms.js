@@ -35,7 +35,7 @@ export const PLATFORM_CONFIG = {
   shopify: {
     key: "shopify",
     label: "Shopify",
-    api: "/api/v1/orders/shopify/orders",
+    api: "/api/v1/orders/shopify/orders/db",
     refreshApi: "/api/v1/orders/shopify/orders",
     updateApi: "/api/v1/orders/shopify/order/update",
     detailsApi: "/api/v1/orders/shopify/order",

@@ -22,9 +22,59 @@ const wcorderStatus = [
   "refunded",
 ];
 
+// Shopify uses the same status values as WooCommerce
+const shopifyOrderStatus = [
+  "pending",
+  "failed", 
+  "processing",
+  "on-hold",
+  "completed",
+  "cancelled",
+  "refunded",
+];
+
+// Walmart specific status values
+const walmartOrderStatus = [
+  "Acknowledged",
+  "Shipped", 
+  "Pending",
+  "Cancelled",
+  "Delivered",
+];
+
 const statusOptions = ["partially processed", "processed", "unprocessed"];
 
-export default function OrderFilters({ filters, onFiltersChange, onReset }) {
+// Platform-specific status configurations
+const getPlatformStatusConfig = (platform) => {
+  switch (platform) {
+    case "woocommerce":
+      return {
+        label: "WC Status",
+        options: wcorderStatus,
+        filterKey: "wc_status"
+      };
+    case "walmart":
+      return {
+        label: "WM Status", 
+        options: walmartOrderStatus,
+        filterKey: "wm_status"
+      };
+    case "shopify":
+      return {
+        label: "SF Status",
+        options: shopifyOrderStatus,
+        filterKey: "wc_status" // Shopify uses wc_status field
+      };
+    default:
+      return {
+        label: "Status",
+        options: wcorderStatus,
+        filterKey: "wc_status"
+      };
+  }
+};
+
+export default function OrderFilters({ filters, onFiltersChange, onReset, activeTab = "woocommerce" }) {
   const [searchValue, setSearchValue] = useState(filters.search);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const isMobile = useMediaQuery({ maxWidth: 768 });
@@ -49,8 +99,9 @@ export default function OrderFilters({ filters, onFiltersChange, onReset }) {
     });
   };
 
-  const handleWcStatusChange = (value) => {
-    onFiltersChange({ ...filters, wc_status: value });
+  const handlePlatformStatusChange = (value) => {
+    const config = getPlatformStatusConfig(activeTab);
+    onFiltersChange({ ...filters, [config.filterKey]: value });
   };
 
   const handleStatusChange = (value) => {
@@ -68,7 +119,9 @@ export default function OrderFilters({ filters, onFiltersChange, onReset }) {
     let count = 0;
     if (filters.search) count++;
     if (filters.dateRange && filters.dateRange.length === 2) count++;
-    if (filters.wc_status) count++;
+    
+    const config = getPlatformStatusConfig(activeTab);
+    if (filters[config.filterKey]) count++;
     if (filters.status) count++;
     return count;
   };
@@ -99,20 +152,20 @@ export default function OrderFilters({ filters, onFiltersChange, onReset }) {
         />
       </div>
 
-      {/* WC Status Filter */}
+      {/* Platform Status Filter */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          WC Status
+          {getPlatformStatusConfig(activeTab).label}
         </label>
         <Select
-          placeholder="Select WC Status"
-          value={filters.wc_status}
-          onChange={handleWcStatusChange}
+          placeholder={`Select ${getPlatformStatusConfig(activeTab).label}`}
+          value={filters[getPlatformStatusConfig(activeTab).filterKey]}
+          onChange={handlePlatformStatusChange}
           allowClear
           className="w-full"
           size={isMobileDrawer ? "large" : "middle"}
         >
-          {wcorderStatus.map((status) => (
+          {getPlatformStatusConfig(activeTab).options.map((status) => (
             <Option key={status} value={status}>
               {status.charAt(0).toUpperCase() + status.slice(1)}
             </Option>
@@ -227,12 +280,12 @@ export default function OrderFilters({ filters, onFiltersChange, onReset }) {
                     />
                   </div>
                 )}
-                {filters.wc_status && (
+                {filters[getPlatformStatusConfig(activeTab).filterKey] && (
                   <div className="bg-green-50 text-green-700 text-xs px-2 py-1 rounded-full flex items-center gap-1">
-                    WC: {filters.wc_status}
+                    {getPlatformStatusConfig(activeTab).label}: {filters[getPlatformStatusConfig(activeTab).filterKey]}
                     <CloseOutlined
                       className="cursor-pointer hover:text-green-900"
-                      onClick={() => handleWcStatusChange(undefined)}
+                      onClick={() => handlePlatformStatusChange(undefined)}
                     />
                   </div>
                 )}
@@ -341,19 +394,19 @@ export default function OrderFilters({ filters, onFiltersChange, onReset }) {
           />
         </div>
 
-        {/* WC Status Filter */}
+        {/* Platform Status Filter */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            WC Status
+            {getPlatformStatusConfig(activeTab).label}
           </label>
           <Select
-            placeholder="Select WC Status"
-            value={filters.wc_status}
-            onChange={handleWcStatusChange}
+            placeholder={`Select ${getPlatformStatusConfig(activeTab).label}`}
+            value={filters[getPlatformStatusConfig(activeTab).filterKey]}
+            onChange={handlePlatformStatusChange}
             allowClear
             className="w-full"
           >
-            {wcorderStatus.map((status) => (
+            {getPlatformStatusConfig(activeTab).options.map((status) => (
               <Option key={status} value={status}>
                 {status.charAt(0).toUpperCase() + status.slice(1)}
               </Option>

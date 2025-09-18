@@ -32,7 +32,7 @@ export default function OrderTable({
 }) {
   const isMobile = useMediaQuery({ maxWidth: 768 });
   const isTablet = useMediaQuery({ minWidth: 769, maxWidth: 1024 });
-  const orderStatus = orders[0]?.status
+  const orderStatus = orders[0]?.status;
 
   console.log("orders", orders);
 
@@ -53,7 +53,11 @@ export default function OrderTable({
       `${pad(date.getMinutes())}:` +
       `${pad(date.getSeconds())}`;
 
-    return <span className="text-sm text-gray-600 whitespace-nowrap">{formatted}</span>;
+    return (
+      <span className="text-sm text-gray-600 whitespace-nowrap">
+        {formatted}
+      </span>
+    );
   };
 
   // Platform-specific column configurations
@@ -189,7 +193,10 @@ export default function OrderTable({
                 width: 150,
                 render: (status, record) =>
                   record?.shipStation_OrderId ? (
-                    <Tag color={status ? "blue" : "default"} className="capitalize">
+                    <Tag
+                      color={status ? "blue" : "default"}
+                      className="capitalize"
+                    >
                       {status || "N/A"}
                     </Tag>
                   ) : (
@@ -229,7 +236,11 @@ export default function OrderTable({
           dataIndex: "app_id",
           key: "app_id",
           render: (app_id) => (
-            <span className={`whitespace-nowrap ${app_id ? "text-green-600" : "text-gray-400"}`}>
+            <span
+              className={`whitespace-nowrap ${
+                app_id ? "text-green-600" : "text-gray-400"
+              }`}
+            >
               {app_id || "No app ID"}
             </span>
           ),
@@ -272,34 +283,38 @@ export default function OrderTable({
             );
           },
         },
-         ...(orderStatus === "processed"
+        ...(orderStatus === "processed"
           ? [
-        {
-          title: "SS Status",
-          dataIndex: "shipStation_order_status",
-          key: "shipStation_order_status",
-          width: 150,
-          render: (status, record) =>
-            record?.shipStation_OrderId ? (
-              <Tag color={status ? "blue" : "default"} className="capitalize">
-                {status || "N/A"}
-              </Tag>
-            ) : (
-              <span className="text-gray-400">—</span>
-            ),
-        },
-        {
-          title: "SS Order ID",
-          dataIndex: "shipStation_OrderId",
-          key: "shipStation_OrderId",
-          width: 80,
-          render: (id, record) =>
-            record?.shipStation_OrderId ? (
-              <span className="text-gray-900">{id}</span>
-            ) : (
-              <span className="text-gray-400">—</span>
-            ),
-        },   ]
+              {
+                title: "SS Status",
+                dataIndex: "shipStation_order_status",
+                key: "shipStation_order_status",
+                width: 150,
+                render: (status, record) =>
+                  record?.shipStation_OrderId ? (
+                    <Tag
+                      color={status ? "blue" : "default"}
+                      className="capitalize"
+                    >
+                      {status || "N/A"}
+                    </Tag>
+                  ) : (
+                    <span className="text-gray-400">—</span>
+                  ),
+              },
+              {
+                title: "SS Order ID",
+                dataIndex: "shipStation_OrderId",
+                key: "shipStation_OrderId",
+                width: 80,
+                render: (id, record) =>
+                  record?.shipStation_OrderId ? (
+                    <span className="text-gray-900">{id}</span>
+                  ) : (
+                    <span className="text-gray-400">—</span>
+                  ),
+              },
+            ]
           : []),
         {
           title: "Status",
@@ -336,7 +351,11 @@ export default function OrderTable({
           dataIndex: "app_id",
           key: "app_id",
           render: (app_id) => (
-            <span className={`whitespace-nowrap ${app_id ? "text-green-600" : "text-gray-400"}`}>
+            <span
+              className={`whitespace-nowrap ${
+                app_id ? "text-green-600" : "text-gray-400"
+              }`}
+            >
               {app_id || "No app ID"}
             </span>
           ),
@@ -345,31 +364,39 @@ export default function OrderTable({
       ];
     }
 
-    // Shopify specific columns (placeholder for future)
+    // Shopify specific columns
     if (activeTab === "shopify") {
       return [
         ...checkboxColumn,
-        ...baseColumns.slice(0, 1), // Order ID
         {
-          title: "Shopify Order ID",
-          dataIndex: "shopifyOrderId",
-          key: "shopifyOrderId",
+          title: "Order ID",
+          dataIndex: "orderId",
+          key: "orderId",
+          render: (text) => {
+            // Extract numeric ID from gid://shopify/Order/6163651690800 format
+            const numericId = text?.replace('gid://shopify/Order/', '') || text;
+            return (
+              <span className="font-semibold text-gray-900">{numericId}</span>
+            );
+          },
+        },
+        {
+          title: "Order Key",
+          dataIndex: "order_key",
+          key: "order_key",
           render: (text) => (
             <span className="text-sm text-gray-600 font-mono">
               {text || "N/A"}
             </span>
           ),
         },
+        // sf_status will only in processing
         {
           title: "SF Status",
-          dataIndex: "sf_status",
+          dataIndex: "sf_status", // Shopify uses wc_status field
           key: "sf_status",
           render: (status) => {
             let color = "default";
-            if (status === "open") color = "blue";
-            else if (status === "closed") color = "green";
-            else if (status === "cancelled") color = "red";
-
             return (
               <Tag color={color} className="capitalize">
                 {status || "N/A"}
@@ -393,12 +420,49 @@ export default function OrderTable({
             );
           },
         },
+        ...(orderStatus === "processed"
+          ? [
+              {
+                title: "SS Status",
+                dataIndex: "shipStation_order_status",
+                key: "shipStation_order_status",
+                width: 150,
+                render: (status, record) =>
+                  record?.shipStation_OrderId ? (
+                    <Tag
+                      color={status ? "blue" : "default"}
+                      className="capitalize"
+                    >
+                      {status || "N/A"}
+                    </Tag>
+                  ) : (
+                    <span className="text-gray-400">—</span>
+                  ),
+              },
+              {
+                title: "SS Order ID",
+                dataIndex: "shipStation_OrderId",
+                key: "shipStation_OrderId",
+                width: 80,
+                render: (id, record) =>
+                  record?.shipStation_OrderId ? (
+                    <span className="text-gray-900">{id}</span>
+                  ) : (
+                    <span className="text-gray-400">—</span>
+                  ),
+              },
+            ]
+          : []),
         {
           title: "Tracking",
           dataIndex: "tracking_number",
           key: "tracking_number",
           render: (tracking) => (
-            <span className={tracking ? "text-green-600" : "text-gray-400"}>
+            <span
+              className={`whitespace-nowrap ${
+                tracking ? "text-green-600" : "text-gray-400"
+              } `}
+            >
               {tracking || "No tracking"}
             </span>
           ),
@@ -408,7 +472,11 @@ export default function OrderTable({
           dataIndex: "app_id",
           key: "app_id",
           render: (app_id) => (
-            <span className={`whitespace-nowrap ${app_id ? "text-green-600" : "text-gray-400"}`}>
+            <span
+              className={`whitespace-nowrap ${
+                app_id ? "text-green-600" : "text-gray-400"
+              }`}
+            >
               {app_id || "No app ID"}
             </span>
           ),
@@ -481,7 +549,11 @@ export default function OrderTable({
           dataIndex: "app_id",
           key: "app_id",
           render: (app_id) => (
-            <span className={`whitespace-nowrap ${app_id ? "text-green-600" : "text-gray-400"}`}>
+            <span
+              className={`whitespace-nowrap ${
+                app_id ? "text-green-600" : "text-gray-400"
+              }`}
+            >
               {app_id || "No app ID"}
             </span>
           ),
@@ -532,11 +604,15 @@ export default function OrderTable({
       }
 
       if (activeTab === "shopify") {
-        const status = order?.sf_status;
+        const status = order?.wc_status; // Shopify uses wc_status field
         let color = "default";
-        if (status === "open") color = "blue";
-        else if (status === "closed") color = "green";
+        if (status === "processing") color = "blue";
+        else if (status === "completed") color = "green";
+        else if (status === "pending") color = "orange";
+        else if (status === "failed") color = "red";
         else if (status === "cancelled") color = "red";
+        else if (status === "refunded") color = "purple";
+        else if (status === "on-hold") color = "orange";
 
         return (
           <Tag color={color} className="capitalize text-xs">
@@ -571,7 +647,7 @@ export default function OrderTable({
         return order?.customerOrderId || "N/A";
       }
       if (activeTab === "shopify") {
-        return order?.shopifyOrderId || "N/A";
+        return order?.order_key || "N/A";
       }
       if (activeTab === "amazon") {
         return order?.amazonOrderId || "N/A";
@@ -607,7 +683,9 @@ export default function OrderTable({
               )}
               <div>
                 <div className="font-semibold text-lg text-gray-900">
-                  Order #{order?.orderId}
+                  Order #{activeTab === "shopify" 
+                    ? order?.orderId?.replace('gid://shopify/Order/', '') || order?.orderId
+                    : order?.orderId}
                 </div>
                 <div className="text-sm text-gray-500 font-mono">
                   {getOrderKey()}

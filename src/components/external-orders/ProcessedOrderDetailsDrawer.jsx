@@ -3,6 +3,7 @@ import { Drawer, Typography, Space, Button, Spin } from "antd";
 
 import ProcessedWooCommerceDetails from "./ProcessedWooCommerceDetails";
 import ProcessedWalmartDetails from "./ProcessedWalmartDetails";
+import ShopifyDetails from "./OrderDetailsDrawer/ShopifyDetails";
 import AddProductModal from "./OrderDetailsDrawer/AddProductModal";
 import useFullscreen from "../useFullscreen";
 
@@ -112,6 +113,17 @@ export default function ProcessedOrderDetailsDrawer({
                   selectedOrder={selectedOrder}
                   onAddProduct={handleAddProduct}
                   onEditProduct={handleEditProduct}
+                />
+              )}
+              {activeTab === "shopify" && (
+                <ShopifyDetails
+                  order={orderDetails?.order}
+                  selectedOrder={selectedOrder}
+                  onAddProduct={handleAddProduct}
+                  onEditProduct={handleEditProduct}
+                  refetchOrderDetails={refetchOrderDetails}
+                  onProductMappingSuccess={() => {}}
+                  localKitProducts={[]}
                 />
               )}
             </div>

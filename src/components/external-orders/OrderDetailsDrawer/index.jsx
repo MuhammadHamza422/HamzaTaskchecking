@@ -10,6 +10,7 @@ import {
 import AddProductModal from "./AddProductModal";
 import WooCommerceDetails from "./WooCommerceDetails";
 import WalmartDetails from "./WalmartDetails";
+import ShopifyDetails from "./ShopifyDetails";
 import ProcessedWooCommerceDetails from "../ProcessedWooCommerceDetails";
 import useFullscreen from "../../useFullscreen";
 
@@ -148,6 +149,17 @@ export default function OrderDetailsDrawer({
                 selectedOrder={selectedOrder}
                 onAddProduct={handleAddProduct}
                 onEditProduct={handleEditProduct}
+              />
+            )}
+            {activeTab === "shopify" && (
+              <ShopifyDetails
+                order={orderDetails?.order}
+                selectedOrder={selectedOrder}
+                onAddProduct={handleAddProduct}
+                onEditProduct={handleEditProduct}
+                refetchOrderDetails={refetchOrderDetails}
+                onProductMappingSuccess={onProductMappingSuccess}
+                localKitProducts={localKitProducts}
               />
             )}
           </div>
