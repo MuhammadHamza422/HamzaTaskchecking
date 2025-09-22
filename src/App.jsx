@@ -1,14 +1,14 @@
-import React from "react";
+
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./contexts/AuthContext";
-import PurchaserPendingPage from "./pages/PurchaserPendingPage";
+import PurchaserPendingPage from "./pages/purchaser/PurchaserPendingPage";
 
 // Layouts and Pages
 import MainLayout from "./components/layout/MainLayout";
 import LoginPage from "./pages/LoginPage";
-import SourcerPage from "./pages/SourcerPage";
-import SourcingPage from "./pages/SourcingPage";
-import PurchaserPage from "./pages/PurchaserPage";
+import SourcerPage from "./pages/sourcer/SourcerPage";
+import SourcingPage from "./pages/sourcer/SourcingPage";
+import PurchaserPage from "./pages/purchaser/PurchaserPage";
 import RequestDetailPage from "./pages/RequestDetailPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
 
@@ -41,6 +41,10 @@ import AdminProductsPage from "./pages/order-processing/AdminProductsPage";
 import ExternalOrdersPage from "./pages/order-processing/ExternalOrdersPage";
 import MergedProductsPage from "./pages/order-processing/MergedProductsPage";
 import ProcessedOrdersPage from "./pages/order-processing/ProcessedOrdersPage";
+import SellerDetailsPage from "./pages/SellersDetailsPage";
+import SellersListPage from "./pages/SellerslistPage";
+import SourcerDashboardPage from "./pages/sourcer/SourcerDashboardPage";
+import PurchaserDashboardPage from "./pages/purchaser/PurchaserDashboardPage";
 
 // 🔹 Role guard for specific routes
 const RequireRoles = ({ allow, children }) => {
@@ -68,13 +72,25 @@ function App() {
           <Route index element={<DashboardCards />} />
           <Route path="sourcing/orders" element={<SourcingPage />} />
           <Route path="sourcing/new" element={<SourcerPage />} />
+          <Route path="/sourcing/edit/:id" element={<SourcerPage />} /> 
+          <Route path="/sourcing/dashboard" element={<SourcerDashboardPage />} />
+
           <Route path="requests/pending" element={<PurchaserPendingPage />} />
           <Route path="requests/my" element={<PurchaserPage />} />
           <Route path="requests/:sourcingId" element={<RequestDetailPage />} />
+          <Route path="/purchasing/dashboard" element={<PurchaserDashboardPage />} />
+          
+
           {/* Admin User Routes */}
           <Route path="admin/users" element={<AdminUsersPage />} />
           <Route path="admin/user-activity" element={<UserActivityPage />} />
           <Route path="admin/roles" element={<RoleManagement />} />
+
+
+
+          {/* Sellers */}
+          <Route path="/sellers/:id" element={<SellerDetailsPage />} />
+          <Route path="/sellers" element={<SellersListPage />} />
 
           {/* 🔹 Admin Companies Route (new) */}
           <Route

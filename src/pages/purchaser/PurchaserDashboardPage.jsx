@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Col, Row, Statistic, message, Typography, Spin } from 'antd';
 import { motion } from 'framer-motion';
-import apiClient from '../api/client';
+import apiClient from '../../api/client';
 
 const { Title } = Typography;
 
