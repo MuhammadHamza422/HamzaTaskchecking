@@ -5,6 +5,8 @@ import {
   ClipboardList,
   ShoppingCart,
   CalendarDays,
+  CalendarArrowDown,
+  CalendarArrowUp
 } from "lucide-react";
 import { LuWarehouse } from "react-icons/lu";
 
@@ -84,6 +86,26 @@ export default function DashboardCards() {
       link: "/timeoff", // 🔹 single entry point
       bgColor: "bg-red-50",
       border: "border-red-500",
+    },
+    {
+      title: "Sourcer",
+      icon: CalendarArrowDown,
+      color: "text-sky-500",
+      hoverColor: "group-hover:text-sky-600",
+      accessKey: "timeoff",
+      link: "/sourcing/orders", // 🔹 single entry point
+      bgColor: "bg-sky-50",
+      border: "border-sky-500",
+    },
+        {
+      title: "Purchaser",
+      icon: CalendarArrowUp,
+      color: "text-green-500",
+      accessKey: "timeoff",
+      hoverColor: "group-hover:text-green-600",
+      link: "requests/my", // 🔹 single entry point
+      bgColor: "bg-green-50",
+      border: "border-green-500",
     },
     // {
     //   title: "Products",

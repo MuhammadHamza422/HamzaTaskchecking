@@ -67,6 +67,33 @@ const rolesOptions = [
     label: "Time Off Management",
     menu: ["my requests", "requests", "types", "allocation"],
   },
+
+
+
+
+    {
+    app: "sourcer",
+    label: "Sourcing (Sourcer)",
+    menu: [
+      "create order",       // show New Sourcing Order page / button
+      "my requests",        // list requests I created
+      "edit my requests",   // allow editing own pending requests
+      "cancel my requests", // allow canceling before purchase
+    ],
+  },
+  {
+    app: "purchaser",
+    label: "Purchasing (Purchaser)",
+    menu: [
+      "pending queue",      // see pending queue
+      "assign to me",       // claim/assign requests
+      "assigned to me",     // list my assigned
+      "all assigned",       // list all assigned (supervisor)
+      "mark purchased",     // update status to Purchased
+      "update tracking",    // update tracking details
+      "return handling",    // mark Returned
+    ],
+  },
 ];
 
 const CustomButton = ({

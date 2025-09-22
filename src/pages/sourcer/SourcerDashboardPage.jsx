@@ -6,7 +6,7 @@ import {
 } from 'antd';
 import { motion } from 'framer-motion';
 import { LoadingOutlined } from '@ant-design/icons';
-import apiClient from '../api/client';
+import apiClient from '../../api/client';
 
 const { Text, Title } = Typography;
 const { TabPane } = Tabs;

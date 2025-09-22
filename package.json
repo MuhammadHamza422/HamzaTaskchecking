@@ -23,6 +23,7 @@
     "jsqr": "^1.4.0",
     "lodash": "^4.17.21",
     "lucide-react": "^0.536.0",
+    "papaparse": "^5.5.3",
     "qr-scanner": "^1.4.2",
     "qrcode.react": "^4.2.0",
     "react": "^19.1.0",
