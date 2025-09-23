@@ -1,4 +1,5 @@
 
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Form,
@@ -20,9 +21,10 @@ import { DeleteOutlined } from "@ant-design/icons";
 import { useNavigate, useParams } from "react-router-dom";
 import apiClient from "../../api/client";
 import { useAuth } from "../../contexts/AuthContext";
-import useProductSearch from "./hooks/useProductSearch";
+import useProductSearch from "./hooks/useProductSearch"; // expects (typeCode)
 import useCart from "./hooks/useCart";
 import Swal from "sweetalert2";
+import AppBreadcrumbs from "../../components/AppBreadCrumbs";
 
 const { Option } = Select;
 const { Title, Text } = Typography;
@@ -106,6 +108,17 @@ const toastError = (title = "Something went wrong", text = "") =>
 const toastInfo = (title = "Heads up", text = "") =>
   Swal.fire({ ...baseToast, icon: "info", title, text });
 
+/* ------------------- type code helpers ------------------- */
+const TYPE_CODE_TO_NAME = { CON: "Console", HAN: "Handheld", ACC: "Accessory", GAM: "Game" };
+
+/* ------------------- market helpers ------------------- */
+const getMarketSlug = (m) => {
+  if (!m) return "";
+  if (typeof m === "string") return m.toLowerCase();
+  if (typeof m === "object") return (m.slug || m.name || "").toLowerCase();
+  return String(m).toLowerCase();
+};
+
 /* ------------------- page ------------------- */
 export default function SourcerPage() {
   const [form] = Form.useForm();
@@ -119,8 +132,14 @@ export default function SourcerPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingOrder, setLoadingOrder] = useState(false);
 
-  const { products, loading, mode, debouncedSearch, setTerm, fetchInitialProducts } =
-    useProductSearch();
+  // product search filters/state
+  const [typeCode, setTypeCode] = useState(""); // "", "ACC", "CON", "HAN", "GAM"
+  const [searchText, setSearchText] = useState("");
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // hook: backend search (keeps it simple)
+  const { products, loading, debouncedSearch, fetchInitialProducts } = useProductSearch(typeCode);
 
   // cart depends on totals to compute some previews
   const cart = useCart(totals);
@@ -128,42 +147,46 @@ export default function SourcerPage() {
   // ProductType (UI only)
   const ProductType = { Accessory: "Accessory", Console: "Console", Game: "Game", Handheld: "Handheld" };
 
-  // search options for product picker
-  const options = useMemo(
-    () =>
-      products.map((p) => ({
-        value: String(p.id),
-        label: (
-          <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
-            <code style={{ fontSize: 12, color: "#555" }}>{p.sku || "NO-SKU"}</code>
-            <span style={{ color: "#999" }}>—</span>
-            <span style={{ fontSize: 13 }}>{p.product_name || "Untitled"}</span>
-          </div>
-        ),
-        product: p,
-      })),
-    [products]
-  );
+  // click-outside to close dropdown
+  useEffect(() => {
+    const onDocClick = (e) => {
+      if (!dropdownRef.current) return;
+      if (!dropdownRef.current.contains(e.target)) setShowProductDropdown(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
 
+  // search input change -> call hook's debounced API
+  const handleSearchChange = (e) => {
+    const val = e.target.value;
+    setSearchText(val);
+    debouncedSearch(val); // hits /all?page=1&limit=50&search=val&type=typeCode
+  };
+
+  // add to cart (map both schema shapes)
   const addToCart = (p) => {
+    const id = p._id || p.id;
+    const name = p.pro_title || p.product_name || "Untitled";
+    const code = p.type_code || p.product_type_code || "";
+    const resolvedType = p.product_type || TYPE_CODE_TO_NAME[code] || ProductType.Game;
+
     cart.add({
-      id: p.id,
-      product_name: p.product_name,
+      id,
+      product_name: name,
       sku: p.sku,
-      product_type: p.product_type || ProductType.Game,
+      product_type: resolvedType,
       category: p.category,
-      // UI-only: target per unit (we will post order-level totals)
       target_cost: Number(p.target_cost) || 0,
       quantity_needed: 1,
-      // per-item line seller total computed on submit
       sourced_price: 0,
     });
   };
 
-  const onSelectChange = (_vals, opts) => {
-    (Array.isArray(opts) ? opts : [opts]).forEach((o) => o?.product && addToCart(o.product));
-    form.setFieldsValue({ search: [] });
-    setTerm("");
+  const onPickProduct = (p) => {
+    addToCart(p);
+    setShowProductDropdown(false);
+    setSearchText("");
   };
 
   /* ------------------- totals & metrics ------------------- */
@@ -171,13 +194,11 @@ export default function SourcerPage() {
   const shippingCharges = toNum(totals?.shipping_charges);
   const taxes = toNum(totals?.taxes);
 
-  // Actual Cost (order-level) = seller + shipping + taxes
   const totalActualCost = useMemo(
     () => round2(sellersPrice + shippingCharges + taxes),
     [sellersPrice, shippingCharges, taxes]
   );
 
-  // Total Target Price = sum(target * qty) from cart
   const targetTotalCost = useMemo(
     () =>
       round2(
@@ -189,25 +210,83 @@ export default function SourcerPage() {
     [cart.rawItems]
   );
 
-  // Efficiency = Target Total - Actual Total
   const purchaseEfficiency = useMemo(
     () => round2(targetTotalCost - totalActualCost),
     [targetTotalCost, totalActualCost]
   );
 
-  // Per-unit seller allocation factor (for preview & line totals when saving)
-  const totalTargetFromCart = targetTotalCost;
-  const allocationFactor = useMemo(() => {
-    const denom = totalTargetFromCart;
-    const numer = sellersPrice;
-    if (denom <= 0) return 0;
-    return numer / denom;
-  }, [sellersPrice, totalTargetFromCart]);
-
   const actualAllocationFactor = useMemo(() => {
     if (targetTotalCost <= 0) return 0;
     return totalActualCost / targetTotalCost;
   }, [totalActualCost, targetTotalCost]);
+
+  /* ------------------- MARKET search/create ------------------- */
+  const [marketOpts, setMarketOpts] = useState([]);
+  const [marketLoading, setMarketLoading] = useState(false);
+  const marketTimer = useRef(null);
+  const lastMarketQuery = useRef("");
+
+  const debouncedMarketSearch = useCallback((q) => {
+    lastMarketQuery.current = q;
+    if (marketTimer.current) clearTimeout(marketTimer.current);
+    marketTimer.current = setTimeout(async () => {
+      try {
+        setMarketLoading(true);
+        const { data } = await apiClient.get("/api/v1/markets", { params: { q } });
+        const list = Array.isArray(data) ? data : [];
+        setMarketOpts(
+          list.map((m) => ({
+            label: `${m.name} (${m.slug})`,
+            value: m.slug, // value is slug
+            meta: m,
+          }))
+        );
+      } catch {
+        setMarketOpts([]);
+      } finally {
+        setMarketLoading(false);
+      }
+    }, 300);
+  }, []);
+
+  const marketOptionsWithCreate = useMemo(() => {
+    const q = String(lastMarketQuery.current || "").trim();
+    if (!q) return marketOpts;
+    const exists = marketOpts.some(
+      (o) =>
+        (o.meta?.slug || "").toLowerCase() === q.toLowerCase() ||
+        (o.meta?.name || "").toLowerCase() === q.toLowerCase()
+    );
+    return exists
+      ? marketOpts
+      : [...marketOpts, { label: `Create “${q}”`, value: "__CREATE__", meta: { createName: q } }];
+  }, [marketOpts]);
+
+  const onMarketSelect = async (val, option) => {
+    if (val === "__CREATE__") {
+      const createName = option?.meta?.createName;
+      try {
+        const { data } = await apiClient.post("/api/v1/markets/find-or-create", { name: createName });
+        form.setFieldsValue({
+          header: { ...form.getFieldValue("header"), market: data.slug }, // store slug
+        });
+        toastSuccess("Market added", `${data.name} (${data.slug})`);
+        // clear seller since market changed
+        form.setFieldsValue({
+          header: { ...form.getFieldValue("header"), seller_id: undefined, seller_name: undefined },
+        });
+        setSellerOptions([]);
+      } catch (e) {
+        toastError("Could not create market", e?.response?.data?.message || "");
+      }
+    } else {
+      // val is slug
+      form.setFieldsValue({
+        header: { ...form.getFieldValue("header"), market: val, seller_id: undefined, seller_name: undefined },
+      });
+      setSellerOptions([]);
+    }
+  };
 
   /* ------------------- Seller search/create (inline) ------------------- */
   const [sellerOptions, setSellerOptions] = useState([]);
@@ -226,29 +305,28 @@ export default function SourcerPage() {
       try {
         setSellerLoading(true);
         const { data } = await apiClient.get("/api/v1/sellers", {
-          params: { q, market },
+          params: { q, market }, // market is slug
         });
-        const opts = (data || []).map((s) => ({
+        // supports array or { data }
+        const list = Array.isArray(data) ? data : data?.data || [];
+        const opts = list.map((s) => ({
           label: s.name,
           value: s._id,
           meta: s,
         }));
         setSellerOptions(opts);
-      } catch (e) {
-        // silent fail to avoid noisy UX
+      } catch {
+        setSellerOptions([]);
       } finally {
         setSellerLoading(false);
       }
     }, 300);
   }, []);
 
-  // include "Create" option if no exact match for current query
   const sellerOptionsWithCreate = useMemo(() => {
     const q = String(lastSellerQuery.current || "").trim();
     if (!q) return sellerOptions;
-    const exact = sellerOptions.some(
-      (o) => (o.label || "").toLowerCase() === q.toLowerCase()
-    );
+    const exact = sellerOptions.some((o) => (o.label || "").toLowerCase() === q.toLowerCase());
     return exact
       ? sellerOptions
       : [
@@ -262,7 +340,7 @@ export default function SourcerPage() {
   }, [sellerOptions]);
 
   const handleSellerSearch = (val) => {
-    const market = form.getFieldValue(["header", "market"]);
+    const market = form.getFieldValue(["header", "market"]); // slug
     debouncedSellerSearch(val, market);
   };
 
@@ -277,7 +355,7 @@ export default function SourcerPage() {
       try {
         const { data } = await apiClient.post("/api/v1/sellers/find-or-create", {
           name: createName,
-          market,
+          market, // slug
         });
         form.setFieldsValue({
           header: {
@@ -286,12 +364,11 @@ export default function SourcerPage() {
             seller_id: data._id,
           },
         });
-        toastSuccess("Seller added", `${data.name} (${data.market})`);
+        toastSuccess("Seller added", `${data.name} (${data.marketSlug || data.marketName || market})`);
       } catch (e) {
         toastError("Could not create seller", e?.response?.data?.message || "");
       }
     } else {
-      // existing seller selected
       form.setFieldsValue({
         header: {
           ...form.getFieldValue("header"),
@@ -302,12 +379,10 @@ export default function SourcerPage() {
     }
   };
 
-  // When marketplace changes, clear selected seller to avoid cross-market mismatch
   useEffect(() => {
     const market = headerWatch?.market;
     if (!market) return;
-    // clear seller fields if market changes after selection
-    // (We track previous market via ref)
+    // react to market changes if needed
   }, [headerWatch?.market]); // eslint-disable-line
 
   /* ------------------- edit mode: load order ------------------- */
@@ -318,13 +393,13 @@ export default function SourcerPage() {
         setLoadingOrder(true);
         const { data } = await apiClient.get(`/api/v1/sourcing/${id}`);
 
-        // Header & totals
         form.setFieldsValue({
           header: {
             listing_link: data?.listing_link || "",
             seller_name: data?.seller?.name || data?.seller_name || "",
             seller_id: data?.seller?._id || undefined,
-            market: data?.seller?.market || data?.market || "eBay",
+            // normalize to slug
+            market: getMarketSlug(data?.seller?.market || data?.market || "ebay"),
             origin: data?.origin || undefined,
           },
           totals: {
@@ -339,22 +414,19 @@ export default function SourcerPage() {
         const items = Array.isArray(data?.items) ? data.items : [];
         const totalUnits = items.reduce((s, it) => s + toNum(it.quantity_needed || 1), 0);
 
-        // derive per-unit target from order.target_total_cost (if available)
         const orderTargetTotal = toNum(data?.target_total_cost);
         const derivedTargetPerUnit =
           totalUnits > 0 && orderTargetTotal > 0 ? orderTargetTotal / totalUnits : 0;
 
         items.forEach((it) => {
           cart.add({
-            id: it._id, // keep stable for editing in the UI
+            id: it._id,
             product_name: it.name || it.product_name || "Untitled",
             sku: it.sku || "",
-            product_type: it.product_type || ProductType.Game,
+            product_type: it.product_type || "Game",
             category: it.category || "",
-            // we do NOT store per-item target in DB; derive from order-level totals
             target_cost: derivedTargetPerUnit,
             quantity_needed: toNum(it.quantity_needed || 1),
-            // DB stores sourced_price as a line total in your subdoc
             sourced_price: toNum(it.sourced_price || 0),
           });
         });
@@ -372,18 +444,17 @@ export default function SourcerPage() {
   const buildPayload = (values) => {
     const listing_link = normalizeListingLink(values.header?.listing_link);
 
-    // Build items (sourced_price must be a LINE TOTAL)
     const itemsPayload = cart.rawItems.map((i) => {
       const qty = toNum(i.quantity_needed) || 1;
       const targetUnit = toNum(i.target_cost);
-      const sellerUnit = round2(allocationFactor * targetUnit);
-      const lineSellerTotal = round2(sellerUnit * qty);
+      const perUnitActual = round2((totalActualCost / Math.max(targetTotalCost, 1)) * targetUnit);
+      const lineActual = round2(perUnitActual * qty);
 
       return {
         product_name: i.product_name,
         sku: i.sku,
         quantity_needed: qty,
-        sourced_price: lineSellerTotal, // line total (kept in your sub-doc)
+        sourced_price: lineActual,
         product_type: i.product_type,
         category: i.category,
         tested: false,
@@ -392,20 +463,17 @@ export default function SourcerPage() {
     });
 
     return {
-      // identity & seller normalization (backend can map seller_name+market to Seller ref)
       sourcer_id: user?.id,
-      seller: values.header?.seller_id || undefined, // prefer persistent id if selected/created
-      seller_name: values.header?.seller_name,       // keep for display/back-compat
-      market: values.header?.market ?? "",
+      seller: values.header?.seller_id || undefined,
+      seller_name: values.header?.seller_name,
+      market: values.header?.market ?? "", // slug
       listing_link,
       origin: values.header?.origin ?? "",
 
-      // order-level amounts (model field names)
       sellers_price: toNum(values.totals?.sellers_price),
       shipping_charges: toNum(values.totals?.shipping_charges ?? values.totals?.shipping_price),
       taxes: toNum(values.totals?.taxes ?? values.totals?.tax),
 
-      // Store these in DB (per your spec)
       target_total_cost: targetTotalCost,
       total_actual_cost: totalActualCost,
       purchase_efficiency: purchaseEfficiency,
@@ -439,7 +507,7 @@ export default function SourcerPage() {
 
       form.resetFields();
       cart.reset();
-      navigate("/"); // back to list
+      navigate("/");
     } catch (err) {
       const apiMsg = err?.response?.data?.message;
       toastError(isEdit ? "Failed to update order" : "Failed to create order", apiMsg || "Please try again.");
@@ -462,16 +530,16 @@ export default function SourcerPage() {
           </div>
         ),
       },
-      {
-        title: "Sourcer",
-        dataIndex: "sourcer_id",
-        width: 90,
-        render: () => (
-          <Tooltip title="Person who created this sourcing order">
-            <span>{user?.name || "Unknown"}</span>
-          </Tooltip>
-        ),
-      },
+      // {
+      //   title: "Sourcer",
+      //   dataIndex: "sourcer_id",
+      //   width: 90,
+      //   render: () => (
+      //     <Tooltip title="Person who created this sourcing order">
+      //       <span>{user?.name || "Unknown"}</span>
+      //     </Tooltip>
+      //   ),
+      // },
       {
         title: "Qty",
         dataIndex: "quantity_needed",
@@ -506,6 +574,7 @@ export default function SourcerPage() {
       {
         title: "Target $ per unit",
         dataIndex: "target_cost",
+        width: 180,
         render: (v) => `$${toNum(v).toFixed(2)}`,
       },
       {
@@ -550,13 +619,17 @@ export default function SourcerPage() {
         ),
       },
     ],
-    [cart, user?.name, allocationFactor, actualAllocationFactor]
+    [cart, user?.name, actualAllocationFactor]
   );
 
   /* ------------------- render ------------------- */
   return (
     <div style={{ padding: "1.5rem", borderRadius: 10, position: "relative" }}>
-      {/* optional overlay when loading edit data */}
+
+
+      <AppBreadcrumbs fromLocation hide={['orders']} />
+
+
       {isEdit && loadingOrder && (
         <div
           style={{
@@ -578,7 +651,7 @@ export default function SourcerPage() {
         form={form}
         layout="vertical"
         initialValues={{
-          header: { market: "eBay" },
+          header: { market: "ebay" }, // store slug
           totals: { sellers_price: 0, shipping_charges: 0, taxes: 0 },
         }}
       >
@@ -650,9 +723,7 @@ export default function SourcerPage() {
                       header: { ...form.getFieldValue("header"), seller_id: undefined, seller_name: undefined },
                     })
                   }
-                  // Display current name for UX after selection/creation
                   value={form.getFieldValue(["header", "seller_name"]) || undefined}
-                  // Make it controlled by name; selecting an option updates seller_name via handleSellerSelect
                   onChange={() => {}}
                   notFoundContent={sellerLoading ? "Loading..." : null}
                 />
@@ -666,23 +737,24 @@ export default function SourcerPage() {
                 rules={[{ required: true, message: "Please select a marketplace" }]}
               >
                 <Select
+                  showSearch
                   size="large"
-                  onChange={() => {
-                    // clear seller on market change
+                  placeholder="Search or create a marketplace"
+                  onSearch={debouncedMarketSearch}
+                  filterOption={false}
+                  options={marketOptionsWithCreate}
+                  loading={marketLoading}
+                  onSelect={onMarketSelect}
+                  allowClear
+                  onClear={() => {
                     form.setFieldsValue({
-                      header: {
-                        ...form.getFieldValue("header"),
-                        seller_id: undefined,
-                        seller_name: undefined,
-                      },
+                      header: { ...form.getFieldValue("header"), market: undefined, seller_id: undefined, seller_name: undefined },
                     });
                     setSellerOptions([]);
                   }}
-                >
-                  <Option value="eBay">eBay</Option>
-                  <Option value="Mercari">Mercari</Option>
-                  <Option value="Facebook">Facebook</Option>
-                </Select>
+                  value={form.getFieldValue(["header", "market"]) || undefined}
+                  notFoundContent={marketLoading ? "Loading..." : null}
+                />
               </Form.Item>
             </Col>
 
@@ -720,28 +792,105 @@ export default function SourcerPage() {
 
         {/* Search + Efficiency */}
         <Card style={gradientStyle}>
-          <Row gutter={[16, 16]} align="middle">
-            <Col xs={24} sm={16}>
-              <Form.Item name="search" noStyle>
-                <Select
-                  mode="multiple"
-                  showSearch
-                  allowClear
+          <Row gutter={[16, 16]}>
+            <Col xs={24} md={16}>
+              <div className="relative" ref={dropdownRef} style={{ position: "relative" }}>
+                <Input
                   size="large"
-                  style={{ width: "100%" }}
-                  placeholder={`Search ${mode.toUpperCase()}...`}
-                  onSearch={debouncedSearch}
-                  options={options}
-                  filterOption={false}
-                  onChange={onSelectChange}
-                  loading={loading}
-                  onDropdownVisibleChange={(open) => {
-                    if (open) fetchInitialProducts();
+                  placeholder="Search products…"
+                  value={searchText}
+                  onChange={handleSearchChange}
+                  onFocus={() => {
+                    setShowProductDropdown(true);
+                    if (!products?.length) fetchInitialProducts();
                   }}
                 />
-              </Form.Item>
+
+                <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {[
+                    { code: "ACC", label: "Accessories" },
+                    { code: "CON", label: "Consoles" },
+                    { code: "HAN", label: "Handhelds" },
+                    { code: "GAM", label: "Games" },
+                  ].map((t) => {
+                    const active = typeCode === t.code;
+                    return (
+                      <button
+                        key={t.code}
+                        type="button"
+                        onClick={() => {
+                          const next = active ? "" : t.code;
+                          debouncedSearch.cancel?.();
+                          setTypeCode(next);
+                        }}
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: 8,
+                          border: "1px solid",
+                          borderColor: active ? "#2563eb" : "#e5e7eb",
+                          background: active ? "#eff6ff" : "#fff",
+                          color: active ? "#1d4ed8" : "#111827",
+                          fontWeight: 600,
+                          fontSize: 13,
+                        }}
+                      >
+                        {t.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {showProductDropdown && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      zIndex: 20,
+                      width: "100%",
+                      marginTop: 6,
+                      background: "#fff",
+                      border: "1px solid #e5e7eb",
+                      borderRadius: 8,
+                      boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
+                      maxHeight: 280,
+                      overflowY: "auto",
+                    }}
+                  >
+                    {loading ? (
+                      <div style={{ padding: "10px 12px", color: "#6b7280", fontSize: 13 }}>
+                        Loading products…
+                      </div>
+                    ) : Array.isArray(products) && products.length ? (
+                      products.map((p) => {
+                        const id = p._id || p.id;
+                        const title = p.pro_title || p.product_name || "Untitled";
+                        const sku = p.sku || "";
+                        return (
+                          <div
+                            key={id}
+                            onClick={() => onPickProduct(p)}
+                            style={{
+                              padding: "10px 12px",
+                              borderBottom: "1px solid #f3f4f6",
+                              cursor: "pointer",
+                            }}
+                            onMouseDown={(e) => e.preventDefault()}
+                          >
+                            <div style={{ fontWeight: 600, fontSize: 14 }}>{title}</div>
+                            <div style={{ fontSize: 12, color: "#6b7280" }}>{sku}</div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div style={{ padding: "10px 12px", color: "#6b7280", fontSize: 13 }}>
+                        No products found
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </Col>
-            <Col xs={24} sm={8}>
+
+            <Col xs={24} md={8}>
               <Statistic
                 title="Efficiency (Target − Actual)"
                 prefix="$"
@@ -753,17 +902,21 @@ export default function SourcerPage() {
           </Row>
         </Card>
 
-        {/* Cart */}
         <Card style={gradientStyle}>
           <Table
-            size="small"
+            size="middle"
             columns={columns}
             dataSource={cart.items}
             rowKey="id"
             pagination={false}
+            tableLayout="auto"
+            scroll={{ x: "max-content" }}
+            bordered={false}
+            sticky
           />
+
           <Row justify="end" style={{ marginTop: 12 }}>
-            <Col>
+            <Col xs={24} md="auto" style={{ textAlign: "right" }}>
               <Statistic
                 title="Total Target Price"
                 prefix="$"
@@ -775,7 +928,6 @@ export default function SourcerPage() {
           </Row>
         </Card>
 
-        {/* Totals */}
         <Card style={gradientStyle}>
           <Row gutter={[12, 12]}>
             <Col xs={24} sm={8}>
@@ -808,7 +960,6 @@ export default function SourcerPage() {
           </Row>
         </Card>
 
-        {/* Submit */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -835,3 +986,4 @@ export default function SourcerPage() {
     </div>
   );
 }
+

@@ -93,7 +93,7 @@ export default function DashboardCards() {
       color: "text-sky-500",
       hoverColor: "group-hover:text-sky-600",
       accessKey: "timeoff",
-      link: "/sourcing/orders", // 🔹 single entry point
+      link: "/sourcing", // 🔹 single entry point
       bgColor: "bg-sky-50",
       border: "border-sky-500",
     },

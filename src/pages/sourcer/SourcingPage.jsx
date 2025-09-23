@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   Card,
@@ -35,7 +34,8 @@ import apiClient from "../../api/client";
 import useFullscreen from "../../components/useFullscreen";
 import SourcingImportModal from "./SourcingImportModal";
 import { Pencil } from "lucide-react";
-
+import { useAuth } from "../../contexts/AuthContext";
+import { statusPill } from "./utils/helpers";
 
 const { Text } = Typography;
 const { Option } = Select;
@@ -61,10 +61,12 @@ const tableCardStyle = {
   overflow: "hidden",
 };
 
+
 const num = (v) => (typeof v === "number" ? v : Number(v) || 0);
 const fmtMoney = (v) =>
   typeof v === "number" && !Number.isNaN(v) ? `$${v.toFixed(2)}` : "$0.00";
-const formatOid = (id) => (id ? String(id).slice(0, 6) + "…" + String(id).slice(-4) : "—");
+const formatOid = (id) =>
+  id ? String(id).slice(0, 6) + "…" + String(id).slice(-4) : "—";
 
 /* ---------- normalize possible API shapes safely ---------- */
 const normalizeArray = (data) =>
@@ -77,39 +79,157 @@ const normalizeArray = (data) =>
       data?.data ||
       [];
 
-/* ---------- status tag colors (full enum) ---------- */
-const statusPill = (status) => {
-  switch (status) {
-    case "Pending": return "gold";
-    case "Assigned": return "geekblue";
-    case "Offer": return "cyan";
-    case "Purchased": return "green";
-    case "Disapproved": return "red";
-    case "Sold": return "green";
-    case "Hold": return "orange";
-    case "Seller Rejected": return "magenta";
-    case "Dropshipped": return "blue";
-    case "Returned": return "volcano";
-    case "Completed": return "green";
-    default: return "default";
-  }
-};
+/* ---------- status tag colors ---------- */
 
-/* ---------- totals/efficiency using new field names with fallbacks ---------- */
+
+/* ---------- totals/efficiency ---------- */
 const sellerTotal = (rec) =>
   num(rec.sellers_price) +
   num(rec.shipping_charges ?? rec.shipping_price) +
   num(rec.taxes ?? rec.tax);
 
 const deriveEfficiency = (rec) => {
-  if (typeof rec.purchase_efficiency === "number" && !Number.isNaN(rec.purchase_efficiency)) {
+  if (
+    typeof rec.purchase_efficiency === "number" &&
+    !Number.isNaN(rec.purchase_efficiency)
+  ) {
     return rec.purchase_efficiency;
   }
-  // fallback: target_total_cost - (seller + shipping + taxes)
   return num(rec.target_total_cost) - sellerTotal(rec);
 };
 
+/* ---------- market pretty printer (handles slug/object/raw) ---------- */
+const PRETTY_MARKET_MAP = {
+  ebay: "eBay",
+  mercari: "Mercari",
+  facebook: "Facebook",
+};
+const prettifySlug = (s) =>
+  String(s || "")
+    .toLowerCase()
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+const prettyMarketName = (marketMaybe) => {
+  if (!marketMaybe) return "—";
+  // populated doc { name, slug, _id }
+  if (typeof marketMaybe === "object") {
+    if (marketMaybe.name) return marketMaybe.name;
+    if (marketMaybe.slug) {
+      const slug = String(marketMaybe.slug).toLowerCase();
+      return PRETTY_MARKET_MAP[slug] || prettifySlug(slug);
+    }
+    // unknown object — show hint with id
+    if (marketMaybe._id) return `Market ${formatOid(marketMaybe._id)}`;
+  }
+  // string (slug or display)
+  const s = String(marketMaybe).trim();
+  const low = s.toLowerCase();
+  return PRETTY_MARKET_MAP[low] || prettifySlug(s);
+};
+
+/* ---------- seller name extractor ---------- */
+const getSellerName = (rec) => {
+  // populated seller doc
+  if (rec?.seller && typeof rec.seller === "object") {
+    return rec.seller.name || `Seller ${formatOid(rec.seller._id)}`;
+  }
+  // fallback fields
+  return (
+    rec?.seller_name || (rec?.seller ? `Seller ${formatOid(rec.seller)}` : "—")
+  );
+};
+
+// --- Market name resolver (cached) ---
+const _marketCache = new Map(); // key -> { name, slug, _id }
+
+function isObjectIdLike(v) {
+  return typeof v === "string" && /^[a-f0-9]{24}$/i.test(v);
+}
+
+
+
+function MarketName({ market }) {
+  const [name, setName] = React.useState("—");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const resolve = async () => {
+      if (!market) return setName("—");
+
+      // populated object
+      if (typeof market === "object") {
+        if (market.name) return setName(market.name);
+        if (market.slug && _marketCache.has(market.slug)) {
+          return setName(_marketCache.get(market.slug).name);
+        }
+        if (market._id && _marketCache.has(market._id)) {
+          return setName(_marketCache.get(market._id).name);
+        }
+      }
+
+      // string: ObjectId or slug
+      const key =
+        typeof market === "string" ? market : market._id || market.slug || "";
+
+      if (!key) return setName("—");
+
+      if (_marketCache.has(key)) {
+        return setName(_marketCache.get(key).name);
+      }
+
+      try {
+        let rec = null;
+
+        if (isObjectIdLike(key)) {
+          // by id
+          const { data } = await apiClient.get(`/api/v1/markets/${key}`);
+          rec = data;
+        } else {
+          // by slug (search then exact-match)
+          const { data } = await apiClient.get(`/api/v1/markets`, {
+            params: { q: key },
+          });
+          const list = Array.isArray(data) ? data : [];
+          rec =
+            list.find(
+              (m) => (m.slug || "").toLowerCase() === key.toLowerCase()
+            ) ||
+            list[0] ||
+            null;
+        }
+
+        if (!cancelled) {
+          if (rec?.name) {
+            _marketCache.set(key, rec);
+            if (rec.slug) _marketCache.set(rec.slug, rec);
+            if (rec._id) _marketCache.set(rec._id, rec);
+            setName(rec.name);
+          } else {
+            setName("—");
+          }
+        }
+      } catch {
+        if (!cancelled) setName("—");
+      }
+    };
+
+    resolve();
+    return () => (cancelled = true);
+  }, [market]);
+
+  return <span>{name}</span>;
+}
+
+
 export default function SourcingOrdersPage() {
+  const { user } = useAuth(); // <-- ADMIN LOGIC
+  const role = user?.roles?.role || user?.role || ""; // supports both shapes
+  const isAdmin = role === "admin";
+  const isSourcer = role === "sourcer";
+  const isPurchaser = role === "purchaser";
+  const canEdit = isAdmin || isSourcer;
+
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -138,12 +258,15 @@ export default function SourcingOrdersPage() {
   const mapProductToOption = (p) => {
     const id = p._id || p.id;
     const sku = p.sku || "NO-SKU";
-    const name = p.pro_title || p.product_name || p.title || p.name || "Untitled";
+    const name =
+      p.pro_title || p.product_name || p.title || p.name || "Untitled";
     const price = p.sale_price ?? p.price ?? null;
 
     return {
       value: String(id),
-      label: `${sku} — ${name}${price != null ? ` ($${Number(price).toFixed(2)})` : ""}`,
+      label: `${sku} — ${name}${
+        price != null ? ` ($${Number(price).toFixed(2)})` : ""
+      }`,
       product: { id, sku, name, price, raw: p },
     };
   };
@@ -154,10 +277,15 @@ export default function SourcingOrdersPage() {
         const query = (q || "").trim();
         if (query.length < 2) return;
         try {
-          const { data } = await apiClient.get("/api/v1/sourcing/products/search", {
-            params: { search: query, limit: 20, page: 1 },
-          });
-          const list = Array.isArray(data?.products) ? data.products : [];
+          const { data } = await apiClient.get(
+            "/api/v1/sourcing/products/search",
+            {
+              params: { search: query, limit: 20, page: 1 },
+            }
+          );
+          const list = Array.isArray(data?.products)
+            ? data.products
+            : normalizeArray(data);
           setSearchOptions(list.map(mapProductToOption));
         } catch (err) {
           console.error(err);
@@ -166,11 +294,20 @@ export default function SourcingOrdersPage() {
     []
   );
 
+  /* ---------- Endpoint by role ---------- */
+  const endpoint = useMemo(() => {
+    if (isAdmin) return "/api/v1/sourcing/all-sourcing";
+    if (isPurchaser) return "/api/v1/sourcing/assigned";
+    // sourcer (default)
+    return "/api/v1/sourcing/mine";
+  }, [isAdmin, isPurchaser]);
+
   /* ---------- Load Orders ---------- */
   const fetchOrders = useCallback(async () => {
+    if (!endpoint) return;
     setLoading(true);
     try {
-      const { data } = await apiClient.get("/api/v1/sourcing/mine");
+      const { data } = await apiClient.get(endpoint);
       setOrders(normalizeArray(data));
     } catch (err) {
       console.error(err);
@@ -178,7 +315,7 @@ export default function SourcingOrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [endpoint]);
 
   useEffect(() => {
     fetchOrders();
@@ -200,7 +337,9 @@ export default function SourcingOrdersPage() {
       const matchesSku =
         !filters.sku ||
         items.some((i) =>
-          (i.sku || "").toLowerCase().includes((filters.sku || "").toLowerCase())
+          (i.sku || "")
+            .toLowerCase()
+            .includes((filters.sku || "").toLowerCase())
         );
 
       const matchesStatus = !filters.status || order.status === filters.status;
@@ -212,21 +351,30 @@ export default function SourcingOrdersPage() {
           dayjs(created).isAfter(filters.dateRange[0].startOf("day")) &&
           dayjs(created).isBefore(filters.dateRange[1].endOf("day")));
 
-      const idForFilter = String(order.sourcing_id ?? order._id ?? order.id ?? "");
+      const idForFilter = String(
+        order.sourcing_id ?? order._id ?? order.id ?? ""
+      );
       const matchesSourcingId =
         !filters.sourcingId || idForFilter.includes(String(filters.sourcingId));
 
       return (
-        matchesProduct && matchesSku && matchesStatus && matchesDate && matchesSourcingId
+        matchesProduct &&
+        matchesSku &&
+        matchesStatus &&
+        matchesDate &&
+        matchesSourcingId
       );
     });
   }, [orders, filters]);
 
   /* ---------- Drawer (load/edit) ---------- */
   const loadItemForEdit = async (orderId, itemId) => {
+    if (!canEdit) return; // guard
     setDrawerLoading(true);
     try {
-      const { data: order } = await apiClient.get(`/api/v1/sourcing/${orderId}`);
+      const { data: order } = await apiClient.get(
+        `/api/v1/sourcing/${orderId}`
+      );
       const items = order.items || [];
       const fullItem = items.find((i) => String(i._id) === String(itemId));
       if (!fullItem) throw new Error("Product not found.");
@@ -254,6 +402,7 @@ export default function SourcingOrdersPage() {
   };
 
   const openNewItem = (orderId) => {
+    if (!canEdit) return; // guard
     setIsNewItem(true);
     setEditingOrderId(orderId);
     setEditingItem(null);
@@ -270,6 +419,7 @@ export default function SourcingOrdersPage() {
   };
 
   const saveItem = async () => {
+    if (!canEdit) return; // guard
     try {
       const values = await form.validateFields();
       const payload = {
@@ -284,10 +434,16 @@ export default function SourcingOrdersPage() {
       };
 
       if (isNewItem) {
-        await apiClient.post(`/api/v1/sourcing/${editingOrderId}/items`, payload);
+        await apiClient.post(
+          `/api/v1/sourcing/${editingOrderId}/items`,
+          payload
+        );
         message.success("Item created");
       } else {
-        await apiClient.patch(`/api/v1/sourcing/items/${editingItem._id}`, payload);
+        await apiClient.patch(
+          `/api/v1/sourcing/items/${editingItem._id}`,
+          payload
+        );
         message.success("Item updated");
       }
       setDrawerOpen(false);
@@ -295,7 +451,9 @@ export default function SourcingOrdersPage() {
     } catch (err) {
       console.error(err);
       message.error(
-        err?.response?.data?.message || err?.response?.data?.detail || "Save failed"
+        err?.response?.data?.message ||
+          err?.response?.data?.detail ||
+          "Save failed"
       );
     }
   };
@@ -305,16 +463,18 @@ export default function SourcingOrdersPage() {
     const data = order.items || [];
     return (
       <>
-        <div style={{ textAlign: "right", marginBottom: 8 }}>
-          <Button
-            type="dashed"
-            size="small"
-            icon={<PlusOutlined />}
-            onClick={() => openNewItem(order._id)}
-          >
-            Add Product
-          </Button>
-        </div>
+        {canEdit && (
+          <div style={{ textAlign: "right", marginBottom: 8 }}>
+            <Button
+              type="dashed"
+              size="small"
+              icon={<PlusOutlined />}
+              onClick={() => openNewItem(order._id)}
+            >
+              Add Product
+            </Button>
+          </div>
+        )}
         <Table
           rowKey="_id"
           size="small"
@@ -326,10 +486,15 @@ export default function SourcingOrdersPage() {
               dataIndex: "name",
               render: (_text, rec) => {
                 const label = rec.name || rec.product_name || "Untitled";
-                return (
-                  <Button type="link" onClick={() => loadItemForEdit(order._id, rec._id)}>
+                return canEdit ? (
+                  <Button
+                    type="link"
+                    onClick={() => loadItemForEdit(order._id, rec._id)}
+                  >
                     {label}
                   </Button>
+                ) : (
+                  <span>{label}</span>
                 );
               },
             },
@@ -357,9 +522,9 @@ export default function SourcingOrdersPage() {
     );
   };
 
-  /* ---------- Main table columns (updated) ---------- */
-  const columns = useMemo(
-    () => [
+  /* ---------- Main table columns (separate Seller & Market) ---------- */
+  const columns = useMemo(() => {
+    const base = [
       {
         title: "ID",
         dataIndex: "sourcing_id",
@@ -382,7 +547,9 @@ export default function SourcingOrdersPage() {
           const fallback =
             [rec?.sourcer_id?.firstName, rec?.sourcer_id?.lastName]
               .filter(Boolean)
-              .join(" ") || rec?.sourcer_id?.email || "—";
+              .join(" ") ||
+            rec?.sourcer_id?.email ||
+            "—";
           const display = val || fallback;
           return (
             <div style={{ lineHeight: 1.2 }}>
@@ -397,6 +564,32 @@ export default function SourcingOrdersPage() {
         },
       },
       {
+        title: "Purchaser",
+        dataIndex: "purchaserName",
+        key: "purchaserName",
+        width: 230,
+        render: (val, rec) => {
+          const full = [
+            rec?.purchaser_id?.firstName,
+            rec?.purchaser_id?.lastName,
+          ]
+            .filter(Boolean)
+            .join(" ");
+          const fallback = full || rec?.purchaser_id?.email || "—";
+          const display = val || fallback || "—";
+          return (
+            <div style={{ lineHeight: 1.2 }}>
+              <div style={{ fontWeight: 600 }}>{display}</div>
+              {rec?.purchaser_id?.email && (
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  {rec.purchaser_id.email}
+                </Text>
+              )}
+            </div>
+          );
+        },
+      },
+      {
         title: "Status",
         dataIndex: "status",
         key: "status",
@@ -404,30 +597,43 @@ export default function SourcingOrdersPage() {
         render: (s) => <Tag color={statusPill(s)}>{s || "Pending"}</Tag>,
       },
       {
-        title: "Seller / Market",
-        key: "seller_market",
-        width: 280,
+        title: "Seller",
+        key: "seller",
+        width: 100,
+        render: (_, rec) => (
+          <span style={{ fontWeight: 600 }}>{getSellerName(rec)}</span>
+        ),
+      },
+      {
+        title: "Market",
+        key: "market",
+        width: 100,
         render: (_, rec) => {
-          const sellerPopulated = rec?.seller && typeof rec.seller === "object";
-          const sellerName = sellerPopulated ? rec.seller.name : undefined;
-          const market = sellerPopulated ? rec.seller.market : undefined;
-          const sellerLabel = sellerName || (rec.seller ? `Seller ${formatOid(rec.seller)}` : "—");
+          // Prefer the populated seller.market; else fall back to order.market
+          const marketRef =
+            rec?.seller && typeof rec.seller === "object"
+              ? rec.seller.market
+              : rec.market;
+          const origin = rec.origin || "—";
           return (
             <div style={{ lineHeight: 1.2 }}>
-              <div style={{ fontWeight: 600 }}>{sellerLabel}</div>
+              <div>
+                <MarketName market={marketRef} />
+              </div>
               <Text type="secondary" style={{ fontSize: 12 }}>
-                {(market || "—")} · {rec.origin || "—"}
+                {origin}
               </Text>
             </div>
           );
         },
       },
+
       {
         title: "Seller $",
         dataIndex: "sellers_price",
         key: "sellers_price",
         width: 110,
-        render: (v, rec) => (
+        render: (v) => (
           <span style={{ fontWeight: 600 }}>{fmtMoney(num(v))}</span>
         ),
       },
@@ -436,7 +642,8 @@ export default function SourcingOrdersPage() {
         dataIndex: "shipping_charges",
         key: "shipping_charges",
         width: 110,
-        render: (_, rec) => fmtMoney(num(rec.shipping_charges ?? rec.shipping_price)),
+        render: (_, rec) =>
+          fmtMoney(num(rec.shipping_charges ?? rec.shipping_price)),
       },
       {
         title: "Tax $",
@@ -445,8 +652,6 @@ export default function SourcingOrdersPage() {
         width: 110,
         render: (_, rec) => fmtMoney(num(rec.taxes ?? rec.tax)),
       },
-
-      /* ⬇️ New columns requested */
       {
         title: "Total Target $",
         dataIndex: "target_total_cost",
@@ -475,7 +680,6 @@ export default function SourcingOrdersPage() {
           );
         },
       },
-
       {
         title: "Created",
         dataIndex: "createdAt",
@@ -486,7 +690,10 @@ export default function SourcingOrdersPage() {
           return actual ? new Date(actual).toLocaleString() : "N/A";
         },
       },
-      {
+    ];
+
+    if (canEdit) {
+      base.push({
         title: "Actions",
         key: "actions",
         fixed: "right",
@@ -494,20 +701,33 @@ export default function SourcingOrdersPage() {
         render: (_, rec) => (
           <Button
             type="link"
-            icon={<Pencil size={16} />}   // 👈 Lucide icon
+            icon={<Pencil size={16} />}
             onClick={() => navigate(`/sourcing/edit/${rec._id}`)}
           >
             Edit
           </Button>
         ),
-      }
-    ],
-    []
-  );
+      });
+    }
+
+    return base;
+  }, [canEdit, navigate]);
+
+  const pageTitle = isAdmin
+    ? "All Sourcing Orders"
+    : isPurchaser
+    ? "Assigned Requests"
+    : "My Sourcing Orders";
 
   if (loading) {
     return (
-      <div style={{ display: "flex", justifyContent: "center", paddingTop: "4rem" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          paddingTop: "4rem",
+        }}
+      >
         <Spin />
       </div>
     );
@@ -515,25 +735,43 @@ export default function SourcingOrdersPage() {
 
   return (
     <>
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
         <Card
-          title={<span style={{ fontWeight: 700, letterSpacing: 0.2 }}>All Sourcing Orders</span>}
+          title={
+            <span style={{ fontWeight: 700, letterSpacing: 0.2 }}>
+              {pageTitle}
+            </span>
+          }
           extra={
             <Space>
-              <Button icon={<ReloadOutlined />} onClick={fetchOrders} style={chipStyle}>
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={fetchOrders}
+                style={chipStyle}
+              >
                 Refresh
               </Button>
-              <Button onClick={() => setImportOpen(true)} style={{ borderRadius: 10 }}>
-                Import CSV
-              </Button>
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={() => navigate("/sourcing/new")}
-                style={{ borderRadius: 10 }}
-              >
-                New Sourcing
-              </Button>
+              {canEdit && (
+                <>
+                  <Button
+                    onClick={() => setImportOpen(true)}
+                    style={{ borderRadius: 10 }}
+                  >
+                    Import CSV
+                  </Button>
+                  <Button
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    onClick={() => navigate("/sourcing/orders/new")}
+                    style={{ borderRadius: 10 }}
+                  >
+                    New Sourcing
+                  </Button>
+                </>
+              )}
             </Space>
           }
           style={gradientCardStyle}
@@ -545,7 +783,9 @@ export default function SourcingOrdersPage() {
               <Input
                 placeholder="Filter by Product Name"
                 allowClear
-                onChange={(e) => setFilters((f) => ({ ...f, product: e.target.value }))}
+                onChange={(e) =>
+                  setFilters((f) => ({ ...f, product: e.target.value }))
+                }
                 style={{ borderRadius: 8 }}
               />
             </Col>
@@ -553,7 +793,9 @@ export default function SourcingOrdersPage() {
               <Input
                 placeholder="Filter by SKU"
                 allowClear
-                onChange={(e) => setFilters((f) => ({ ...f, sku: e.target.value }))}
+                onChange={(e) =>
+                  setFilters((f) => ({ ...f, sku: e.target.value }))
+                }
                 style={{ borderRadius: 8 }}
               />
             </Col>
@@ -581,14 +823,18 @@ export default function SourcingOrdersPage() {
             <Col xs={24} sm={12} md={12} lg={5}>
               <RangePicker
                 style={{ width: "100%" }}
-                onChange={(range) => setFilters((f) => ({ ...f, dateRange: range }))}
+                onChange={(range) =>
+                  setFilters((f) => ({ ...f, dateRange: range }))
+                }
               />
             </Col>
             <Col xs={24} sm={12} md={12} lg={3}>
               <Input
                 placeholder="Sourcing ID (#)"
                 allowClear
-                onChange={(e) => setFilters((f) => ({ ...f, sourcingId: e.target.value }))}
+                onChange={(e) =>
+                  setFilters((f) => ({ ...f, sourcingId: e.target.value }))
+                }
                 style={{ borderRadius: 8 }}
               />
             </Col>
@@ -607,8 +853,10 @@ export default function SourcingOrdersPage() {
               scroll={{ x: 1350, y: 520 }}
               onRow={() => ({
                 style: { transition: "background 0.2s" },
-                onMouseEnter: (e) => (e.currentTarget.style.background = "#fafbff"),
-                onMouseLeave: (e) => (e.currentTarget.style.background = "unset"),
+                onMouseEnter: (e) =>
+                  (e.currentTarget.style.background = "#fafbff"),
+                onMouseLeave: (e) =>
+                  (e.currentTarget.style.background = "unset"),
               })}
               locale={{
                 emptyText: (
@@ -630,8 +878,7 @@ export default function SourcingOrdersPage() {
         onImported={() => fetchOrders()}
       />
 
-
-      {drawerOpen && (
+      {drawerOpen && canEdit && (
         <div ref={fullscreenRef}>
           <Drawer
             getContainer={getContainer}
@@ -643,7 +890,10 @@ export default function SourcingOrdersPage() {
             destroyOnClose
             footer={
               <Space style={{ float: "right" }}>
-                <Button icon={<CloseOutlined />} onClick={() => setDrawerOpen(false)}>
+                <Button
+                  icon={<CloseOutlined />}
+                  onClick={() => setDrawerOpen(false)}
+                >
                   Cancel
                 </Button>
                 <Button
@@ -679,7 +929,9 @@ export default function SourcingOrdersPage() {
                 <Form.Item
                   label="Product Name"
                   name="name"
-                  rules={[{ required: true, message: "Product name is required" }]}
+                  rules={[
+                    { required: true, message: "Product name is required" },
+                  ]}
                 >
                   <Input />
                 </Form.Item>

@@ -1,4 +1,3 @@
-"use client";
 
 import { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -62,6 +61,37 @@ const navLinks = [
     roles: ["admin"],
   },
   { to: "orders/kits", label: "Kits", app: "orders", roles: ["admin"] },
+
+
+   // ⬇️ NEW: Sourcing dropdown
+  // {
+  //   label: "Sourcing",
+  //   isDropdown: true,
+  //   app: "sourcing",                       // <- gates via hasAppAccess + DB roles.access
+  //   roles: ["admin", "sourcer", "purchaser"],
+  //   children: [
+  //     { to: "/sourcing/orders", label: "My Orders", default: true },
+  //     { to: "/sourcing/new",    label: "New Sourcing" },
+  //     { to: "/requests/pending", label: "Pending" },
+  //     { to: "/requests/my",      label: "Assigned to Me" },
+  //     // optional (admin page if you have a route for it)
+  //     { to: "/sourcing/all", label: "All Orders" },
+  //     { to: "/sourcing/sellers", label: "Sellers" }, 
+  //   ],
+  // },
+  { 
+  to: "/sourcing/sellers",
+  label: "Sellers",
+  app: "sourcing",                    
+  roles: ["admin", "sourcer", "purchaser"]
+},
+  { 
+  to: "/sourcing/dashboard",
+  label: "Sourcer Dashboard",
+  app: "sourcing",                    
+  roles: ["admin", "sourcer", "purchaser"]
+}
+  
 ];
 
 /* ✅ Check if user has access to app */
@@ -109,9 +139,11 @@ const MainLayout = () => {
       ((pathName.startsWith("/admin") &&
         ["Users", "Dashboard"].includes(link.label)) ||
         (pathName.startsWith("/product") &&
-          ["Products", "Dashboard"].includes(link.label)) ||
+          ["Products", "Dashboard"].includes(link.label)) || 
         (pathName.startsWith("/orders") &&
-          ["Dashboard", "Orders", "Platforms", "Kits"].includes(link.label)))
+          ["Dashboard", "Orders", "Platforms", "Kits"].includes(link.label))) ||
+        (pathName.startsWith("/sourcing") &&
+        ["Sourcing", "Sellers",].includes(link.label))
   );
 
   //  ||

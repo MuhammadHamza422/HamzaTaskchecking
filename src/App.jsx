@@ -41,8 +41,8 @@ import AdminProductsPage from "./pages/order-processing/AdminProductsPage";
 import ExternalOrdersPage from "./pages/order-processing/ExternalOrdersPage";
 import MergedProductsPage from "./pages/order-processing/MergedProductsPage";
 import ProcessedOrdersPage from "./pages/order-processing/ProcessedOrdersPage";
-import SellerDetailsPage from "./pages/SellersDetailsPage";
-import SellersListPage from "./pages/SellerslistPage";
+import SellerDetailsPage from "./pages/sellers/SellersDetailsPage";
+import SellersListPage from "./pages/sellers/SellersListPage";
 import SourcerDashboardPage from "./pages/sourcer/SourcerDashboardPage";
 import PurchaserDashboardPage from "./pages/purchaser/PurchaserDashboardPage";
 
@@ -70,10 +70,10 @@ function App() {
         >
           {/* Child routes of MainLayout */}
           <Route index element={<DashboardCards />} />
-          <Route path="sourcing/orders" element={<SourcingPage />} />
-          <Route path="sourcing/new" element={<SourcerPage />} />
+          <Route path="/sourcing/orders" element={<SourcingPage />} />
+          <Route path="/sourcing/orders/new" element={<SourcerPage />} />
           <Route path="/sourcing/edit/:id" element={<SourcerPage />} /> 
-          <Route path="/sourcing/dashboard" element={<SourcerDashboardPage />} />
+          <Route path="/sourcing" element={<SourcerDashboardPage />} />
 
           <Route path="requests/pending" element={<PurchaserPendingPage />} />
           <Route path="requests/my" element={<PurchaserPage />} />
@@ -89,8 +89,8 @@ function App() {
 
 
           {/* Sellers */}
-          <Route path="/sellers/:id" element={<SellerDetailsPage />} />
-          <Route path="/sellers" element={<SellersListPage />} />
+          <Route path="/sourcing/sellers/:id" element={<SellerDetailsPage />} />
+          <Route path="/sourcing/sellers" element={<SellersListPage />} />
 
           {/* 🔹 Admin Companies Route (new) */}
           <Route
