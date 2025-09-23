@@ -1245,16 +1245,16 @@ const AdminProductsPage = () => {
                 </Col>
                 <Col xs={24} sm={12}>
                   <Form.Item
-                    label="WooCommerce ID"
+                    label="Platform"
                     name="wc_id"
                     rules={[
                       {
                         required: true,
-                        message: "Please enter WooCommerce ID",
+                        message: "Please enter Platform",
                       },
                     ]}
                   >
-                    <Input placeholder="Enter WooCommerce ID" size="large" />
+                    <Input placeholder="Enter Platform" size="large" />
                   </Form.Item>
                 </Col>
               </Row>
