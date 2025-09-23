@@ -39,6 +39,31 @@ export const AuthProvider = ({ children }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
+  // Remove Expired Token
+  useEffect(() => {
+    const checkTokenExpiry = async () => {
+      if (!token) return;
+
+      try {
+        const payload = JSON.parse(atob(token.split(".")[1]));
+
+        if (!payload?.exp || typeof payload.exp !== "number") {
+          throw new Error("Invalid token payload");
+        }
+
+        const isExpired = Date.now() > payload.exp * 1000;
+
+        if (isExpired) {
+          logout();
+        }
+      } catch (err) {
+        console.error("JWT validation failed:", err);
+      }
+    };
+
+    checkTokenExpiry();
+  }, [token]);
+
   const login = async (newToken, userData) => {
     localStorage.setItem("token", newToken);
     localStorage.setItem("user", JSON.stringify(userData));
