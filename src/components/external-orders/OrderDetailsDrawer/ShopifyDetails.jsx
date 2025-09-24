@@ -22,7 +22,7 @@ export default function ShopifyDetails({
     if (!selectedOrder?.orderId) return;
     try {
       const mergedRes = await apiClient.get(
-        `/api/v1/products/mapped/product/${selectedOrder.orderId}`
+        `/api/v1/products/mapped/product/${encodeURIComponent(selectedOrder.orderId)}`
       );
       setMergedProducts(
         Array.isArray(mergedRes.data?.product) ? mergedRes.data.product : []
@@ -83,39 +83,265 @@ export default function ShopifyDetails({
 
     setIsMerging(true);
     try {
+      // Build items to merge from selected nodes
       const itemsToMerge = order?.lineItems?.edges
         ?.filter((edge) => selectedItems.includes(edge.node.id))
         ?.map((edge) => edge.node) || [];
 
-      if (itemsToMerge.length === 0) {
-        message.error("No items found to merge");
+      if (!itemsToMerge || itemsToMerge.length < 2) {
+        message.error("Invalid items selected for merging");
         return;
       }
 
-      // Create merge payload
-      const mergePayload = {
-        orderId: selectedOrder.orderId,
-        items: itemsToMerge.map((item) => ({
-          id: item.id,
-          name: item.name,
-          quantity: item.quantity,
-          price: item.originalUnitPriceSet?.shopMoney?.amount || "0",
-          sku: item.sku || "",
-        })),
+      // Attribute extraction (enhanced similar to WooCommerce)
+      const extractProductAttributes = (items) => {
+        let storageCode = "DEFAULT";
+        let colorCode = "DEFAULT";
+        let typeCode = "CON";
+        let brandCode = "NIN";
+        let modelCode = "DEFAULT";
+        let conditionCode = "N";
+
+        const storagePatterns = [
+          { pattern: /(\d+)\s*GB/i, code: "GB" },
+          { pattern: /(\d+)\s*TB/i, code: "TB" },
+          { pattern: /^\d+GB$/i, code: "GB" },
+          { pattern: /^\d+TB$/i, code: "TB" },
+        ];
+        const colorPatterns = [
+          { pattern: /black/i, code: "BLK" },
+          { pattern: /white/i, code: "WHT" },
+          { pattern: /blue/i, code: "BLU" },
+          { pattern: /red/i, code: "RED" },
+          { pattern: /green/i, code: "GRN" },
+          { pattern: /silver/i, code: "SLV" },
+          { pattern: /gold/i, code: "GLD" },
+        ];
+        const brandPatterns = [
+          { pattern: /nintendo/i, code: "NIN" },
+          { pattern: /sony/i, code: "SNY" },
+          { pattern: /play\s*station|playstation|ps\s*\d+/i, code: "SNY" },
+          { pattern: /microsoft|xbox/i, code: "MSF" },
+          { pattern: /sega/i, code: "SEG" },
+        ];
+        const typePatterns = [
+          { pattern: /console|system/i, code: "CON" },
+          { pattern: /game/i, code: "GAM" },
+          { pattern: /accessory|controller|adapter|cable|memory\s*card|hdmi|av\s*to\s*hdmi/i, code: "ACC" },
+        ];
+        const conditionPatterns = [
+          { pattern: /new/i, code: "N" },
+          { pattern: /used|pre[-\s]*owned|preowned/i, code: "U" },
+          { pattern: /refurb/i, code: "R" },
+          { pattern: /sealed/i, code: "S" },
+        ];
+
+        let mainProduct = items[0];
+        items.forEach((it) => {
+          const nm = (it?.name || "").toLowerCase();
+          if (!mainProduct || nm.length > (mainProduct?.name || "").length) {
+            mainProduct = it;
+          }
+        });
+
+        items.forEach((it) => {
+          const nm = (it?.name || "").toLowerCase();
+          let matched = false;
+          for (const p of storagePatterns) {
+            const m = nm.match(p.pattern);
+            if (m) {
+              storageCode = `${m[1]}${p.code}`;
+              matched = true;
+              break;
+            }
+          }
+          if (matched) return;
+          for (const p of colorPatterns) {
+            if (p.pattern.test(nm)) {
+              colorCode = p.code;
+              matched = true;
+              break;
+            }
+          }
+          if (matched) return;
+          for (const p of conditionPatterns) {
+            if (p.pattern.test(nm)) {
+              conditionCode = p.code;
+              break;
+            }
+          }
+        });
+
+        if (mainProduct) {
+          const mainNm = (mainProduct?.name || "").toLowerCase();
+          for (const p of brandPatterns) {
+            if (p.pattern.test(mainNm)) {
+              brandCode = p.code;
+              break;
+            }
+          }
+          for (const p of typePatterns) {
+            if (p.pattern.test(mainNm)) {
+              typeCode = p.code;
+              break;
+            }
+          }
+
+          // model detection similar to WooCommerce
+          const modelPatterns = [
+            /(ps\s*5|ps5)/i,
+            /(ps\s*4|ps4)/i,
+            /(ps\s*3|ps3)/i,
+            /(ps\s*2|ps2)/i,
+            /(ps\s*1|psx|psone)/i,
+            /(xbox\s*series\s*x|xbox\s*series\s*s|xbox\s*one|xbox\s*360)/i,
+            /(switch)/i,
+            /(wii\s*u|wii)/i,
+            /(gamecube)/i,
+            /(n64)/i,
+            /(snes)/i,
+            /(nes)/i,
+            /(genesis)/i,
+            /(dreamcast)/i,
+            /(saturn)/i,
+            /(mega\s*drive)/i,
+          ];
+          for (const mp of modelPatterns) {
+            const m = mainNm.match(mp);
+            if (m) {
+              modelCode = m[0].toUpperCase().replace(/\s+/g, "");
+              break;
+            }
+          }
+        }
+
+        return {
+          storageCode,
+          colorCode,
+          typeCode,
+          brandCode,
+          modelCode,
+          conditionCode,
+        };
       };
 
+      const attrs = extractProductAttributes(itemsToMerge);
+
+      const productIdsList = itemsToMerge.map((it) => String(it.id));
+      let skuString =
+        itemsToMerge
+          .map((it) => it?.sku)
+        .filter(Boolean)
+        .join("_") || productIdsList.join("_");
+
+      // Fallback SKU synthesis if still empty (should not happen)
+      if (!skuString || skuString.trim().length === 0) {
+        const safe = [
+          attrs.typeCode,
+          attrs.brandCode,
+          attrs.modelCode,
+          attrs.storageCode,
+          attrs.colorCode,
+          attrs.conditionCode,
+        ]
+          .map((s) => String(s || "STD").toUpperCase().replace(/[^A-Z0-9]+/g, ""))
+          .filter(Boolean)
+          .join("-");
+        skuString = safe || productIdsList.join("_");
+      }
+
+      const sumAmount = (arr) =>
+        arr.reduce((sum, it) => {
+          const unit = parseFloat(it?.originalUnitPriceSet?.shopMoney?.amount || 0);
+          const qty = Number(it?.quantity || 1);
+          return sum + unit * qty;
+        }, 0);
+
+      // Ensure minimally required fields are populated
+      const safeType = attrs.typeCode || "CON";
+      const safeBrand = attrs.brandCode || "SNY"; // default to SNY when PlayStation-like
+      const safeModel = attrs.modelCode && attrs.modelCode !== "DEFAULT" ? attrs.modelCode : "STD";
+      const safeStorage = attrs.storageCode || "STD";
+      const safeColor = attrs.colorCode || "STD";
+      const safeCond = attrs.conditionCode || "U";
+
+      const combinedData = {
+        wc_id: itemsToMerge?.[0]?.id, // align with WooCommerce payload key expected by API
+        pro_title: itemsToMerge.map((it) => it?.name).join(" + "),
+        sku: skuString,
+        type_code: safeType,
+        brnd_code: safeBrand,
+        model_code: safeModel,
+        storage_code: safeStorage,
+        color_code: safeColor,
+        cnd_code: safeCond,
+        regular_price: sumAmount(itemsToMerge).toFixed(2),
+        price: sumAmount(itemsToMerge).toFixed(2),
+        sale_price: sumAmount(itemsToMerge).toFixed(2),
+        order_Id: selectedOrder?.orderId,
+        plateformId: selectedOrder?.plateform_id || selectedOrder?.platform_id || "N/A",
+        productIds: productIdsList,
+      };
+
+      // Basic client-side validation to avoid backend "required field missing"
+      const requiredKeys = [
+        "wc_id",
+        "pro_title",
+        "sku",
+        "type_code",
+        "brnd_code",
+        "model_code",
+        "cnd_code",
+        "price",
+        "order_Id",
+        "plateformId",
+        "productIds",
+      ];
+      for (const k of requiredKeys) {
+        if (
+          combinedData[k] === undefined ||
+          combinedData[k] === null ||
+          (typeof combinedData[k] === "string" && combinedData[k].toString().trim() === "") ||
+          (Array.isArray(combinedData[k]) && combinedData[k].length === 0)
+        ) {
+          throw new Error(`Missing required field: ${k}`);
+        }
+      }
+
       const response = await apiClient.post(
-        "/api/v1/products/merge/shopify",
-        mergePayload
+        "/api/v1/products/mapped/add",
+        combinedData
       );
 
-      if (response.data?.success) {
-        message.success("Items merged successfully");
+      if (response?.data?.success) {
+        Swal.fire({
+          icon: "success",
+          title: "Items Merged Successfully!",
+          text: `${selectedItems.length} items have been merged into a single product.`,
+          toast: true,
+          position: "top-end",
+          showConfirmButton: false,
+          timer: 3000,
+          timerProgressBar: true,
+          background: "#10b981",
+          color: "#fff",
+          customClass: { popup: "rounded-lg" },
+        });
+
         setSelectedItems([]);
-        loadMergedProducts();
-        refetchOrderDetails();
+        await loadMergedProducts();
+
+        // Optimistically mark merged items locally
+        setLocalMergedIds((prev) => {
+          const next = new Set(prev.map((i) => i?.toString()));
+          selectedItems.forEach((id) => next.add(id?.toString()));
+          return Array.from(next);
+        });
+
+        if (refetchOrderDetails) refetchOrderDetails();
+        if (onProductMappingSuccess) onProductMappingSuccess();
       } else {
-        message.error(response.data?.message || "Failed to merge items");
+        throw new Error(response?.data?.message || "Failed to merge items");
       }
     } catch (error) {
       console.error("Error merging items:", error);
@@ -202,6 +428,61 @@ export default function ShopifyDetails({
               <dt className="w-20 font-semibold text-gray-800">Date:</dt>
               <dd className="text-gray-700">
                 {formatDate(order?.createdAt)}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </Card>
+
+      {/* Payment & Totals */}
+      <Card
+        size="small"
+        title="Payment & Totals"
+        className="border border-green-200 rounded-lg shadow-sm"
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-gray-700">
+          <dl className="space-y-2">
+            <div className="flex">
+              <dt className="w-28 font-semibold text-gray-800">Payment:</dt>
+              <dd className="text-gray-700">
+                {(order?.paymentGatewayNames || []).join(", ") || "—"}
+              </dd>
+            </div>
+            <div className="flex">
+              <dt className="w-28 font-semibold text-gray-800">Confirm #:</dt>
+              <dd className="text-gray-700">{order?.confirmationNumber || "—"}</dd>
+            </div>
+            <div className="flex">
+              <dt className="w-28 font-semibold text-gray-800">Locale:</dt>
+              <dd className="text-gray-700">{order?.customerLocale || "—"}</dd>
+            </div>
+          </dl>
+          <dl className="space-y-2">
+            <div className="flex">
+              <dt className="w-28 font-semibold text-gray-800">Subtotal:</dt>
+              <dd className="text-gray-700">
+                {formatCurrency(
+                  order?.subtotalPriceSet?.shopMoney?.amount,
+                  order?.subtotalPriceSet?.shopMoney?.currencyCode || order?.totalPriceSet?.shopMoney?.currencyCode
+                )}
+              </dd>
+            </div>
+            <div className="flex">
+              <dt className="w-28 font-semibold text-gray-800">Discounts:</dt>
+              <dd className="text-gray-700">
+                {formatCurrency(
+                  order?.totalDiscountsSet?.shopMoney?.amount,
+                  order?.totalDiscountsSet?.shopMoney?.currencyCode || order?.totalPriceSet?.shopMoney?.currencyCode
+                )}
+              </dd>
+            </div>
+            <div className="flex">
+              <dt className="w-28 font-semibold text-gray-800">Tax:</dt>
+              <dd className="text-gray-700">
+                {formatCurrency(
+                  order?.totalTaxSet?.shopMoney?.amount,
+                  order?.totalTaxSet?.shopMoney?.currencyCode || order?.totalPriceSet?.shopMoney?.currencyCode
+                )}
               </dd>
             </div>
           </dl>

@@ -64,12 +64,12 @@ export default function AddProductModal({
           );
           defaultPlatformId = wmPlatform?._id || "";
         } else if (activeTab === "shopify") {
-          const spPlatform = sortedPlatforms.find(
+          const sfPlatform = sortedPlatforms.find(
             (p) =>
               p.plt_name.toLowerCase().includes("shopify") ||
-              p.plt_prefix.toLowerCase().includes("sp")
+              p.plt_prefix.toLowerCase().includes("sf")
           );
-          defaultPlatformId = spPlatform?._id || "";
+          defaultPlatformId = sfPlatform?._id || "";
         } else if (activeTab === "amazon") {
           const amPlatform = sortedPlatforms.find(
             (p) =>
@@ -98,7 +98,7 @@ export default function AddProductModal({
     try {
       if (!selectedOrder?.orderId) return;
       const res = await apiClient.get(
-        `/api/v1/products/mapped/product/${selectedOrder.orderId}`
+        `/api/v1/products/mapped/product/${encodeURIComponent(selectedOrder.orderId)}`
       );
       setMergedProducts(
         Array.isArray(res.data?.product) ? res.data.product : []
@@ -136,7 +136,7 @@ export default function AddProductModal({
       }
 
       const response = await apiClient.get(
-        `/api/v1/kit/details/${productIdToSend}`
+        `/api/v1/kit/details/${encodeURIComponent(productIdToSend)}`
       );
       if (response.data.success) {
         const mappedProducts =
@@ -243,6 +243,39 @@ export default function AddProductModal({
         (charge) => charge?.chargeType === "PRODUCT"
       );
       const lineItemTotal = productCharge?.chargeAmount?.amount || 0;
+
+      const totalSalePriceOfSelectedProducts = selectedProducts.reduce(
+        (acc, product) => acc + (product.sale_price || 0) * product.quantity,
+        0
+      );
+      if (totalSalePriceOfSelectedProducts > 0) {
+        return (lineItemTotal / totalSalePriceOfSelectedProducts) * price;
+      }
+    } else if (activeTab === "shopify") {
+      // For Shopify, compute line item total from GraphQL line item (price x qty)
+      const order = orderDetails?.order;
+      const node = order?.lineItems?.edges?.find(
+        (edge) => edge?.node?.id === selectedLineItemId
+      )?.node;
+      let lineItemTotal = 0;
+      if (node) {
+        const unitAmount = parseFloat(
+          node?.originalUnitPriceSet?.shopMoney?.amount || 0
+        );
+        const qty = node?.quantity || 1;
+        lineItemTotal = unitAmount * qty;
+      }
+
+      // If not found or zero, try merged products price
+      if (!lineItemTotal && Array.isArray(mergedProducts) && mergedProducts.length > 0) {
+        const idStr = String(selectedLineItemId || "");
+        const foundMerged = mergedProducts.find((mp) =>
+          (mp?.productIds || []).map(String).includes(idStr)
+        );
+        if (foundMerged) {
+          lineItemTotal = parseFloat(foundMerged.price || 0);
+        }
+      }
 
       const totalSalePriceOfSelectedProducts = selectedProducts.reduce(
         (acc, product) => acc + (product.sale_price || 0) * product.quantity,
@@ -366,6 +399,18 @@ export default function AddProductModal({
         orderQty =
           orderDetails?.order?.order?.orderLines?.orderLine?.length?.toString() ||
           "1";
+      } else if (activeTab === "shopify") {
+        // Compute number of effective line items (accounting for merged products)
+        let nodes = [...((orderDetails?.order?.lineItems?.edges || []).map((e) => e.node))];
+        (mergedProducts || []).forEach((mp) => {
+          const mpIds = (mp?.productIds || []).map(String);
+          const allMatch = mpIds.every((pid) => nodes.some((li) => String(li.id) === pid));
+          if (allMatch) {
+            nodes = nodes.filter((li) => !mpIds.includes(String(li.id)));
+            nodes.push({ id: `merged-${mpIds.join("-")}`, name: mp.pro_title || "Merged Product" });
+          }
+        });
+        orderQty = String(nodes.length || 1);
       }
       console.log("orderQty", orderQty);
 
@@ -541,9 +586,15 @@ export default function AddProductModal({
       <div className="space-y-4">
         {/* Platform ID Display */}
         <div className="bg-blue-50 p-3 rounded-lg">
-          <p className="text-xs text-blue-600 mt-1">
-            Order ID: {selectedOrder?.orderId}
-          </p>
+          {activeTab === "shopify" && selectedOrder?.orderId?.includes('gid://shopify/Order/') ? (
+            <p className="text-xs text-blue-600 mt-1">
+              Order ID: {selectedOrder?.orderId?.replace('gid://shopify/Order/', '')}
+            </p>
+          ) : (
+            <p className="text-xs text-blue-600 mt-1">
+              Order ID: {selectedOrder?.orderId}
+            </p>
+          )}
         </div>
 
         {/* Platform Selection Dropdown */}

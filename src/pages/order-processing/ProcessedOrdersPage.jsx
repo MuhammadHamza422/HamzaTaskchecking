@@ -168,7 +168,7 @@ export default function ProcessedOrdersPage() {
       const params = new URLSearchParams({
         limit: limit.toString(),
         page: page.toString(),
-        status: "confirmed", // Always fetch processed orders
+        status: "processed", // Always fetch processed orders
       });
       if (search) {
         params.append("search", search);
@@ -312,6 +312,11 @@ export default function ProcessedOrdersPage() {
   const fetchOrderDetails = async (orderId) => {
     if (!orderId) return null;
     const config = getPlatformConfig(activeTab);
+    if (activeTab === "shopify") {
+      // Shopify expects orderId as a query parameter
+      const response = await apiClient.get(`${config.detailsApi}?orderId=${orderId}`);
+      return response.data;
+    }
     const response = await apiClient.get(`${config.detailsApi}/${orderId}`);
     return response.data;
   };
@@ -499,7 +504,9 @@ export default function ProcessedOrdersPage() {
             continue;
           }
           console.log("Fetching kits for selected order", orderId);
-          const res = await apiClient.get(`/api/v1/kit/order/kits/${orderId}`);
+          const res = await apiClient.get(
+            `/api/v1/kit/order/kits/${encodeURIComponent(orderId)}`
+          );
           console.log("Kits fetched for selected order", orderId, res?.data);
           setKitsByOrderId((prev) => ({ ...prev, [orderId]: res?.data }));
         } catch (e) {
@@ -743,6 +750,92 @@ export default function ProcessedOrdersPage() {
     };
   };
 
+  // Build ShipStation order payload for Shopify
+  const buildShipStationOrderFromShopify = ({
+    kits,
+    details,
+    tableOrder,
+    tagId,
+  }) => {
+    const sf = details?.order || details || {};
+    const kitsArray = Array.isArray(kits?.allKits) ? kits.allKits : [];
+
+    const items = [];
+    const productTitles = [];
+    for (const kit of kitsArray) {
+      if (kit?.product_title) {
+        productTitles.push(kit.product_title);
+      }
+      for (const sku of kit?.skus || []) {
+        items.push({
+          sku: sku?.pId?.sku || String(sku?.pId?._id || ""),
+          name: sku?.pId?.pro_title || "Product",
+          imageUrl: null,
+          quantity: Number(sku?.quantity || 1),
+          unitPrice: Number(sku?.price || sku?.pId?.sale_price || 0),
+          taxAmount: null,
+          shippingAmount: null,
+          productId: Number(sku?.pId?.uid) || undefined,
+        });
+      }
+    }
+
+    const orderDate = formatDateForShipStation(sf?.createdAt || tableOrder?.createdAt || new Date());
+
+    const billing = sf?.billingAddress || {};
+    const shipping = sf?.shippingAddress || {};
+
+    const advancedOptions = {};
+    if (productTitles[0]) advancedOptions.customField1 = productTitles[0];
+    if (productTitles[1]) advancedOptions.customField2 = productTitles[1];
+    if (productTitles[2]) advancedOptions.customField3 = productTitles[2];
+
+    return {
+      orderNumber: String(tableOrder?.orderId || sf?.id || ""),
+      orderKey: String(tableOrder?._id || sf?.id || ""),
+      orderDate: orderDate,
+      orderStatus: "awaiting_shipment",
+      customerId: undefined,
+      customerUsername: sf?.email || undefined,
+      customerEmail: sf?.email || undefined,
+      tagIds: tagId ? [Number(tagId)] : undefined,
+      billTo: {
+        name: [billing?.firstName, billing?.lastName].filter(Boolean).join(" ") || null,
+        company: null,
+        street1: billing?.address1 || null,
+        street2: billing?.address2 || null,
+        street3: null,
+        city: billing?.city || null,
+        state: billing?.province || null,
+        postalCode: billing?.zip || null,
+        country: normalizeCountryCode(billing?.country) || null,
+        phone: billing?.phone || null,
+        residential: null,
+      },
+      shipTo: {
+        name: [shipping?.firstName, shipping?.lastName].filter(Boolean).join(" ") || null,
+        company: null,
+        street1: shipping?.address1 || null,
+        street2: shipping?.address2 || null,
+        street3: null,
+        city: shipping?.city || null,
+        state: shipping?.province || null,
+        postalCode: shipping?.zip || null,
+        country: normalizeCountryCode(shipping?.country) || null,
+        phone: shipping?.phone || null,
+        residential: true,
+      },
+      items,
+      requestedShippingService: undefined,
+      amountPaid: Number(sf?.totalPriceSet?.shopMoney?.amount) || undefined,
+      taxAmount: Number(sf?.totalTaxSet?.shopMoney?.amount) || undefined,
+      shippingAmount: undefined,
+      gift: false,
+      paymentMethod: (sf?.paymentGatewayNames || []).join(", ") || undefined,
+      advancedOptions,
+    };
+  };
+
   const handleMoveToShipStation = async () => {
     try {
       const ordersToProcess = selectedOrders.length > 0 ? selectedOrders : [];
@@ -793,14 +886,21 @@ export default function ProcessedOrdersPage() {
             } else {
               console.log("Fetching kits for move", ord?.orderId);
               const kitsRes = await apiClient.get(
-                `/api/v1/kit/order/kits/${ord?.orderId}`
+                `/api/v1/kit/order/kits/${encodeURIComponent(ord?.orderId)}`
               );
               console.log("Kits Data", kitsRes?.data);
               kitsData = kitsRes?.data;
             }
-            const detailsRes = await apiClient.get(
-              `${config.detailsApi}/${ord?.orderId}`
-            );
+            let detailsRes;
+            if (activeTab === "shopify") {
+              detailsRes = await apiClient.get(
+                `${config.detailsApi}?orderId=${ord?.orderId}`
+              );
+            } else {
+              detailsRes = await apiClient.get(
+                `${config.detailsApi}/${ord?.orderId}`
+              );
+            }
             console.log("Details", detailsRes?.data);
             return { ord, kits: kitsData, details: detailsRes?.data };
           })
@@ -818,6 +918,13 @@ export default function ProcessedOrdersPage() {
               });
             } else if (activeTab === "walmart") {
               return buildShipStationOrderFromWalmart({
+                kits,
+                details,
+                tableOrder: ord,
+                tagId: platformTagId,
+              });
+            } else if (activeTab === "shopify") {
+              return buildShipStationOrderFromShopify({
                 kits,
                 details,
                 tableOrder: ord,

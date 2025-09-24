@@ -408,7 +408,7 @@ export default function WooCommerceDetails({
     try {
       // Get selected items data
       const itemsToMerge = order?.line_items?.filter((item) =>
-        selectedItems.includes(item?.product_id || item?.id)
+        selectedItems.includes(item?.id)
       );
 
       if (!itemsToMerge || itemsToMerge.length < 2) {
@@ -426,13 +426,13 @@ export default function WooCommerceDetails({
       console.log("Extracted attributes:", extractedAttributes);
 
       // Calculate combined data
-      const productIdsList = itemsToMerge.map((item) => String(item.product_id || item.id));
+      const productIdsList = itemsToMerge.map((item) => String(item.id));
       const skuString = itemsToMerge
         .map((item) => item.sku)
         .filter(Boolean)
         .join("_") || productIdsList.join("_");
       const combinedData = {
-        wc_id: itemsToMerge[0]?.product_id || itemsToMerge[0]?.id,
+        wc_id: itemsToMerge[0]?.id,
         pro_title: itemsToMerge.map((item) => item.name).join(" + "),
         sku: skuString,
         type_code: extractedAttributes.typeCode,
@@ -530,7 +530,7 @@ export default function WooCommerceDetails({
   // Calculate total price of selected items
   const selectedItemsTotal =
     order?.line_items
-      ?.filter((item) => selectedItems.includes(item?.product_id || item?.id))
+      ?.filter((item) => selectedItems.includes(item?.id))
       ?.reduce((sum, item) => sum + parseFloat(item.total || 0), 0) || 0;
 
   // Merged products helpers
@@ -542,7 +542,7 @@ export default function WooCommerceDetails({
   ]);
   const mergedLineItems = Array.isArray(order?.line_items)
     ? order.line_items.filter((item) =>
-        mergedLineItemIds.has((item?.product_id || item?.id)?.toString())
+        mergedLineItemIds.has((item?.id)?.toString())
       )
     : [];
 
@@ -834,12 +834,11 @@ export default function WooCommerceDetails({
         <div className="space-y-3">
           {(Array.isArray(order?.line_items)
             ? order.line_items.filter(
-                (item) =>
-                  !hiddenLineItemIds.has(String(item?.product_id || item?.id))
+                (item) => !hiddenLineItemIds.has(String(item?.id))
               )
             : []
           ).map((item) => {
-            const itemId = item?.product_id || item?.id;
+            const itemId = item?.id;
             const isSelected = selectedItems.includes(itemId);
 
             return (
@@ -880,8 +879,8 @@ export default function WooCommerceDetails({
                 <div className="text-right">
                   {/* Check if this specific line item has mapped products */}
                   {(() => {
-                    const lineItemId = item?.product_id || item?.id;
-                    const idStr = lineItemId?.toString();
+                    const lineItemId = item?.id;
+                    const idStr = String(lineItemId);
                     const isMerged = mergedLineItemIds.has(idStr);
                     const hasMappedProducts =
                       selectedOrder?.kit_products &&

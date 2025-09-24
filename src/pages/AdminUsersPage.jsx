@@ -65,7 +65,7 @@ const AdminUsersPage = () => {
   const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
   const [warehouses, setWarehouses] = useState([]);
 
-  console.log("users", users);
+  
 
   const loadRoles = useCallback(async () => {
     setLoading(true);
@@ -108,14 +108,7 @@ const AdminUsersPage = () => {
         }));
         setUsers(transformedUsers);
 
-        const totalFromResponse =
-          response?.data?.totalUsers ??
-          response?.data?.total ??
-          response?.data?.count ??
-          response?.data?.totalCount ??
-          response?.data?.pagination?.total ??
-          list.length;
-        setTotal(Number(totalFromResponse) || 0);
+        setTotal(Number(response?.data?.totalCount || 0));
       })
       .catch((error) => {
         console.error("Error fetching users:", error);
