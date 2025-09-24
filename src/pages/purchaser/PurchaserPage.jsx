@@ -28,6 +28,7 @@ import { motion } from "framer-motion";
 import dayjs from "dayjs";
 import { useNavigate } from "react-router-dom";
 import useProductSearch from "../sourcer/hooks/useProductSearch"; // async product search (same as Sourcer)
+import PurchaserDashboard from "./PurchaserDashboardPage";
 
 const { Option } = Select;
 const { Title, Text } = Typography;
@@ -539,7 +540,7 @@ export default function PurchaserPage() {
   // filters
   const [statusFilter, setStatusFilter] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState("all"); // all | returned | pending
+  const [activeTab, setActiveTab] = useState("dashboard"); // all | returned | pending
   const [dateRange, setDateRange] = useState([]);
   const [selectedProductIds, setSelectedProductIds] = useState([]);
 
@@ -1030,6 +1031,15 @@ export default function PurchaserPage() {
         style={{ marginBottom: 16, fontWeight: 500 }}
         tabBarStyle={{ fontSize: 16 }}
       >
+
+        <TabPane tab="Dashboard" key="dashboard">
+          <PurchaserDashboard
+            data={filteredRequests}   // ← use filtered
+            loading={loading}
+            onRefresh={fetchAssigned} // ← reuse your fetch
+          />
+        </TabPane>
+
         <TabPane tab="All Assigned" key="all">
           <motion.div
             initial={{ scale: 0.97, opacity: 0 }}
