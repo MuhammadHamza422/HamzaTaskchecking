@@ -52,12 +52,14 @@ export default function InventoryDisplay({
     typeCode: "",
     selectedProduct: null, // Store the selected product data
   });
+
   const [pendingQtyChanges, setPendingQtyChanges] = useState(new Map()); // Track multiple pending changes
   const [isRefreshing, setIsRefreshing] = useState(false); // disable add buttons while refetching
   const [isSaving, setIsSaving] = useState(false); // control modal Save button spinner
   const queryClient = useQueryClient();
   const dropdownRef = useRef(null);
   const { user } = useAuth();
+  const role = user?.roles.role;
   console.log("User Role:", user?.roles.role);
   const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
   // console.log("Location Id", locationid);
@@ -786,8 +788,16 @@ export default function InventoryDisplay({
   }
 
   const isAddDisabled = createInv.isLoading || isRefreshing;
-  const addBtnLabel = createInv.isLoading ? "Adding..." : isRefreshing ? "Updating..." : "Add Product";
-  const addFirstBtnLabel = createInv.isLoading ? "Adding..." : isRefreshing ? "Updating..." : "Add first Product";
+  const addBtnLabel = createInv.isLoading
+    ? "Adding..."
+    : isRefreshing
+    ? "Updating..."
+    : "Add Product";
+  const addFirstBtnLabel = createInv.isLoading
+    ? "Adding..."
+    : isRefreshing
+    ? "Updating..."
+    : "Add first Product";
 
   return (
     <div className="space-y-6 pb-12">
@@ -1511,7 +1521,10 @@ export default function InventoryDisplay({
                 <button
                   type="submit"
                   disabled={
-                    isSaving || createInv.isLoading || !form.productId || !form.quantity
+                    isSaving ||
+                    createInv.isLoading ||
+                    !form.productId ||
+                    !form.quantity
                   }
                   className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white disabled:opacity-60 flex items-center gap-2"
                 >

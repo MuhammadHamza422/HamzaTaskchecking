@@ -23,6 +23,7 @@ import ShelfGroupedView from "./components/ShelfGroupedView";
 import CreateInventoryModal from "./components/CreateInventoryModal";
 import MoveToZoneModal from "./components/MoveToZoneModal";
 import InventoryPagination from "./components/InventoryPagination";
+import { useAuth } from "../../contexts/AuthContext";
 
 // product types moved to CreateInventoryModal
 
@@ -35,6 +36,8 @@ export default function InventoryList() {
   const [searchTerm, setSearchTerm] = useState("");
   const [warehouseType, setWarehouseType] = useState("shelf");
   const [pendingQtyChanges, setPendingQtyChanges] = useState(new Map());
+  const { user } = useAuth();
+  const role = user?.roles.role;
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -766,10 +769,10 @@ export default function InventoryList() {
 
   // CSV filename based on current zone name and page
   const csvFilename = useMemo(() => {
-    const base = String(zoneName || "inventory").trim().toLowerCase();
-    const slug = base
-      .replace(/[^a-z0-9]+/gi, "-")
-      .replace(/^-+|-+$/g, "");
+    const base = String(zoneName || "inventory")
+      .trim()
+      .toLowerCase();
+    const slug = base.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "");
     return `${slug || "inventory"}-page-${page}.csv`;
   }, [zoneName, page]);
 
@@ -837,6 +840,7 @@ export default function InventoryList() {
               setPendingQtyChanges={setPendingQtyChanges}
               handleQuantityInputChange={handleQuantityInputChange}
               handleUpdateQty={handleUpdateQty}
+              role={role}
               onOpenMove={(id) => {
                 setMoveTargetId(id);
                 const found = items.find((it) => it.id === id);
@@ -915,7 +919,11 @@ export default function InventoryList() {
             e.preventDefault();
             if (!moveTargetId || !selectedMoveZoneId) return;
             const qty = Number(moveQty || 0);
-            if (!Number.isFinite(qty) || qty < 1 || qty > Number(moveMaxQty || 0)) {
+            if (
+              !Number.isFinite(qty) ||
+              qty < 1 ||
+              qty > Number(moveMaxQty || 0)
+            ) {
               Swal.fire({
                 icon: "error",
                 title: "Invalid Quantity",
