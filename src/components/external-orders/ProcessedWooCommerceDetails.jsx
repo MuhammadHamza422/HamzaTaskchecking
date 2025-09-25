@@ -234,12 +234,11 @@ export default function ProcessedWooCommerceDetails({
         <div className="space-y-3">
           {(Array.isArray(order?.line_items)
             ? order.line_items.filter(
-                (item) =>
-                  !hiddenLineItemIds.has(String(item?.product_id || item?.id))
+                (item) => !hiddenLineItemIds.has(String(item?.id))
               )
             : []
           ).map((item) => {
-            const itemId = item?.product_id || item?.id;
+            const itemId = item?.id;
             const idStr = itemId?.toString();
             const hasMappedProducts =
               selectedOrder?.kit_products &&

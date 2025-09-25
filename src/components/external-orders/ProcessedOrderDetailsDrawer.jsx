@@ -3,7 +3,7 @@ import { Drawer, Typography, Space, Button, Spin } from "antd";
 
 import ProcessedWooCommerceDetails from "./ProcessedWooCommerceDetails";
 import ProcessedWalmartDetails from "./ProcessedWalmartDetails";
-import ShopifyDetails from "./OrderDetailsDrawer/ShopifyDetails";
+import ProcessedShopifyDetails from "./ProcessedShopifyDetails";
 import AddProductModal from "./OrderDetailsDrawer/AddProductModal";
 import useFullscreen from "../useFullscreen";
 
@@ -83,11 +83,17 @@ export default function ProcessedOrderDetailsDrawer({
           title={
             <div>
               <Title level={4} className="mb-0">
-                Processed Order Details
+                Processed Order Details of {tabConfig?.label}
               </Title>
-              <Text className="text-gray-500">
-                {selectedOrder?.orderId} - {tabConfig?.label}
-              </Text>
+              {activeTab === "shopify" && selectedOrder?.orderId?.includes('gid://shopify/Order/') ? (
+                <Text className="text-gray-500">
+                  {selectedOrder?.orderId?.replace('gid://shopify/Order/', '')} - {tabConfig?.label}
+                </Text>
+              ) : (
+                <Text className="text-gray-500">
+                  {selectedOrder?.orderId} - {tabConfig?.label}
+                </Text>
+              )}
             </div>
           }
           footer={
@@ -116,14 +122,11 @@ export default function ProcessedOrderDetailsDrawer({
                 />
               )}
               {activeTab === "shopify" && (
-                <ShopifyDetails
+                <ProcessedShopifyDetails
                   order={orderDetails?.order}
                   selectedOrder={selectedOrder}
                   onAddProduct={handleAddProduct}
                   onEditProduct={handleEditProduct}
-                  refetchOrderDetails={refetchOrderDetails}
-                  onProductMappingSuccess={() => {}}
-                  localKitProducts={[]}
                 />
               )}
             </div>

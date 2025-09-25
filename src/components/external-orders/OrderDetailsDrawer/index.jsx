@@ -109,9 +109,16 @@ export default function OrderDetailsDrawer({
             <Title level={4} className="mb-0">
               Order Details
             </Title>
-            <Text className="text-gray-500">
-              {selectedOrder?.orderId} - {tabConfig?.label}
-            </Text>
+            {/* in shopify orderId will be show like this 6163651690800, so we need to remove the gid://shopify/Order/ */}
+            {activeTab === "shopify" && selectedOrder?.orderId?.includes('gid://shopify/Order/') ? (
+              <Text className="text-gray-500">
+                {selectedOrder?.orderId?.replace('gid://shopify/Order/', '')} - {tabConfig?.label}
+              </Text>
+            ) : (
+              <Text className="text-gray-500">
+                {selectedOrder?.orderId} - {tabConfig?.label}
+              </Text>
+            )}
           </div>
         }
         footer={

@@ -184,7 +184,7 @@ export default function OrderEditModal({
       <Modal
         getContainer={getContainer}
         key={String(isFullscreen)}
-        title={`Edit Order - ${order?.orderId}`}
+        title={`Edit Order - ${activeTab === "shopify" && order?.orderId?.includes('gid://shopify/Order/') ? order?.orderId?.replace('gid://shopify/Order/', '') : order?.orderId}`}
         open={visible}
         onCancel={handleCancel}
         centered
