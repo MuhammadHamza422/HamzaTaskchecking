@@ -41,8 +41,17 @@ const toListingUrl = (url) =>
   !url ? "#" : /^https?:\/\//i.test(url) ? url : `https://${url}`;
 const fmtCurrency = (n) =>
   typeof n === "number"
-    ? n.toLocaleString(undefined, { style: "currency", currency: "USD" })
+    ? new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+        currencyDisplay: "narrowSymbol", // → "$" instead of "US$"
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(n)
     : "—";
+
+const fmtDateTime = (value) =>
+  value ? dayjs(value).format("YYYY-MM-DD HH:mm") : "—"; 
 const safeNum = (v) => (typeof v === "number" ? v : Number(v) || 0);
 const getCreated = (rec) =>
   rec.created_at || rec.createdAt || rec.created_on || null;
@@ -371,8 +380,7 @@ function PendingTab({ onAssigned }) {
       title: "Created",
       dataIndex: "created_at",
       width: 190,
-      render: (date, rec) =>
-        new Date(date || rec.createdAt || rec.created_on || 0).toLocaleString(),
+      render: (date, rec) => fmtDateTime(date || rec.createdAt || rec.created_on)
     },
     {
       title: "Actions",
@@ -839,9 +847,9 @@ export default function PurchaserPage() {
     {
       title: "Created",
       dataIndex: "created_at",
-      width: 190,
-      render: (date, rec) =>
-        new Date(date || rec.createdAt || rec.created_on || 0).toLocaleString(),
+      width: 150,
+      onCell: () => ({ style: { minWidth: 150 } }),
+      render: (date, rec) => fmtDateTime(date || rec.createdAt || rec.created_on)
     },
   ];
 
