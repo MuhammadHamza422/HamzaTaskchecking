@@ -52,14 +52,12 @@ export default function InventoryDisplay({
     typeCode: "",
     selectedProduct: null, // Store the selected product data
   });
-
   const [pendingQtyChanges, setPendingQtyChanges] = useState(new Map()); // Track multiple pending changes
   const [isRefreshing, setIsRefreshing] = useState(false); // disable add buttons while refetching
   const [isSaving, setIsSaving] = useState(false); // control modal Save button spinner
   const queryClient = useQueryClient();
   const dropdownRef = useRef(null);
   const { user } = useAuth();
-  const role = user?.roles.role;
   console.log("User Role:", user?.roles.role);
   const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
   // console.log("Location Id", locationid);

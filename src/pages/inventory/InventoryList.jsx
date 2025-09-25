@@ -858,6 +858,7 @@ export default function InventoryList() {
         ) : (
           <ShelfGroupedView
             groupedByShelf={groupedByShelf}
+            userRole={user?.roles?.role}
             pendingQtyChanges={pendingQtyChanges}
             setPendingQtyChanges={setPendingQtyChanges}
             handleQuantityInputChange={handleQuantityInputChange}
