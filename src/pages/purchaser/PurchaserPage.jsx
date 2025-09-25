@@ -26,7 +26,7 @@ import {
 import apiClient from "../../api/client";
 import { motion } from "framer-motion";
 import dayjs from "dayjs";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import useProductSearch from "../sourcer/hooks/useProductSearch"; // async product search (same as Sourcer)
 import PurchaserDashboard from "./PurchaserDashboardPage";
 
@@ -281,7 +281,7 @@ function PendingTab({ onAssigned }) {
       render: (s) => (
         <Tag
           color={statusColor(s)}
-          style={{ fontWeight: 500, fontSize: 13, borderRadius: 6 }}
+          style={{ fontWeight: 400, fontSize: 14, borderRadius: 6 }}
         >
           {s}
         </Tag>
@@ -302,56 +302,101 @@ function PendingTab({ onAssigned }) {
     // },
 
     {
-      title: "Seller",
+      title: "Seller Name",
       dataIndex: "seller_name",
       width: 160,
-      render: (v) => v || "—",
+      // render: (v) => v || "—",
+      sorter: (a, b) =>
+        (a?.seller_name || "").localeCompare(b?.seller_name || ""),
+      render: (v) =>
+        v ? (
+          <p className="m-0 font-normal" style={{ marginLeft: 0 }}>
+            {v}
+          </p>
+        ) : (
+          "—"
+        ),
     },
     {
       title: "Market",
       dataIndex: "market",
-      width: 120,
-      render: (v) => (v ? <Tag style={{ marginLeft: 0 }}>{v}</Tag> : "—"),
+      width: 100,
+      render: (v) => (v ? <p className="m-0 font-normal">{v}</p> : "—"),
     },
     {
-      title: "Seller $",
+      title: "Seller Price",
       dataIndex: "sellers_price",
       width: 120,
       align: "right",
-      render: (v) => fmtCurrency(safeNum(v)),
+      render: (v) =>
+        v ? (
+          <p className="m-0 font-normal">
+            ${v ? parseFloat(v).toFixed(2) : "0.00"}
+          </p>
+        ) : (
+          "—"
+        ),
     },
     {
-      title: "Ship $",
+      title: "Ship Charges",
       dataIndex: "shipping_charges",
       width: 110,
       align: "right",
-      render: (v, rec) => fmtCurrency(safeNum(v ?? rec.shipping_price)),
+      render: (v) =>
+        v ? (
+          <p className="m-0 font-normal">
+            ${v ? parseFloat(v).toFixed(2) : "0.00"}
+          </p>
+        ) : (
+          "—"
+        ),
     },
     {
-      title: "Tax $",
+      title: "Tax",
       dataIndex: "taxes",
       width: 100,
       align: "right",
-      render: (v, rec) => fmtCurrency(safeNum(v ?? rec.tax)),
+      render: (v) =>
+        v ? (
+          <p className="m-0 font-normal">
+            ${v ? parseFloat(v).toFixed(2) : "0.00"}
+          </p>
+        ) : (
+          "—"
+        ),
     },
     {
-      title: "Target $",
+      title: "Target Cost",
       dataIndex: "target_total_cost",
       width: 130,
       align: "right",
-      render: (v) => fmtCurrency(safeNum(v)),
+      render: (v) =>
+        v ? (
+          <p className="m-0 font-normal">
+            ${v ? parseFloat(v).toFixed(2) : "0.00"}
+          </p>
+        ) : (
+          "—"
+        ),
       responsive: ["sm"],
     },
     {
-      title: "Actual $",
+      title: "Actual Cost",
       dataIndex: "total_actual_cost",
       width: 130,
       align: "right",
-      render: (v) => fmtCurrency(safeNum(v)),
+      render: (v) =>
+        v ? (
+          <p className="m-0 font-normal">
+            ${v ? parseFloat(v).toFixed(2) : "0.00"}
+          </p>
+        ) : (
+          "—"
+        ),
       responsive: ["sm"],
     },
     {
-      title: "Efficiency $",
+      title: "Efficiency",
       key: "efficiency",
       width: 140,
       align: "right",
@@ -362,17 +407,35 @@ function PendingTab({ onAssigned }) {
             : safeNum(rec.target_total_cost) - safeNum(rec.total_actual_cost);
         const color = eff >= 0 ? "#16a34a" : "#ef4444";
         return (
-          <span style={{ color, fontWeight: 600 }}>{fmtCurrency(eff)}</span>
+          // <span style={{ color, fontWeight: 600 }}>{fmtCurrency(eff)}</span>
+          <p className="m-0 font-normal" style={{ color }}>
+            ${eff ? parseFloat(eff).toFixed(2) : "0.00"}
+          </p>
         );
       },
       responsive: ["md"],
     },
     {
-      title: "Created",
+      title: "Created At",
       dataIndex: "created_at",
       width: 190,
-      render: (date, rec) =>
-        new Date(date || rec.createdAt || rec.created_on || 0).toLocaleString(),
+      // render: (date, rec) =>
+      //   new Date(date || rec.createdAt || rec.created_on || 0).toLocaleString(),
+      render: (date, rec) => {
+        const d = new Date(date || rec.createdAt || rec.created_on || 0);
+        return (
+          <span style={{ fontWeight: 400 }}>
+            {d.toLocaleString("en-US", {
+              year: "numeric",
+              month: "2-digit",
+              day: "2-digit",
+              hour: "numeric",
+              minute: "2-digit",
+              hour12: true,
+            })}
+          </span>
+        );
+      },
     },
     {
       title: "Actions",
@@ -536,16 +599,47 @@ const ExpandedItemsTable = ({ order, onOpen }) => {
 export default function PurchaserPage() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // filters
   const [statusFilter, setStatusFilter] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState("dashboard"); // all | returned | pending
   const [dateRange, setDateRange] = useState([]);
   const [selectedProductIds, setSelectedProductIds] = useState([]);
 
   const screens = useBreakpoint();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Tab persistence with localStorage and URL state
+  const getInitialActiveTab = () => {
+    // First check URL params
+    const urlParams = new URLSearchParams(location.search);
+    const urlTab = urlParams.get('tab');
+    if (urlTab && ['dashboard', 'all', 'returned', 'pending'].includes(urlTab)) {
+      return urlTab;
+    }
+    // Then check localStorage
+    const savedTab = localStorage.getItem('purchaserActiveTab');
+    if (savedTab && ['dashboard', 'all', 'returned', 'pending'].includes(savedTab)) {
+      return savedTab;
+    }
+    // Default to dashboard
+    return 'dashboard';
+  };
+
+  const [activeTab, setActiveTab] = useState(getInitialActiveTab);
+
+  // Handle tab change with persistence
+  const handleTabChange = useCallback((key) => {
+    setActiveTab(key);
+    // Save to localStorage
+    localStorage.setItem('purchaserActiveTab', key);
+    // Update URL without page reload
+    const url = new URL(window.location);
+    url.searchParams.set('tab', key);
+    window.history.replaceState({}, '', url);
+  }, []);
 
   // Product async search
   const {
@@ -598,21 +692,33 @@ export default function PurchaserPage() {
     return params;
   }, [statusFilter, activeTab, dateRange, selectedProductIds, searchTerm]);
 
-  const fetchAssigned = useCallback(() => {
+  const fetchAssigned = useCallback(async () => {
     if (activeTab === "pending") return; // Pending is a different source
     setLoading(true);
-    apiClient
-      .get("/api/v1/sourcing/assigned", { params: serverParams })
-      .then((res) => setRequests(normalizeRequests(res.data)))
-      .catch((err) => {
-        console.error(
-          "Failed to fetch assigned:",
-          err?.response?.data || err?.message
-        );
-        message.error("Failed to fetch assigned requests.");
-      })
-      .finally(() => setLoading(false));
+    try {
+      const res = await apiClient.get("/api/v1/sourcing/assigned", {
+        params: serverParams,
+      });
+      setRequests(normalizeRequests(res.data));
+    } catch (err) {
+      console.error(
+        "Failed to fetch assigned:",
+        err?.response?.data || err?.message
+      );
+      message.error("Failed to fetch assigned requests.");
+    } finally {
+      setLoading(false);
+    }
   }, [activeTab, serverParams]);
+
+  const handleRefreshClick = useCallback(async () => {
+    try {
+      setIsRefreshing(true);
+      await fetchAssigned();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [fetchAssigned]);
 
   useEffect(() => {
     fetchAssigned();
@@ -711,6 +817,10 @@ export default function PurchaserPage() {
       title: "ID",
       dataIndex: "sourcing_id",
       width: 120,
+      sorter: (a, b) =>
+        String(a?.sourcing_id ?? a?.id ?? a?._id ?? "").localeCompare(
+          String(b?.sourcing_id ?? b?.id ?? b?._id ?? "")
+        ),
       render: (_, rec) => (
         <strong style={{ color: "#2c2c2c" }}>
           #{String(rec.sourcing_id ?? rec.id ?? rec._id).slice(-6)}
@@ -718,6 +828,7 @@ export default function PurchaserPage() {
       ),
       responsive: ["sm"],
     },
+
     // {
     //   title: "Products",
     //   key: "products",
@@ -740,17 +851,27 @@ export default function PurchaserPage() {
       title: "Sourcer",
       dataIndex: "sourcer_name",
       width: 160,
-      render: (v) => v || "—",
+      sorter: (a, b) =>
+        (a?.sourcer_name || "").localeCompare(b?.sourcer_name || ""),
+      render: (v) =>
+        v ? (
+          <p className="m-0 font-medium" style={{ marginLeft: 0 }}>
+            {v}
+          </p>
+        ) : (
+          "—"
+        ),
     },
     {
       title: "Status",
       dataIndex: "status",
       width: 140,
       align: "center",
+      sorter: (a, b) => (a?.status || "").localeCompare(b?.status || ""),
       render: (s) => (
         <Tag
           color={statusTagColor(s)}
-          style={{ fontWeight: 500, fontSize: 13, borderRadius: 6 }}
+          style={{ fontWeight: 400, fontSize: 13, borderRadius: 6 }}
         >
           {s}
         </Tag>
@@ -773,54 +894,131 @@ export default function PurchaserPage() {
     {
       title: "Seller",
       dataIndex: "seller_name",
-      width: 160,
-      render: (v) => v || "—",
+      width: 180,
+      ellipsis: true,
+      onCell: () => ({
+        style: {
+          maxWidth: 180,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        },
+      }),
+      // render: (v) => v || "—",
+      render: (v) =>
+        v ? (
+          <p className="m-0 font-normal" style={{ marginLeft: 0 }}>
+            {v}
+          </p>
+        ) : (
+          "—"
+        ),
     },
     {
       title: "Market",
       dataIndex: "market",
-      width: 120,
-      render: (v) => (v ? <Tag style={{ marginLeft: 0 }}>{v}</Tag> : "—"),
+      width: 100,
+      ellipsis: true,
+      onCell: () => ({
+        style: {
+          maxWidth: 100,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        },
+      }),
+      render: (v) =>
+        v ? (
+          <p className="m-0 font-normal" style={{ marginLeft: 0 }}>
+            {v}
+          </p>
+        ) : (
+          "—"
+        ),
     },
     {
-      title: "Seller $",
+      title: "Seller Price",
       dataIndex: "sellers_price",
-      width: 120,
+      width: 200,
       align: "right",
-      render: (v) => fmtCurrency(safeNum(v)),
+      onCell: () => ({
+        style: {
+          maxWidth: 200,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        },
+      }),
+      render: (price) =>
+        price ? (
+          <p className="m-0 text-sm font-normal">
+            ${price ? parseFloat(price).toFixed(2) : "0.00"}
+          </p>
+        ) : (
+          "—"
+        ),
     },
     {
-      title: "Ship $",
+      title: "Shipping charges",
       dataIndex: "shipping_charges",
-      width: 110,
+      width: 200,
       align: "right",
-      render: (v) => fmtCurrency(safeNum(v)),
+      render: (price) =>
+        price ? (
+          <p className="m-0 text-sm font-normal">
+            ${price ? parseFloat(price).toFixed(2) : "0.00"}
+          </p>
+        ) : (
+          "—"
+        ),
     },
     {
-      title: "Tax $",
+      title: "Tax",
       dataIndex: "taxes",
       width: 100,
       align: "right",
-      render: (v) => fmtCurrency(safeNum(v)),
+      render: (price) =>
+        price ? (
+          <p className="m-0 text-sm font-normal">
+            ${price ? parseFloat(price).toFixed(2) : "0.00"}
+          </p>
+        ) : (
+          "—"
+        ),
     },
     {
-      title: "Target $",
+      title: "Target Cost",
       dataIndex: "target_total_cost",
       width: 130,
       align: "right",
-      render: (v) => fmtCurrency(safeNum(v)),
+      render: (price) =>
+        price ? (
+          <p className="m-0 text-sm font-normal">
+            ${price ? parseFloat(price).toFixed(2) : "0.00"}
+          </p>
+        ) : (
+          "—"
+        ),
       responsive: ["md"],
     },
     {
-      title: "Actual $",
+      title: "Actual Cost",
       dataIndex: "total_actual_cost",
       width: 130,
       align: "right",
-      render: (v) => fmtCurrency(safeNum(v)),
+      // render: (v) => fmtCurrency(safeNum(v)),
+      render: (price) =>
+        price ? (
+          <p className="m-0 text-sm font-normal">
+            ${price ? parseFloat(price).toFixed(2) : "0.00"}
+          </p>
+        ) : (
+          "—"
+        ),
       responsive: ["md"],
     },
     {
-      title: "Efficiency $",
+      title: "Efficiency",
       key: "efficiency",
       width: 140,
       align: "right",
@@ -831,17 +1029,32 @@ export default function PurchaserPage() {
             : safeNum(rec.target_total_cost) - safeNum(rec.total_actual_cost);
         const color = eff >= 0 ? "#16a34a" : "#ef4444";
         return (
-          <span style={{ color, fontWeight: 600 }}>{fmtCurrency(eff)}</span>
+          <p className="m-0 text-sm font-normal" style={{ color }}>
+            ${eff ? parseFloat(eff).toFixed(2) : "0.00"}
+          </p>
         );
       },
       responsive: ["lg"],
     },
     {
-      title: "Created",
+      title: "Created At",
       dataIndex: "created_at",
       width: 190,
-      render: (date, rec) =>
-        new Date(date || rec.createdAt || rec.created_on || 0).toLocaleString(),
+      render: (date, rec) => {
+        const d = new Date(date || rec.createdAt || rec.created_on || 0);
+        return (
+          <span style={{ fontWeight: 400 }}>
+            {d.toLocaleString("en-US", {
+              year: "numeric",
+              month: "2-digit",
+              day: "2-digit",
+              hour: "numeric",
+              minute: "2-digit",
+              hour12: true,
+            })}
+          </span>
+        );
+      },
     },
   ];
 
@@ -876,15 +1089,9 @@ export default function PurchaserPage() {
 
   return (
     <motion.div
-      className="page-container"
       initial={{ opacity: 0, y: 30 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, ease: "easeOut" }}
-      style={{
-        padding: screens.xs ? "1rem" : "2rem",
-        background: "#f5f7fb",
-        minHeight: "100vh",
-      }}
     >
       {/* Header / KPIs + Filters */}
       <Card
@@ -900,8 +1107,8 @@ export default function PurchaserPage() {
           <Col xs={24} md={8}>
             <Space direction="vertical" size={2}>
               <Title
-                level={4}
-                style={{ margin: 0, color: "#1f2937", fontWeight: 800 }}
+                level={3}
+                style={{ margin: 0, color: "#1f2937", fontWeight: 500 }}
               >
                 Total Orders: {filteredRequests.length}
               </Title>
@@ -911,77 +1118,26 @@ export default function PurchaserPage() {
 
           <Col xs={24} md={16}>
             <Row gutter={[8, 8]} justify="end">
-              <Col xs={24} sm={12} md={6} lg={5}>
-                <Select
-                  placeholder="Status"
-                  style={{ width: "100%" }}
-                  onChange={(value) => setStatusFilter(value || "")}
-                  allowClear
-                  value={statusFilter || undefined}
-                  size={screens.xs ? "middle" : "large"}
+              <button
+                onClick={handleRefreshClick}
+                disabled={isRefreshing}
+                className="sm:w-auto w-full flex  min-w-fit text-[14px] sm:text-[15px] items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200 shadow-sm"
+              >
+                <svg
+                  className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
                 >
-                  {[
-                    "Assigned",
-                    "Offer",
-                    "Purchased",
-                    "Disapproved",
-                    "Sold",
-                    "Hold",
-                    "Seller Rejected",
-                    "Dropshipped",
-                    "Returned",
-                  ].map((status) => (
-                    <Option key={status} value={status}>
-                      {status}
-                    </Option>
-                  ))}
-                </Select>
-              </Col>
-
-              <Col xs={24} sm={12} md={8} lg={7}>
-                <Search
-                  placeholder="Search product/SKU/seller/sourcer/id"
-                  allowClear
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  onSearch={(v) => setSearchTerm(v)}
-                  style={{ width: "100%" }}
-                  size={screens.xs ? "middle" : "large"}
-                  enterButton={<FilterOutlined />}
-                />
-              </Col>
-
-              <Col xs={24} sm={24} md={10} lg={8}>
-                <DatePicker.RangePicker
-                  style={{ width: "100%" }}
-                  onChange={(dates) => setDateRange(dates ?? [])}
-                  value={dateRange}
-                  size={screens.xs ? "middle" : "large"}
-                />
-              </Col>
-
-              {/* Products dropdown field */}
-              <Col xs={24} sm={24} md={12} lg={8}>
-                {ProductsSelect}
-              </Col>
-
-              <Col>
-                <Space>
-                  <Button
-                    icon={<ReloadOutlined />}
-                    size={screens.xs ? "middle" : "large"}
-                    onClick={fetchAssigned}
-                  >
-                    Refresh
-                  </Button>
-                  <Button
-                    onClick={clearAll}
-                    size={screens.xs ? "middle" : "large"}
-                  >
-                    Clear
-                  </Button>
-                </Space>
-              </Col>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+                {isRefreshing ? "Refreshing..." : "Refresh"}
+              </button>
             </Row>
           </Col>
         </Row>
@@ -1023,18 +1179,79 @@ export default function PurchaserPage() {
           </Row>
         ) : null}
       </Card>
+      <div className="bg-white rounded-lg p-4 mb-4 shadow-sm border border-gray-200">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
+          <Title level={4} style={{ margin: 0 }} className="text-gray-700">
+            Filters
+          </Title>
+          <button
+            onClick={clearAll}
+            className="sm:w-auto w-full flex min-w-fit text-sm sm:text-base items-center justify-center gap-2 px-4 py-1 bg-red-500 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200 shadow-sm"
+          >
+            Clear
+          </button>
+        </div>
+        <Row gutter={[8, 8]}>
+          <Col xs={24} sm={12} md={6} lg={5}>
+            <Select
+              placeholder="Status"
+              style={{ width: "100%" }}
+              onChange={(value) => setStatusFilter(value || "")}
+              allowClear
+              value={statusFilter || undefined}
+              size={screens.xs ? "middle" : "large"}
+            >
+              {[
+                "Assigned",
+                "Offer",
+                "Purchased",
+                "Disapproved",
+                "Sold",
+                "Hold",
+                "Seller Rejected",
+                "Dropshipped",
+                "Returned",
+              ].map((status) => (
+                <Option key={status} value={status}>
+                  {status}
+                </Option>
+              ))}
+            </Select>
+          </Col>
 
+          <Col xs={24} sm={12} md={8} lg={7}>
+            <Search
+              placeholder="Search product/SKU/seller/sourcer/id"
+              allowClear
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onSearch={(v) => setSearchTerm(v)}
+              style={{ width: "100%" }}
+              size={screens.xs ? "middle" : "large"}
+              enterButton={<FilterOutlined />}
+            />
+          </Col>
+
+          <Col xs={24} sm={24} md={10} lg={8}>
+            <DatePicker.RangePicker
+              style={{ width: "100%" }}
+              onChange={(dates) => setDateRange(dates ?? [])}
+              value={dateRange}
+              size={screens.xs ? "middle" : "large"}
+            />
+          </Col>
+        </Row>
+      </div>
       <Tabs
         activeKey={activeTab}
-        onChange={setActiveTab}
+        onChange={handleTabChange}
         type="card"
         style={{ marginBottom: 16, fontWeight: 500 }}
         tabBarStyle={{ fontSize: 16 }}
       >
-
         <TabPane tab="Dashboard" key="dashboard">
           <PurchaserDashboard
-            data={filteredRequests}   // ← use filtered
+            data={filteredRequests} // ← use filtered
             loading={loading}
             onRefresh={fetchAssigned} // ← reuse your fetch
           />
@@ -1045,12 +1262,6 @@ export default function PurchaserPage() {
             initial={{ scale: 0.97, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ duration: 0.4 }}
-            style={{
-              background: "#ffffff",
-              padding: screens.xs ? "12px" : "20px",
-              borderRadius: "16px",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.06)",
-            }}
           >
             <Table
               locale={{
@@ -1062,7 +1273,6 @@ export default function PurchaserPage() {
               columns={columns}
               rowKey={(rec) => rec._id}
               loading={loading}
-              bordered
               size={screens.md ? "middle" : "small"}
               pagination={{
                 pageSize,
@@ -1077,7 +1287,8 @@ export default function PurchaserPage() {
                 style: { cursor: "pointer" },
               })}
               rowClassName={() => "row-clickable"}
-              scroll={{ x: true }}
+              scroll={{ x: "max-content" }}
+              tableLayout="fixed"
               sticky
               expandable={{
                 expandedRowRender: (record) => (
@@ -1104,7 +1315,6 @@ export default function PurchaserPage() {
             columns={columns}
             rowKey={(rec) => rec._id}
             loading={loading}
-            bordered
             size={screens.md ? "middle" : "small"}
             pagination={{ pageSize, showSizeChanger: false, responsive: true }}
             onRow={(record) => ({
@@ -1115,7 +1325,8 @@ export default function PurchaserPage() {
               style: { cursor: "pointer" },
             })}
             rowClassName={() => "row-clickable"}
-            scroll={{ x: true }}
+            scroll={{ x: "max-content" }}
+            tableLayout="fixed"
             sticky
           />
         </TabPane>

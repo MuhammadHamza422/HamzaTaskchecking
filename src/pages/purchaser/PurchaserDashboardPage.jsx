@@ -401,9 +401,6 @@
 // //   );
 // // }
 
-
-
-
 // import React, { useMemo } from "react";
 // import {
 //   Card,
@@ -750,8 +747,6 @@
 //   );
 // }
 
-
-
 import React, { useMemo } from "react";
 import {
   Card,
@@ -787,22 +782,33 @@ const money = (x) =>
     : "—";
 const statusColor = (s) => {
   switch (s) {
-    case "Assigned": return "gold";
-    case "Offer": return "blue";
-    case "Purchased": return "green";
-    case "Disapproved": return "red";
-    case "Sold": return "purple";
-    case "Hold": return "orange";
-    case "Seller Rejected": return "magenta";
-    case "Dropshipped": return "cyan";
-    case "Returned": return "volcano";
-    default: return "geekblue";
+    case "Assigned":
+      return "gold";
+    case "Offer":
+      return "blue";
+    case "Purchased":
+      return "green";
+    case "Disapproved":
+      return "red";
+    case "Sold":
+      return "purple";
+    case "Hold":
+      return "orange";
+    case "Seller Rejected":
+      return "magenta";
+    case "Dropshipped":
+      return "cyan";
+    case "Returned":
+      return "volcano";
+    default:
+      return "geekblue";
   }
 };
 const labelFromMarket = (m) => {
   if (!m) return "—";
   if (typeof m === "string") return m;
-  if (typeof m === "object") return m.name || m.label || m.title || m.slug || "—";
+  if (typeof m === "object")
+    return m.name || m.label || m.title || m.slug || "—";
   return "—";
 };
 
@@ -827,7 +833,14 @@ export default function PurchaserDashboard({
     const agg = {
       count: rows.length,
       byStatus: new Map(),
-      totals: { seller: 0, ship: 0, tax: 0, actual: 0, target: 0, efficiency: 0 },
+      totals: {
+        seller: 0,
+        ship: 0,
+        tax: 0,
+        actual: 0,
+        target: 0,
+        efficiency: 0,
+      },
       byMarket: new Map(),
       bySeller: new Map(),
       last7Purchased: new Map(),
@@ -921,14 +934,20 @@ export default function PurchaserDashboard({
     >
       <Row justify="space-between" align="middle" style={{ marginBottom: 12 }}>
         <Col>
-          <Title level={4} style={{ margin: 0 }}>Purchaser Dashboard</Title>
+          <Title level={4} style={{ margin: 0 }}>
+            Purchaser Dashboard
+          </Title>
           <Text type="secondary">
             {loading ? "Loading…" : `Showing ${count} records`}
           </Text>
         </Col>
         <Col>
           <Space>
-            <Button icon={<ReloadOutlined />} onClick={onRefresh} disabled={loading}>
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={onRefresh}
+              disabled={loading}
+            >
               Refresh
             </Button>
           </Space>
@@ -940,14 +959,30 @@ export default function PurchaserDashboard({
         {[
           { title: "Total Orders", value: count },
           { title: "Purchased", value: purchasedCount },
-          { title: "Spend (Actual)", value: totals.actual, precision: 2, prefix: "$" },
-          { title: "Avg Efficiency", value: avgEfficiency, precision: 2, prefix: avgEfficiency >= 0 ? "+" : "-", extra: <Trend value={avgEfficiency} /> },
+          {
+            title: "Spend (Actual)",
+            value: totals.actual,
+            precision: 2,
+            prefix: "$",
+          },
+          {
+            title: "Avg Efficiency",
+            value: avgEfficiency,
+            precision: 2,
+            prefix: avgEfficiency >= 0 ? "+" : "",
+            extra: <Trend value={avgEfficiency} />,
+          },
         ].map((kpi, i) => (
           <Col xs={12} md={6} key={i} style={{ display: "flex" }}>
             <Card
               bordered
               style={{ borderRadius: 14, flex: 1 }}
-              bodyStyle={{ padding: 16, display: "flex", flexDirection: "column", height: "100%" }}
+              bodyStyle={{
+                padding: 16,
+                display: "flex",
+                flexDirection: "column",
+                height: "100%",
+              }}
             >
               {loading ? (
                 <Skeleton active paragraph={false} />
@@ -959,7 +994,9 @@ export default function PurchaserDashboard({
                     precision={kpi.precision}
                     prefix={kpi.prefix}
                   />
-                  {kpi.extra ? <div style={{ marginTop: 8 }}>{kpi.extra}</div> : null}
+                  {kpi.extra ? (
+                    <div style={{ marginTop: 8 }}>{kpi.extra}</div>
+                  ) : null}
                 </>
               )}
             </Card>
@@ -974,7 +1011,11 @@ export default function PurchaserDashboard({
         {/* By Status */}
         <Col xs={24} md={8} style={{ display: "flex" }}>
           <Card
-            title={<Space>By Status <Text type="secondary">({byStatus.length})</Text></Space>}
+            title={
+              <Space>
+                By Status <Text type="secondary">({byStatus.length})</Text>
+              </Space>
+            }
             size="small"
             bordered
             style={{ borderRadius: 12, flex: 1 }}
@@ -990,7 +1031,11 @@ export default function PurchaserDashboard({
                 {
                   title: "Status",
                   dataIndex: "status",
-                  render: (s) => <Tag color={statusColor(s)} style={{ borderRadius: 6 }}>{s}</Tag>,
+                  render: (s) => (
+                    <Tag color={statusColor(s)} style={{ borderRadius: 6 }}>
+                      {s}
+                    </Tag>
+                  ),
                 },
                 { title: "Count", dataIndex: "cnt", align: "right", width: 90 },
               ]}
@@ -1002,7 +1047,11 @@ export default function PurchaserDashboard({
         {/* Top Markets */}
         <Col xs={24} md={8} style={{ display: "flex" }}>
           <Card
-            title={<Space>Top Markets <Text type="secondary">({byMarket.length})</Text></Space>}
+            title={
+              <Space>
+                Top Markets <Text type="secondary">({byMarket.length})</Text>
+              </Space>
+            }
             size="small"
             bordered
             style={{ borderRadius: 12, flex: 1 }}
@@ -1013,7 +1062,10 @@ export default function PurchaserDashboard({
               pagination={false}
               loading={loading}
               rowKey="market"
-              dataSource={byMarket.map(([market, cnt]) => ({ market: market || "—", cnt }))}
+              dataSource={byMarket.map(([market, cnt]) => ({
+                market: market || "—",
+                cnt,
+              }))}
               columns={[
                 { title: "Market", dataIndex: "market" },
                 { title: "Count", dataIndex: "cnt", align: "right", width: 90 },
@@ -1026,7 +1078,11 @@ export default function PurchaserDashboard({
         {/* Top Sellers */}
         <Col xs={24} md={8} style={{ display: "flex" }}>
           <Card
-            title={<Space>Top Sellers <Text type="secondary">({bySeller.length})</Text></Space>}
+            title={
+              <Space>
+                Top Sellers <Text type="secondary">({bySeller.length})</Text>
+              </Space>
+            }
             size="small"
             bordered
             style={{ borderRadius: 12, flex: 1 }}
@@ -1037,7 +1093,10 @@ export default function PurchaserDashboard({
               pagination={false}
               loading={loading}
               rowKey="seller"
-              dataSource={bySeller.map(([seller, cnt]) => ({ seller: seller || "—", cnt }))}
+              dataSource={bySeller.map(([seller, cnt]) => ({
+                seller: seller || "—",
+                cnt,
+              }))}
               columns={[
                 { title: "Seller", dataIndex: "seller" },
                 { title: "Count", dataIndex: "cnt", align: "right", width: 90 },
@@ -1052,11 +1111,15 @@ export default function PurchaserDashboard({
 
       {/* Last 7 days */}
       <Card
-        title={<Space>Purchased in Last 7 Days <Text type="secondary">({last7Purchased.length})</Text></Space>}
+        title={
+          <Space>
+            Purchased in Last 7 Days{" "}
+            <Text type="secondary">({last7Purchased.length})</Text>
+          </Space>
+        }
         size="small"
         bordered
         style={{ borderRadius: 12 }}
-        bodyStyle={{ padding: 12 }}
       >
         <Table
           size="small"
@@ -1064,9 +1127,18 @@ export default function PurchaserDashboard({
           loading={loading}
           rowKey="day"
           dataSource={last7Purchased.map(([day, cnt]) => ({ day, cnt }))}
-          locale={{ emptyText: <Empty description="No purchased orders in the last 7 days" /> }}
+          locale={{
+            emptyText: (
+              <Empty description="No purchased orders in the last 7 days" />
+            ),
+          }}
           columns={[
-            { title: "Day", dataIndex: "day", width: 160, render: (d) => dayjs(d).format("ddd, MMM D") },
+            {
+              title: "Day",
+              dataIndex: "day",
+              width: 160,
+              render: (d) => dayjs(d).format("ddd, MMM D"),
+            },
             { title: "Purchased", dataIndex: "cnt", align: "right" },
           ]}
         />
@@ -1084,18 +1156,59 @@ export default function PurchaserDashboard({
               rowKey={(r, i) => r._id || r.id || i}
               dataSource={Array.isArray(data) ? data.slice(0, 5) : []}
               columns={[
-                { title: "id", dataIndex: "_id", render: (v, r) => v || r.id || "—" },
-                { title: "status", dataIndex: "status", render: (v) => String(v || "—") },
-                { title: "seller_name", dataIndex: "seller_name", render: (v, r) => v ?? r.sellerName ?? "—" },
-                { title: "market", dataIndex: "market", render: (v, r) => labelFromMarket(v ?? r.sellerMarket) },
                 {
-                  title: "created_at",
+                  title: "Id",
+                  dataIndex: "_id",
+                  render: (v, r) => (
+                    <span style={{ fontWeight: 400, fontSize: 14 }}>
+                      {v || r.id || "—"}
+                    </span>
+                  ),
+                },
+                {
+                  title: "Status",
+                  dataIndex: "status",
+                  render: (v) => (
+                    <span style={{ fontWeight: 400, fontSize: 14 }}>
+                      {v || "—"}
+                    </span>
+                  ),
+                },
+                {
+                  title: "Seller Name",
+                  dataIndex: "seller_name",
+                  render: (v, r) => (
+                    <span style={{ fontWeight: 400, fontSize: 14 }}>
+                      {v ?? r.sellerName ?? "—"}
+                    </span>
+                  ),
+                },
+                {
+                  title: "market",
+                  dataIndex: "market",
+                  render: (v, r) => (
+                    <span style={{ fontWeight: 400, fontSize: 14 }}>
+                      {labelFromMarket(v ?? r.sellerMarket)}
+                    </span>
+                  ),
+                },
+                {
+                  title: "Created At",
                   dataIndex: "created_at",
-                  render: (_v, r) =>
-                    getCreated(r) ? dayjs(getCreated(r)).format("YYYY-MM-DD HH:mm") : "—",
+                  render: (_v, r) => (
+                    <span style={{ fontWeight: 400, fontSize: 14 }}>
+                      {getCreated(r)
+                        ? dayjs(getCreated(r)).format("YYYY-MM-DD hh:mm A") // ✅ AM/PM, no seconds
+                        : "—"}
+                    </span>
+                  ),
                 },
               ]}
-              locale={{ emptyText: <Empty description="No rows passed into dashboard" /> }}
+              locale={{
+                emptyText: (
+                  <Empty description="No rows passed into dashboard" />
+                ),
+              }}
             />
           </Card>
         </>
