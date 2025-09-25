@@ -1338,6 +1338,46 @@ export default function PurchaserPage() {
 
       <style>{`
         .row-clickable:hover { background-color: #f0f9ff !important; transition: background 0.2s ease; }
+        
+        /* Custom tab styling */
+        .ant-tabs-card > .ant-tabs-nav .ant-tabs-tab {
+          background: #f5f5f5 !important;
+          border: 1px solid #d9d9d9 !important;
+          color: #666 !important;
+          font-weight: 500 !important;
+          transition: all 0.3s ease !important;
+        }
+        
+        .ant-tabs-card > .ant-tabs-nav .ant-tabs-tab:hover {
+          background: #e6f7ff !important;
+          border-color: #91d5ff !important;
+          color: #1890ff !important;
+        }
+        
+        .ant-tabs-card > .ant-tabs-nav .ant-tabs-tab-active {
+          background: #1890ff !important;
+          border-color: #1890ff !important;
+          color: #fff !important;
+          font-weight: 600 !important;
+        }
+        
+        .ant-tabs-card > .ant-tabs-nav .ant-tabs-tab-active:hover {
+          background: #40a9ff !important;
+          border-color: #40a9ff !important;
+          color: #fff !important;
+        }
+        
+        .ant-tabs-card > .ant-tabs-nav .ant-tabs-tab-active .ant-tabs-tab-btn {
+          color: #fff !important;
+        }
+        
+        .ant-tabs-card > .ant-tabs-nav .ant-tabs-tab .ant-tabs-tab-btn {
+          color: inherit !important;
+        }
+        
+        .ant-tabs-card > .ant-tabs-nav .ant-tabs-tab:hover .ant-tabs-tab-btn {
+          color: inherit !important;
+        }
       `}</style>
     </motion.div>
   );
