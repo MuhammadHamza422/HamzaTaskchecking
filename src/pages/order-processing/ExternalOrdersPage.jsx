@@ -269,7 +269,7 @@ export default function ExternalOrdersPage() {
     setUpdateOrderStatusLoading(true);
     try {
       const { data } = await apiClient.patch(
-        "/api/v1/shipstation/update/shopify/status"
+        "/api/v1/shipstation/update/sf/status"
       );
       if (data) {
         Swal.fire({

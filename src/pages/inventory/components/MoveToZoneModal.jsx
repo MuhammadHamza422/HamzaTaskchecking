@@ -1,6 +1,6 @@
 import React from "react";
 import { Modal } from "antd";
-import { Loader2 } from "lucide-react";
+import { Loader2, Minus, Plus } from "lucide-react";
 
 export default function MoveToZoneModal({
   isOpen,
@@ -10,6 +10,9 @@ export default function MoveToZoneModal({
   zonesOptions,
   selectedMoveZoneId,
   setSelectedMoveZoneId,
+  moveQty,
+  setMoveQty,
+  maxQty,
   onSubmit,
   isSubmitting,
   isLoading,
@@ -46,6 +49,56 @@ export default function MoveToZoneModal({
               ))}
             </select>
           </div>
+          <div>
+            <label className="block text-sm font-medium text-zinc-700">Quantity to move</label>
+            <div className="mt-1 flex items-center rounded-lg overflow-hidden border border-gray-200 shadow-sm bg-gray-50 h-9 w-fit">
+              <button
+                type="button"
+                disabled={Number(moveQty || 0) <= 1}
+                onClick={() => setMoveQty((prev) => Math.max(1, Number(prev || 1) - 1))}
+                className={`px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors ${
+                  Number(moveQty || 0) <= 1
+                    ? "text-gray-300 bg-gray-50 cursor-not-allowed"
+                    : "text-red-400 bg-red-100 hover:bg-red-800 hover:text-white"
+                }`}
+                title="Decrease by 1"
+              >
+                <Minus className="w-4 h-4" />
+              </button>
+              <input
+                value={moveQty ?? ""}
+                onChange={(e) => {
+                  const raw = e.target.value || "";
+                  const numeric = raw.replace(/\D/g, "");
+                  if (numeric === "") {
+                    setMoveQty("")
+                    return;
+                  }
+                  const n = Math.min(Number(maxQty || 0), Math.max(1, parseInt(numeric)));
+                  setMoveQty(n);
+                }}
+                onBlur={() => {
+                  const n = Number(moveQty || 0);
+                  if (!Number.isFinite(n) || n < 1) setMoveQty(1);
+                  else if (n > Number(maxQty || 0)) setMoveQty(Number(maxQty || 1));
+                }}
+                className="w-16 text-center px-3 py-2 text-sm bg-white border-l border-r outline-none focus:ring-2 focus:ring-blue-500 focus:bg-blue-50 transition-colors"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder="1"
+              />
+              <button
+                type="button"
+                onClick={() => setMoveQty((prev) => Math.min(Number(maxQty || 0), Number(prev || 1) + 1))}
+                disabled={Number(moveQty || 0) >= Number(maxQty || 0)}
+                className="px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors bg-green-100 text-green-600 hover:bg-green-900 hover:text-white disabled:bg-gray-50 disabled:text-gray-300 disabled:cursor-not-allowed"
+                title="Increase by 1"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-zinc-500">Max: {Number(maxQty || 0)}</p>
+          </div>
 
           <div className="mt-6 flex justify-end gap-2">
             <button type="button" onClick={onClose} className="rounded-lg border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50">
@@ -53,8 +106,8 @@ export default function MoveToZoneModal({
             </button>
             <button
               type="submit"
-              disabled={!selectedMoveZoneId || isLoading || isSubmitting}
-              className={`rounded-lg bg-purple-600 px-4 py-2 text-sm text-white hover:bg-purple-700 flex items-center gap-2 ${
+              disabled={!selectedMoveZoneId || isLoading || isSubmitting || Number(moveQty || 0) < 1}
+              className={`rounded-lg cursor-pointer bg-purple-600 px-4 py-2 text-sm text-white hover:bg-purple-700 flex items-center gap-2 ${
                 isLoading || isSubmitting ? "opacity-50 cursor-not-allowed" : ""
               }`}
             >
@@ -73,5 +126,3 @@ export default function MoveToZoneModal({
     </Modal>
   );
 }
-
-
