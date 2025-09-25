@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   Card,
@@ -19,6 +20,7 @@ import {
   Empty,
   Row,
   Col,
+  Popconfirm,
 } from "antd";
 import {
   PlusOutlined,
@@ -33,7 +35,7 @@ import dayjs from "dayjs";
 import apiClient from "../../api/client";
 import useFullscreen from "../../components/useFullscreen";
 import SourcingImportModal from "./SourcingImportModal";
-import { Pencil } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { statusPill } from "./utils/helpers";
 
@@ -61,7 +63,6 @@ const tableCardStyle = {
   overflow: "hidden",
 };
 
-
 const num = (v) => (typeof v === "number" ? v : Number(v) || 0);
 const fmtMoney = (v) =>
   typeof v === "number" && !Number.isNaN(v) ? `$${v.toFixed(2)}` : "$0.00";
@@ -78,9 +79,6 @@ const normalizeArray = (data) =>
       data?.items ||
       data?.data ||
       [];
-
-/* ---------- status tag colors ---------- */
-
 
 /* ---------- totals/efficiency ---------- */
 const sellerTotal = (rec) =>
@@ -111,17 +109,14 @@ const prettifySlug = (s) =>
     .replace(/\b\w/g, (c) => c.toUpperCase());
 const prettyMarketName = (marketMaybe) => {
   if (!marketMaybe) return "—";
-  // populated doc { name, slug, _id }
   if (typeof marketMaybe === "object") {
     if (marketMaybe.name) return marketMaybe.name;
     if (marketMaybe.slug) {
       const slug = String(marketMaybe.slug).toLowerCase();
       return PRETTY_MARKET_MAP[slug] || prettifySlug(slug);
     }
-    // unknown object — show hint with id
     if (marketMaybe._id) return `Market ${formatOid(marketMaybe._id)}`;
   }
-  // string (slug or display)
   const s = String(marketMaybe).trim();
   const low = s.toLowerCase();
   return PRETTY_MARKET_MAP[low] || prettifySlug(s);
@@ -129,11 +124,9 @@ const prettyMarketName = (marketMaybe) => {
 
 /* ---------- seller name extractor ---------- */
 const getSellerName = (rec) => {
-  // populated seller doc
   if (rec?.seller && typeof rec.seller === "object") {
     return rec.seller.name || `Seller ${formatOid(rec.seller._id)}`;
   }
-  // fallback fields
   return (
     rec?.seller_name || (rec?.seller ? `Seller ${formatOid(rec.seller)}` : "—")
   );
@@ -145,8 +138,6 @@ const _marketCache = new Map(); // key -> { name, slug, _id }
 function isObjectIdLike(v) {
   return typeof v === "string" && /^[a-f0-9]{24}$/i.test(v);
 }
-
-
 
 function MarketName({ market }) {
   const [name, setName] = React.useState("—");
@@ -182,11 +173,9 @@ function MarketName({ market }) {
         let rec = null;
 
         if (isObjectIdLike(key)) {
-          // by id
           const { data } = await apiClient.get(`/api/v1/markets/${key}`);
           rec = data;
         } else {
-          // by slug (search then exact-match)
           const { data } = await apiClient.get(`/api/v1/markets`, {
             params: { q: key },
           });
@@ -221,10 +210,9 @@ function MarketName({ market }) {
   return <span>{name}</span>;
 }
 
-
 export default function SourcingOrdersPage() {
   const { user } = useAuth(); // <-- ADMIN LOGIC
-  const role = user?.roles?.role || user?.role || ""; // supports both shapes
+  const role = user?.roles?.role || user?.role || "";
   const isAdmin = role === "admin";
   const isSourcer = role === "sourcer";
   const isPurchaser = role === "purchaser";
@@ -298,7 +286,6 @@ export default function SourcingOrdersPage() {
   const endpoint = useMemo(() => {
     if (isAdmin) return "/api/v1/sourcing/all-sourcing";
     if (isPurchaser) return "/api/v1/sourcing/assigned";
-    // sourcer (default)
     return "/api/v1/sourcing/mine";
   }, [isAdmin, isPurchaser]);
 
@@ -320,6 +307,26 @@ export default function SourcingOrdersPage() {
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
+
+  /* ---------- Delete Order ---------- */
+  const handleDeleteOrder = useCallback(
+    async (orderId) => {
+      if (!orderId) return;
+      try {
+        await apiClient.delete(`/api/v1/sourcing/${orderId}`);
+        message.success("Sourcing request deleted");
+        fetchOrders();
+      } catch (err) {
+        console.error(err);
+        message.error(
+          err?.response?.data?.message ||
+            err?.response?.data?.detail ||
+            "Delete failed"
+        );
+      }
+    },
+    [fetchOrders]
+  );
 
   /* ---------- Filters ---------- */
   const filteredOrders = useMemo(() => {
@@ -369,7 +376,7 @@ export default function SourcingOrdersPage() {
 
   /* ---------- Drawer (load/edit) ---------- */
   const loadItemForEdit = async (orderId, itemId) => {
-    if (!canEdit) return; // guard
+    if (!canEdit) return;
     setDrawerLoading(true);
     try {
       const { data: order } = await apiClient.get(
@@ -402,7 +409,7 @@ export default function SourcingOrdersPage() {
   };
 
   const openNewItem = (orderId) => {
-    if (!canEdit) return; // guard
+    if (!canEdit) return;
     setIsNewItem(true);
     setEditingOrderId(orderId);
     setEditingItem(null);
@@ -419,7 +426,7 @@ export default function SourcingOrdersPage() {
   };
 
   const saveItem = async () => {
-    if (!canEdit) return; // guard
+    if (!canEdit) return;
     try {
       const values = await form.validateFields();
       const payload = {
@@ -609,7 +616,6 @@ export default function SourcingOrdersPage() {
         key: "market",
         width: 100,
         render: (_, rec) => {
-          // Prefer the populated seller.market; else fall back to order.market
           const marketRef =
             rec?.seller && typeof rec.seller === "object"
               ? rec.seller.market
@@ -699,19 +705,39 @@ export default function SourcingOrdersPage() {
         fixed: "right",
         width: 120,
         render: (_, rec) => (
-          <Button
-            type="link"
-            icon={<Pencil size={16} />}
-            onClick={() => navigate(`/sourcing/edit/${rec._id}`)}
-          >
-            Edit
-          </Button>
+          <Space size={4}>
+            <Tooltip title="Edit">
+              <Button
+                type="text" // subtle icon-only
+                icon={<Pencil size={16} />}
+                aria-label="Edit"
+                onClick={() => navigate(`/sourcing/edit/${rec._id}`)}
+              />
+            </Tooltip>
+
+            <Popconfirm
+              title="Delete this sourcing request?"
+              description="This action cannot be undone."
+              okText="Delete"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => handleDeleteOrder(rec._id || rec.id)}
+            >
+              <Tooltip title="Delete">
+                <Button
+                  type="text"
+                  danger
+                  icon={<Trash2 size={16} />}
+                  aria-label="Delete"
+                />
+              </Tooltip>
+            </Popconfirm>
+          </Space>
         ),
       });
     }
 
     return base;
-  }, [canEdit, navigate]);
+  }, [canEdit, navigate, handleDeleteOrder]);
 
   const pageTitle = isAdmin
     ? "All Sourcing Orders"
