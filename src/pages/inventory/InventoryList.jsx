@@ -23,6 +23,7 @@ import ShelfGroupedView from "./components/ShelfGroupedView";
 import CreateInventoryModal from "./components/CreateInventoryModal";
 import MoveToZoneModal from "./components/MoveToZoneModal";
 import InventoryPagination from "./components/InventoryPagination";
+import { useAuth } from "../../contexts/AuthContext";
 
 // product types moved to CreateInventoryModal
 
@@ -35,6 +36,8 @@ export default function InventoryList() {
   const [searchTerm, setSearchTerm] = useState("");
   const [warehouseType, setWarehouseType] = useState("shelf");
   const [pendingQtyChanges, setPendingQtyChanges] = useState(new Map());
+  const { user } = useAuth();
+  const role = user?.roles.role;
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -42,6 +45,8 @@ export default function InventoryList() {
   const [moveTargetId, setMoveTargetId] = useState(null);
   const [selectedMoveZoneId, setSelectedMoveZoneId] = useState("");
   const [isMoveSubmitting, setIsMoveSubmitting] = useState(false);
+  const [moveQty, setMoveQty] = useState(1);
+  const [moveMaxQty, setMoveMaxQty] = useState(0);
   const [form, setForm] = useState({
     productId: "",
     locationId: "",
@@ -557,11 +562,11 @@ export default function InventoryList() {
 
   // Move inventory to another zone
   const moveInvToZone = useMutation({
-    mutationFn: async ({ inventoryId, movedZoneId }) => {
+    mutationFn: async ({ inventoryId, movedZoneId, quantity }) => {
       if (!inventoryId || !movedZoneId) {
         throw new Error("Inventory and target zone are required");
       }
-      return moveInventoryToZone(inventoryId, movedZoneId);
+      return moveInventoryToZone(inventoryId, movedZoneId, quantity);
     },
     onSuccess: () => {
       setMoveModalOpen(false);
@@ -764,10 +769,10 @@ export default function InventoryList() {
 
   // CSV filename based on current zone name and page
   const csvFilename = useMemo(() => {
-    const base = String(zoneName || "inventory").trim().toLowerCase();
-    const slug = base
-      .replace(/[^a-z0-9]+/gi, "-")
-      .replace(/^-+|-+$/g, "");
+    const base = String(zoneName || "inventory")
+      .trim()
+      .toLowerCase();
+    const slug = base.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "");
     return `${slug || "inventory"}-page-${page}.csv`;
   }, [zoneName, page]);
 
@@ -835,8 +840,13 @@ export default function InventoryList() {
               setPendingQtyChanges={setPendingQtyChanges}
               handleQuantityInputChange={handleQuantityInputChange}
               handleUpdateQty={handleUpdateQty}
+              role={role}
               onOpenMove={(id) => {
                 setMoveTargetId(id);
+                const found = items.find((it) => it.id === id);
+                const qty = Number(found?.quantity || 0);
+                setMoveMaxQty(qty);
+                setMoveQty(Math.max(1, qty));
                 setSelectedMoveZoneId("");
                 setMoveModalOpen(true);
               }}
@@ -848,6 +858,7 @@ export default function InventoryList() {
         ) : (
           <ShelfGroupedView
             groupedByShelf={groupedByShelf}
+            userRole={user?.roles?.role}
             pendingQtyChanges={pendingQtyChanges}
             setPendingQtyChanges={setPendingQtyChanges}
             handleQuantityInputChange={handleQuantityInputChange}
@@ -856,6 +867,10 @@ export default function InventoryList() {
             toggleBin={toggleBin}
             onOpenMove={(id) => {
               setMoveTargetId(id);
+              const found = items.find((it) => it.id === id);
+              const qty = Number(found?.quantity || 0);
+              setMoveMaxQty(qty);
+              setMoveQty(Math.max(1, qty));
               setSelectedMoveZoneId("");
               setMoveModalOpen(true);
             }}
@@ -898,14 +913,37 @@ export default function InventoryList() {
           zonesOptions={zonesOptions}
           selectedMoveZoneId={selectedMoveZoneId}
           setSelectedMoveZoneId={setSelectedMoveZoneId}
+          moveQty={moveQty}
+          setMoveQty={setMoveQty}
+          maxQty={moveMaxQty}
           onSubmit={(e) => {
             e.preventDefault();
             if (!moveTargetId || !selectedMoveZoneId) return;
+            const qty = Number(moveQty || 0);
+            if (
+              !Number.isFinite(qty) ||
+              qty < 1 ||
+              qty > Number(moveMaxQty || 0)
+            ) {
+              Swal.fire({
+                icon: "error",
+                title: "Invalid Quantity",
+                text: "Quantity must be between 1 and current quantity",
+                toast: true,
+                position: "top-end",
+                showConfirmButton: false,
+                timer: 2500,
+                background: "#ef4444",
+                color: "#fff",
+              });
+              return;
+            }
             setIsMoveSubmitting(true);
             moveInvToZone.mutate(
               {
                 inventoryId: moveTargetId,
                 movedZoneId: selectedMoveZoneId,
+                quantity: qty,
               },
               {
                 onSettled: () => setIsMoveSubmitting(false),

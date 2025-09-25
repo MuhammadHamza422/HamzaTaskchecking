@@ -253,12 +253,15 @@ export async function moveInventoryItem(inventoryId, movedLocationId) {
 
 // PATCH /api/v1/inventry/move-zone/:id
 // Body: { movedZoneId }
-export async function moveInventoryToZone(inventoryId, movedZoneId) {
+
+export async function moveInventoryToZone(inventoryId, movedZoneId, quantity) {
+  const body = { movedZoneId };
+  if (typeof quantity === "number" && Number.isFinite(quantity)) {
+    body.quantity = Number(quantity);
+  }
   const { data } = await apiClient.patch(
     `/api/v1/inventry/move-zone/${inventoryId}`,
-    {
-      movedZoneId,
-    }
+    body
   );
   return data;
 }

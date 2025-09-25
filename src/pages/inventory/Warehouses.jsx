@@ -31,6 +31,7 @@ import { Modal } from "antd";
 
 export default function Warehouses() {
   const { token, user } = useAuth();
+  const role = user?.roles.role;
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const selectedWarehouseId = useSelector((s) => s.app.selectedWarehouseId);
@@ -61,7 +62,7 @@ export default function Warehouses() {
   const [znFormError, setZnFormError] = useState("");
   const [copied, setCopied] = useState(false);
   const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
-  const role = user?.roles.role;
+
   const [type, setType] = useState("shelf");
   const [zones, setZones] = useState([]);
 

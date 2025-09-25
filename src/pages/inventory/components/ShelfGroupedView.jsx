@@ -11,6 +11,7 @@ export default function ShelfGroupedView({
   expandedBins,
   toggleBin,
   onOpenMove,
+  userRole,
 }) {
   if (!Array.isArray(groupedByShelf) || groupedByShelf.length === 0) return null;
   return (
@@ -46,27 +47,31 @@ export default function ShelfGroupedView({
                           <td className="px-3 py-2 text-sm text-gray-700">
                             <div className="flex items-center gap-2">
                               <div className="flex items-center rounded-lg overflow-hidden border border-gray-200 shadow-sm bg-gray-50 h-9">
-                                <button
-                                  disabled={Number(r.quantity) <= 0}
-                                  onClick={() => {
-                                    const currentPending = pendingQtyChanges.get(r.id);
-                                    const baseQty = currentPending ? currentPending.newQty : Number(r.quantity);
-                                    const newQty = Math.max(0, baseQty - 1);
-                                    setPendingQtyChanges((prev) => {
-                                      const newMap = new Map(prev);
-                                      newMap.set(r.id, { currentQty: Number(r.quantity), newQty, type: "decrease" });
-                                      return newMap;
-                                    });
-                                  }}
-                                  className={`px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors ${
-                                    Number(r.quantity) <= 0
-                                      ? "text-gray-300 bg-gray-50 cursor-not-allowed"
-                                      : "text-red-400 bg-red-100 hover:bg-red-800 hover:text-white"
-                                  }`}
-                                  title="Decrease by 1"
-                                >
-                                  <Minus className="w-4 h-4" />
-                                </button>
+                                {/* Minus button - enabled for Picker and Inventory Supervisor, disabled for Technician */}
+                                  <button
+                                  // disabled for Technician
+                                    disabled={
+                                      Number(r.quantity) <= 0 || userRole === "Technician"
+                                    }
+                                    onClick={() => {
+                                      const currentPending = pendingQtyChanges.get(r.id);
+                                      const baseQty = currentPending ? currentPending.newQty : Number(r.quantity);
+                                      const newQty = Math.max(0, baseQty - 1);
+                                      setPendingQtyChanges((prev) => {
+                                        const newMap = new Map(prev);
+                                        newMap.set(r.id, { currentQty: Number(r.quantity), newQty, type: "decrease" });
+                                        return newMap;
+                                      });
+                                    }}
+                                    className={`px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                                      Number(r.quantity) <= 0
+                                        ? "text-gray-300 bg-gray-50 cursor-not-allowed"
+                                        : "text-red-400 bg-red-100 hover:bg-red-800 hover:text-white"
+                                    }`}
+                                    title="Decrease by 1"
+                                  >
+                                    <Minus className="w-4 h-4" />
+                                  </button>
                                 <input
                                   value={pendingQtyChanges.has(r.id) ? pendingQtyChanges.get(r.id).newQty : r.quantity || ""}
                                   onChange={(e) => handleQuantityInputChange(r.id, e.target.value)}
@@ -84,22 +89,24 @@ export default function ShelfGroupedView({
                                   pattern="[0-9]*"
                                   placeholder="0"
                                 />
-                                <button
-                                  onClick={() => {
-                                    const currentPending = pendingQtyChanges.get(r.id);
-                                    const baseQty = currentPending ? currentPending.newQty : Number(r.quantity);
-                                    const newQty = baseQty + 1;
-                                    setPendingQtyChanges((prev) => {
-                                      const newMap = new Map(prev);
-                                      newMap.set(r.id, { currentQty: Number(r.quantity), newQty, type: "increase" });
-                                      return newMap;
-                                    });
-                                  }}
-                                  className="px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors bg-green-100 text-green-600 hover:bg-green-900 hover:text-white"
-                                  title="Increase by 1"
-                                >
-                                  <Plus className="w-4 h-4" />
-                                </button>
+                                {/* Plus button will be disabled for picker only */}
+                                  <button
+                                    disabled={userRole === "Picker"}
+                                    onClick={() => {
+                                      const currentPending = pendingQtyChanges.get(r.id);
+                                      const baseQty = currentPending ? currentPending.newQty : Number(r.quantity);
+                                      const newQty = baseQty + 1;
+                                      setPendingQtyChanges((prev) => {
+                                        const newMap = new Map(prev);
+                                        newMap.set(r.id, { currentQty: Number(r.quantity), newQty, type: "increase" });
+                                        return newMap;
+                                      });
+                                    }}
+                                    className="px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors bg-green-100 text-green-600 hover:bg-green-900 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Increase by 1"
+                                  >
+                                    <Plus className="w-4 h-4" />
+                                  </button>
                               </div>
                               <button
                                 onClick={() => onOpenMove(r.id)}
@@ -196,27 +203,30 @@ export default function ShelfGroupedView({
                                 <td className="px-3 py-2 text-sm text-gray-700">
                                   <div className="flex items-center gap-2">
                                     <div className="flex items-center rounded-lg overflow-hidden border border-gray-200 shadow-sm bg-gray-50 h-9">
-                                      <button
-                                        disabled={Number(r.quantity) <= 0}
-                                        onClick={() => {
-                                          const currentPending = pendingQtyChanges.get(r.id);
-                                          const baseQty = currentPending ? currentPending.newQty : Number(r.quantity);
-                                          const newQty = Math.max(0, baseQty - 1);
-                                          setPendingQtyChanges((prev) => {
-                                            const newMap = new Map(prev);
-                                            newMap.set(r.id, { currentQty: Number(r.quantity), newQty, type: "decrease" });
-                                            return newMap;
-                                          });
-                                        }}
-                                        className={`px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors ${
-                                          Number(r.quantity) <= 0
-                                            ? "text-gray-300 bg-gray-50 cursor-not-allowed"
-                                            : "text-red-400 bg-red-100 hover:bg-red-800 hover:text-white"
-                                        }`}
-                                        title="Decrease by 1"
-                                      >
-                                        <Minus className="w-4 h-4" />
-                                      </button>
+                                      {/* Minus button - enabled for Picker and Inventory Supervisor, disabled for Technician */}
+                                      {(userRole === "Picker" || userRole === "Inventory Supervisor") && (
+                                        <button
+                                          disabled={Number(r.quantity) <= 0}
+                                          onClick={() => {
+                                            const currentPending = pendingQtyChanges.get(r.id);
+                                            const baseQty = currentPending ? currentPending.newQty : Number(r.quantity);
+                                            const newQty = Math.max(0, baseQty - 1);
+                                            setPendingQtyChanges((prev) => {
+                                              const newMap = new Map(prev);
+                                              newMap.set(r.id, { currentQty: Number(r.quantity), newQty, type: "decrease" });
+                                              return newMap;
+                                            });
+                                          }}
+                                          className={`px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors ${
+                                            Number(r.quantity) <= 0
+                                              ? "text-gray-300 bg-gray-50 cursor-not-allowed"
+                                              : "text-red-400 bg-red-100 hover:bg-red-800 hover:text-white"
+                                          }`}
+                                          title="Decrease by 1"
+                                        >
+                                          <Minus className="w-4 h-4" />
+                                        </button>
+                                      )}
                                       <input
                                         value={pendingQtyChanges.has(r.id) ? pendingQtyChanges.get(r.id).newQty : r.quantity || ""}
                                         onChange={(e) => handleQuantityInputChange(r.id, e.target.value)}
@@ -234,22 +244,25 @@ export default function ShelfGroupedView({
                                         pattern="[0-9]*"
                                         placeholder="0"
                                       />
-                                      <button
-                                        onClick={() => {
-                                          const currentPending = pendingQtyChanges.get(r.id);
-                                          const baseQty = currentPending ? currentPending.newQty : Number(r.quantity);
-                                          const newQty = baseQty + 1;
-                                          setPendingQtyChanges((prev) => {
-                                            const newMap = new Map(prev);
-                                            newMap.set(r.id, { currentQty: Number(r.quantity), newQty, type: "increase" });
-                                            return newMap;
-                                          });
-                                        }}
-                                        className="px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors bg-green-100 text-green-600 hover:bg-green-900 hover:text-white"
-                                        title="Increase by 1"
-                                      >
-                                        <Plus className="w-4 h-4" />
-                                      </button>
+                                      {/* Plus button - enabled for Technician and Inventory Supervisor, disabled for Picker */}
+                                      {(userRole === "Technician" || userRole === "Inventory Supervisor") && (
+                                        <button
+                                          onClick={() => {
+                                            const currentPending = pendingQtyChanges.get(r.id);
+                                            const baseQty = currentPending ? currentPending.newQty : Number(r.quantity);
+                                            const newQty = baseQty + 1;
+                                            setPendingQtyChanges((prev) => {
+                                              const newMap = new Map(prev);
+                                              newMap.set(r.id, { currentQty: Number(r.quantity), newQty, type: "increase" });
+                                              return newMap;
+                                            });
+                                          }}
+                                          className="px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors bg-green-100 text-green-600 hover:bg-green-900 hover:text-white"
+                                          title="Increase by 1"
+                                        >
+                                          <Plus className="w-4 h-4" />
+                                        </button>
+                                      )}
                                     </div>
                                     <button
                                       onClick={() => onOpenMove(r.id)}

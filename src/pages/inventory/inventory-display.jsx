@@ -786,8 +786,16 @@ export default function InventoryDisplay({
   }
 
   const isAddDisabled = createInv.isLoading || isRefreshing;
-  const addBtnLabel = createInv.isLoading ? "Adding..." : isRefreshing ? "Updating..." : "Add Product";
-  const addFirstBtnLabel = createInv.isLoading ? "Adding..." : isRefreshing ? "Updating..." : "Add first Product";
+  const addBtnLabel = createInv.isLoading
+    ? "Adding..."
+    : isRefreshing
+    ? "Updating..."
+    : "Add Product";
+  const addFirstBtnLabel = createInv.isLoading
+    ? "Adding..."
+    : isRefreshing
+    ? "Updating..."
+    : "Add first Product";
 
   return (
     <div className="space-y-6 pb-12">
@@ -1511,7 +1519,10 @@ export default function InventoryDisplay({
                 <button
                   type="submit"
                   disabled={
-                    isSaving || createInv.isLoading || !form.productId || !form.quantity
+                    isSaving ||
+                    createInv.isLoading ||
+                    !form.productId ||
+                    !form.quantity
                   }
                   className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white disabled:opacity-60 flex items-center gap-2"
                 >

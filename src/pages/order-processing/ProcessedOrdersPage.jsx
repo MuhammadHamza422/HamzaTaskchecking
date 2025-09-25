@@ -121,7 +121,18 @@ export default function ProcessedOrdersPage() {
 
   //  also want to add shopify orders
   const fetchProcessedOrders = async ({ queryKey }) => {
-    const [_, tab, page, limit, search, dateRange, wcStatus, sfStatus, wmStatus, status] = queryKey;
+    const [
+      _,
+      tab,
+      page,
+      limit,
+      search,
+      dateRange,
+      wcStatus,
+      sfStatus,
+      wmStatus,
+      status,
+    ] = queryKey;
     const config = getPlatformConfig(tab);
 
     if (tab === "woocommerce") {
@@ -289,7 +300,7 @@ export default function ProcessedOrdersPage() {
     setUpdateOrderStatusLoading(true);
     try {
       const { data } = await apiClient.patch(
-        "/api/v1/shipstation/update/shopify/status"
+        "/api/v1/shipstation/update/sf/status"
       );
       if (data) {
         Swal.fire({
@@ -314,7 +325,9 @@ export default function ProcessedOrdersPage() {
     const config = getPlatformConfig(activeTab);
     if (activeTab === "shopify") {
       // Shopify expects orderId as a query parameter
-      const response = await apiClient.get(`${config.detailsApi}?orderId=${orderId}`);
+      const response = await apiClient.get(
+        `${config.detailsApi}?orderId=${orderId}`
+      );
       return response.data;
     }
     const response = await apiClient.get(`${config.detailsApi}/${orderId}`);
@@ -780,7 +793,9 @@ export default function ProcessedOrdersPage() {
       }
     }
 
-    const orderDate = formatDateForShipStation(sf?.createdAt || tableOrder?.createdAt || new Date());
+    const orderDate = formatDateForShipStation(
+      sf?.createdAt || tableOrder?.createdAt || new Date()
+    );
 
     const billing = sf?.billingAddress || {};
     const shipping = sf?.shippingAddress || {};
@@ -800,7 +815,9 @@ export default function ProcessedOrdersPage() {
       customerEmail: sf?.email || undefined,
       tagIds: tagId ? [Number(tagId)] : undefined,
       billTo: {
-        name: [billing?.firstName, billing?.lastName].filter(Boolean).join(" ") || null,
+        name:
+          [billing?.firstName, billing?.lastName].filter(Boolean).join(" ") ||
+          null,
         company: null,
         street1: billing?.address1 || null,
         street2: billing?.address2 || null,
@@ -813,7 +830,9 @@ export default function ProcessedOrdersPage() {
         residential: null,
       },
       shipTo: {
-        name: [shipping?.firstName, shipping?.lastName].filter(Boolean).join(" ") || null,
+        name:
+          [shipping?.firstName, shipping?.lastName].filter(Boolean).join(" ") ||
+          null,
         company: null,
         street1: shipping?.address1 || null,
         street2: shipping?.address2 || null,
