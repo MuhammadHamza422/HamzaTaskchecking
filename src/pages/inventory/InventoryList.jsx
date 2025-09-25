@@ -42,6 +42,8 @@ export default function InventoryList() {
   const [moveTargetId, setMoveTargetId] = useState(null);
   const [selectedMoveZoneId, setSelectedMoveZoneId] = useState("");
   const [isMoveSubmitting, setIsMoveSubmitting] = useState(false);
+  const [moveQty, setMoveQty] = useState(1);
+  const [moveMaxQty, setMoveMaxQty] = useState(0);
   const [form, setForm] = useState({
     productId: "",
     locationId: "",
@@ -557,11 +559,11 @@ export default function InventoryList() {
 
   // Move inventory to another zone
   const moveInvToZone = useMutation({
-    mutationFn: async ({ inventoryId, movedZoneId }) => {
+    mutationFn: async ({ inventoryId, movedZoneId, quantity }) => {
       if (!inventoryId || !movedZoneId) {
         throw new Error("Inventory and target zone are required");
       }
-      return moveInventoryToZone(inventoryId, movedZoneId);
+      return moveInventoryToZone(inventoryId, movedZoneId, quantity);
     },
     onSuccess: () => {
       setMoveModalOpen(false);
@@ -837,6 +839,10 @@ export default function InventoryList() {
               handleUpdateQty={handleUpdateQty}
               onOpenMove={(id) => {
                 setMoveTargetId(id);
+                const found = items.find((it) => it.id === id);
+                const qty = Number(found?.quantity || 0);
+                setMoveMaxQty(qty);
+                setMoveQty(Math.max(1, qty));
                 setSelectedMoveZoneId("");
                 setMoveModalOpen(true);
               }}
@@ -856,6 +862,10 @@ export default function InventoryList() {
             toggleBin={toggleBin}
             onOpenMove={(id) => {
               setMoveTargetId(id);
+              const found = items.find((it) => it.id === id);
+              const qty = Number(found?.quantity || 0);
+              setMoveMaxQty(qty);
+              setMoveQty(Math.max(1, qty));
               setSelectedMoveZoneId("");
               setMoveModalOpen(true);
             }}
@@ -898,14 +908,33 @@ export default function InventoryList() {
           zonesOptions={zonesOptions}
           selectedMoveZoneId={selectedMoveZoneId}
           setSelectedMoveZoneId={setSelectedMoveZoneId}
+          moveQty={moveQty}
+          setMoveQty={setMoveQty}
+          maxQty={moveMaxQty}
           onSubmit={(e) => {
             e.preventDefault();
             if (!moveTargetId || !selectedMoveZoneId) return;
+            const qty = Number(moveQty || 0);
+            if (!Number.isFinite(qty) || qty < 1 || qty > Number(moveMaxQty || 0)) {
+              Swal.fire({
+                icon: "error",
+                title: "Invalid Quantity",
+                text: "Quantity must be between 1 and current quantity",
+                toast: true,
+                position: "top-end",
+                showConfirmButton: false,
+                timer: 2500,
+                background: "#ef4444",
+                color: "#fff",
+              });
+              return;
+            }
             setIsMoveSubmitting(true);
             moveInvToZone.mutate(
               {
                 inventoryId: moveTargetId,
                 movedZoneId: selectedMoveZoneId,
+                quantity: qty,
               },
               {
                 onSettled: () => setIsMoveSubmitting(false),
