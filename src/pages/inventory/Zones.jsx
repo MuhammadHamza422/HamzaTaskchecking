@@ -46,17 +46,10 @@ export default function Zones() {
   const [znFormError, setZnFormError] = useState("");
   const [type, setType] = useState("shelf");
 
-  useEffect(() => {
-    const zoneType = localStorage.getItem("zoneType");
-    setType(zoneType);
-  }, []);
-
   const { data, isLoading, error } = useQuery({
-    queryKey: ["zones", selectedWarehouseId, type],
+    queryKey: ["zones", selectedWarehouseId],
     queryFn: () =>
-      selectedWarehouseId
-        ? getZonesByWarehouse(selectedWarehouseId, type)
-        : null,
+      selectedWarehouseId ? getZonesByWarehouse(selectedWarehouseId) : null,
     enabled: !!selectedWarehouseId,
     staleTime: 0,
     refetchOnWindowFocus: true,
@@ -263,12 +256,12 @@ export default function Zones() {
     <div ref={fullscreenRef} className="space-y-6">
       {/* Header */}
       <div className="rounded-xl border border-zinc-200 bg-white">
-        <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
+        <div className="flex items-start sm:items-center sm:justify-between flex-col sm:flex-row gap-3 border-b border-zinc-200 px-4 py-3">
           <h1 className="text-base font-semibold">
             Zones{" "}
             {selectedWarehouseId ? `— ${warehouseName || "Warehouse"}` : ""}
           </h1>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 w-full sm:w-fit justify-end">
             {role !== "Technician" && role !== "Picker" && (
               <button
                 onClick={openCreateZn}
@@ -314,11 +307,11 @@ export default function Zones() {
           </div>
         )}
 
-        {filtered.map((z) => (
+        {filtered?.map((z, i) => (
           <div
-            key={z.id}
+            key={z.id + i}
             onClick={() => dispatch(setSelectedZoneId(z.id))}
-            className={`group relative cursor-pointer rounded-xl border p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+            className={`group relative cursor-pointer rounded-xl hover:bg-blue-50  duration-500 border p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${
               selectedZoneId === z.id
                 ? "border-blue-600 bg-blue-50"
                 : "border-zinc-200 bg-white"
@@ -342,10 +335,13 @@ export default function Zones() {
 
             <h2 className="truncate text-base font-semibold">{z.name}</h2>
             {z.description && (
-              <p className="mt-1 line-clamp-3 text-sm text-zinc-600">
+              <p className="mt-1 line-clamp-3 text-xs text-zinc-500">
                 {z.description}
               </p>
             )}
+            <span className="mt-2 inline-flex items-center capitalize rounded-full bg-green-100 text-green-700 border border-green-500 px-3 py-0.5 text-xs">
+              {z.type}
+            </span>
           </div>
         ))}
       </div>
@@ -436,6 +432,7 @@ export default function Zones() {
                 >
                   <option value="shelf">Shelf</option>
                   <option value="not_shelf">Not Shelf</option>
+                  <option value="hybrid">Hybrid</option>
                 </select>
               </div>
               <div className="mt-6 flex justify-end gap-2">

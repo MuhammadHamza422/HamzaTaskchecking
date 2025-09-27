@@ -261,11 +261,6 @@ export default function InventoryLayout() {
   const [warehouseId, setWarehouseId] = useState(selectedWarehouseId);
 
   useEffect(() => {
-    const zoneType = localStorage.getItem("zoneType");
-      setType(zoneType || "shelf");
-  }, []);
-
-  useEffect(() => {
     setWarehouseId(selectedWarehouseId);
   }, [selectedWarehouseId]);
 
@@ -275,24 +270,18 @@ export default function InventoryLayout() {
       { to: "/inventory", label: "Home", icon: "home", exact: true },
       { to: "/inventory/warehouses", label: "Warehouse", icon: "warehouse" },
       { to: "/inventory/zones", label: "Zone", icon: "zones" },
-      ...(type === "shelf"
-        ? [
-            {
-              to: "/inventory/locations",
-              label: "Location",
-              icon: "locations",
-            },
-          ]
-        : []),
+      {
+        to: "/inventory/locations",
+        label: "Location",
+        icon: "locations",
+      },
       {
         to: warehouseId ? "/inventory/inventory" : "#",
         label: "Inventory",
         icon: "inventory",
       },
       { to: "/inventory/products", label: "Products", icon: "products" },
-      ...(type === "shelf"
-        ? [{ to: "/inventory/scan", label: "Scan", icon: "scan" }]
-        : []),
+      { to: "/inventory/scan", label: "Scan", icon: "scan" },
       {
         to: "/inventory/activity-logs",
         label: "Activity Log",

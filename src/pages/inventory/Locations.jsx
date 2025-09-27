@@ -30,6 +30,7 @@ export default function Locations() {
   const zoneId = useSelector((s) => s.app.selectedZoneId);
   const { user } = useAuth();
   const role = user?.roles.role;
+  const [type, setType] = useState("All");
 
   console.log("zoneId", zoneId);
 
@@ -84,8 +85,6 @@ export default function Locations() {
 
   console.log("zonesRes", zonesRes);
 
-
-
   // Fetch locations with backend pagination and search
   const {
     data: locationsRes,
@@ -100,6 +99,7 @@ export default function Locations() {
       limit,
       debouncedSearchQuery,
       sortOrder,
+      type,
     ],
     enabled: !!warehouseId && !!zoneId,
     staleTime: 0,
@@ -114,6 +114,7 @@ export default function Locations() {
         warehouseId,
         zoneId,
         sortOrder,
+        type,
       });
 
       const list = Array.isArray(res?.locations)
@@ -546,6 +547,11 @@ export default function Locations() {
           setSearchQuery("");
           setPage(1);
         }}
+        onTypeChange={(value) => {
+          setType(value);
+          setPage(1);
+        }}
+        type={type}
       />
 
       {/* Locations Grid */}

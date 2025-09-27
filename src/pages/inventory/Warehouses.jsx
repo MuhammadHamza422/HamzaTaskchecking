@@ -92,9 +92,9 @@ export default function Warehouses() {
     isLoading: warehousesLoading,
     error: warehousesError,
   } = useQuery({
-    queryKey: ["warehouses", type],
+    queryKey: ["warehouses"],
     queryFn: async () => {
-      const ws = await apiGetWarehouses({ page: 1, limit: 50, type });
+      const ws = await apiGetWarehouses({ page: 1, limit: 50 });
       return ws;
     },
     staleTime: 0,
@@ -150,9 +150,9 @@ export default function Warehouses() {
     setZones(zoneList);
   }, [selectedWarehouseId, type]);
 
-  useEffect(() => {
-    fetchZones();
-  }, [fetchZones]);
+  // useEffect(() => {
+  //   fetchZones();
+  // }, [fetchZones]);
 
   // Warehouse CRUD
   function openNewWh() {
@@ -456,14 +456,14 @@ export default function Warehouses() {
           <h1 className=" text-xl sm:text-2xl font-semibold">Warehouses</h1>
           <p className="mt-1 text-sm text-zinc-600">Manage your warehouses.</p>
         </div>
-        <select
+        {/* <select
           value={type}
           onChange={(e) => handleTypeChange(e.target.value)}
           className=" h-[2.2rem] border border-gray-400 outline-none rounded-md cursor-pointer text-sm"
         >
           <option value="shelf">Shelf</option>
           <option value="not_shelf">Without Shelf</option>
-        </select>
+        </select> */}
       </div>
       {/* handleTypeChange */}
 
@@ -473,7 +473,7 @@ export default function Warehouses() {
             {warehousesError?.message || "Failed to load warehouses"}
           </div>
         )}
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[340px_1fr] mt-4">
+        <div className="grid grid-cols-1  mt-4">
           {/* LEFT: Warehouses */}
           <section className="rounded-xl border border-zinc-200 bg-white">
             <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
@@ -489,7 +489,18 @@ export default function Warehouses() {
                   </button>
                 )}
             </div>
-            <div className="px-4 py-3 border-b border-zinc-200">
+
+            {/* Search */}
+            <div className="flex items-center gap-4 py-3 px-3 border-b border-gray-200 mb-3">
+              <div className="relative w-full">
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Search warehouses…"
+                  className="w-full rounded-lg border border-zinc-300 bg-white px-9 py-2 text-sm outline-none placeholder:text-zinc-400 focus:border-zinc-400"
+                />
+                <FiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+              </div>
               <button
                 onClick={() => {
                   if (!selectedWarehouseId) return;
@@ -497,6 +508,7 @@ export default function Warehouses() {
                   const w = warehouseData.find(
                     (x) => x.id === selectedWarehouseId
                   );
+
                   if (w) {
                     Swal.fire({
                       icon: "success",
@@ -509,23 +521,10 @@ export default function Warehouses() {
                   }
                 }}
                 disabled={!selectedWarehouseId}
-                className="rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-50 disabled:opacity-60"
+                className="rounded-lg border-none min-w-fit bg-green-500 hover:bg-green-600  text-white cursor-pointer  px-3 py-2 text-sm  disabled:opacity-60"
               >
                 Save Selection
               </button>
-            </div>
-
-            {/* Search */}
-            <div className="px-4 pb-3 pt-3">
-              <div className="relative">
-                <input
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder="Search warehouses…"
-                  className="w-full rounded-lg border border-zinc-300 bg-white px-9 py-2 text-sm outline-none placeholder:text-zinc-400 focus:border-zinc-400"
-                />
-                <FiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-              </div>
             </div>
 
             {/* List */}
@@ -542,63 +541,62 @@ export default function Warehouses() {
                 </div>
               )}
 
-              <ul className="space-y-2">
-                {filteredWarehouses.map((w) => {
-                  const active = selectedWarehouseId === w.id;
-                  return (
-                    <li key={w.id}>
-                      <button
-                        onClick={() => {
-                          dispatch(setSelectedWarehouseId(w.id));
-                          dispatch(setSelectedZoneId(null));
-                        }}
-                        className={[
-                          "flex w-full items-start justify-between rounded-lg border px-3 py-2 text-left",
-                          active
-                            ? "border-blue-600 bg-blue-50"
-                            : "border-zinc-200 bg-white hover:bg-zinc-50",
-                        ].join(" ")}
-                      >
-                        <div>
-                          <p className="font-medium">{w.name}</p>
-                          <p className="text-xs text-zinc-500">
-                            {w.country || "—"}
-                          </p>
-                          <div
-                            className="flex items-center gap-1 group cursor-pointer"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (copiedId === w.id) return;
-                              navigator.clipboard.writeText(w.id);
-                              setCopiedId(w.id);
-                              setTimeout(() => setCopiedId(null), 2000);
-                            }}
-                            title={copiedId === w.id ? "Copied!" : "Copy"}
-                          >
-                            <p className="text-xs text-zinc-500">{w.id}</p>
-                            {copiedId === w.id ? (
-                              <FiCheck className="h-3 w-3 text-green-600 transition-colors" />
-                            ) : (
-                              <FiCopy className="h-3 w-3 text-zinc-400 group-hover:text-zinc-600 transition-colors" />
-                            )}
-                          </div>
+              <div className=" grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {filteredWarehouses?.map((w, i) => (
+                  <div key={w?.id + i}>
+                    <button
+                      onClick={() => {
+                        dispatch(setSelectedWarehouseId(w.id));
+                        dispatch(setSelectedZoneId(null));
+                        localStorage.setItem("warehouse", JSON.stringify(w));
+                      }}
+                      className={[
+                        "flex w-full items-start justify-between rounded-lg border px-3 py-2 text-left",
+                        selectedWarehouseId === w.id
+                          ? "border-blue-600 bg-blue-50"
+                          : "border-zinc-200 bg-white hover:bg-zinc-50",
+                      ].join(" ")}
+                    >
+                      <div>
+                        <p className="font-medium">{w.name}</p>
+                        <p className="text-xs text-zinc-500">
+                          {w.country || "—"}
+                        </p>
+                        <div
+                          className="flex items-center gap-1 group cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (copiedId === w.id) return;
+                            navigator.clipboard.writeText(w.id);
+                            setCopiedId(w.id);
+                            setTimeout(() => setCopiedId(null), 2000);
+                          }}
+                          title={copiedId === w.id ? "Copied!" : "Copy"}
+                        >
+                          <p className="text-xs text-zinc-500">{w.id}</p>
+                          {copiedId === w.id ? (
+                            <FiCheck className="h-3 w-3 text-green-600 transition-colors" />
+                          ) : (
+                            <FiCopy className="h-3 w-3 text-zinc-400 group-hover:text-zinc-600 transition-colors" />
+                          )}
                         </div>
-                        <div className="flex items-center gap-1">
-                          {role !== "Technician" &&
-                            role !== "Picker" &&
-                            role !== "Inventory Supervisor" && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openEditWh(w);
-                                }}
-                                className="rounded p-1 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
-                                title="Edit"
-                              >
-                                <FiEdit2 />
-                              </button>
-                            )}
-                          {/* <button
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {role !== "Technician" &&
+                          role !== "Picker" &&
+                          role !== "Inventory Supervisor" && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEditWh(w);
+                              }}
+                              className="rounded p-1 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+                              title="Edit"
+                            >
+                              <FiEdit2 />
+                            </button>
+                          )}
+                        {/* <button
                             onClick={async (e) => {
                               e.stopPropagation();
                               await handleDeleteWarehouse(w.id);
@@ -608,17 +606,16 @@ export default function Warehouses() {
                           >
                             <FiTrash2 />
                           </button> */}
-                        </div>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+                      </div>
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           </section>
 
           {/* RIGHT: Zones of selected warehouse */}
-          <section className="rounded-xl border border-zinc-200 bg-white">
+          {/* <section className="rounded-xl border border-zinc-200 bg-white">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-zinc-200 px-4 py-3 gap-y-2">
               <h2 className="text-base font-semibold">
                 {selectedWarehouseId
@@ -689,7 +686,7 @@ export default function Warehouses() {
                             )}
                           </div>
                         </div>
-                        {/* {role !== "Technician" &&
+                        {role !== "Technician" &&
                           role !== "Picker" &&
                           role !== "Inventory Supervisor" && (
                             <div className="flex items-center gap-1">
@@ -714,14 +711,13 @@ export default function Warehouses() {
                             <FiTrash2 />
                           </button>
                             </div>
-                          )} */}
+                          )}
                       </div>
                     );
                   })}
                 </div>
               )}
 
-              {/* Select Zone */}
               {selectedWarehouseId && selectedZoneId && (
                 <div className="mt-4 text-right">
                   <button
@@ -733,7 +729,7 @@ export default function Warehouses() {
                 </div>
               )}
             </div>
-          </section>
+          </section> */}
         </div>
 
         <div ref={fullscreenRef}>
@@ -871,19 +867,7 @@ export default function Warehouses() {
                     ))}
                   </select>
                 </div>
-                <div className="w-full">
-                  <label className="block text-sm font-medium text-zinc-700">
-                    Type
-                  </label>
-                  <select
-                    value={whType}
-                    onChange={(e) => setWhType(e.target.value)}
-                    className=" h-[2.2rem] w-full mt-2 border border-gray-400 outline-none rounded-md cursor-pointer text-sm"
-                  >
-                    <option value="shelf">Shelf</option>
-                    <option value="not_shelf">Not Shelf</option>
-                  </select>
-                </div>
+
                 <div className="mt-6 flex justify-end gap-2">
                   <button
                     type="button"

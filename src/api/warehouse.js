@@ -7,13 +7,11 @@ export async function getWarehouses({
   page = 1,
   limit = 50,
   search = "",
-  type = "shelf",
 } = {}) {
   const params = new URLSearchParams();
   if (page) params.set("page", String(page));
   if (limit) params.set("limit", String(limit));
   if (search) params.set("search", String(search));
-  if (type) params.set("type", String(type));
   const { data } = await apiClient.get(
     `/api/v1/warehouse/all?${params.toString()}`
   );
@@ -48,10 +46,8 @@ export async function deleteWarehouse(id) {
 }
 
 // GET /api/v1/warehouse/zone/:warehouseId
-export async function getZonesByWarehouse(warehouseId, type = "shelf") {
-  const { data } = await apiClient.get(
-    `/api/v1/warehouse/zone/${warehouseId}?type=${type ? type : "shelf"}`
-  );
+export async function getZonesByWarehouse(warehouseId) {
+  const { data } = await apiClient.get(`/api/v1/warehouse/zone/${warehouseId}`);
   return data;
 }
 
@@ -88,6 +84,7 @@ export async function getLocations({
   warehouseId,
   zoneId,
   sortOrder,
+  type,
 } = {}) {
   const params = new URLSearchParams();
   params.set("page", String(page));
@@ -96,6 +93,7 @@ export async function getLocations({
   if (warehouseId) params.set("warehouse", String(warehouseId));
   if (zoneId) params.set("zone", String(zoneId));
   if (sortOrder) params.set("sortOrder", String(sortOrder));
+  if (type) params.set("type", String(type));
 
   const { data } = await apiClient.get(
     `/api/v1/location/all?${params.toString()}`

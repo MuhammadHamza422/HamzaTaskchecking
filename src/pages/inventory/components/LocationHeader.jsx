@@ -68,7 +68,9 @@ export default function LocationHeader({
 
       {/* Header + New */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h1 className="text-2xl font-bold">Locations {zoneName ? `of ${zoneName}` : ""}</h1>
+        <h1 className="text-2xl font-bold">
+          Locations {zoneName ? `of ${zoneName}` : ""}
+        </h1>
         {role !== "Technician" && role !== "Picker" && (
           <div className="flex gap-2">
             <button

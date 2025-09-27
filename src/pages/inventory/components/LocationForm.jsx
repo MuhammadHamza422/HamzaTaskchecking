@@ -13,7 +13,7 @@ export default function LocationForm({
   isLoading = false,
 }) {
   const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
-  
+
   // Form state
   const [type, setType] = useState("shelf");
   const [row, setRow] = useState("");
@@ -22,12 +22,13 @@ export default function LocationForm({
   const [bin, setBin] = useState("");
   const [errors, setErrors] = useState({});
   const [error, setError] = useState("");
+  const [boxName, setBoxName] = useState("");
 
   // Initialize form when editing
   useEffect(() => {
     if (isEditing && location) {
       setType(location.type);
-      
+
       // Parse location code to extract components
       const code = String(location.code || "");
       let match = code.match(/^([A-Za-z])-(\d{1,2})-(\d{1,2})-BIN-(\d{1,2})$/);
@@ -86,10 +87,15 @@ export default function LocationForm({
     const cleanShelf = sanitizeNum2(shelf);
     const cleanBin = sanitizeNum2(bin);
 
-    if (!cleanRow) errs.row = "Row is required";
-    if (!cleanBay) errs.bay = "Bay is required and must be greater than 0";
-    if (!cleanShelf) errs.shelf = "Shelf is required and must be greater than 0";
-    if (type === "bin" && !cleanBin) errs.bin = "Bin is required and must be greater than 0";
+    if (type !== "box") {
+      if (!cleanRow) errs.row = "Row is required";
+      if (!cleanBay) errs.bay = "Bay is required and must be greater than 0";
+      if (!cleanShelf)
+        errs.shelf = "Shelf is required and must be greater than 0";
+      if (type === "bin" && !cleanBin)
+        errs.bin = "Bin is required and must be greater than 0";
+    }
+    if (type === "box" && !boxName) errs.boxName = "Box name is required";
 
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -107,13 +113,31 @@ export default function LocationForm({
     const cleanShelf = sanitizeNum2(shelf);
     const cleanBin = sanitizeNum2(bin);
 
-    if (!cleanRow || !cleanBay || !cleanShelf || (type === "bin" && !cleanBin)) {
-      setError("Please enter row (A), bay (1-99), shelf (1-99) and bin (1-99 for BIN type).");
+    if (type !== "box") {
+      if (
+        !cleanRow ||
+        !cleanBay ||
+        !cleanShelf ||
+        (type === "bin" && !cleanBin)
+      ) {
+        setError(
+          `Please enter row (A), bay (1-99), shelf (1-99)${
+            type === "bin" ? " and bin (1-99 for BIN type)." : "."
+          }`
+        );
+        return;
+      }
+    }
+    if (type === "box" && !boxName) {
+      setError("Please enter a box name.");
       return;
     }
     setError("");
 
-    const code = buildCode(cleanRow, cleanBay, cleanShelf, type, cleanBin);
+    const code =
+      type === "box"
+        ? boxName
+        : buildCode(cleanRow, cleanBay, cleanShelf, type, cleanBin);
 
     onSubmit({
       type,
@@ -122,6 +146,7 @@ export default function LocationForm({
       bay: cleanBay,
       shelf: cleanShelf,
       bin: cleanBin,
+      boxName,
     });
   };
 
@@ -160,7 +185,7 @@ export default function LocationForm({
           <h3 className="text-xl font-semibold">
             {isEditing ? "Edit Location" : "New Location"}
           </h3>
-          
+
           <div className="space-y-2">
             <label className="block text-sm font-medium">Type</label>
             <select
@@ -172,73 +197,78 @@ export default function LocationForm({
               {(hasShelves || (isEditing && location?.type === "bin")) && (
                 <option value="bin">Bin</option>
               )}
+              <option value="box">Box</option>
             </select>
           </div>
 
-          <div className="space-y-2">
-            <label className="block text-sm font-medium">Row</label>
-            <input
-              type="text"
-              value={row}
-              onChange={(e) =>
-                setRow(
-                  e.target.value
-                    .replace(/[^A-Za-z]/g, "")
-                    .toUpperCase()
-                    .slice(0, 1)
-                )
-              }
-              placeholder="A"
-              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-            />
-            {errors?.row && (
-              <p className="text-sm text-red-600 mt-1">{errors.row}</p>
-            )}
-          </div>
+          {type !== "box" && (
+            <div className="flex flex-col gap-3">
+              <div className="space-y-2">
+                <label className="block text-sm font-medium">Row</label>
+                <input
+                  type="text"
+                  value={row}
+                  onChange={(e) =>
+                    setRow(
+                      e.target.value
+                        .replace(/[^A-Za-z]/g, "")
+                        .toUpperCase()
+                        .slice(0, 1)
+                    )
+                  }
+                  placeholder="A"
+                  className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+                />
+                {errors?.row && (
+                  <p className="text-sm text-red-600 mt-1">{errors.row}</p>
+                )}
+              </div>
 
-          <div className="space-y-2">
-            <label className="block text-sm font-medium">Bay</label>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={bay}
-              onChange={(e) =>
-                setBay(
-                  e.target.value
-                    .replace(/[^0-9]/g, "")
-                    .replace(/^0+/, "")
-                    .slice(0, 2)
-                )
-              }
-              placeholder="1"
-              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-            />
-            {errors.bay && (
-              <p className="text-sm text-red-600 mt-1">{errors.bay}</p>
-            )}
-          </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium">Bay</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={bay}
+                  onChange={(e) =>
+                    setBay(
+                      e.target.value
+                        .replace(/[^0-9]/g, "")
+                        .replace(/^0+/, "")
+                        .slice(0, 2)
+                    )
+                  }
+                  placeholder="1"
+                  className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+                />
+                {errors.bay && (
+                  <p className="text-sm text-red-600 mt-1">{errors.bay}</p>
+                )}
+              </div>
 
-          <div className="space-y-2">
-            <label className="block text-sm font-medium">Shelf</label>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={shelf}
-              onChange={(e) =>
-                setShelf(
-                  e.target.value
-                    .replace(/[^0-9]/g, "")
-                    .replace(/^0+/, "")
-                    .slice(0, 2)
-                )
-              }
-              placeholder="1"
-              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
-            />
-            {errors.shelf && (
-              <p className="text-sm text-red-600 mt-1">{errors.shelf}</p>
-            )}
-          </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium">Shelf</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={shelf}
+                  onChange={(e) =>
+                    setShelf(
+                      e.target.value
+                        .replace(/[^0-9]/g, "")
+                        .replace(/^0+/, "")
+                        .slice(0, 2)
+                    )
+                  }
+                  placeholder="1"
+                  className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+                />
+                {errors.shelf && (
+                  <p className="text-sm text-red-600 mt-1">{errors.shelf}</p>
+                )}
+              </div>
+            </div>
+          )}
 
           {type === "bin" && (
             <div className="space-y-2">
@@ -264,6 +294,22 @@ export default function LocationForm({
             </div>
           )}
 
+          {type === "box" && (
+            <div className="space-y-2">
+              <label className="block text-sm font-medium">Box Name</label>
+              <input
+                type="text"
+                value={boxName}
+                onChange={(e) => setBoxName(e.target.value)}
+                placeholder="Box Name"
+                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
+              />
+              {errors.boxName && (
+                <p className="text-sm text-red-600 mt-1">{errors.boxName}</p>
+              )}
+            </div>
+          )}
+
           {error && <p className="text-red-600">{error}</p>}
 
           <div className="flex justify-end space-x-3">
@@ -279,7 +325,13 @@ export default function LocationForm({
               disabled={isLoading}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50"
             >
-              {isLoading ? (isEditing ? "Saving…" : "Creating…") : (isEditing ? "Save" : "Create")}
+              {isLoading
+                ? isEditing
+                  ? "Saving…"
+                  : "Creating…"
+                : isEditing
+                ? "Save"
+                : "Create"}
             </button>
           </div>
         </form>
