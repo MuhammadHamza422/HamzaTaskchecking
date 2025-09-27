@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { FiDownload, FiSearch } from "react-icons/fi";
 import { CSVLink } from "react-csv";
 
@@ -14,6 +14,14 @@ export default function InventoryHeader({
   csvHeaders,
   csvFilename = "inventory.csv",
 }) {
+  const [zoneType, setZoneType] = useState("");
+
+  useEffect(() => {
+    const ztype = JSON.parse(localStorage.getItem("zoneType"));
+
+    setZoneType(ztype);
+  }, []);
+
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-zinc-200 bg-white p-6">
       <div>
@@ -34,7 +42,7 @@ export default function InventoryHeader({
             <p className="text-sm font-bold uppercase">EXPORT</p>
             <FiDownload className="text-sm" />
           </CSVLink>
-          {warehouseType === "not_shelf" && (
+          {zoneType !== "shelf" && (
             <button
               onClick={onAddNew}
               disabled={isAddDisabled}

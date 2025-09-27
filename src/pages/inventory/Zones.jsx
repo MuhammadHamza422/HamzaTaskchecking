@@ -44,7 +44,6 @@ export default function Zones() {
   const [znType, setZnType] = useState("shelf");
   const [znLoading, setZnLoading] = useState(false);
   const [znFormError, setZnFormError] = useState("");
-  const [type, setType] = useState("shelf");
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["zones", selectedWarehouseId],
@@ -76,7 +75,7 @@ export default function Zones() {
       name: z.name,
       description: z.description,
       warehouseId: z.warehouse?.id ?? z.warehouse?._id ?? selectedWarehouseId,
-      type: z.type || "shelf",
+      type: z.type,
     }));
   }, [data, selectedWarehouseId]);
 
@@ -310,7 +309,10 @@ export default function Zones() {
         {filtered?.map((z, i) => (
           <div
             key={z.id + i}
-            onClick={() => dispatch(setSelectedZoneId(z.id))}
+            onClick={() => {
+              dispatch(setSelectedZoneId(z.id));
+              localStorage.setItem("zoneType", JSON.stringify(z.type));
+            }}
             className={`group relative cursor-pointer rounded-xl hover:bg-blue-50  duration-500 border p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${
               selectedZoneId === z.id
                 ? "border-blue-600 bg-blue-50"

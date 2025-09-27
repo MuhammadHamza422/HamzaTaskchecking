@@ -23,6 +23,15 @@ export default function LocationForm({
   const [errors, setErrors] = useState({});
   const [error, setError] = useState("");
   const [boxName, setBoxName] = useState("");
+  const [zoneType, setZoneType] = useState("");
+
+  useEffect(() => {
+    const ztype = JSON.parse(localStorage.getItem("zoneType"));
+
+    setZoneType(ztype);
+  }, []);
+
+  console.log("zonType", zoneType);
 
   // Initialize form when editing
   useEffect(() => {
@@ -193,15 +202,25 @@ export default function LocationForm({
               onChange={(e) => handleTypeChange(e.target.value)}
               className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm bg-white text-black duration-300 ease-in-out focus:border-zinc-400 focus:shadow-lg focus:shadow-zinc-400/50"
             >
-              <option value="shelf">Shelf</option>
-              {(hasShelves || (isEditing && location?.type === "bin")) && (
+              <option value="">Select Type</option>
+              {zoneType !== "not_shelf" && <option value="shelf">Shelf</option>}
+              {(hasShelves ||
+                (isEditing &&
+                  location?.type === "bin" &&
+                  zoneType !== "not_shelf")) && (
                 <option value="bin">Bin</option>
               )}
-              <option value="box">Box</option>
+
+              {(hasShelves ||
+                (isEditing && location?.type === "bin") ||
+                zoneType === "hybrid" ||
+                zoneType === "shelf") && <option value="bin">Bin</option>}
+
+              {zoneType !== "shelf" && <option value="box">Box</option>}
             </select>
           </div>
 
-          {type !== "box" && (
+          {type !== "box" && zoneType !== "not_shelf" && (
             <div className="flex flex-col gap-3">
               <div className="space-y-2">
                 <label className="block text-sm font-medium">Row</label>
