@@ -211,11 +211,6 @@ export default function LocationForm({
                 <option value="bin">Bin</option>
               )}
 
-              {(hasShelves ||
-                (isEditing && location?.type === "bin") ||
-                zoneType === "hybrid" ||
-                zoneType === "shelf") && <option value="bin">Bin</option>}
-
               {zoneType !== "shelf" && <option value="box">Box</option>}
             </select>
           </div>
