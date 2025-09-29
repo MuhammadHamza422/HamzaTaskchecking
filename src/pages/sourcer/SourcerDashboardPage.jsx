@@ -1,4 +1,3 @@
-
 // src/pages/sourcer/SourcerDashboardPage.jsx
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
@@ -19,10 +18,14 @@ import {
   Skeleton,
 } from "antd";
 import { motion } from "framer-motion";
-import { ReloadOutlined, FilterOutlined } from "@ant-design/icons";
+import {
+  ReloadOutlined,
+  FilterOutlined,
+  PlusOutlined,
+} from "@ant-design/icons";
 import { debounce } from "lodash";
 import dayjs from "dayjs";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 import apiClient from "../../api/client";
 import { useAuth } from "../../contexts/AuthContext";
@@ -32,6 +35,7 @@ import SourcingOrdersPage from "./SourcingPage";
 import RecentlyCreatedFive from "./components/RecentlyCreatedFive";
 import { statusPill } from "./utils/helpers";
 import { makeItemsTable } from "./utils/sourcingColumns";
+import { Plus } from "lucide-react";
 
 const { Text } = Typography;
 const { Title } = Typography;
@@ -45,7 +49,10 @@ const statsCardStyle = {
   boxShadow: "0 8px 20px rgba(15,23,42,0.05)",
   border: "1px solid #eef2ff",
 };
-const cardHoverEffect = { whileHover: { scale: 1.01 }, whileTap: { scale: 0.99 } };
+const cardHoverEffect = {
+  whileHover: { scale: 1.01 },
+  whileTap: { scale: 0.99 },
+};
 
 const num = (v) => (typeof v === "number" ? v : Number(v) || 0);
 
@@ -71,7 +78,13 @@ const orderBelongsToUser = (order, user) => {
   const userId = String(user._id || user.id || "");
   const userEmail = (user.email || "").toLowerCase();
 
-  const candidates = [order.sourcer, order.sourcer_id, order.sourcerId, order.createdBy, order.created_by];
+  const candidates = [
+    order.sourcer,
+    order.sourcer_id,
+    order.sourcerId,
+    order.createdBy,
+    order.created_by,
+  ];
 
   for (const c of candidates) {
     if (!c) continue;
@@ -92,7 +105,11 @@ const orderBelongsToUser = (order, user) => {
     if (userId && sameId(cid, userId)) return true;
     if (userEmail && cemail && cemail === userEmail) return true;
   }
-  const creatorEmail = (order.created_by_email || order.sourcer_email || "").toLowerCase();
+  const creatorEmail = (
+    order.created_by_email ||
+    order.sourcer_email ||
+    ""
+  ).toLowerCase();
   if (creatorEmail && userEmail && creatorEmail === userEmail) return true;
   return false;
 };
@@ -101,6 +118,33 @@ export default function SourcerDashboardPage() {
   const { user: authUser } = useAuth();
   const [user, setUser] = useState(authUser || null);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const TAB_KEYS = ["dashboard", "orders"];
+  const readTabFromSearch = (search) => {
+    const q = new URLSearchParams(search);
+    const t = q.get("tab");
+    return TAB_KEYS.includes(t) ? t : "dashboard";
+  };
+  const [activeTab, setActiveTab] = useState(
+    readTabFromSearch(location.search)
+  );
+
+  useEffect(() => {
+    setActiveTab(readTabFromSearch(location.search));
+  }, [location.search]);
+
+  const setUrlTab = (key) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", key);
+    window.history.replaceState({}, "", url);
+  };
+
+  const hrefForTab = (key) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", key);
+    return url.toString();
+  };
 
   const role = user?.roles?.role || user?.role || "";
   const isAdmin = role === "admin";
@@ -112,12 +156,10 @@ export default function SourcerDashboardPage() {
   const [statsLoading, setStatsLoading] = useState(false);
   const [orders, setOrders] = useState([]);
 
-  // Admin-only sourcer picker
   const [sourcerId, setSourcerId] = useState(null);
   const [sourcerOptions, setSourcerOptions] = useState([]);
   const [sourcerOptionsLoading, setSourcerOptionsLoading] = useState(false);
 
-  // Filters
   const [filters, setFilters] = useState({
     productId: null,
     productText: "",
@@ -126,7 +168,6 @@ export default function SourcerDashboardPage() {
     sourcingId: "",
   });
 
-  // Product search
   const [searchOptions, setSearchOptions] = useState([]);
   const debouncedSearch = useMemo(
     () =>
@@ -137,19 +178,29 @@ export default function SourcerDashboardPage() {
           return;
         }
         try {
-          const { data } = await apiClient.get("/api/v1/sourcing/products/search", {
-            params: { search: query, limit: 20, page: 1 },
-          });
+          const { data } = await apiClient.get(
+            "/api/v1/sourcing/products/search",
+            {
+              params: { search: query, limit: 20, page: 1 },
+            }
+          );
           const list = Array.isArray(data?.products) ? data.products : [];
           setSearchOptions(
             list.map((p) => {
               const id = p._id || p.id;
               const sku = p.sku || "NO-SKU";
-              const name = p.pro_title || p.product_name || p.title || p.name || "Untitled";
+              const name =
+                p.pro_title ||
+                p.product_name ||
+                p.title ||
+                p.name ||
+                "Untitled";
               const price = p.sale_price ?? p.price ?? null;
               return {
                 value: String(id),
-                label: `${sku} — ${name}${price != null ? ` ($${Number(price).toFixed(2)})` : ""}`,
+                label: `${sku} — ${name}${
+                  price != null ? ` ($${Number(price).toFixed(2)})` : ""
+                }`,
                 product: { id, sku, name, price, raw: p },
               };
             })
@@ -161,7 +212,6 @@ export default function SourcerDashboardPage() {
     []
   );
 
-  // Load current user
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -184,7 +234,6 @@ export default function SourcerDashboardPage() {
     };
   }, [authUser]);
 
-  // Admin: preload a list of sourcers to populate the select
   const loadSourcerOptions = useCallback(async () => {
     if (!isAdmin) return;
     setSourcerOptionsLoading(true);
@@ -192,7 +241,9 @@ export default function SourcerDashboardPage() {
       const { data } = await apiClient.get("/api/v1/sourcing/all-sourcing", {
         params: { page: 1, limit: 200 },
       });
-      const list = Array.isArray(data) ? data : data?.results || data?.data || [];
+      const list = Array.isArray(data)
+        ? data
+        : data?.results || data?.data || [];
       const map = new Map();
       list.forEach((o) => {
         const s = o?.sourcer_id;
@@ -203,7 +254,11 @@ export default function SourcerDashboardPage() {
         const label = name || s?.email || `Sourcer ${id.slice(-4)}`;
         if (!map.has(id)) map.set(id, { value: id, label });
       });
-      setSourcerOptions(Array.from(map.values()).sort((a, b) => (a.label || "").localeCompare(b.label || "")));
+      setSourcerOptions(
+        Array.from(map.values()).sort((a, b) =>
+          (a.label || "").localeCompare(b.label || "")
+        )
+      );
     } catch (e) {
       console.error(e);
     } finally {
@@ -215,23 +270,28 @@ export default function SourcerDashboardPage() {
     if (isAdmin) loadSourcerOptions();
   }, [isAdmin, loadSourcerOptions]);
 
-  // Data loaders
   const fetchMine = useCallback(async (u) => {
     if (!u) return [];
     try {
       const r = await apiClient.get("/api/v1/sourcing/mine");
       const raw = r?.data;
-      return Array.isArray(raw) ? raw : raw?.orders || raw?.data || raw?.results || [];
+      return Array.isArray(raw)
+        ? raw
+        : raw?.orders || raw?.data || raw?.results || [];
     } catch {
       try {
         const r = await apiClient.get("/api/v1/sourcing/all-sourcing");
         const raw = r?.data;
-        const all = Array.isArray(raw) ? raw : raw?.orders || raw?.data || raw?.results || raw?.items || [];
+        const all = Array.isArray(raw)
+          ? raw
+          : raw?.orders || raw?.data || raw?.results || raw?.items || [];
         return all.filter((o) => orderBelongsToUser(o, u));
       } catch {
         const r = await apiClient.get("/api/v1/sourcing/pending");
         const raw = r?.data;
-        const pending = Array.isArray(raw) ? raw : raw?.orders || raw?.data || raw?.results || [];
+        const pending = Array.isArray(raw)
+          ? raw
+          : raw?.orders || raw?.data || raw?.results || [];
         return pending.filter((o) => orderBelongsToUser(o, u));
       }
     }
@@ -244,7 +304,6 @@ export default function SourcerDashboardPage() {
     return Array.isArray(data) ? data : data?.results || data?.data || [];
   }, []);
 
-  // Initial load / when selection changes
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -272,7 +331,6 @@ export default function SourcerDashboardPage() {
     };
   }, [authUser, user, fetchMine, fetchForSourcer, isAdmin, sourcerId]);
 
-  // Loading feel when filters change
   useEffect(() => {
     if (!loading) {
       setTableLoading(true);
@@ -281,14 +339,15 @@ export default function SourcerDashboardPage() {
     }
   }, [filters, loading]);
 
-  // Enrich orders with efficiency dollars per order
   const enriched = useMemo(() => {
     return (orders || []).map((r) => {
       const baselineBackend = num(r.target_total_cost);
       const baseline =
-        baselineBackend > 0 ? baselineBackend : calcBaselineFromItems(r.items, r.target_cost_per_unit);
+        baselineBackend > 0
+          ? baselineBackend
+          : calcBaselineFromItems(r.items, r.target_cost_per_unit);
       const actual = calcActualTotal(r);
-      const savingsDollar = baseline - actual; // ← efficiency dollars for this order
+      const savingsDollar = baseline - actual;
       const effPct = baseline > 0 ? (savingsDollar / baseline) * 100 : 0;
       return {
         ...r,
@@ -301,12 +360,10 @@ export default function SourcerDashboardPage() {
     });
   }, [orders]);
 
-  // === Stats ===
   const totalBaseline = useMemo(
     () => enriched.reduce((s, r) => s + num(r.target_total), 0),
     [enriched]
   );
-  // ↓↓↓ SUM of efficiency across all loaded orders (for selected sourcer if admin picked one)
   const totalSavings = useMemo(
     () => enriched.reduce((s, r) => s + num(r.savings_dollar), 0),
     [enriched]
@@ -324,19 +381,23 @@ export default function SourcerDashboardPage() {
     [enriched]
   );
 
-  // Apply UI filters for the table widget
   const filtered = useMemo(() => {
     return enriched.filter((order) => {
       const items = order.items || [];
 
       const matchesProductId =
         !filters.productId ||
-        items.some((i) => String(i._id || i.id || i.product_id) === String(filters.productId));
+        items.some(
+          (i) =>
+            String(i._id || i.id || i.product_id) === String(filters.productId)
+        );
 
       const matchesProductText =
         !filters.productText ||
         items.some((i) =>
-          (i.name || i.product_name || "").toLowerCase().includes((filters.productText || "").toLowerCase())
+          (i.name || i.product_name || "")
+            .toLowerCase()
+            .includes((filters.productText || "").toLowerCase())
         );
 
       const matchesStatus = !filters.status || order.status === filters.status;
@@ -348,10 +409,19 @@ export default function SourcerDashboardPage() {
           dayjs(created).isAfter(filters.dateRange[0].startOf("day")) &&
           dayjs(created).isBefore(filters.dateRange[1].endOf("day")));
 
-      const idForFilter = String(order.sourcing_id ?? order._id ?? order.id ?? "");
-      const matchesSourcingId = !filters.sourcingId || idForFilter.includes(String(filters.sourcingId));
+      const idForFilter = String(
+        order.sourcing_id ?? order._id ?? order.id ?? ""
+      );
+      const matchesSourcingId =
+        !filters.sourcingId || idForFilter.includes(String(filters.sourcingId));
 
-      return matchesProductId && matchesProductText && matchesStatus && matchesDate && matchesSourcingId;
+      return (
+        matchesProductId &&
+        matchesProductText &&
+        matchesStatus &&
+        matchesDate &&
+        matchesSourcingId
+      );
     });
   }, [enriched, filters]);
 
@@ -375,7 +445,11 @@ export default function SourcerDashboardPage() {
         }
       } catch (err) {
         console.error(err);
-        message.error(err?.response?.data?.message || err?.response?.data?.detail || "Delete failed");
+        message.error(
+          err?.response?.data?.message ||
+            err?.response?.data?.detail ||
+            "Delete failed"
+        );
       }
     },
     [authUser, user, fetchMine, fetchForSourcer, isAdmin, sourcerId]
@@ -391,215 +465,228 @@ export default function SourcerDashboardPage() {
 
   return (
     <div className="min-h-screen">
-      <AppBreadcrumbs fromLocation />
+      <div className="flex items-center justify-between gap-3">
+        <AppBreadcrumbs fromLocation />
+        {canEdit && (
+            <button
+              onClick={() => navigate("/sourcing/orders/new")}
+              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
+            >
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              New Sourcing
+            </button>
+        )}
+      </div>
 
-      <Tabs defaultActiveKey="1" type="card" className="mt-4" tabBarStyle={{ fontWeight: 600 }}>
-        <TabPane tab="Dashboard Overview" key="1">
+      <Tabs
+        defaultActiveKey="dashboard"
+        type="card"
+        className="mt-4"
+        tabBarStyle={{ fontWeight: 600 }}
+        onChange={(key) => {
+          setActiveTab(key);
+          setUrlTab(key);
+        }}
+      >
+        <TabPane tab="Dashboard Overview" key="dashboard">
           <div className="p-0 md:p-[1.25rem] rounded-[16px] sm:shadow-[0_12px_28px_rgba(15,23,42,0.06)] sm:border border-[#e6edff] bg-none md:bg-[linear-gradient(135deg,#f8fbff,#eef4ff)]">
+            {/* Filters */}
+            <div className="bg-white rounded-lg p-4 mb-4 shadow-sm border border-gray-200">
+              {/* Header */}
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
+                <div className="flex items-center gap-2">
+                  <FilterOutlined className="text-gray-500" />
+                  <Title
+                    level={4}
+                    style={{ margin: 0 }}
+                    className="!mb-0 text-gray-700"
+                  >
+                    Filters
+                  </Title>
+                </div>
 
-            {/* Filter Bar */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {isAdmin && (
+                    <Tooltip title="Pick a sourcer (admins only)">
+                      <Select
+                        allowClear
+                        showSearch
+                        className="w-64"
+                        placeholder="View sourcer…"
+                        options={sourcerOptions}
+                        loading={sourcerOptionsLoading}
+                        value={sourcerId || undefined}
+                        onChange={async (val) => {
+                          setSourcerId(val || null);
+                          setTableLoading(true);
+                          setStatsLoading(true);
+                          try {
+                            if (val) {
+                              setOrders(await fetchForSourcer(val));
+                            } else {
+                              const u = authUser || user;
+                              if (u) setOrders(await fetchMine(u));
+                            }
+                          } catch (e) {
+                            console.error(e);
+                            message.error("Failed to load sourcer’s orders");
+                          } finally {
+                            setTableLoading(false);
+                            setStatsLoading(false);
+                          }
+                        }}
+                        filterOption={(input, option) =>
+                          (option?.label || "")
+                            .toLowerCase()
+                            .includes((input || "").toLowerCase())
+                        }
+                      />
+                    </Tooltip>
+                  )}
 
+                  {isAdmin && sourcerId && (
+                    <Button
+                      type="primary"
+                      onClick={() =>
+                        navigate(`/sourcing/orders?sourcer_id=${sourcerId}`)
+                      }
+                    >
+                      View All
+                    </Button>
+                  )}
 
-            {/* Filters (new look) */}
-<div className="bg-white rounded-lg p-4 mb-4 shadow-sm border border-gray-200">
-  {/* Header */}
-  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
-    <div className="flex items-center gap-2">
-      <FilterOutlined className="text-gray-500" />
-      <Title level={4} style={{ margin: 0 }} className="!mb-0 text-gray-700">
-        Filters
-      </Title>
-    </div>
+                  <Tooltip title="Reset filters">
+                    <button
+                      onClick={() =>
+                        setFilters({
+                          productId: null,
+                          productText: "",
+                          status: "",
+                          dateRange: null,
+                          sourcingId: "",
+                        })
+                      }
+                      className="bg-green-600 hover:bg-green-700 border-green-600 text-white px-4 py-2 rounded-md w-full md:w-auto"
+                    >
+                      Reset Filters
+                    </button>
+                  </Tooltip>
 
-    <div className="flex flex-wrap items-center gap-2">
-      {/* Admin-only sourcer selector */}
-      {isAdmin && (
-        <Tooltip title="Pick a sourcer (admins only)">
-          <Select
-            allowClear
-            showSearch
-            className="w-64"
-            placeholder="View sourcer…"
-            options={sourcerOptions}
-            loading={sourcerOptionsLoading}
-            value={sourcerId || undefined}
-            onChange={async (val) => {
-              setSourcerId(val || null);
-              setTableLoading(true);
-              setStatsLoading(true);
-              try {
-                if (val) {
-                  setOrders(await fetchForSourcer(val));
-                } else {
-                  const u = authUser || user;
-                  if (u) setOrders(await fetchMine(u));
-                }
-              } catch (e) {
-                console.error(e);
-                message.error("Failed to load sourcer’s orders");
-              } finally {
-                setTableLoading(false);
-                setStatsLoading(false);
-              }
-            }}
-            filterOption={(input, option) =>
-              (option?.label || "").toLowerCase().includes((input || "").toLowerCase())
-            }
-          />
-        </Tooltip>
-      )}
+                  <Tooltip title="Reload">
+                    <Button
+                      icon={<ReloadOutlined />}
+                      style={{
+                        padding: "0.5rem 1rem",
+                        height: "auto",
+                        width: "auto",
+                      }}
+                      onClick={async () => {
+                        setTableLoading(true);
+                        setStatsLoading(true);
+                        try {
+                          if (isAdmin && sourcerId) {
+                            setOrders(await fetchForSourcer(sourcerId));
+                          } else {
+                            const u = user;
+                            setOrders(await fetchMine(u));
+                          }
+                        } catch (err) {
+                          console.error(err);
+                          message.error("Failed to refresh.");
+                        } finally {
+                          setTableLoading(false);
+                          setStatsLoading(false);
+                        }
+                      }}
+                    />
+                  </Tooltip>
+                </div>
+              </div>
 
-      {/* View All (admin + sourcer selected) */}
-      {isAdmin && sourcerId && (
-        <Button type="primary" onClick={() => navigate(`/sourcing/orders?sourcer_id=${sourcerId}`)}>
-          View All
-        </Button>
-      )}
+              {/* Controls */}
+              <Row gutter={[16, 16]}>
+                <Col xs={24} md={8} lg={6}>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Product Name contains
+                    </label>
+                    <Input
+                      placeholder="e.g. controller"
+                      allowClear
+                      onChange={(e) =>
+                        setFilters((f) => ({
+                          ...f,
+                          productText: e.target.value,
+                        }))
+                      }
+                      size="large"
+                    />
+                  </div>
+                </Col>
 
-      <Tooltip title="Reset filters">
-        <button
-          size="small"
-          onClick={() =>
-            setFilters({
-              productId: null,
-              productText: "",
-              status: "",
-              dateRange: null,
-              sourcingId: "",
-            })
-          }
-          className="bg-green-600 hover:bg-green-700 border-green-600 text-white px-4 py-2 rounded-md w-full md:w-auto"
-          
-        >
-          Reset Filters
-        </button>
-      </Tooltip>
+                <Col xs={24} md={8} lg={5}>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Status
+                    </label>
+                    <Select
+                      placeholder="Status"
+                      allowClear
+                      className="w-full"
+                      onChange={(val) =>
+                        setFilters((f) => ({ ...f, status: val || "" }))
+                      }
+                      dropdownStyle={{ borderRadius: 10 }}
+                      size="large"
+                    >
+                      <Option value="Pending">Pending</Option>
+                      <Option value="Assigned">Assigned</Option>
+                      <Option value="Offer">Offer</Option>
+                      <Option value="Purchased">Purchased</Option>
+                      <Option value="Disapproved">Disapproved</Option>
+                      <Option value="Sold">Sold</Option>
+                      <Option value="Hold">Hold</Option>
+                      <Option value="Seller Rejected">Seller Rejected</Option>
+                      <Option value="Dropshipped">Dropshipped</Option>
+                      <Option value="Returned">Returned</Option>
+                      <Option value="Completed">Completed</Option>
+                    </Select>
+                  </div>
+                </Col>
 
-      <Tooltip title="Reload">
-        <Button
-          icon={<ReloadOutlined />}
-          style={{ padding: "0.5rem 1rem", height: "auto", width: "auto" }} 
-          
-          onClick={async () => {
-            setTableLoading(true);
-            setStatsLoading(true);
-            try {
-              if (isAdmin && sourcerId) {
-                setOrders(await fetchForSourcer(sourcerId));
-              } else {
-                const u = user;
-                setOrders(await fetchMine(u));
-              }
-            } catch (err) {
-              console.error(err);
-              message.error("Failed to refresh.");
-            } finally {
-              setTableLoading(false);
-              setStatsLoading(false);
-            }
-          }}
-        />
-      </Tooltip>
-    </div>
-  </div>
-
-  {/* Controls */}
-  <Row gutter={[16, 16]}>
-    <Col xs={24} md={10} lg={8}>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Master Product
-        </label>
-        <Select
-          allowClear
-          showSearch
-          placeholder="Filter by Master Product (SKU or Name)…"
-          className="w-full"
-          filterOption={false}
-          onSearch={debouncedSearch}
-          options={searchOptions}
-          onChange={(val, option) => {
-            setFilters((f) => ({ ...f, productId: val || null }));
-            if (option?.product?.name) {
-              setFilters((f) => ({ ...f, productText: option.product.name }));
-            }
-          }}
-          onClear={() => {
-            setFilters((f) => ({ ...f, productId: null, productText: "" }));
-            setSearchOptions([]);
-          }}
-          size="large"
-        />
-      </div>
-    </Col>
-
-    <Col xs={24} md={8} lg={6}>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Product Name contains
-        </label>
-        <Input
-          placeholder="e.g. controller"
-          allowClear
-          onChange={(e) =>
-            setFilters((f) => ({ ...f, productText: e.target.value }))
-          }
-          size="large"
-        />
-      </div>
-    </Col>
-
-    <Col xs={24} md={8} lg={5}>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Status
-        </label>
-        <Select
-          placeholder="Status"
-          allowClear
-          className="w-full"
-          onChange={(val) => setFilters((f) => ({ ...f, status: val || "" }))}
-          dropdownStyle={{ borderRadius: 10 }}
-          size="large"
-        >
-          <Option value="Pending">Pending</Option>
-          <Option value="Assigned">Assigned</Option>
-          <Option value="Offer">Offer</Option>
-          <Option value="Purchased">Purchased</Option>
-          <Option value="Disapproved">Disapproved</Option>
-          <Option value="Sold">Sold</Option>
-          <Option value="Hold">Hold</Option>
-          <Option value="Seller Rejected">Seller Rejected</Option>
-          <Option value="Dropshipped">Dropshipped</Option>
-          <Option value="Returned">Returned</Option>
-          <Option value="Completed">Completed</Option>
-        </Select>
-      </div>
-    </Col>
-
-    <Col xs={24} md={12} lg={5}>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Date Range
-        </label>
-        <RangePicker
-          className="w-full"
-          onChange={(range) => setFilters((f) => ({ ...f, dateRange: range }))}
-          size="large"
-        />
-      </div>
-    </Col>
-  </Row>
-</div>
-
+                <Col xs={24} md={12} lg={5}>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Date Range
+                    </label>
+                    <RangePicker
+                      className="w-full"
+                      onChange={(range) =>
+                        setFilters((f) => ({ ...f, dateRange: range }))
+                      }
+                      size="large"
+                    />
+                  </div>
+                </Col>
+              </Row>
+            </div>
 
             {/* Stats */}
             <Row gutter={[16, 16]}>
               {[
-                { title: isAdmin && sourcerId ? "Total Requests (Selected Sourcer)" : "Total Requests Submitted", value: enriched.length },
-                { title: "Total Savings Generated", value: totalSavings, prefix: "$", precision: 2 }, // ← SUM of efficiencies
-                // { title: "Total Baseline", value: totalBaseline, prefix: "$", precision: 2 },
-                // { title: "Overall Efficiency %", value: overallEffPct, precision: 1, suffix: "%" },
+                {
+                  title:
+                    isAdmin && sourcerId
+                      ? "Total Requests (Selected Sourcer)"
+                      : "Total Requests Submitted",
+                  value: enriched.length,
+                },
+                {
+                  title: "Total Savings Generated",
+                  value: totalSavings,
+                  prefix: "$",
+                  precision: 2,
+                },
                 { title: "Requests Pending", value: requestsPending },
                 { title: "Requests Purchased", value: requestsPurchased },
               ].map((stat, index) => (
@@ -607,10 +694,18 @@ export default function SourcerDashboardPage() {
                   <motion.div {...cardHoverEffect}>
                     <Card style={statsCardStyle} bodyStyle={{ padding: 16 }}>
                       {statsLoading ? (
-                        <Skeleton active paragraph={{ rows: 2 }} title={{ width: "80%" }} />
+                        <Skeleton
+                          active
+                          paragraph={{ rows: 2 }}
+                          title={{ width: "80%" }}
+                        />
                       ) : (
                         <Statistic
-                          title={<span style={{ fontWeight: 600 }}>{stat.title}</span>}
+                          title={
+                            <span style={{ fontWeight: 600 }}>
+                              {stat.title}
+                            </span>
+                          }
                           value={stat.value}
                           prefix={stat.prefix}
                           suffix={stat.suffix}
@@ -625,11 +720,19 @@ export default function SourcerDashboardPage() {
             </Row>
 
             {/* Recent requests table */}
-            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+            >
               <RecentlyCreatedFive
                 orders={filtered}
                 loading={tableLoading}
-                title={isAdmin && sourcerId ? "5 Most Recent (Selected Sourcer)" : "My 5 Most Recent Requests"}
+                title={
+                  isAdmin && sourcerId
+                    ? "5 Most Recent (Selected Sourcer)"
+                    : "My 5 Most Recent Requests"
+                }
                 canEdit={canEdit}
                 navigate={navigate}
                 handleDeleteOrder={handleDeleteOrder}
@@ -640,11 +743,10 @@ export default function SourcerDashboardPage() {
           </div>
         </TabPane>
 
-        <TabPane tab="All Sourcing Orders" key="2">
+        <TabPane tab="All Sourcing Orders" key="all-orders">
           <SourcingOrdersPage />
         </TabPane>
       </Tabs>
     </div>
   );
 }
-

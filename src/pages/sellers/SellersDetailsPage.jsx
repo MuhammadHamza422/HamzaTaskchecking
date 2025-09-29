@@ -1,68 +1,57 @@
 
-import React, { useEffect, useMemo, useState } from "react";
+
+// src/pages/sellers/SellerDetailsPage.jsx
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Card,
-  Row,
-  Col,
   Typography,
-  Descriptions,
   Tag,
   Space,
   Button,
   Divider,
   Table,
-  Tooltip,
   Skeleton,
-  Popconfirm,
-  Statistic,
+  Tooltip,
+  Badge,
+  Modal,
+  Form,
+  Input,
+  Select,
+  Switch,
+  InputNumber,
 } from "antd";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   MailOutlined,
   PhoneOutlined,
   GlobalOutlined,
+  ReloadOutlined,
+  EditOutlined,
   CheckCircleTwoTone,
   StopTwoTone,
-  EditOutlined,
-  ReloadOutlined,
-  VerifiedOutlined,
 } from "@ant-design/icons";
 import apiClient from "../../api/client";
 import Swal from "sweetalert2";
+import { getSourcingColumns } from "../sourcer/utils/sourcingColumns";
 
-const { Title, Text, Link } = Typography;
+const { Text, Link } = Typography;
+const { Option } = Select;
 
-/* ------------------- styling ------------------- */
-// gradientStyle converted to Tailwind classes: bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl p-4 mb-4 shadow-lg
-
+/* toasts */
 const baseToast = {
   toast: true,
   position: "top-end",
   showConfirmButton: false,
-  timer: 3500,
+  timer: 3000,
   timerProgressBar: true,
   customClass: { popup: "rounded-lg" },
 };
 const toastSuccess = (title = "Success!", text = "") =>
-  Swal.fire({
-    ...baseToast,
-    icon: "success",
-    title,
-    text,
-    background: "#10b981",
-    color: "#fff",
-  });
+  Swal.fire({ ...baseToast, icon: "success", title, text, background: "#10b981", color: "#fff" });
 const toastError = (title = "Something went wrong", text = "") =>
-  Swal.fire({
-    ...baseToast,
-    icon: "error",
-    title,
-    text,
-    background: "#ef4444",
-    color: "#fff",
-  });
+  Swal.fire({ ...baseToast, icon: "error", title, text, background: "#ef4444", color: "#fff" });
 
-/* ------------------- helpers ------------------- */
+/* helpers */
 const ensureHttp = (v) => {
   if (!v) return v;
   const s = String(v).trim();
@@ -70,55 +59,65 @@ const ensureHttp = (v) => {
   return `https://${s}`;
 };
 const formatAddress = (a = {}) =>
-  [a.line1, a.line2, a.city, a.state, a.postalCode, a.country]
-    .filter(Boolean)
-    .join(", ");
-
+  [a.line1, a.line2, a.city, a.state, a.postalCode, a.country].filter(Boolean).join(", ");
 const prettyDate = (d) => (d ? new Date(d).toLocaleString() : "—");
+const pickRows = (body) =>
+  Array.isArray(body) ? body : body?.docs || body?.data || body?.results || body?.items || body?.orders || [];
 
-const currency = (n) =>
-  typeof n === "number"
-    ? n.toLocaleString(undefined, { style: "currency", currency: "USD" })
-    : "—";
-
-/* ------------------- page ------------------- */
+/* page */
 export default function SellerDetailsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
 
   const [seller, setSeller] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [orders, setOrders] = useState([]);
-  const [loadingOrders, setLoadingOrders] = useState(true);
+  const [loadingSeller, setLoadingSeller] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const load = async () => {
+  // edit modal
+  const [editOpen, setEditOpen] = useState(false);
+  const [form] = Form.useForm();
+
+  // orders
+  const [orders, setOrders] = useState([]);
+  const [loadingOrders, setLoadingOrders] = useState(true);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [totalOrders, setTotalOrders] = useState(0);
+
+  const didInit = useRef(false);
+
+  const marketLabel = useMemo(() => {
+    if (seller?.marketName) return seller.marketName;
+    if (seller?.market?.name) return seller.market.name;
+    if (seller?.marketSlug) return seller.marketSlug;
+    return "—";
+  }, [seller]);
+
+  const loadSeller = async () => {
     try {
-      setLoading(true);
+      setLoadingSeller(true);
       const { data } = await apiClient.get(`/api/v1/sellers/${id}`);
       setSeller(data);
     } catch (e) {
-      toastError(
-        "Failed to load seller",
-        e?.response?.data?.message || e?.message || ""
-      );
+      toastError("Failed to load seller", e?.response?.data?.message || e?.message || "");
     } finally {
-      setLoading(false);
+      setLoadingSeller(false);
     }
   };
 
-  const loadOrders = async () => {
+  const loadOrders = async (p = page, ps = limit) => {
     try {
       setLoadingOrders(true);
-      const { data } = await apiClient.get(`/api/v1/sourcing`, {
-        params: { seller: id },
+      const { data } = await apiClient.get(`/api/v1/sourcing/by-seller/${id}`, {
+        params: { page: p, limit: ps, sort: "-createdAt" },
       });
-      setOrders(Array.isArray(data) ? data : data?.docs || []);
+      const rows = pickRows(data);
+      setOrders(rows);
+      setTotalOrders(Number(data?.total ?? rows.length ?? 0));
+      setPage(p);
+      setLimit(ps);
     } catch (e) {
-      toastError(
-        "Failed to load seller orders",
-        e?.response?.data?.message || e?.message || ""
-      );
+      toastError("Failed to load seller orders", e?.response?.data?.message || e?.message || "");
     } finally {
       setLoadingOrders(false);
     }
@@ -126,13 +125,14 @@ export default function SellerDetailsPage() {
 
   useEffect(() => {
     if (!id) return;
-    load();
-    loadOrders();
+    if (import.meta.env?.DEV) {
+      if (didInit.current) return;
+      didInit.current = true;
+    }
+    loadSeller();
+    loadOrders(1, limit);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
-
-  const tags = useMemo(() => (seller?.tags || []).slice(0, 12), [seller]);
-  const market = seller?.market;
 
   const handlePatch = async (patch) => {
     try {
@@ -141,497 +141,492 @@ export default function SellerDetailsPage() {
       setSeller(data);
       toastSuccess("Updated", "Seller updated successfully.");
     } catch (e) {
-      toastError(
-        "Update failed",
-        e?.response?.data?.message || e?.message || ""
-      );
+      toastError("Update failed", e?.response?.data?.message || e?.message || "");
     } finally {
       setSaving(false);
     }
   };
 
-  const columns = [
-    {
-      title: "Sourcing #",
-      dataIndex: "sourcing_id",
-      width: 120,
-      render: (v, rec) => (
-        <Button type="link" onClick={() => navigate(`/sourcing/${rec._id}`)}>
-          #{v || "—"}
-        </Button>
-      ),
-    },
-    { title: "Status", dataIndex: "status", width: 160 },
-    {
-      title: "Actual",
-      dataIndex: "total_actual_cost",
-      width: 120,
-      render: (v) => currency(v),
-    },
-    {
-      title: "Target",
-      dataIndex: "target_total_cost",
-      width: 120,
-      render: (v) => currency(v),
-    },
-    { title: "Created", dataIndex: "createdAt", render: (v) => prettyDate(v) },
-  ];
+  /* --- sourcing columns (all), rows clickable to edit page --- */
+  const sourcingColumns = useMemo(
+    () =>
+      getSourcingColumns({
+        statusPill: true,
+        canEdit: false,
+        navigate,
+        handleDeleteOrder: () => {},
+      }),
+    [navigate]
+  );
+
+  /* --- edit modal helpers --- */
+  const openEdit = () => {
+    if (!seller) return;
+    form.setFieldsValue({
+      name: seller.name,
+      verified: !!seller.verified,
+      blocked: !!seller.blocked,
+      preferredContact: seller.preferredContact || "none",
+      rating: seller.rating ?? 0,
+      email: seller?.contact?.email || "",
+      phone: seller?.contact?.phone || "",
+      whatsapp: seller?.contact?.whatsapp || "",
+      website: seller?.contact?.website || "",
+      line1: seller?.address?.line1 || "",
+      line2: seller?.address?.line2 || "",
+      city: seller?.address?.city || "",
+      state: seller?.address?.state || "",
+      postalCode: seller?.address?.postalCode || "",
+      country: seller?.address?.country || "",
+      ebay: seller?.handles?.ebay || "",
+      mercari: seller?.handles?.mercari || "",
+      facebook: seller?.handles?.facebook || "",
+      other: seller?.handles?.other || "",
+    });
+    setEditOpen(true);
+  };
+
+  const submitEdit = async () => {
+    try {
+      const values = await form.validateFields();
+      const patch = {
+        name: values.name?.trim(),
+        verified: !!values.verified,
+        blocked: !!values.blocked,
+        preferredContact: values.preferredContact || "none",
+        rating: Number(values.rating ?? 0),
+        contact: {
+          email: values.email || undefined,
+          phone: values.phone || undefined,
+          whatsapp: values.whatsapp || undefined,
+          website: values.website || undefined,
+        },
+        address: {
+          line1: values.line1 || undefined,
+          line2: values.line2 || undefined,
+          city: values.city || undefined,
+          state: values.state || undefined,
+          postalCode: values.postalCode || undefined,
+          country: values.country || undefined,
+        },
+        handles: {
+          ebay: values.ebay || undefined,
+          mercari: values.mercari || undefined,
+          facebook: values.facebook || undefined,
+          other: values.other || undefined,
+        },
+      };
+      await handlePatch(patch);
+      setEditOpen(false);
+    } catch (e) {
+      // validation errors already shown by antd
+    }
+  };
 
   return (
-    <div>
-      <Space direction="vertical" size="large" className="flex flex-col">
-        {/* Header */}
-        <div className="rounded-xl border border-blue-100 bg-none md:bg-gradient-to-br md:from-blue-50 md:to-indigo-50 shadow-lg p-4 mb-3">
-          {loading ? (
-            // Simple skeleton approximation
-            <div className="animate-pulse space-y-2">
-              <div className="h-6 w-40 bg-gray-200 rounded" />
-              <div className="h-4 w-56 bg-gray-200 rounded" />
+    <div className="min-h-screen">
+      {/* Header */}
+      <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-[#f7fbff] to-[#eef4ff] shadow-lg px-5 py-5 mb-5">
+        {loadingSeller ? (
+          <Skeleton active paragraph={{ rows: 2 }} />
+        ) : !seller ? (
+          <Text type="danger">Seller not found.</Text>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <Badge color={seller?.blocked ? "red" : seller?.verified ? "green" : "blue"} dot offset={[0, 12]}>
+                  <div className="h-12 w-12 rounded-xl bg-white border border-gray-200 shadow-sm flex items-center justify-center text-lg font-bold text-gray-700">
+                    {seller.name?.[0]?.toUpperCase() || "S"}
+                  </div>
+                </Badge>
+
+                <div>
+                  <h1 className="text-2xl md:text-3xl font-semibold m-0">{seller.name}</h1>
+
+                  <div className="flex flex-wrap items-center gap-2 text-[13px] mt-1">
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+                      {marketLabel}
+                    </span>
+
+                    {seller.verified ? (
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
+                        Verified
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">
+                        Unverified
+                      </span>
+                    )}
+
+                    {seller.blocked && (
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                        Blocked
+                      </span>
+                    )}
+
+                    <span className="text-gray-500">
+                      Created: {prettyDate(seller.createdAt)} · Updated: {prettyDate(seller.updatedAt)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <Space wrap>
+                <Tooltip title="Refresh">
+                  <Button
+                    icon={<ReloadOutlined />}
+                    onClick={() => {
+                      loadSeller();
+                      loadOrders(page, limit);
+                    }}
+                  >
+                    Refresh
+                  </Button>
+                </Tooltip>
+
+                <Button icon={<EditOutlined />} onClick={openEdit}>
+                  Edit
+                </Button>
+
+                <Button
+                  type={seller?.verified ? "default" : "primary"}
+                  onClick={() => handlePatch({ verified: !seller?.verified })}
+                  disabled={saving}
+                >
+                  {seller?.verified ? "Unverify" : "Verify"}
+                </Button>
+
+                <Button
+                  danger
+                  ghost
+                  onClick={() => {
+                    const ok = window.confirm(seller?.blocked ? "Unblock this seller?" : "Block this seller?");
+                    if (ok) handlePatch({ blocked: !seller?.blocked });
+                  }}
+                  disabled={saving}
+                >
+                  {seller?.blocked ? "Unblock" : "Block"}
+                </Button>
+              </Space>
             </div>
-          ) : !seller ? (
-            <p className="text-red-600">Seller not found.</p>
-          ) : (
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-              {/* Left: seller info */}
-              <div>
-                <div className="flex items-baseline gap-3 flex-wrap">
-                  <h3 className="text-2xl font-semibold m-0">{seller.name}</h3>
 
-                  {/* Market tag */}
-                  <span className="text-sm px-2 py-0.5 rounded-md bg-blue-100 text-blue-700">
-                    {market}
-                  </span>
-
-                  {/* Verified / Unverified */}
-                  {seller.verified ? (
-                    <span className="flex items-center gap-1 text-sm px-2 py-0.5 rounded-md bg-green-50 text-green-700">
-                      {/* check icon */}
-                      <svg
-                        className="w-4 h-4"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <path
-                          d="M20 6L9 17l-5-5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                      Verified
+            {/* Quick stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="rounded-xl border border-[#eef2ff] bg-white shadow-sm p-4">
+                <div className="text-xs text-gray-500 mb-1">Total Orders</div>
+                <div className="text-xl font-semibold">{totalOrders}</div>
+              </div>
+              <div className="rounded-xl border border-[#eef2ff] bg-white shadow-sm p-4">
+                <div className="text-xs text-gray-500 mb-1">Verified</div>
+                <div className="text-xl font-semibold">
+                  {seller?.verified ? (
+                    <span className="inline-flex items-center gap-1 text-green-700">
+                      <CheckCircleTwoTone twoToneColor="#52c41a" />
+                      Yes
                     </span>
                   ) : (
-                    <span className="flex items-center gap-1 text-sm px-2 py-0.5 rounded-md bg-gray-100 text-gray-700">
-                      {/* verified (outline) icon */}
-                      <svg
-                        className="w-4 h-4"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <circle
-                          cx="12"
-                          cy="12"
-                          r="9"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                        <path
-                          d="M9 12l2 2 4-4"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                      Unverified
-                    </span>
-                  )}
-
-                  {/* Blocked tag */}
-                  {seller.blocked && (
-                    <span className="flex items-center gap-1 text-sm px-2 py-0.5 rounded-md bg-red-50 text-red-700">
-                      {/* stop icon */}
-                      <svg
-                        className="w-4 h-4"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <path
-                          d="M18.364 5.636L5.636 18.364"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                        <path
-                          d="M5.636 5.636l12.728 12.728"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                      Blocked
-                    </span>
+                    "No"
                   )}
                 </div>
-
-                <div className="mt-1 text-sm text-gray-500">
-                  <span>Created: {prettyDate(seller.createdAt)}</span>
-                  <span className="ml-4">
-                    Updated: {prettyDate(seller.updatedAt)}
-                  </span>
+              </div>
+              <div className="rounded-xl border border-[#eef2ff] bg-white shadow-sm p-4">
+                <div className="text-xs text-gray-500 mb-1">Blocked</div>
+                <div className="text-xl font-semibold">
+                  {seller?.blocked ? (
+                    <span className="inline-flex items-center gap-1 text-red-600">
+                      <StopTwoTone twoToneColor="#ff4d4f" />
+                      Yes
+                    </span>
+                  ) : (
+                    "No"
+                  )}
                 </div>
               </div>
-
-              {/* Right: actions */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => {
-                    load();
-                    loadOrders();
-                  }}
-                  className="h-9 px-3 rounded-md border border-gray-300 bg-white text-sm hover:bg-gray-50 flex items-center gap-2"
-                  aria-label="Refresh"
-                >
-                  {/* reload icon */}
-                  <svg
-                    className="w-4 h-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path
-                      d="M21 12a9 9 0 1 0-3.2 6.2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <path
-                      d="M21 3v6h-6"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  Refresh
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => navigate(`/sellers/${id}/edit`)}
-                  className="h-9 px-3 rounded-md border border-gray-300 bg-white text-sm hover:bg-gray-50 flex items-center gap-2"
-                  aria-label="Edit seller"
-                >
-                  {/* edit icon */}
-                  <svg
-                    className="w-4 h-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path
-                      d="M12 20h9"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <path
-                      d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  Edit
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handlePatch({ verified: !seller.verified })}
-                  disabled={saving}
-                  className={`h-9 px-3 rounded-md text-sm flex items-center gap-2 ${
-                    seller.verified
-                      ? "border border-gray-300 bg-white text-gray-800 hover:bg-gray-50"
-                      : "bg-indigo-600 text-white hover:bg-indigo-700"
-                  } ${saving ? "opacity-60 cursor-not-allowed" : ""}`}
-                  aria-label={seller.verified ? "Unverify" : "Verify"}
-                >
-                  {seller.verified ? "Unverify" : "Verify"}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const ok = window.confirm(
-                      seller.blocked
-                        ? "Unblock this seller?"
-                        : "Block this seller?"
-                    );
-                    if (ok) handlePatch({ blocked: !seller.blocked });
-                  }}
-                  disabled={saving}
-                  className={`h-9 px-3 rounded-md text-sm flex items-center gap-2 ${
-                    saving
-                      ? "opacity-60 cursor-not-allowed"
-                      : "bg-white border border-red-300 text-red-700 hover:bg-red-50"
-                  }`}
-                  aria-label={
-                    seller.blocked ? "Unblock seller" : "Block seller"
-                  }
-                >
-                  {seller.blocked ? "Unblock" : "Block"}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Contact & Address */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="rounded-xl p-4 mb-4 shadow-lg">
-            <div className="mb-4">
-              <h3 className="text-lg font-semibold text-gray-800 m-0">
-                Contact
-              </h3>
-            </div>
-            {loading ? (
-              <Skeleton active />
-            ) : (
-              <div className="space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center">
-                  <div className="w-full sm:w-36 text-sm font-medium text-gray-600 mb-1 sm:mb-0">
-                    Email
-                  </div>
-                  <div className="flex-1">
-                    {seller?.contact?.email ? (
-                      <Space>
-                        <Link
-                          href={`mailto:${seller.contact.email}`}
-                          target="_blank"
-                        >
-                          <MailOutlined /> {seller.contact.email}
-                        </Link>
-                        {seller.contact.emailLower && (
-                          <Tag>{seller.contact.emailLower}</Tag>
-                        )}
-                      </Space>
-                    ) : (
-                      "—"
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row sm:items-center">
-                  <div className="w-full sm:w-36 text-sm font-medium text-gray-600 mb-1 sm:mb-0">
-                    Phone
-                  </div>
-                  <div className="flex-1">
-                    {seller?.contact?.phone ? (
-                      <Space>
-                        <Link href={`tel:${seller.contact.phone}`}>
-                          <PhoneOutlined /> {seller.contact.phone}
-                        </Link>
-                        {seller.contact.phoneE164 && (
-                          <Tag>{seller.contact.phoneE164}</Tag>
-                        )}
-                      </Space>
-                    ) : (
-                      "—"
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row sm:items-center">
-                  <div className="w-full sm:w-36 text-sm font-medium text-gray-600 mb-1 sm:mb-0">
-                    WhatsApp
-                  </div>
-                  <div className="flex-1">
-                    {seller?.contact?.whatsapp ? (
-                      <Link
-                        href={`https://wa.me/${seller.contact.whatsapp.replace(
-                          /[^\d]/g,
-                          ""
-                        )}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {seller.contact.whatsapp}
-                      </Link>
-                    ) : (
-                      "—"
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row sm:items-center">
-                  <div className="w-full sm:w-36 text-sm font-medium text-gray-600 mb-1 sm:mb-0">
-                    Website
-                  </div>
-                  <div className="flex-1">
-                    {seller?.contact?.website ? (
-                      <Link
-                        href={ensureHttp(seller.contact.website)}
-                        target="_blank"
-                      >
-                        <GlobalOutlined /> {seller.contact.website}
-                      </Link>
-                    ) : (
-                      "—"
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row sm:items-center">
-                  <div className="w-full sm:w-36 text-sm font-medium text-gray-600 mb-1 sm:mb-0">
-                    Preferred Contact
-                  </div>
-                  <div className="flex-1">
-                    {seller?.preferredContact || "—"}
-                  </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row sm:items-center">
-                  <div className="w-full sm:w-36 text-sm font-medium text-gray-600 mb-1 sm:mb-0">
-                    Last Seen
-                  </div>
-                  <div className="flex-1">{prettyDate(seller?.lastSeenAt)}</div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-xl p-4 mb-4 shadow-lg">
-            <div className="mb-4">
-              <h3 className="text-lg font-semibold text-gray-800 m-0">
-                Address
-              </h3>
-            </div>
-            {loading ? (
-              <Skeleton active />
-            ) : (
-              <div className="space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center">
-                  <div className="w-full sm:w-36 text-sm font-medium text-gray-600 mb-1 sm:mb-0">
-                    Address
-                  </div>
-                  <div className="flex-1">
-                    {seller?.address ? formatAddress(seller.address) : "—"}
-                  </div>
-                </div>
-              </div>
-            )}
-            <Divider className="my-3" />
-            <div className="grid grid-cols-2 gap-4">
-              <div className="text-center">
-                <div className="text-2xl font-semibold text-gray-800">
-                  {seller?.rating ?? 0}
-                </div>
-                <div className="text-sm text-gray-600">Rating</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-semibold text-gray-800">
-                  {seller?.verified ? "Yes" : "No"}
-                </div>
-                <div className="text-sm text-gray-600">Verified</div>
+              <div className="rounded-xl border border-[#eef2ff] bg-white shadow-sm p-4">
+                <div className="text-xs text-gray-500 mb-1">Rating</div>
+                <div className="text-xl font-semibold">{seller?.rating ?? 0}</div>
               </div>
             </div>
           </div>
-        </div>
+        )}
+      </div>
 
-        {/* Handles & Tags & Notes */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="rounded-xl p-4 mb-4 shadow-lg">
-            <div className="mb-4">
-              <h3 className="text-lg font-semibold text-gray-800 m-0">
-                Marketplace Handles
-              </h3>
-            </div>
-            {loading ? (
-              <Skeleton active />
-            ) : (
-              <div className="space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center">
-                  <div className="w-full sm:w-36 text-sm font-medium text-gray-600 mb-1 sm:mb-0">
-                    eBay
-                  </div>
-                  <div className="flex-1">{seller?.handles?.ebay || "—"}</div>
-                </div>
-                <div className="flex flex-col sm:flex-row sm:items-center">
-                  <div className="w-full sm:w-36 text-sm font-medium text-gray-600 mb-1 sm:mb-0">
-                    Mercari
-                  </div>
-                  <div className="flex-1">
-                    {seller?.handles?.mercari || "—"}
-                  </div>
-                </div>
-                <div className="flex flex-col sm:flex-row sm:items-center">
-                  <div className="w-full sm:w-36 text-sm font-medium text-gray-600 mb-1 sm:mb-0">
-                    Facebook
-                  </div>
-                  <div className="flex-1">
-                    {seller?.handles?.facebook || "—"}
-                  </div>
-                </div>
-                <div className="flex flex-col sm:flex-row sm:items-center">
-                  <div className="w-full sm:w-36 text-sm font-medium text-gray-600 mb-1 sm:mb-0">
-                    Other
-                  </div>
-                  <div className="flex-1">{seller?.handles?.other || "—"}</div>
-                </div>
-              </div>
-            )}
-          </div>
-          <div className="rounded-xl p-4 mb-4 shadow-lg">
-            <div className="mb-4">
-              <h3 className="text-lg font-semibold text-gray-800 m-0">
-                Tags & Notes
-              </h3>
-            </div>
-            {loading ? (
-              <Skeleton active />
-            ) : (
-              <div className="space-y-4">
-                <div>
-                  <Space wrap>
-                    {tags.length ? (
-                      tags.map((t) => <Tag key={t}>{t}</Tag>)
-                    ) : (
-                      <Text>—</Text>
-                    )}
-                  </Space>
-                </div>
-                <Divider />
-                <div>
-                  <Text type="secondary" className="whitespace-pre-wrap">
-                    {seller?.notes || "—"}
-                  </Text>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Orders for this seller */}
-        <div className="rounded-xl p-4 mb-4 shadow-lg">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-semibold text-gray-800 m-0">
-              Sourcing Orders
-            </h3>
-            <Text type="secondary">{orders?.length || 0} total</Text>
-          </div>
-          {loadingOrders ? (
+      {/* 3 cards in ONE row: Contact, Address, Marketplace Handles */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card
+          title={<span className="font-semibold">Contact</span>}
+          className="rounded-xl shadow-sm border border-[#eef2ff]"
+          bodyStyle={{ padding: 16 }}
+        >
+          {loadingSeller ? (
             <Skeleton active />
           ) : (
-            <Table
-              rowKey={(r) => r._id}
-              columns={columns}
-              dataSource={orders}
-              size="small"
-              pagination={{ pageSize: 10 }}
-              className="overflow-x-auto"
-            />
+            <div className="space-y-3 text-[14px]">
+              <div className="flex">
+                <div className="w-28 text-gray-600">Email</div>
+                <div className="flex-1">
+                  {seller?.contact?.email ? (
+                    <Space>
+                      <Link href={`mailto:${seller.contact.email}`} target="_blank">
+                        <MailOutlined /> {seller.contact.email}
+                      </Link>
+                      {seller.contact.emailLower && <Tag>{seller.contact.emailLower}</Tag>}
+                    </Space>
+                  ) : (
+                    "—"
+                  )}
+                </div>
+              </div>
+
+              <div className="flex">
+                <div className="w-28 text-gray-600">Phone</div>
+                <div className="flex-1">
+                  {seller?.contact?.phone ? (
+                    <Space>
+                      <Link href={`tel:${seller.contact.phone}`}>
+                        <PhoneOutlined /> {seller.contact.phone}
+                      </Link>
+                      {seller.contact.phoneE164 && <Tag>{seller.contact.phoneE164}</Tag>}
+                    </Space>
+                  ) : (
+                    "—"
+                  )}
+                </div>
+              </div>
+
+              <div className="flex">
+                <div className="w-28 text-gray-600">WhatsApp</div>
+                <div className="flex-1">
+                  {seller?.contact?.whatsapp ? (
+                    <Link
+                      href={`https://wa.me/${seller.contact.whatsapp.replace(/[^\d]/g, "")}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {seller.contact.whatsapp}
+                    </Link>
+                  ) : (
+                    "—"
+                  )}
+                </div>
+              </div>
+
+              <div className="flex">
+                <div className="w-28 text-gray-600">Website</div>
+                <div className="flex-1">
+                  {seller?.contact?.website ? (
+                    <Link href={ensureHttp(seller.contact.website)} target="_blank">
+                      <GlobalOutlined /> {seller.contact.website}
+                    </Link>
+                  ) : (
+                    "—"
+                  )}
+                </div>
+              </div>
+
+              <div className="flex">
+                <div className="w-28 text-gray-600">Preferred</div>
+                <div className="flex-1">{seller?.preferredContact || "—"}</div>
+              </div>
+
+              <div className="flex">
+                <div className="w-28 text-gray-600">Last Seen</div>
+                <div className="flex-1">{prettyDate(seller?.lastSeenAt)}</div>
+              </div>
+            </div>
           )}
+        </Card>
+
+        <Card
+          title={<span className="font-semibold">Address</span>}
+          className="rounded-xl shadow-sm border border-[#eef2ff]"
+          bodyStyle={{ padding: 16 }}
+        >
+          {loadingSeller ? (
+            <Skeleton active />
+          ) : (
+            <>
+              <div className="text-[14px]">{seller?.address ? formatAddress(seller.address) : "—"}</div>
+              <Divider className="my-3" />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-xs text-gray-500">Verified</div>
+                  <div className="text-base font-medium mt-1">{seller?.verified ? "Yes" : "No"}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500">Rating</div>
+                  <div className="text-base font-medium mt-1">{seller?.rating ?? 0}</div>
+                </div>
+              </div>
+            </>
+          )}
+        </Card>
+
+        <Card
+          title={<span className="font-semibold">Marketplace Handles</span>}
+          className="rounded-xl shadow-sm border border-[#eef2ff]"
+          bodyStyle={{ padding: 16 }}
+        >
+          {loadingSeller ? (
+            <Skeleton active />
+          ) : (
+            <div className="space-y-3">
+              <div className="flex">
+                <div className="w-28 text-gray-600">eBay</div>
+                <div className="flex-1">{seller?.handles?.ebay || "—"}</div>
+              </div>
+              <div className="flex">
+                <div className="w-28 text-gray-600">Mercari</div>
+                <div className="flex-1">{seller?.handles?.mercari || "—"}</div>
+              </div>
+              <div className="flex">
+                <div className="w-28 text-gray-600">Facebook</div>
+                <div className="flex-1">{seller?.handles?.facebook || "—"}</div>
+              </div>
+              <div className="flex">
+                <div className="w-28 text-gray-600">Other</div>
+                <div className="flex-1">{seller?.handles?.other || "—"}</div>
+              </div>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* --- BOTTOM: Sourcing Orders (ALL columns, roomy, clickable) --- */}
+      <Card
+        title={<span className="font-semibold">Sourcing Orders</span>}
+        extra={<span className="text-gray-500">{totalOrders} total</span>}
+        className="rounded-xl shadow-sm border border-[#eef2ff] mt-6"
+        bodyStyle={{ padding: 0 }}
+      >
+        <div className="p-3">
+          <div className="rounded-xl border border-gray-100 bg-white overflow-hidden">
+            <Table
+              rowKey={(r) => r._id || r.id}
+              columns={sourcingColumns}
+              dataSource={orders}
+              loading={loadingOrders}
+              size="middle"
+              pagination={{
+                current: page,
+                pageSize: limit,
+                total: totalOrders,
+                showSizeChanger: true,
+                onChange: (p, ps) => loadOrders(p, ps),
+              }}
+              onRow={(record) => ({
+                onClick: () => navigate(`/sourcing/edit/${record._id || record.id}`),
+                style: { cursor: "pointer" },
+              })}
+              rowClassName={() => "hover:bg-blue-50 transition-colors"}
+              scroll={{ x: 1200 }}
+              className="
+                [&_.ant-table-thead>tr>th]:bg-[#f9fbff]
+                [&_.ant-table-thead>tr>th]:text-gray-600
+                [&_.ant-table-thead>tr>th]:font-semibold
+                [&_.ant-table-tbody>tr>td]:py-4
+              "
+            />
+          </div>
         </div>
-      </Space>
+      </Card>
+
+      {/* Edit Seller Modal */}
+      <Modal
+        title="Edit Seller"
+        open={editOpen}
+        onCancel={() => setEditOpen(false)}
+        onOk={submitEdit}
+        okText="Save"
+        confirmLoading={saving}
+        destroyOnClose
+      >
+        <Form form={form} layout="vertical">
+          <Form.Item name="name" label="Name" rules={[{ required: true, message: "Name is required" }]}>
+            <Input placeholder="Seller name" />
+          </Form.Item>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <Form.Item name="verified" label="Verified" valuePropName="checked">
+              <Switch />
+            </Form.Item>
+            <Form.Item name="blocked" label="Blocked" valuePropName="checked">
+              <Switch />
+            </Form.Item>
+            <Form.Item name="rating" label="Rating">
+              <InputNumber min={0} max={5} style={{ width: "100%" }} />
+            </Form.Item>
+          </div>
+
+          <Form.Item name="preferredContact" label="Preferred Contact">
+            <Select placeholder="Select">
+              <Option value="none">None</Option>
+              <Option value="email">Email</Option>
+              <Option value="phone">Phone</Option>
+              <Option value="whatsapp">WhatsApp</Option>
+              <Option value="website">Website</Option>
+            </Select>
+          </Form.Item>
+
+          <Divider />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <Form.Item name="email" label="Email">
+              <Input placeholder="Email" />
+            </Form.Item>
+            <Form.Item name="phone" label="Phone">
+              <Input placeholder="Phone" />
+            </Form.Item>
+            <Form.Item name="whatsapp" label="WhatsApp">
+              <Input placeholder="WhatsApp" />
+            </Form.Item>
+            <Form.Item name="website" label="Website">
+              <Input placeholder="Website" />
+            </Form.Item>
+          </div>
+
+          <Divider />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <Form.Item name="line1" label="Address line 1">
+              <Input />
+            </Form.Item>
+            <Form.Item name="line2" label="Address line 2">
+              <Input />
+            </Form.Item>
+            <Form.Item name="city" label="City">
+              <Input />
+            </Form.Item>
+            <Form.Item name="state" label="State">
+              <Input />
+            </Form.Item>
+            <Form.Item name="postalCode" label="Postal Code">
+              <Input />
+            </Form.Item>
+            <Form.Item name="country" label="Country">
+              <Input />
+            </Form.Item>
+          </div>
+
+          <Divider />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <Form.Item name="ebay" label="eBay">
+              <Input />
+            </Form.Item>
+            <Form.Item name="mercari" label="Mercari">
+              <Input />
+            </Form.Item>
+            <Form.Item name="facebook" label="Facebook">
+              <Input />
+            </Form.Item>
+            <Form.Item name="other" label="Other">
+              <Input />
+            </Form.Item>
+          </div>
+        </Form>
+      </Modal>
     </div>
   );
 }

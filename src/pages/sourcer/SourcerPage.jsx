@@ -1,4 +1,5 @@
 
+// /src/pages/sourcer/SourcerPage.jsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Form,
@@ -13,6 +14,7 @@ import {
   Col,
   Typography,
   Spin,
+  Alert,
 } from "antd";
 import { motion } from "framer-motion";
 import { DeleteOutlined } from "@ant-design/icons";
@@ -53,7 +55,11 @@ const normalizeListingLink = (raw) => {
   const withProto = /^https?:\/\//i.test(v) ? v : `https://${v}`;
   if (/\s/.test(withProto)) throw new Error("URL cannot contain spaces");
   let u;
-  try { u = new URL(withProto); } catch { throw new Error("Invalid URL"); }
+  try {
+    u = new URL(withProto);
+  } catch {
+    throw new Error("Invalid URL");
+  }
   if (!u.hostname || !u.hostname.includes(".")) throw new Error("Invalid URL host");
   return u.toString();
 };
@@ -82,9 +88,10 @@ const COUNTRY_OPTIONS = MAIN_COUNTRIES.map((c) => ({ label: c, value: c }));
 
 const baseToast = { toast: true, position: "top-end", showConfirmButton: false, timer: 4000, timerProgressBar: true, customClass: { popup: "rounded-lg" } };
 const toastSuccess = (title = "Success!", text = "") => Swal.fire({ ...baseToast, icon: "success", title, text, background: "#10b981", color: "#fff" });
-const toastError = (title = "Something went wrong", text = "") => Swal.fire({ ...baseToast, icon: "error", title, text, background: "#ef4444", color: "#fff" });
+const toastError   = (title = "Something went wrong", text = "") => Swal.fire({ ...baseToast, icon: "error",   title, text, background: "#ef4444", color: "#fff" });
 
 const TYPE_CODE_TO_NAME = { CON: "Console", HAN: "Handheld", ACC: "Accessory", GAM: "Game" };
+const ProductType = { Accessory: "Accessory", Console: "Console", Game: "Game", Handheld: "Handheld" };
 
 const getMarketSlug = (m) => {
   if (!m) return "";
@@ -95,15 +102,21 @@ const getMarketSlug = (m) => {
 
 const isMongoId = (v) => typeof v === "string" && /^[0-9a-fA-F]{24}$/.test(v);
 
+/** Sum target total directly from items (used during submit) */
+const calcTargetTotalFromItems = (items) =>
+  round2(items.reduce((sum, i) => sum + toNum(i.target_cost_per_unit) * toNum(i.quantity_needed), 0));
+
+/** Persist per-line target + allocated actual cost to backend payload */
 const buildItemsForSave = (cartItems, totalActualCost, targetTotalCost) => {
   const alloc = targetTotalCost > 0 ? totalActualCost / targetTotalCost : 0;
   return cartItems.map((i) => {
     const qty = toNum(i.quantity_needed) || 1;
-    const target = toNum(i.target_cost);
-    const perUnitActual = round2(alloc * target);
+    const tpu = toNum(i.target_cost_per_unit);
+    const perUnitActual = round2(alloc * tpu);
     const lineActual = round2(perUnitActual * qty);
     return {
       ...(isMongoId(i.id) ? { _id: i.id } : {}),
+      ...(isMongoId(i.product_id) ? { product: i.product_id } : {}),
       product_name: i.product_name || "Untitled",
       sku: i.sku || "",
       quantity_needed: qty,
@@ -111,7 +124,12 @@ const buildItemsForSave = (cartItems, totalActualCost, targetTotalCost) => {
       category: i.category || "",
       tested: !!i.tested,
       product_condition: i.product_condition ?? null,
-      sourced_price: lineActual,
+
+      // item financials
+      target_cost_per_unit: tpu,
+      total_target_cost: round2(qty * tpu),
+      actual_cost_per_unit: perUnitActual,
+      total_actual_cost: lineActual,
     };
   });
 };
@@ -140,8 +158,6 @@ export default function SourcerPage() {
   const cartRef = useRef(cart);
   useEffect(() => { cartRef.current = cart; }, [cart]);
 
-  const ProductType = { Accessory: "Accessory", Console: "Console", Game: "Game", Handheld: "Handheld" };
-
   useEffect(() => {
     const onDocClick = (e) => {
       if (!dropdownRef.current) return;
@@ -157,6 +173,7 @@ export default function SourcerPage() {
     debouncedSearch(val);
   };
 
+  /** Keep product_id & sku so we can update product.target_cost_per_unit */
   const addToCartLocal = (p) => {
     const name = p.pro_title || p.product_name || "Untitled";
     const code = p.type_code || p.product_type_code || "";
@@ -164,11 +181,13 @@ export default function SourcerPage() {
 
     cart.add({
       id: `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      product_id: p._id || p.id || null, // prefer real Mongo _id if you have it (not required)
+      product_uid: p.uid || null,
       product_name: name,
       sku: p.sku || "",
       product_type: resolvedType,
       category: p.category || "",
-      target_cost: Number(p.target_cost) || 0,
+      target_cost_per_unit: Number(p.target_cost_per_unit ?? p.target_cost) || 0,
       quantity_needed: 1,
       sourced_price: 0,
     });
@@ -184,16 +203,18 @@ export default function SourcerPage() {
   const shippingCharges = toNum(totals?.shipping_charges);
   const taxes = toNum(totals?.taxes);
 
+  // "Overall Actual Cost" = seller + shipping + taxes
   const totalActualCost = useMemo(
     () => round2(sellersPrice + shippingCharges + taxes),
     [sellersPrice, shippingCharges, taxes]
   );
 
+  // "Overall Target Price" = sum of qty * target_cost_per_unit
   const targetTotalCost = useMemo(
     () =>
       round2(
         cart.rawItems.reduce(
-          (sum, i) => sum + toNum(i.target_cost) * toNum(i.quantity_needed),
+          (sum, i) => sum + toNum(i.target_cost_per_unit) * toNum(i.quantity_needed),
           0
         )
       ),
@@ -210,6 +231,33 @@ export default function SourcerPage() {
     return totalActualCost / targetTotalCost;
   }, [totalActualCost, targetTotalCost]);
 
+  /** REQUIRED: every row must have target_cost_per_unit > 0 */
+  const invalidTargetsCount = useMemo(
+    () => cart.rawItems.reduce((n, it) => n + (toNum(it.target_cost_per_unit) > 0 ? 0 : 1), 0),
+    [cart.rawItems]
+  );
+
+  /** Update product.target_cost_per_unit for all rows (SKU-only endpoint) */
+  const updateProductsTargetCosts = useCallback(async (items) => {
+    const ops = items
+      .filter((i) => i.sku && toNum(i.target_cost_per_unit) > 0)
+      .map((i) => {
+        const cost = toNum(i.target_cost_per_unit);
+        const sku  = encodeURIComponent(i.sku);
+        return apiClient.put(`/api/v1/products/sku/${sku}/target-cost`, { target_cost: cost });
+      });
+
+    if (!ops.length) return { ok: true, failed: 0, total: 0 };
+
+    const results = await Promise.allSettled(ops);
+    const failed = results.filter((r) => r.status === "rejected");
+    failed.forEach((r) =>
+      console.error("target_cost update failed:", r.reason?.response?.data || r.reason)
+    );
+    return { ok: failed.length === 0, failed: failed.length, total: results.length };
+  }, []);
+
+  /** Markets & Sellers async search (UI aid for creating/selecting seller) */
   const [marketOpts, setMarketOpts] = useState([]);
   const [marketLoading, setMarketLoading] = useState(false);
   const marketTimer = useRef(null);
@@ -245,22 +293,53 @@ export default function SourcerPage() {
       : [...marketOpts, { label: `Create “${q}”`, value: "__CREATE__", meta: { createName: q } }];
   }, [marketOpts]);
 
+  // 🔧 UPDATED: when selecting (or creating) a market, ensure the current seller_name exists for that market
   const onMarketSelect = async (val, option) => {
-    if (val === "__CREATE__") {
-      const createName = option?.meta?.createName;
-      try {
+    try {
+      let slug = "";
+      if (val === "__CREATE__") {
+        const createName = option?.meta?.createName;
         const { data } = await apiClient.post("/api/v1/markets/find-or-create", { name: createName });
-        const h = form.getFieldValue("header") || {};
-        form.setFieldsValue({ header: { ...h, market: data.slug, seller_id: undefined, seller_name: undefined } });
-        setSellerOptions([]);
+        slug = data.slug;
+        const hPrev = form.getFieldValue("header") || {};
+        form.setFieldsValue({ header: { ...hPrev, market: slug } });
         toastSuccess("Market added", `${data.name} (${data.slug})`);
-      } catch (e) {
-        toastError("Could not create market", e?.response?.data?.message || "");
+      } else {
+        slug = val;
+        const hPrev = form.getFieldValue("header") || {};
+        form.setFieldsValue({ header: { ...hPrev, market: slug } });
       }
-    } else {
+
+      // After setting market, try to ensure seller (by name) exists for that market
       const h = form.getFieldValue("header") || {};
-      form.setFieldsValue({ header: { ...h, market: val, seller_id: undefined, seller_name: undefined } });
-      setSellerOptions([]);
+      const sellerName = (h.seller_name || "").trim();
+
+      if (sellerName) {
+        try {
+          const { data: s } = await apiClient.post("/api/v1/sellers/find-or-create", {
+            name: sellerName,
+            market: slug,
+          });
+          // set ensured seller id + name back to the form
+          form.setFieldsValue({
+            header: { ...h, market: slug, seller_id: s._id, seller_name: s.name },
+          });
+          setSellerOptions([{ label: s.name, value: s._id, meta: s }]);
+          toastSuccess("Seller ready", `${s.name} on ${slug}`);
+        } catch (e) {
+          // keep the typed name, clear id
+          const h2 = form.getFieldValue("header") || {};
+          form.setFieldsValue({ header: { ...h2, market: slug, seller_id: undefined } });
+          toastError("Could not ensure seller", e?.response?.data?.message || "");
+        }
+      } else {
+        // No seller name typed; clear seller id only
+        const h2 = form.getFieldValue("header") || {};
+        form.setFieldsValue({ header: { ...h2, market: slug, seller_id: undefined } });
+        setSellerOptions([]);
+      }
+    } catch (e) {
+      toastError("Market selection failed", e?.response?.data?.message || "");
     }
   };
 
@@ -270,7 +349,10 @@ export default function SourcerPage() {
   const lastSellerQuery = useRef("");
 
   const debouncedSellerSearch = useCallback((q, market) => {
-    if (!market) { setSellerOptions([]); return; }
+    if (!market) {
+      setSellerOptions([]);
+      return;
+    }
     lastSellerQuery.current = q;
     if (sellerSearchTimer.current) clearTimeout(sellerSearchTimer.current);
     sellerSearchTimer.current = setTimeout(async () => {
@@ -305,7 +387,10 @@ export default function SourcerPage() {
     if (val === "__CREATE__") {
       const createName = option?.meta?.createName;
       const market = form.getFieldValue(["header", "market"]);
-      if (!market) { Swal.fire({ ...baseToast, icon: "info", title: "Please select a marketplace first" }); return; }
+      if (!market) {
+        Swal.fire({ ...baseToast, icon: "info", title: "Please select a marketplace first" });
+        return;
+      }
       try {
         const { data } = await apiClient.post("/api/v1/sellers/find-or-create", { name: createName, market });
         const h = form.getFieldValue("header") || {};
@@ -336,23 +421,22 @@ export default function SourcerPage() {
         const { data } = await apiClient.get(`/api/v1/sourcing/${id}`);
         if (cancelled) return;
 
-        // form fields
         form.setFieldsValue({
           header: {
             listing_link: data?.listing_link || "",
-            seller_name: data?.seller?.name || data?.seller_name || "",
+            seller_name: data?.seller?.name || "",
             seller_id: data?.seller?._id || undefined,
             market: getMarketSlug(data?.seller?.market || data?.market || "ebay"),
             origin: data?.origin || undefined,
           },
           totals: {
             sellers_price: toNum(data?.sellers_price),
-            shipping_charges: toNum(data?.shipping_charges ?? data?.shipping_price),
-            taxes: toNum(data?.taxes ?? data?.tax),
+            shipping_charges: toNum(data?.shipping_charges),
+            taxes: toNum(data?.taxes),
           },
         });
 
-        // items -> cart (use ref to avoid effect deps)
+        // items -> cart
         const items = Array.isArray(data?.items) ? data.items : [];
         const totalUnits = items.reduce((s, it) => s + toNum(it.quantity_needed || 1), 0);
         const orderTargetTotal = toNum(data?.target_total_cost);
@@ -362,13 +446,14 @@ export default function SourcerPage() {
         items.forEach((it) => {
           cartRef.current.add({
             id: it._id,
+            product_id: it.product || null,
             product_name: it.name || it.product_name || "Untitled",
             sku: it.sku || "",
             product_type: it.product_type || "Game",
             category: it.category || "",
-            target_cost: derivedTargetPerUnit,
+            target_cost_per_unit: toNum(it.target_cost_per_unit) || derivedTargetPerUnit,
             quantity_needed: toNum(it.quantity_needed || 1),
-            sourced_price: toNum(it.sourced_price || 0),
+            sourced_price: toNum(it.total_actual_cost || 0),
           });
         });
       } catch (err) {
@@ -378,85 +463,141 @@ export default function SourcerPage() {
       }
     })();
 
-    return () => { cancelled = true; };
-  }, [isEdit, id, form]);
+    return () => {
+      cancelled = true;
+    };
+  }, [isEdit, id, form]); // eslint-disable-line
 
   const buildOrderFields = (values) => {
     const listing_link = normalizeListingLink(values.header?.listing_link);
     return {
       sourcer_id: user?.id,
-      seller: values.header?.seller_id || undefined,
-      seller_name: values.header?.seller_name,
-      market: values.header?.market ?? "",
+      seller: values.header?.seller_id || undefined, // ObjectId only
       listing_link,
       origin: values.header?.origin ?? "",
       sellers_price: toNum(values.totals?.sellers_price),
-      shipping_charges: toNum(values.totals?.shipping_charges ?? values.totals?.shipping_price),
-      taxes: toNum(values.totals?.taxes ?? values.totals?.tax),
-      target_total_cost: targetTotalCost,
-      total_actual_cost: totalActualCost,
+      shipping_charges: toNum(values.totals?.shipping_charges),
+      taxes: toNum(values.totals?.taxes),
+      target_total_cost: targetTotalCost,     // Overall Target Price
+      total_actual_cost: totalActualCost,     // Overall Actual Cost
       purchase_efficiency: round2(targetTotalCost - totalActualCost),
     };
   };
 
   const onSubmit = async () => {
-    if (!cart.rawItems.length) { Swal.fire({ ...baseToast, icon: "info", title: "Cart is empty", text: "Add at least one product to proceed." }); return; }
-    if (!user?.id) { Swal.fire({ ...baseToast, icon: "info", title: "Please log in first" }); return; }
+    if (!cartRef.current.rawItems.length) {
+      Swal.fire({ ...baseToast, icon: "info", title: "Cart is empty", text: "Add at least one product to proceed." });
+      return;
+    }
+    if (cartRef.current.rawItems.some((it) => !(toNum(it.target_cost_per_unit) > 0))) {
+      Swal.fire({
+        ...baseToast,
+        icon: "error",
+        title: "Missing Target $ per unit",
+        text: "Please enter a positive Target $ per unit for every item.",
+        background: "#ef4444",
+        color: "#fff",
+      });
+      return;
+    }
+    if (!user?.id) {
+      Swal.fire({ ...baseToast, icon: "info", title: "Please log in first" });
+      return;
+    }
 
     setIsSubmitting(true);
     try {
+      const itemsLive = cartRef.current.rawItems;
+
+      // Persist product target costs (SKU-only)
+      const upd = await updateProductsTargetCosts(itemsLive);
+      if (upd?.failed > 0) {
+        toastError("Some products were not updated", `${upd.failed}/${upd.total} target costs failed to save to product.`);
+      }
+
       const values = await form.validateFields();
 
+      const liveTargetTotal = calcTargetTotalFromItems(itemsLive);
+      const liveActualTotal = round2(
+        toNum(values?.totals?.sellers_price) +
+        toNum(values?.totals?.shipping_charges) +
+        toNum(values?.totals?.taxes)
+      );
+
+      const orderFields = {
+        sourcer_id: user?.id,
+        seller: values.header?.seller_id || undefined,
+        listing_link: normalizeListingLink(values.header?.listing_link),
+        origin: values.header?.origin ?? "",
+        sellers_price: toNum(values.totals?.sellers_price),
+        shipping_charges: toNum(values.totals?.shipping_charges),
+        taxes: toNum(values.totals?.taxes),
+        target_total_cost: liveTargetTotal,
+        total_actual_cost: liveActualTotal,
+        purchase_efficiency: round2(liveTargetTotal - liveActualTotal),
+      };
+
+      const itemsPayload = buildItemsForSave(itemsLive, liveActualTotal, liveTargetTotal);
+      const payload = { ...orderFields, items: itemsPayload };
+
+      console.log("PUT /api/v1/sourcing/:id payload →", JSON.stringify(payload, null, 2));
+
       if (isEdit) {
-        const orderFields = buildOrderFields(values);
-        const items = buildItemsForSave(cart.rawItems, totalActualCost, targetTotalCost);
-        await apiClient.put(`/api/v1/sourcing/${id}`, { ...orderFields, items });
+        await apiClient.patch(`/api/v1/sourcing/${id}`, payload, {
+          headers: { "Content-Type": "application/json" },
+        });
         toastSuccess("Record Updated!", "Your sourcing order has been updated.");
 
-        // Reload once to sync tmp ids -> real ids, then update log
+        // Refresh after save
         try {
           const { data } = await apiClient.get(`/api/v1/sourcing/${id}`);
           form.setFieldsValue({
             header: {
               listing_link: data?.listing_link || "",
-              seller_name: data?.seller?.name || data?.seller_name || "",
+              seller_name: data?.seller?.name || "",
               seller_id: data?.seller?._id || undefined,
               market: getMarketSlug(data?.seller?.market || data?.market || "ebay"),
               origin: data?.origin || undefined,
             },
             totals: {
               sellers_price: toNum(data?.sellers_price),
-              shipping_charges: toNum(data?.shipping_charges ?? data?.shipping_price),
-              taxes: toNum(data?.taxes ?? data?.tax),
+              shipping_charges: toNum(data?.shipping_charges),
+              taxes: toNum(data?.taxes),
             },
           });
-          const itemsSrv = Array.isArray(data?.items) ? data.items : [];
-          const totalUnits = itemsSrv.reduce((s, it) => s + toNum(it.quantity_needed || 1), 0);
+          const srvItems = Array.isArray(data?.items) ? data.items : [];
+          const totalUnits = srvItems.reduce((s, it) => s + toNum(it.quantity_needed || 1), 0);
           const orderTargetTotal = toNum(data?.target_total_cost);
           const derivedTargetPerUnit = totalUnits > 0 && orderTargetTotal > 0 ? orderTargetTotal / totalUnits : 0;
 
           cart.reset();
-          itemsSrv.forEach((it) => {
+          srvItems.forEach((it) => {
             cart.add({
               id: it._id,
+              product_id: it.product || null,
               product_name: it.name || it.product_name || "Untitled",
               sku: it.sku || "",
               product_type: it.product_type || "Game",
               category: it.category || "",
-              target_cost: derivedTargetPerUnit,
+              target_cost_per_unit: toNum(it.target_cost_per_unit) || derivedTargetPerUnit,
               quantity_needed: toNum(it.quantity_needed || 1),
-              sourced_price: toNum(it.sourced_price || 0),
+              sourced_price: toNum(it.total_actual_cost || 0),
             });
           });
         } catch {}
         setLogsTick((n) => n + 1);
       } else {
-        const orderFields = buildOrderFields(values);
-        const items = buildItemsForSave(cart.rawItems, totalActualCost, targetTotalCost);
-        const { data } = await apiClient.post("/api/v1/sourcing", { ...orderFields, items });
+        const { data } = await apiClient.post("/api/v1/sourcing", payload, {
+          headers: { "Content-Type": "application/json" },
+        });
         toastSuccess("Record Created Successfully!", "Your sourcing order has been created.");
-        if (data?._id) { navigate(`/sourcing/edit/${data._id}`); return; }
-        form.resetFields(); cart.reset(); navigate("/");
+        if (data?._id) {
+          navigate(`/sourcing/edit/${data._id}`);
+          return;
+        }
+        form.resetFields();
+        cart.reset();
+        navigate("/");
       }
     } catch (err) {
       const apiMsg = err?.response?.data?.message;
@@ -507,17 +648,39 @@ export default function SourcerPage() {
               cart.update(rec.id, { product_type: newType });
             }}
           >
-            {Object.values({ Accessory: "Accessory", Console: "Console", Game: "Game", Handheld: "Handheld" }).map((type) => (
+            {Object.values(ProductType).map((type) => (
               <Option key={type} value={type}>{type}</Option>
             ))}
           </Select>
         ),
       },
       {
-        title: "Target $ per unit",
-        dataIndex: "target_cost",
-        width: 180,
-        render: (v) => `$${toNum(v).toFixed(2)}`,
+        title: "Target $ per unit *",
+        dataIndex: "target_cost_per_unit",
+        width: 200,
+        render: (v, rec) => {
+          const valNum = toNum(v);
+          const isInvalid = !(valNum > 0);
+          return (
+            <InputNumber
+              min={0.01}
+              step={0.01}
+              size="large"
+              value={Number.isFinite(valNum) && valNum > 0 ? valNum : null}
+              onChange={(n) => {
+                const next = toNum(n);
+                cart.update(rec.id, { target_cost_per_unit: next });
+              }}
+              formatter={(x) => (x == null ? "" : String(x))}
+              style={{
+                width: "100%",
+                borderColor: isInvalid ? "#ef4444" : undefined,
+                boxShadow: isInvalid ? "0 0 0 2px rgba(239,68,68,0.15)" : undefined,
+              }}
+              placeholder="Enter target per unit"
+            />
+          );
+        },
       },
       {
         title: "Total Target (line)",
@@ -525,7 +688,7 @@ export default function SourcerPage() {
         width: 180,
         render: (_v, rec) => {
           const qty = toNum(rec.quantity_needed);
-          const target = toNum(rec.target_cost);
+          const target = toNum(rec.target_cost_per_unit);
           return `$${(qty * target).toFixed(2)}`;
         },
       },
@@ -534,7 +697,7 @@ export default function SourcerPage() {
         key: "actual_per_unit",
         width: 180,
         render: (_v, rec) => {
-          const perUnitActual = round2(actualAllocationFactor * toNum(rec.target_cost));
+          const perUnitActual = round2(actualAllocationFactor * toNum(rec.target_cost_per_unit));
           return <InputNumber disabled size="large" value={perUnitActual} />;
         },
       },
@@ -544,7 +707,7 @@ export default function SourcerPage() {
         width: 180,
         render: (_v, rec) => {
           const qty = toNum(rec.quantity_needed);
-          const perUnitActual = round2(actualAllocationFactor * toNum(rec.target_cost));
+          const perUnitActual = round2(actualAllocationFactor * toNum(rec.target_cost_per_unit));
           return `$${(qty * perUnitActual).toFixed(2)}`;
         },
       },
@@ -568,14 +731,19 @@ export default function SourcerPage() {
 
   return (
     <div style={{ padding: "1.5rem", borderRadius: 10, position: "relative" }}>
-      <AppBreadcrumbs fromLocation hide={['orders']} />
+      <AppBreadcrumbs fromLocation hide={["orders"]} />
 
       {isEdit && loadingOrder && (
         <div
           style={{
-            position: "absolute", inset: 0, background: "rgba(255,255,255,0.6)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            zIndex: 10, borderRadius: 10,
+            position: "absolute",
+            inset: 0,
+            background: "rgba(255,255,255,0.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 10,
+            borderRadius: 10,
           }}
         >
           <Spin size="large" />
@@ -626,7 +794,9 @@ export default function SourcerPage() {
               </Form.Item>
             </Col>
 
-            <Form.Item name={["header", "seller_id"]} hidden><Input /></Form.Item>
+            <Form.Item name={["header", "seller_id"]} hidden>
+              <Input />
+            </Form.Item>
 
             <Col xs={24} sm={12} md={6}>
               <Form.Item
@@ -635,10 +805,15 @@ export default function SourcerPage() {
                 rules={[{ required: true, message: "Please select or create a seller" }]}
               >
                 <Select
-                  showSearch size="large" placeholder="Type to search or create"
-                  onSearch={handleSellerSearch} filterOption={false}
-                  options={sellerOptionsWithCreate} loading={sellerLoading}
-                  onSelect={handleSellerSelect} allowClear
+                  showSearch
+                  size="large"
+                  placeholder="Type to search or create"
+                  onSearch={handleSellerSearch}
+                  filterOption={false}
+                  options={sellerOptionsWithCreate}
+                  loading={sellerLoading}
+                  onSelect={handleSellerSelect}
+                  allowClear
                   onClear={() => {
                     const h = form.getFieldValue("header") || {};
                     form.setFieldsValue({ header: { ...h, seller_id: undefined, seller_name: undefined } });
@@ -657,13 +832,21 @@ export default function SourcerPage() {
                 rules={[{ required: true, message: "Please select a marketplace" }]}
               >
                 <Select
-                  showSearch size="large" placeholder="Search or create a marketplace"
-                  onSearch={debouncedMarketSearch} filterOption={false}
-                  options={marketOptionsWithCreate} loading={marketLoading}
-                  onSelect={onMarketSelect} allowClear
+                  showSearch
+                  size="large"
+                  placeholder="Search or create a marketplace"
+                  onSearch={debouncedMarketSearch}
+                  filterOption={false}
+                  options={marketOptionsWithCreate}
+                  loading={marketLoading}
+                  onSelect={onMarketSelect}
+                  allowClear
                   onClear={() => {
+                    // keep seller_name typed; only clear seller_id because market is unknown now
                     const h = form.getFieldValue("header") || {};
-                    form.setFieldsValue({ header: { ...h, market: undefined, seller_id: undefined, seller_name: undefined } });
+                    form.setFieldsValue({
+                      header: { ...h, market: undefined, seller_id: undefined },
+                    });
                     setSellerOptions([]);
                   }}
                   value={form.getFieldValue(["header", "market"]) || undefined}
@@ -689,8 +872,12 @@ export default function SourcerPage() {
                 ]}
               >
                 <Select
-                  size="large" showSearch allowClear placeholder="Select country"
-                  options={COUNTRY_OPTIONS} optionFilterProp="label"
+                  size="large"
+                  showSearch
+                  allowClear
+                  placeholder="Select country"
+                  options={COUNTRY_OPTIONS}
+                  optionFilterProp="label"
                   filterOption={(input, option) => (option?.label ?? "").toLowerCase().includes(input.toLowerCase())}
                 />
               </Form.Item>
@@ -703,7 +890,8 @@ export default function SourcerPage() {
             <Col xs={24} md={16}>
               <div className="relative" ref={dropdownRef} style={{ position: "relative" }}>
                 <Input
-                  size="large" placeholder="Search products…"
+                  size="large"
+                  placeholder="Search products…"
                   value={searchText}
                   onChange={handleSearchChange}
                   onFocus={() => {
@@ -713,40 +901,52 @@ export default function SourcerPage() {
                 />
 
                 <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {[{ code: "ACC", label: "Accessories" }, { code: "CON", label: "Consoles" }, { code: "HAN", label: "Handhelds" }, { code: "GAM", label: "Games" }]
-                    .map((t) => {
-                      const active = typeCode === t.code;
-                      return (
-                        <button
-                          key={t.code}
-                          type="button"
-                          onClick={() => {
-                            const next = active ? "" : t.code;
-                            debouncedSearch.cancel?.();
-                            setTypeCode(next);
-                          }}
-                          style={{
-                            padding: "6px 10px",
-                            borderRadius: 8,
-                            border: "1px solid",
-                            borderColor: active ? "#2563eb" : "#e5e7eb",
-                            background: active ? "#eff6ff" : "#fff",
-                            color: active ? "#1d4ed8" : "#111827",
-                            fontWeight: 600, fontSize: 13,
-                          }}
-                        >
-                          {t.label}
-                        </button>
-                      );
-                    })}
+                  {[
+                    { code: "ACC", label: "Accessories" },
+                    { code: "CON", label: "Consoles" },
+                    { code: "HAN", label: "Handhelds" },
+                    { code: "GAM", label: "Games" },
+                  ].map((t) => {
+                    const active = typeCode === t.code;
+                    return (
+                      <button
+                        key={t.code}
+                        type="button"
+                        onClick={() => {
+                          const next = active ? "" : t.code;
+                          debouncedSearch.cancel?.();
+                          setTypeCode(next);
+                        }}
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: 8,
+                          border: "1px solid",
+                          borderColor: active ? "#2563eb" : "#e5e7eb",
+                          background: active ? "#eff6ff" : "#fff",
+                          color: active ? "#1d4ed8" : "#111827",
+                          fontWeight: 600,
+                          fontSize: 13,
+                        }}
+                      >
+                        {t.label}
+                      </button>
+                    );
+                  })}
                 </div>
 
                 {showProductDropdown && (
                   <div
                     style={{
-                      position: "absolute", zIndex: 20, width: "100%", marginTop: 6,
-                      background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8,
-                      boxShadow: "0 10px 30px rgba(0,0,0,0.08)", maxHeight: 280, overflowY: "auto",
+                      position: "absolute",
+                      zIndex: 20,
+                      width: "100%",
+                      marginTop: 6,
+                      background: "#fff",
+                      border: "1px solid #e5e7eb",
+                      borderRadius: 8,
+                      boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
+                      maxHeight: 280,
+                      overflowY: "auto",
                     }}
                   >
                     {loading ? (
@@ -789,6 +989,16 @@ export default function SourcerPage() {
         </Card>
 
         <Card style={gradientStyle}>
+          {invalidTargetsCount > 0 && (
+            <Alert
+              type="error"
+              showIcon
+              style={{ marginBottom: 12 }}
+              message="Target $ per unit is required"
+              description={`Please enter a positive Target $ per unit for all items. (${invalidTargetsCount} missing)`}
+            />
+          )}
+
           <Table
             size="middle"
             columns={columns}
@@ -803,7 +1013,13 @@ export default function SourcerPage() {
 
           <Row justify="end" style={{ marginTop: 12 }}>
             <Col xs={24} md="auto" style={{ textAlign: "right" }}>
-              <Statistic title="Total Target Price" prefix="$" value={targetTotalCost} precision={2} valueStyle={{ fontWeight: 700 }} />
+              <Statistic
+                title="Overall Target Price"
+                prefix="$"
+                value={targetTotalCost}
+                precision={2}
+                valueStyle={{ fontWeight: 700 }}
+              />
             </Col>
           </Row>
         </Card>
@@ -829,18 +1045,29 @@ export default function SourcerPage() {
 
           <Row justify="end">
             <Col>
-              <Statistic title="Actual Cost" prefix="$" value={totalActualCost} precision={2} valueStyle={{ fontWeight: 700 }} />
+              <Statistic
+                title="Overall Actual Cost"
+                prefix="$"
+                value={totalActualCost}
+                precision={2}
+                valueStyle={{ fontWeight: 700 }}
+              />
             </Col>
           </Row>
         </Card>
 
         <motion.div
-          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
           style={{ position: "fixed", bottom: 24, right: 32, zIndex: 999 }}
         >
           <Button
-            type="primary" size="large" onClick={onSubmit}
-            loading={isSubmitting} disabled={!cart.rawItems.length || isSubmitting}
+            type="primary"
+            size="large"
+            onClick={onSubmit}
+            loading={isSubmitting}
+            disabled={!cart.rawItems.length || invalidTargetsCount > 0 || isSubmitting}
             style={{ padding: "0.75rem 2rem", fontWeight: 600, borderRadius: 8, boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}
           >
             {isEdit ? "Save Changes" : "Create Record"}

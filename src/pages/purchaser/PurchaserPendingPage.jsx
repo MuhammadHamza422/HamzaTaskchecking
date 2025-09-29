@@ -1,56 +1,62 @@
 
 
-import React, { useState, useEffect, useCallback } from "react";
-import { Table, Button, message, Space, Typography, Card, Tag } from "antd";
-import { LoadingOutlined, ReloadOutlined } from "@ant-design/icons";
+// /src/pages/purchaser/PurchaserPendingPage.jsx
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Card,
+  Table,
+  Tag,
+  Button,
+  Empty,
+  message,
+  Modal,
+  Select,
+} from "antd";
+import { ReloadOutlined, LoadingOutlined } from "@ant-design/icons";
+import { useNavigate } from "react-router-dom";
+import dayjs from "dayjs";
 import apiClient from "../../api/client";
-import Swal from "sweetalert2";
 
+// shared utils you already had
+import {
+  normalizeRequests,
+  statusColor,
+  num as safeNum,
+  ExpandedItemsTable,
+} from "./utils/PurchaseTableUtils.jsx";
 
-const { Title } = Typography;
+const MAX_FETCH = 200; // how many purchasers to show initially
 
-// normalize API payloads to a stable shape for the table
-const normalizeRequests = (payload) => {
-  const list = Array.isArray(payload) ? payload : payload?.data || [];
-  return list.map((doc) => {
-    const id = doc.id ?? doc._id ?? doc.sourcing_id ?? String(doc._id || "");
-    const created_at = doc.created_at ?? doc.createdAt ?? doc.created_on ?? null;
-    const assigned_at = doc.assigned_at ?? doc.assignedAt ?? null;
-    const purchaser_id =
-      doc.purchaser_id ?? doc.purchaserId ?? doc.purchaser?._id ?? null;
-    const items = Array.isArray(doc.items) ? doc.items : [];
-    const status = doc.status ?? "Pending";
+// open raw URL or add https://
+const toListingUrl = (url) =>
+  !url ? "#" : /^https?:\/\//i.test(url) ? url : `https://${url}`;
 
-    return {
-      ...doc,
-      id,
-      created_at,
-      assigned_at,
-      purchaser_id,
-      status,
-      items: items.map((it) => ({
-        ...it,
-        id: it.id ?? it._id ?? String(it._id || ""),
-        product_name: it.product_name ?? it.name ?? "Unnamed",
-      })),
-    };
-  });
-};
-
-const PurchaserPendingPage = () => {
+export default function PurchaserPendingPage({ onAssigned, isAdmin = false }) {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [assigningId, setAssigningId] = useState(null);
 
+  // --- assign-to-purchaser modal state ---
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
+  const [assignTargetId, setAssignTargetId] = useState(null);
+
+  const [purchaserOptions, setPurchaserOptions] = useState([]); // [{value,label,search,email,raw}]
+  const [purchaserLoading, setPurchaserLoading] = useState(false);
+  const [selectedPurchaserId, setSelectedPurchaserId] = useState(null);
+  const [hasPrefetched, setHasPrefetched] = useState(false);
+
+  const navigate = useNavigate();
+
+  /* ------------------- fetch pending ------------------- */
   const fetchPending = useCallback(async () => {
     setLoading(true);
     try {
       const res = await apiClient.get("/api/v1/sourcing/pending");
-      const data = normalizeRequests(res.data);
-      setRequests(data);
+      setRequests(normalizeRequests(res.data));
     } catch (err) {
       console.error(err);
       message.error("Failed to fetch pending requests.");
+      setRequests([]);
     } finally {
       setLoading(false);
     }
@@ -60,194 +66,326 @@ const PurchaserPendingPage = () => {
     fetchPending();
   }, [fetchPending]);
 
-const handleAssign = async (sourcingId) => {
-  setAssigningId(sourcingId);
-  try {
-    const res = await apiClient.post(`/api/v1/sourcing/${sourcingId}/assign`);
-    const [updated] = normalizeRequests([res.data]);
+  /* ------------------- assign to me ------------------- */
+  const handleAssignToMe = async (sourcingId) => {
+    setAssigningId(sourcingId);
+    try {
+      const res = await apiClient.post(`/api/v1/sourcing/${sourcingId}/assign`);
+      // (optional) set assignedAt for consistency with your previous behavior
+      const assignedAt = new Date().toISOString();
+      await apiClient.patch(`/api/v1/sourcing/${sourcingId}`, { assignedAt });
 
-    // Remove from the pending list
-    setRequests((prev) => prev.filter((r) => String(r.id) !== String(sourcingId)));
+      // remove from local list & notify parent
+      setRequests((prev) => prev.filter((r) => String(r._id) !== String(sourcingId)));
+      onAssigned?.({ ...res.data, assignedAt });
+      message.success(`Assigned #${res.data?.sourcing_id ?? res.data?._id} to you.`);
+    } catch (e) {
+      console.error(e);
+      message.error(e?.response?.data?.message || "Failed to assign request.");
+    } finally {
+      setAssigningId(null);
+    }
+  };
 
-    // ✅ SUCCESS toast (green)
-    Swal.fire({
-      icon: "success",
-      title: "Assigned!",
-      text: `Request #${updated.id} is now ${updated.status}.`,
-      toast: true,
-      position: "top-end",
-      showConfirmButton: false,
-      timer: 3000,
-      timerProgressBar: true,
-      background: "#10b981",
-      color: "#fff",
-      customClass: { popup: "rounded-lg" },
-    });
-  } catch (error) {
-    const msg =
-      error?.response?.data?.message ||
-      "Failed to assign request.";
+  /* ------------------- assign to purchaser (admin) ------------------- */
+  const openAssignModal = (sourcingId) => {
+    setAssignTargetId(sourcingId);
+    setSelectedPurchaserId(null);
+    setAssignModalOpen(true);
+    // fetch the list once when the modal opens
+    if (!hasPrefetched) prefetchAllPurchasers();
+  };
 
-    // If backend says it's not pending anymore, show a warning-style toast
-    const isAlreadyTaken =
-      error?.response?.status === 400 &&
-      /Cannot assign request/i.test(msg);
+  const normalizePurchaserList = (payload) => {
+    const list = Array.isArray(payload?.results)
+      ? payload.results
+      : Array.isArray(payload?.data)
+      ? payload.data
+      : Array.isArray(payload?.users)
+      ? payload.users
+      : Array.isArray(payload)
+      ? payload
+      : [];
 
-    Swal.fire({
-      icon: isAlreadyTaken ? "warning" : "error",
-      title: isAlreadyTaken ? "Already Taken" : "Error",
-      text: msg,
-      toast: true,
-      position: "top-end",
-      showConfirmButton: false,
-      timer: 3500,
-      timerProgressBar: true,
-      background: isAlreadyTaken ? "#f59e0b" : "#ef4444",
-      color: "#fff",
-      customClass: { popup: "rounded-lg" },
-    });
-  } finally {
-    setAssigningId(null);
-  }
-};
+    return list
+      .map((u) => {
+        const id = String(u.value || u._id || u.id || "");
+        const name =
+          u.label ||
+          [u.firstName, u.lastName].filter(Boolean).join(" ") ||
+          u.name ||
+          u.email ||
+          "Unnamed";
+        const email = u.email || "";
+        const search = `${name} ${email}`.toLowerCase();
+        return {
+          value: id,
+          label: (
+            <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+              <span style={{ fontWeight: 600 }}>{name}</span>
+              {email ? <span style={{ color: "#888" }}>· {email}</span> : null}
+            </div>
+          ),
+          search, // used for client filtering
+          email,
+          raw: u,
+        };
+      })
+      .filter((o) => o.value);
+  };
 
-  const columns = [
-    {
-      title: "ID",
-      dataIndex: "id",
-      key: "id",
-      width: 90,
-      render: (id) => <strong style={{ color: "#2c2c2c" }}>#{String(id)}</strong>,
-    },
-    {
-      title: "Product(s)",
-      key: "products",
-      render: (_, record) => (
-        <Space direction="vertical" size="small">
-          {(record.items || []).map((item) => (
-            <span key={item.id} style={{ fontWeight: 500, color: "#3a3a3a" }}>
-              {item.product_name}
-            </span>
-          ))}
-        </Space>
-      ),
-    },
-    // (Optional) show current status even on pending page
-    {
-      title: "Status",
-      dataIndex: "status",
-      key: "status",
-      width: 120,
-      render: (s) => (
-        <Tag color={s === "Pending" ? "gold" : s === "Assigned" ? "blue" : "green"}>
-          {s}
-        </Tag>
-      ),
-      responsive: ["md"],
-    },
-    // (Optional) show purchaser/assigned timestamps if server fills them before you remove row
-    {
-      title: "Purchaser",
-      dataIndex: "purchaser_id",
-      key: "purchaser_id",
-      width: 170,
-      render: (v) => <span style={{ color: "#555" }}>{v || "—"}</span>,
-      responsive: ["lg"],
-    },
-    {
-      title: "Created At",
-      dataIndex: "created_at",
-      key: "created_at",
-      render: (date) => (
-        <span style={{ color: "#777" }}>
-          {date ? new Date(date).toLocaleString() : "—"}
-        </span>
-      ),
-      responsive: ["md"],
-    },
-    {
-      title: "Actions",
-      key: "actions",
-      width: 170,
-      render: (_, record) => (
-        <Button
-          type="primary"
-          onClick={() => handleAssign(record.id)}
-          loading={assigningId === record.id}
-          disabled={assigningId !== null}
-          style={{
-            background: "linear-gradient(90deg, #4facfe 0%, #00f2fe 100%)",
-            border: "none",
-            borderRadius: 8,
-            fontWeight: 600,
-            boxShadow: "0 2px 8px rgba(79, 172, 254, 0.3)",
-          }}
-        >
-          Assign to Me
-        </Button>
-      ),
-    },
-  ];
+  const prefetchAllPurchasers = async () => {
+    setPurchaserLoading(true);
+    try {
+      // fetch an initial page of purchasers (no query) so dropdown shows them all
+      const { data } = await apiClient.get("/api/v1/sourcing/purchasers/search", {
+        params: { q: "", page: 1, limit: MAX_FETCH },
+      });
+      const opts = normalizePurchaserList(data);
+      setPurchaserOptions(opts);
+      setHasPrefetched(true);
+    } catch (e) {
+      const status = e?.response?.status;
+      if (status === 403) message.warning("Only admins can search purchasers.");
+      else message.error(e?.response?.data?.message || "Failed to load purchasers.");
+      setPurchaserOptions([]);
+    } finally {
+      setPurchaserLoading(false);
+    }
+  };
+
+  const submitAssignTo = async () => {
+    if (!assignTargetId || !selectedPurchaserId) return;
+    try {
+      await apiClient.post(`/api/v1/sourcing/${assignTargetId}/assign-to`, {
+        purchaserId: selectedPurchaserId,
+      });
+      // update UI
+      setRequests((prev) => prev.filter((r) => String(r._id) !== String(assignTargetId)));
+      setAssignModalOpen(false);
+      onAssigned?.({ _id: assignTargetId, purchaserId: selectedPurchaserId });
+      message.success("Assigned to purchaser.");
+    } catch (e) {
+      console.error(e);
+      message.error(e?.response?.data?.message || "Assign failed.");
+    }
+  };
+
+  /* ------------------- columns ------------------- */
+  const columns = useMemo(
+    () => [
+      {
+        title: "ID",
+        dataIndex: "sourcing_id",
+        width: 90,
+        align: "left",
+        render: (_, rec) => (
+          <strong>#{String(rec.sourcing_id ?? rec.id ?? rec._id).slice(-6)}</strong>
+        ),
+      },
+      { title: "Sourcer", dataIndex: "sourcer_name", width: 160, render: (v) => v || "—" },
+      {
+        title: "Status",
+        dataIndex: "status",
+        width: 140,
+        align: "center",
+        render: (s) => (
+          <Tag color={statusColor(s)} style={{ fontWeight: 400, fontSize: 14, borderRadius: 6 }}>
+            {s}
+          </Tag>
+        ),
+      },
+      {
+        title: "Seller",
+        dataIndex: "seller_name",
+        width: 180,
+        ellipsis: true,
+        render: (v) => (v ? <p className="m-0">{v}</p> : "—"),
+      },
+      { title: "Market", dataIndex: "market", width: 100, render: (v) => v || "—" },
+      {
+        title: "Seller Price",
+        dataIndex: "sellers_price",
+        width: 120,
+        align: "right",
+        render: (v) => (v ? <p className="m-0">${parseFloat(v).toFixed(2)}</p> : "—"),
+      },
+      {
+        title: "Ship Charges",
+        dataIndex: "shipping_charges",
+        width: 110,
+        align: "right",
+        render: (v) => (v ? <p className="m-0">${parseFloat(v).toFixed(2)}</p> : "—"),
+      },
+      {
+        title: "Tax",
+        dataIndex: "taxes",
+        width: 100,
+        align: "right",
+        render: (v) => (v ? <p className="m-0">${parseFloat(v).toFixed(2)}</p> : "—"),
+      },
+      {
+        title: "Target Cost",
+        dataIndex: "target_total_cost",
+        width: 130,
+        align: "right",
+        render: (v) => (v ? <p className="m-0">${parseFloat(v).toFixed(2)}</p> : "—"),
+        responsive: ["sm"],
+      },
+      {
+        title: "Actual Cost",
+        dataIndex: "total_actual_cost",
+        width: 130,
+        align: "right",
+        render: (v) => (v ? <p className="m-0">${parseFloat(v).toFixed(2)}</p> : "—"),
+        responsive: ["sm"],
+      },
+      {
+        title: "Efficiency",
+        key: "efficiency",
+        width: 140,
+        align: "right",
+        render: (_, rec) => {
+          const eff =
+            typeof rec.purchase_efficiency === "number"
+              ? rec.purchase_efficiency
+              : safeNum(rec.target_total_cost) - safeNum(rec.total_actual_cost);
+          const color = eff >= 0 ? "#16a34a" : "#ef4444";
+          return <p className="m-0" style={{ color }}>${eff ? parseFloat(eff).toFixed(2) : "0.00"}</p>;
+        },
+        responsive: ["md"],
+      },
+      {
+        title: "Created At",
+        dataIndex: "created_at",
+        width: 190,
+        render: (date, rec) => {
+          const d = new Date(date || rec.createdAt || rec.created_on || 0);
+          return <span style={{ fontWeight: 400 }}>{dayjs(d).format("MM/DD/YYYY hh:mm A")}</span>;
+        },
+      },
+      {
+        title: "Actions",
+        key: "actions",
+        width: isAdmin ? 300 : 170,
+        fixed: "right",
+        align: "right",
+        render: (_, record) => (
+          <div className="flex gap-2 justify-end">
+            <Button
+              type="primary"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleAssignToMe(record._id);
+              }}
+              loading={assigningId === record._id}
+              disabled={assigningId !== null}
+              style={{ border: "none", borderRadius: 8, fontWeight: 600 }}
+            >
+              Assign to Me
+            </Button>
+
+            {isAdmin && (
+              <Button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openAssignModal(record._id);
+                }}
+                style={{ borderRadius: 8, fontWeight: 600 }}
+              >
+                Assign to Purchaser
+              </Button>
+            )}
+          </div>
+        ),
+      },
+    ],
+    [assigningId, isAdmin]
+  );
 
   return (
-    <div
-      className="page-container"
-      style={{ padding: "2rem", background: "#f5f9ff", minHeight: "100vh" }}
-    >
-      <div
-        style={{
-          background: "linear-gradient(to right, #4facfe, #00f2fe)",
-          padding: "1.5rem 2rem",
-          borderRadius: "16px",
-          marginBottom: "2rem",
-          color: "#fff",
-          boxShadow: "0 6px 20px rgba(0, 0, 0, 0.08)",
-        }}
-      >
-        <Title level={2} style={{ color: "#fff", margin: 0, fontWeight: 700 }}>
-          Pending Sourcing Requests
-        </Title>
-        <p style={{ marginTop: 6, fontSize: 15, opacity: 0.9 }}>
-          Assign yourself to incoming sourcing tasks
-        </p>
-      </div>
-
+    <>
       <Card
         style={{
-          borderRadius: "20px",
-          background: "rgba(255, 255, 255, 0.95)",
-          backdropFilter: "blur(6px)",
-          boxShadow: "0 10px 40px rgba(0, 0, 0, 0.06)",
+          borderRadius: 16,
+          background: "rgba(255,255,255,0.95)",
+          boxShadow: "0 10px 40px rgba(0,0,0,0.06)",
         }}
-        bodyStyle={{ padding: "2rem" }}
+        bodyStyle={{ padding: 16 }}
         extra={
-          <Button icon={<ReloadOutlined />} onClick={fetchPending}>
+          <Button icon={<ReloadOutlined />} onClick={fetchPending} aria-label="Refresh pending">
             Refresh
           </Button>
         }
       >
         <Table
+          className="pending-table"
+          locale={{ emptyText: <Empty description="No pending requests" /> }}
           dataSource={requests}
           columns={columns}
-          rowKey="id"
+          rowKey={(rec) => rec._id}
           loading={{
             spinning: loading,
             indicator: <LoadingOutlined style={{ fontSize: 24 }} spin />,
           }}
-          pagination={{ pageSize: 10 }}
-          rowClassName={() => "hoverable-row"}
-          locale={{ emptyText: "No pending requests found" }}
+          pagination={{ pageSize: 10, responsive: true }}
+          onRow={(record) => ({
+            onClick: () => {
+              const url = toListingUrl(record.listing_link);
+              if (url !== "#") window.open(url, "_blank", "noopener,noreferrer");
+            },
+            style: { cursor: record.listing_link ? "pointer" : "default" },
+          })}
+          tableLayout="fixed"
+          scroll={{ x: 1600 }}
+          sticky
+          expandable={{
+            expandedRowRender: (record) => (
+              <ExpandedItemsTable order={record} onOpen={(to) => navigate(to)} />
+            ),
+            rowExpandable: (record) => Array.isArray(record.items) && record.items.length > 0,
+          }}
         />
+
+        <style>{`
+          .pending-table .ant-table-thead > tr > th { white-space: nowrap; }
+          .prod-cell { display: flex; flex-wrap: wrap; gap: 6px; overflow: hidden; }
+          .prod-chip.ant-tag { margin: 0; border-radius: 6px; max-width: 100%; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+        `}</style>
       </Card>
 
-      <style>{`
-        .hoverable-row:hover {
-          background-color: #f0f9ff !important;
-          transition: background 0.3s ease;
-        }
-      `}</style>
-    </div>
+      {/* Assign-to-purchaser (admin only) */}
+      <Modal
+        title="Assign to a purchaser"
+        open={assignModalOpen}
+        okText="Assign"
+        onOk={submitAssignTo}
+        onCancel={() => setAssignModalOpen(false)}
+        okButtonProps={{ disabled: !selectedPurchaserId, type: "primary" }}
+        destroyOnClose
+      >
+        <Select
+          showSearch
+          placeholder={purchaserLoading ? "Loading purchasers…" : "Select / search purchaser"}
+          style={{ width: "100%" }}
+          size="large"
+          value={selectedPurchaserId || undefined}
+          loading={purchaserLoading}
+          onChange={(val) => setSelectedPurchaserId(val)}
+          onDropdownVisibleChange={(open) => {
+            if (open && !hasPrefetched) prefetchAllPurchasers();
+          }}
+          options={purchaserOptions}
+          filterOption={(input, option) => {
+            const term = (input || "").toLowerCase().trim();
+            if (!term) return true; // show all when input empty
+            return (option?.search || "").includes(term);
+          }}
+          optionFilterProp="search" // so built-in also knows our field
+          dropdownMatchSelectWidth
+          getPopupContainer={() => document.body}
+        />
+      </Modal>
+    </>
   );
-};
-
-export default PurchaserPendingPage;
+}
