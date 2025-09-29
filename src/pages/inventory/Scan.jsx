@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import InventoryDisplay from "./inventory-display";
 import apiClient from "../../api/client";
+import { useSelector } from "react-redux";
 
 export default function ScanProduct() {
   const [mode, setMode] = useState("select");
@@ -35,6 +36,7 @@ export default function ScanProduct() {
   const scanSound = new Audio("/scansound.mp3");
   scanSound.preload = "auto";
   const lastScannedDataRef = useRef(null);
+  const zoneId = useSelector((s) => s.app.selectedZoneId);
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -267,7 +269,9 @@ export default function ScanProduct() {
 
     try {
       const { data } = await apiClient.get(
-        `/api/v1/inventry/all?search=${encodeURIComponent(query)}`,
+        `/api/v1/inventry/all?search=${encodeURIComponent(
+          query
+        )}&zoneId=${zoneId}`,
         {
           method: "GET",
           headers: {
@@ -280,9 +284,15 @@ export default function ScanProduct() {
 
       if (data) {
         setLocationId(data.locations[0]._id);
-        console.log("Search results:", data.locations[0]._id);
+        setActiveLocationCode(data.locations[0].code);
+        if (!data.locations) {
+          setSearchQuery("");
+        } else {
+          setSearchQuery(data.locations[0].code);
+        }
         setSearchResults(data.inventry);
         setTotalInventory(data.totalInventry);
+
         scanSound.currentTime = 0;
         scanSound
           .play()
@@ -295,6 +305,8 @@ export default function ScanProduct() {
       console.error("API call failed, using mock data:", error);
 
       setIsSearching(false);
+    } finally {
+      setSearchQuery("");
     }
   };
 
@@ -786,7 +798,9 @@ export default function ScanProduct() {
                 setItems={setSearchResults}
                 totalCount={totalInventory}
                 isLoading={isSearching}
-                scannedData={searchQuery}
+                scannedData={
+                  activeLocationCode ? activeLocationCode : searchQuery
+                }
                 locationid={locationId}
               />
             </div>

@@ -341,8 +341,16 @@ export default function Zones() {
                 {z.description}
               </p>
             )}
-            <span className="mt-2 inline-flex items-center capitalize rounded-full bg-green-100 text-green-700 border border-green-500 px-3 py-0.5 text-xs">
-              {z.type}
+            <span
+              className={`mt-2 inline-flex items-center capitalize rounded-full  border ${
+                z.type === "shelf"
+                  ? "bg-green-100 text-green-700  border-green-500 "
+                  : z.type === "not_shelf"
+                  ? "bg-purple-100 text-purple-700  border-purple-500"
+                  : "bg-orange-100 text-orange-700  border-orange-500"
+              }   px-3 py-0.5 text-xs`}
+            >
+              {z.type === "not_shelf" ? "Not Shelf" : z.type}
             </span>
           </div>
         ))}

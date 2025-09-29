@@ -205,12 +205,12 @@ export default function LocationForm({
               <option value="">Select Type</option>
               {zoneType !== "not_shelf" && <option value="shelf">Shelf</option>}
               {(hasShelves ||
-                (isEditing &&
-                  location?.type === "bin" &&
-                  zoneType !== "not_shelf")) && (
-                <option value="bin">Bin</option>
-              )}
+                (isEditing && location?.type === "bin") ||
+                zoneType !== "not_shelf") && <option value="bin">Bin</option>}
 
+              {/* {zoneType.toLowerCase() !== "not_shelf" && (
+                <option value="bin">Bin</option>
+              )} */}
               {zoneType !== "shelf" && <option value="box">Box</option>}
             </select>
           </div>

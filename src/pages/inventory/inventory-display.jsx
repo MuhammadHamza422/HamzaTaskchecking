@@ -795,7 +795,7 @@ export default function InventoryDisplay({
     ? "Adding..."
     : isRefreshing
     ? "Updating..."
-    : "Add first Product";
+    : "Add First Product";
 
   return (
     <div className="space-y-6 pb-12">
