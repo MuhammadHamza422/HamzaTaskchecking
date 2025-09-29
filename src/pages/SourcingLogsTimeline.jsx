@@ -1,3 +1,5 @@
+
+// src/components/SourcingLogsTimeline.jsx
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Card,
@@ -26,8 +28,7 @@ const { Text, Title } = Typography;
 const getDate = (d) => (d && d.$date) || d;
 const fmtDate = (v) => (v ? dayjs(getDate(v)).format("MMM D, YYYY") : "—");
 const fmtTime = (v) => (v ? dayjs(getDate(v)).format("HH:mm") : "—");
-const fmtDateTime = (v) =>
-  v ? dayjs(getDate(v)).format("MMM D, YYYY • HH:mm") : "—";
+const fmtDateTime = (v) => (v ? dayjs(getDate(v)).format("MMM D, YYYY • HH:mm") : "—");
 
 const LABELS = {
   sourcing_id: "Sourcing #",
@@ -36,6 +37,7 @@ const LABELS = {
   createdAt: "Created At",
   updatedAt: "Updated At",
   seller: "Seller",
+  market: "Marketplace",
   origin: "Origin",
   target_cost_per_unit: "Target / Unit",
   target_total_cost: "Target Total",
@@ -95,26 +97,31 @@ const actionColor = (action, token) => {
   }
 };
 
-/* flatten limited depth */
-function flatten(obj, prefix = "", out = {}, depth = 0) {
-  if (!obj || typeof obj !== "object" || Array.isArray(obj) || depth >= 3) {
-    out[prefix || ""] = obj;
-    return out;
-  }
-  for (const k of Object.keys(obj)) {
-    const key = prefix ? `${prefix}.${k}` : k;
-    const val = obj[k];
-    if (val && typeof val === "object" && !Array.isArray(val)) {
-      flatten(val, key, out, depth + 1);
-    } else {
-      out[key] = val;
-    }
-  }
-  return out;
-}
+/* ---------- atomic roots & allow-list ---------- */
+const DISPLAY_FIELDS = new Set([
+  "listing_link",
+  "seller",
+  "market",
+  "origin",
+  "sellers_price",
+  "shipping_charges",
+  "taxes",
+  "status",
+  "target_total_cost",
+  "total_actual_cost",
+]);
 
-const isNumericString = (s) =>
-  typeof s === "string" && s.trim() !== "" && !Number.isNaN(Number(s));
+const ATOMIC_ROOTS = new Set(["seller", "market", "sourcer_id", "purchaser_id"]);
+
+const isNumericString = (s) => typeof s === "string" && s.trim() !== "" && !Number.isNaN(Number(s));
+
+const extractId = (v) => {
+  if (v == null) return null;
+  if (typeof v === "string") return v;
+  if (typeof v === "object") return v._id || v.id || v.$oid || null;
+  return null;
+};
+
 const normalizeForDiff = (v) => {
   if (v === "" || v === null || v === undefined) return null;
   if (typeof v === "string") {
@@ -134,30 +141,89 @@ const normalizeForDiff = (v) => {
   return v;
 };
 
+/* flatten limited depth, but stop inside atomic roots */
+function flatten(obj, prefix = "", out = {}, depth = 0) {
+  if (obj === null || obj === undefined) {
+    if (prefix) out[prefix] = obj;
+    return out;
+  }
+
+  const root = prefix ? prefix.split(".")[0] : "";
+  if (root && ATOMIC_ROOTS.has(root)) {
+    // keep whole object under its root (don’t explode sub-keys)
+    out[root] = obj;
+    return out;
+  }
+
+  if (typeof obj !== "object" || Array.isArray(obj) || depth >= 3) {
+    if (prefix) out[prefix] = obj;
+    return out;
+  }
+
+  for (const k of Object.keys(obj)) {
+    const key = prefix ? `${prefix}.${k}` : k;
+    const val = obj[k];
+    if (val && typeof val === "object" && !Array.isArray(val)) {
+      flatten(val, key, out, depth + 1);
+    } else {
+      out[key] = val;
+    }
+  }
+  return out;
+}
+
 const EXCLUDE_FIELDS = new Set([
   "updatedAt",
   "__v",
-  "items", // avoid huge array dumps; prefer meta.itemsOps for item-level changes
+  "items", // item changes should come from meta.itemsOps or server diff
 ]);
 
 function changesWithValues(before = {}, after = {}) {
+  // Flatten but keep atomic roots whole
   const b = flatten(before);
   const a = flatten(after);
-  const keys = Array.from(new Set([...Object.keys(b), ...Object.keys(a)])).sort();
 
-  const rows = keys.map((k) => {
+  // Only display allowed roots
+  const keysAll = Array.from(new Set([...Object.keys(b), ...Object.keys(a)])).sort();
+  const keys = keysAll.filter((k) => DISPLAY_FIELDS.has(k.split(".")[0]));
+
+  // Build comparable rows
+  let rows = keys.map((k) => {
+    const root = k.split(".")[0];
     const from = b[k];
     const to = a[k];
+
+    // If this is an atomic root, compare by ID (prevents false positives when populated)
+    if (ATOMIC_ROOTS.has(root) && !k.includes(".")) {
+      const nFrom = extractId(from);
+      const nTo = extractId(to);
+      return { field: k, from, to, nFrom, nTo, _atomic: true };
+    }
+
+    // Normal comparison
     const nFrom = normalizeForDiff(from);
     const nTo = normalizeForDiff(to);
-    return { field: k, from, to, nFrom, nTo };
+    return { field: k, from, to, nFrom, nTo, _atomic: false };
   });
 
-  return rows
+  rows = rows
     .filter(({ field }) => !EXCLUDE_FIELDS.has(field))
     .filter(({ nFrom, nTo }) => JSON.stringify(nFrom) !== JSON.stringify(nTo))
-    .filter(({ nFrom, nTo }) => !(nFrom === null && nTo === null))
-    .map(({ field, from, to }) => ({ field, from, to }));
+    .filter(({ nFrom, nTo }) => !(nFrom === null && nTo === null));
+
+  // If a root changed, drop nested siblings (defensive)
+  const rootsChanged = new Set(
+    rows.filter((d) => !d.field.includes(".")).map((d) => d.field.split(".")[0])
+  );
+
+  rows = rows.filter((d) => {
+    const root = d.field.split(".")[0];
+    if (rootsChanged.has(root) && d.field.includes(".")) return false;
+    if (ATOMIC_ROOTS.has(root) && d.field.includes(".")) return false;
+    return true;
+  });
+
+  return rows.map(({ field, from, to }) => ({ field, from, to }));
 }
 
 const toStringish = (v) => {
@@ -173,30 +239,52 @@ const toStringish = (v) => {
 
 const isDateField = (field) =>
   /(At|Time|Date)$/i.test(field) ||
-  ["createdAt", "updatedAt", "assignedAt", "purchaserResponseTime"].includes(
-    field
-  );
+  ["createdAt", "updatedAt", "assignedAt", "purchaserResponseTime"].includes(field);
+
+/** Use the last path segment to decide formatting for nested changes. */
+const lastKey = (field = "") => field.split(".").pop() || field;
 
 const renderVal = (field, v) => {
-  if (MONEY_FIELDS.has(field)) return fmtMoney(v);
-  if (isDateField(field)) {
+  const key = lastKey(field);
+  if (MONEY_FIELDS.has(key)) return fmtMoney(v);
+  if (isDateField(key)) {
     const d = getDate(v);
-    return d && dayjs(d).isValid()
-      ? dayjs(d).format("MMM D, YYYY • HH:mm")
-      : toStringish(v);
+    return d && dayjs(d).isValid() ? dayjs(d).format("MMM D, YYYY • HH:mm") : toStringish(v);
+  }
+  // Pretty-print atomic objects when available
+  if ((field === "seller" || field === "market") && v && typeof v === "object") {
+    const name = v.name || v.slug || "";
+    const id = extractId(v);
+    return name || id || "—";
   }
   return toStringish(v);
 };
 
-const ellipsis = (s, n = 36) =>
-  s && s.length > n ? s.slice(0, n - 1) + "…" : s;
+const ellipsis = (s, n = 36) => (s && s.length > n ? s.slice(0, n - 1) + "…" : s);
+
+/** Human label for a field path; shows item index & optional name/SKU if available in log. */
+function labelForField(field = "", log) {
+  if (!field) return "Field";
+  if (field.startsWith("items.")) {
+    const m = field.match(/^items\.(\d+)\.(.+)$/);
+    if (m) {
+      const idx = Number(m[1]);
+      const key = m[2];
+      const base = LABELS[key] || key;
+      const itemAfter = log?.after?.items?.[idx] || log?.before?.items?.[idx];
+      const name = itemAfter?.product_name || itemAfter?.name || null;
+      const sku = itemAfter?.sku || null;
+      const tag = sku ? `${name ? `${name} • ` : ""}${sku}` : name;
+      return tag ? `Item ${idx + 1} (${tag}) — ${base}` : `Item ${idx + 1} — ${base}`;
+    }
+  }
+  return LABELS[field] || field;
+}
 
 function groupByDay(logs) {
   const map = new Map();
   logs.forEach((l) => {
-    const key = dayjs(getDate(l.createdAt) || getDate(l.updatedAt)).format(
-      "YYYY-MM-DD"
-    );
+    const key = dayjs(getDate(l.createdAt) || getDate(l.updatedAt)).format("YYYY-MM-DD");
     if (!map.has(key)) map.set(key, []);
     map.get(key).push(l);
   });
@@ -212,17 +300,11 @@ function groupByDay(logs) {
 }
 
 /* ======================== Component ======================== */
-export default function SourcingLogsTimeline({
-  targetId,
-  title = "Activity Log",
-  refreshKey,
-}) {
+export default function SourcingLogsTimeline({ targetId, title = "Activity Log", refreshKey }) {
   const { token } = theme.useToken();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
-
-  // collapsed by default
   const [expanded, setExpanded] = useState(false);
 
   const fetchLogs = useCallback(async () => {
@@ -237,15 +319,8 @@ export default function SourcingLogsTimeline({
         params: { targetId, _: Date.now() },
         headers: { "Cache-Control": "no-cache" },
       });
-      const list = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.results)
-        ? data.results
-        : [];
-      list.sort(
-        (a, b) =>
-          new Date(getDate(b.createdAt)) - new Date(getDate(a.createdAt))
-      );
+      const list = Array.isArray(data) ? data : Array.isArray(data?.results) ? data.results : [];
+      list.sort((a, b) => new Date(getDate(b.createdAt)) - new Date(getDate(a.createdAt)));
       setRows(list);
     } catch (e) {
       console.error("Failed to fetch logs", e?.response?.data || e.message);
@@ -256,7 +331,6 @@ export default function SourcingLogsTimeline({
     }
   }, [targetId]);
 
-  // fetch only when expanded
   useEffect(() => {
     if (expanded) fetchLogs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -273,11 +347,7 @@ export default function SourcingLogsTimeline({
           </Title>
           {expanded && (
             <Tooltip title="Reload">
-              <Button
-                size="small"
-                icon={<ReloadOutlined />}
-                onClick={fetchLogs}
-              />
+              <Button size="small" icon={<ReloadOutlined />} onClick={fetchLogs} />
             </Tooltip>
           )}
         </div>
@@ -297,7 +367,6 @@ export default function SourcingLogsTimeline({
       style={{ borderRadius: token.borderRadiusLG, overflow: "hidden" }}
     >
       {!expanded ? (
-        // collapsed: render nothing (fully hidden)
         <div style={{ display: "none" }} />
       ) : loading ? (
         <div style={{ padding: 20 }}>
@@ -307,9 +376,7 @@ export default function SourcingLogsTimeline({
         </div>
       ) : err ? (
         <div style={{ padding: 32, textAlign: "center" }}>
-          <InfoCircleOutlined
-            style={{ fontSize: 18, color: token.colorTextTertiary }}
-          />
+          <InfoCircleOutlined style={{ fontSize: 18, color: token.colorTextTertiary }} />
           <div style={{ marginTop: 8 }}>
             <Text type="secondary">Could not load activity.</Text>
           </div>
@@ -345,13 +412,10 @@ export default function SourcingLogsTimeline({
               <Timeline
                 items={g.items.flatMap((log) => {
                   const who = log.userEmail || "—";
-                  const when =
-                    getDate(log.createdAt) || getDate(log.updatedAt);
+                  const when = getDate(log.createdAt) || getDate(log.updatedAt);
                   const color = actionColor(log.action, token);
-                  const itemsOps = Array.isArray(log?.meta?.itemsOps)
-                    ? log.meta.itemsOps
-                    : [];
 
+                  const itemsOps = Array.isArray(log?.meta?.itemsOps) ? log.meta.itemsOps : [];
                   if (itemsOps.length) {
                     return itemsOps.map((op, idx) => {
                       const title =
@@ -410,17 +474,8 @@ export default function SourcingLogsTimeline({
                                 <Text>{sub}</Text>
                               </div>
                             </div>
-                            <Tooltip
-                              title={
-                                <span>
-                                  <FieldTimeOutlined /> {fmtDateTime(when)}
-                                </span>
-                              }
-                            >
-                              <Text
-                                type="secondary"
-                                style={{ whiteSpace: "nowrap" }}
-                              >
+                            <Tooltip title={<span><FieldTimeOutlined /> {fmtDateTime(when)}</span>}>
+                              <Text type="secondary" style={{ whiteSpace: "nowrap" }}>
                                 {fmtTime(when)}
                               </Text>
                             </Tooltip>
@@ -430,13 +485,23 @@ export default function SourcingLogsTimeline({
                     });
                   }
 
-                  const changes = changesWithValues(log.before, log.after);
+                  // Prefer server-provided diff if present; normalize {path} -> {field}
+                  const changes = Array.isArray(log?.diff) && log.diff.length
+                    ? log.diff.map((d, i) => ({
+                        field: d.field || d.path || "", // <— FIX: support `path`
+                        from: d.from,
+                        to: d.to,
+                        _k: i,
+                      }))
+                    : changesWithValues(log.before, log.after);
+
                   if (changes.length === 0 && log.action === "STATUS_CHANGE") {
                     const fromStr = renderVal("status", log.statusFrom);
                     const toStr = renderVal("status", log.statusTo);
                     return [
                       {
                         color,
+                        key: `${log._id || "status"}-only`,
                         children: (
                           <div
                             style={{
@@ -477,27 +542,15 @@ export default function SourcingLogsTimeline({
                               >
                                 <Text type="secondary">from</Text>
                                 <Text code>{fromStr}</Text>
-                                <Text
-                                  type="secondary"
-                                  style={{ margin: "0 4px" }}
-                                >
+                                <Text type="secondary" style={{ margin: "0 4px" }}>
                                   →
                                 </Text>
                                 <Text type="secondary">to</Text>
                                 <Text code>{toStr}</Text>
                               </div>
                             </div>
-                            <Tooltip
-                              title={
-                                <span>
-                                  <FieldTimeOutlined /> {fmtDateTime(when)}
-                                </span>
-                              }
-                            >
-                              <Text
-                                type="secondary"
-                                style={{ whiteSpace: "nowrap" }}
-                              >
+                            <Tooltip title={<span><FieldTimeOutlined /> {fmtDateTime(when)}</span>}>
+                              <Text type="secondary" style={{ whiteSpace: "nowrap" }}>
                                 {fmtTime(when)}
                               </Text>
                             </Tooltip>
@@ -507,8 +560,8 @@ export default function SourcingLogsTimeline({
                     ];
                   }
 
-                  return changes.map(({ field, from, to }, idx) => {
-                    const label = LABELS[field] || field;
+                  return changes.map(({ field, from, to, _k }, idx) => {
+                    const label = labelForField(field, log);
                     const fromStr = renderVal(field, from);
                     const toStr = renderVal(field, to);
                     const shortFrom = ellipsis(fromStr);
@@ -516,7 +569,7 @@ export default function SourcingLogsTimeline({
 
                     return {
                       color,
-                      key: `${log._id || "log"}-${idx}`,
+                      key: `${log._id || "log"}-${field || "field"}-${_k ?? idx}`,
                       children: (
                         <div
                           style={{
@@ -570,10 +623,7 @@ export default function SourcingLogsTimeline({
                                   {shortFrom}
                                 </Text>
                               </Tooltip>
-                              <Text
-                                type="secondary"
-                                style={{ margin: "0 4px" }}
-                              >
+                              <Text type="secondary" style={{ margin: "0 4px" }}>
                                 →
                               </Text>
                               <Text type="secondary">to</Text>
@@ -593,17 +643,8 @@ export default function SourcingLogsTimeline({
                               </Tooltip>
                             </div>
                           </div>
-                          <Tooltip
-                            title={
-                              <span>
-                                <FieldTimeOutlined /> {fmtDateTime(when)}
-                              </span>
-                            }
-                          >
-                            <Text
-                              type="secondary"
-                              style={{ whiteSpace: "nowrap" }}
-                            >
+                          <Tooltip title={<span><FieldTimeOutlined /> {fmtDateTime(when)}</span>}>
+                            <Text type="secondary" style={{ whiteSpace: "nowrap" }}>
                               {fmtTime(when)}
                             </Text>
                           </Tooltip>
