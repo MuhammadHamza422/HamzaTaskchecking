@@ -20,6 +20,7 @@ import InventoryBreadcrumb from "./components/InventoryBreadcrumb";
 import InventoryHeader from "./components/InventoryHeader";
 import NotShelfTable from "./components/NotShelfTable";
 import ShelfGroupedView from "./components/ShelfGroupedView";
+import HybridView from "./components/HybridView";
 import CreateInventoryModal from "./components/CreateInventoryModal";
 import MoveToZoneModal from "./components/MoveToZoneModal";
 import InventoryPagination from "./components/InventoryPagination";
@@ -63,8 +64,14 @@ export default function InventoryList() {
 
   // Get warehouse type from localStorage
   useEffect(() => {
-    const type = localStorage.getItem("zoneType") || "shelf";
-    setWarehouseType(type);
+    const stored = localStorage.getItem("zoneType");
+    let type = "shelf";
+    try {
+      type = stored ? JSON.parse(stored) : "shelf";
+    } catch {
+      type = stored || "shelf";
+    }
+    setWarehouseType(String(type).toLowerCase());
   }, []);
 
   const navigate = useNavigate();
@@ -104,6 +111,102 @@ export default function InventoryList() {
     refetchOnMount: true,
   });
 
+  
+  const { data: locationsRes } = useQuery({
+    queryKey: ["locations", warehouseId, zoneId],
+    enabled: !!warehouseId,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMount: true,
+    queryFn: async () => {
+      const res = await getLocations({
+        warehouseId,
+        zoneId,
+        page: 1,
+        limit: 50,
+      });
+      const list = Array.isArray(res?.locations)
+        ? res.locations
+        : Array.isArray(res)
+        ? res
+        : [];
+      return list
+        .map((l) => ({
+          id: l.id ?? l._id,
+          code: l.code,
+          type: String(l.type || "").toLowerCase(),
+          warehouseId:
+            typeof l.warehouse === "string"
+              ? l.warehouse
+              : l.warehouse?.id ?? l.warehouse?._id ?? null,
+          zoneId: typeof l?.zone === "string" ? l.zone : l.zone?._id ?? null,
+          zone: l.zone,
+          qrcode: l.qrcode || l.qrPath || null,
+        }))
+        .filter((l) => l.warehouseId === warehouseId);
+    },
+  });
+
+  const locations = locationsRes || [];
+
+  const items = useMemo(() => {
+    const list = Array.isArray(data?.inventry) ? data.inventry : [];
+
+    const mapped = list
+      .filter((row) => {
+        const itemWarehouseId = row.warehouseData?._id;
+        return itemWarehouseId === warehouseId;
+      })
+      .map((row) => {
+        const locationIdFromRow =
+          row.locationData?._id ||
+          row.locationData?.id ||
+          (typeof row.location === "string"
+            ? row.location
+            : row.location?._id || row.location?.id);
+
+        // Attempt to resolve code from multiple sources
+        let resolvedLocationCode =
+          row.locationData?.code || row.location?.code || "";
+        
+        // If no location code found, try to find it in our locations array
+        if (!resolvedLocationCode && locationIdFromRow) {
+          const foundLoc = (locations || []).find((l) => l.id === locationIdFromRow);
+          if (foundLoc?.code) resolvedLocationCode = foundLoc.code;
+        }
+        
+        // If still no code and we have a location ID, try to match by string comparison
+        if (!resolvedLocationCode && locationIdFromRow && locations.length > 0) {
+          const foundLoc = (locations || []).find((l) => 
+            String(l.id) === String(locationIdFromRow) || 
+            String(l._id) === String(locationIdFromRow)
+          );
+          if (foundLoc?.code) resolvedLocationCode = foundLoc.code;
+        }
+
+        const resolvedLocationType =
+          (row.locationData?.type || row.location?.type || "").toLowerCase();
+
+        return {
+          id: row._id,
+          quantity: row.quantity,
+          updatedAt: row.updatedAt,
+          productTitle: row.productData?.pro_title,
+          locationCode: resolvedLocationCode,
+          sku: row.productData?.sku,
+          modelCode: row.productData?.model_code,
+          name: row.warehouseData?.name,
+          country: row.warehouseData?.country,
+          warehouseId: row.warehouseData?._id,
+          locationId: locationIdFromRow,
+          locationType: resolvedLocationType,
+        };
+      });
+
+    return mapped;
+  }, [data, warehouseId, locations]);
+
   console.log("zonesRes", zonesRes);
 
   const zonesOptions = useMemo(() => {
@@ -122,6 +225,7 @@ export default function InventoryList() {
         quantity: String(body.quantity),
         key: body.key,
         zoneId: String(zoneId),
+        locationId: body.locationId, // Include locationId in the API call
       });
       return data;
     },
@@ -131,14 +235,10 @@ export default function InventoryList() {
     onSuccess: async (data, variables) => {
       try {
         // Refetch inventory to update the UI
-        queryClient.invalidateQueries([
-          "inventory",
-          page,
-          limit,
-          searchTerm,
-          warehouseId,
-          zoneId,
-        ]);
+        queryClient.invalidateQueries({
+          queryKey: ["inventory", page, limit, searchTerm, zoneId],
+          exact: false,
+        });
 
         setIsCreateOpen(false);
         setForm({
@@ -212,38 +312,6 @@ export default function InventoryList() {
     const parts = String(code).split("-BIN-");
     return parts[0]; // if no BIN part, returns whole code (shelf)
   };
-
-  const items = useMemo(() => {
-    const list = Array.isArray(data?.inventry) ? data.inventry : [];
-
-    const mapped = list
-      .filter((row) => {
-        const itemWarehouseId = row.warehouseData?._id;
-        return itemWarehouseId === warehouseId;
-      })
-      .map((row) => ({
-        id: row._id,
-        quantity: row.quantity,
-        updatedAt: row.updatedAt,
-        productTitle: row.productData?.pro_title,
-        locationCode: row.locationData?.code,
-        sku: row.productData?.sku,
-        modelCode: row.productData?.model_code,
-        name: row.warehouseData?.name,
-        country: row.warehouseData?.country,
-        warehouseId: row.warehouseData?._id,
-        // keep original location type if available
-        locationType: row.locationData?.type,
-      }));
-
-    return mapped;
-  }, [data, warehouseId]);
-
-  // Total items for pagination (fallback to items length)
-  const totalInventory = useMemo(() => {
-    const total = Number(data?.totalInventry ?? data?.total ?? 0);
-    return Number.isFinite(total) && total > 0 ? total : items.length;
-  }, [data, items.length]);
 
   // Reset to first page when filters change
   useEffect(() => {
@@ -371,43 +439,12 @@ export default function InventoryList() {
     refetchOnMount: true,
   });
 
-  const { data: locationsRes } = useQuery({
-    queryKey: ["locations", warehouseId, zoneId],
-    enabled: !!warehouseId,
-    staleTime: 0,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
-    refetchOnMount: true,
-    queryFn: async () => {
-      const res = await getLocations({
-        warehouseId,
-        zoneId,
-        page: 1,
-        limit: 50,
-      });
-      const list = Array.isArray(res?.locations)
-        ? res.locations
-        : Array.isArray(res)
-        ? res
-        : [];
-      return list
-        .map((l) => ({
-          id: l.id ?? l._id,
-          code: l.code,
-          type: String(l.type || "").toLowerCase(),
-          warehouseId:
-            typeof l.warehouse === "string"
-              ? l.warehouse
-              : l.warehouse?.id ?? l.warehouse?._id ?? null,
-          zoneId: typeof l?.zone === "string" ? l.zone : l.zone?._id ?? null,
-          zone: l.zone,
-          qrcode: l.qrcode || l.qrPath || null,
-        }))
-        .filter((l) => l.warehouseId === warehouseId);
-    },
-  });
 
-  const locations = locationsRes || [];
+  // Total items for pagination (fallback to items length)
+  const totalInventory = useMemo(() => {
+    const total = Number(data?.totalInventry ?? data?.total ?? 0);
+    return Number.isFinite(total) && total > 0 ? total : items.length;
+  }, [data, items.length]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -627,6 +664,23 @@ export default function InventoryList() {
       return;
     }
 
+    // In hybrid (and optionally shelf) zones, require a location to be selected
+    const requiresLocation = warehouseType === "hybrid";
+    if (requiresLocation && !form.locationId) {
+      Swal.fire({
+        icon: "error",
+        title: "Location Required",
+        text: "Please select a location for this inventory.",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        background: "#ef4444",
+        color: "#fff",
+      });
+      return;
+    }
+
     // Ensure we have a valid warehouse ID
     if (!warehouseId) {
       Swal.fire({
@@ -667,6 +721,9 @@ export default function InventoryList() {
       quantity: String(quantity),
       type: form.typeCode,
       key: "add", // Since we're creating new inventory, it's an "add" operation
+      // Prefer locationId for hybrid; keep zoneId for compatibility on backend
+      locationId: form.locationId || undefined,
+      zoneId: String(zoneId),
     });
   };
 
@@ -852,8 +909,29 @@ export default function InventoryList() {
               }}
             />
           )
-        ) : // Grouped display for shelf warehouses
-        groupedByLocation.length === 0 ? (
+        ) : warehouseType === "hybrid" ? (
+          groupedByLocation.length === 0 ? (
+            <EmptyInventory onAddNew={() => setIsCreateOpen(true)} />
+          ) : (
+            <HybridView
+              groupedByLocation={groupedByLocation}
+              userRole={user?.roles?.role}
+              pendingQtyChanges={pendingQtyChanges}
+              setPendingQtyChanges={setPendingQtyChanges}
+              handleQuantityInputChange={handleQuantityInputChange}
+              handleUpdateQty={handleUpdateQty}
+              onOpenMove={(id) => {
+                setMoveTargetId(id);
+                const found = items.find((it) => it.id === id);
+                const qty = Number(found?.quantity || 0);
+                setMoveMaxQty(qty);
+                setMoveQty(Math.max(1, qty));
+                setSelectedMoveZoneId("");
+                setMoveModalOpen(true);
+              }}
+            />
+          )
+        ) : groupedByLocation.length === 0 ? (
           <EmptyInventory onAddNew={() => setIsCreateOpen(true)} />
         ) : (
           <ShelfGroupedView
@@ -893,6 +971,8 @@ export default function InventoryList() {
           getContainer={getContainer}
           isFullscreen={isFullscreen}
           zoneName={zoneName}
+          warehouseType={warehouseType}
+          locations={locations}
           form={form}
           setForm={setForm}
           productsData={productsData}

@@ -15,6 +15,8 @@ export default function CreateInventoryModal({
   getContainer,
   isFullscreen,
   zoneName,
+  warehouseType,
+  locations = [],
   form,
   setForm,
   productsData,
@@ -45,6 +47,25 @@ export default function CreateInventoryModal({
             <label className="block text-sm font-medium text-gray-700 mb-1">ZoneName</label>
             <div className="w-full rounded-md border px-3 py-2 text-sm bg-gray-50 text-gray-600">{zoneName}</div>
           </div>
+
+          {warehouseType === "hybrid" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+              <select
+                value={form.locationId}
+                onChange={(e) => setForm((prev) => ({ ...prev, locationId: e.target.value }))}
+                className="w-full rounded-md border px-3 py-2 text-sm"
+                required
+              >
+                <option value="">Select location</option>
+                {locations.map((loc) => (
+                  <option key={loc.id} value={loc.id}>
+                    {loc.code}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="relative">
             <label className="block text-sm font-medium text-gray-700 mb-1">Product Type</label>
