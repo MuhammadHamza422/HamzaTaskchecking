@@ -61,24 +61,6 @@ const navLinks = [
     roles: ["admin"],
   },
   { to: "orders/kits", label: "Kits", app: "orders", roles: ["admin"] },
-
-
-   // ⬇️ NEW: Sourcing dropdown
-  // {
-  //   label: "Sourcing",
-  //   isDropdown: true,
-  //   app: "sourcing",                       // <- gates via hasAppAccess + DB roles.access
-  //   roles: ["admin", "sourcer", "purchaser"],
-  //   children: [
-  //     { to: "/sourcing/orders", label: "My Orders", default: true },
-  //     { to: "/sourcing/new",    label: "New Sourcing" },
-  //     { to: "/requests/pending", label: "Pending" },
-  //     { to: "/requests/my",      label: "Assigned to Me" },
-  //     // optional (admin page if you have a route for it)
-  //     { to: "/sourcing/all", label: "All Orders" },
-  //     { to: "/sourcing/sellers", label: "Sellers" }, 
-  //   ],
-  // },
   { 
   to: "/sourcing/sellers",
   label: "Sellers",
@@ -86,8 +68,15 @@ const navLinks = [
   roles: ["admin", "sourcer", "purchaser"]
 },
   { 
-  to: "/sourcing/dashboard",
-  label: "Sourcer Dashboard",
+  to: "/sourcing",
+  label: "Sourcing Dashboard",
+  app: "sourcing",                    
+  roles: ["admin", "sourcer", "purchaser"]
+},
+
+  { 
+  to: "/sourcing/orders",
+  label: "All Orders",
   app: "sourcing",                    
   roles: ["admin", "sourcer", "purchaser"]
 }
@@ -143,15 +132,9 @@ const MainLayout = () => {
         (pathName.startsWith("/orders") &&
           ["Dashboard", "Orders", "Platforms", "Kits"].includes(link.label))) ||
         (pathName.startsWith("/sourcing") &&
-        ["Sourcing", "Sellers",].includes(link.label))
-  );
+        ["Sourcing", "Sellers", "Sourcing Dashboard", "All Orders", ].includes(link.label))
 
-  //  ||
-  //       ((pathName === "/" || pathName.startsWith("/inventory")) &&
-  //         link.label === "Dashboard") ||
-  //       (!pathName.startsWith("/admin") &&
-  //         !pathName.startsWith("/orders") &&
-  //         !pathName.startsWith("/inventory"))
+  );
 
   const handleLogout = async () => {
     const result = await Swal.fire({

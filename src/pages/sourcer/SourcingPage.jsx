@@ -1,9 +1,9 @@
+
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   Card,
   Table,
   Space,
-  Button,
   message,
   Spin,
   Input,
@@ -19,10 +19,11 @@ import dayjs from "dayjs";
 
 import apiClient from "../../api/client";
 import SourcingImportModal from "./SourcingImportModal";
-import { RefreshCcw } from "lucide-react";
+import { RefreshCcw, Plus } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { statusPill } from "./utils/helpers";
 import { getSourcingColumns, makeItemsTable } from "./utils/sourcingColumns";
+import SleekPagination from "./components/Sleekpagination";
 
 const { Option } = Select;
 const { RangePicker } = DatePicker;
@@ -65,10 +66,17 @@ export default function SourcingOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [importOpen, setImportOpen] = useState(false);
 
+  // pagination
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+
   const navigate = useNavigate();
   const location = useLocation();
   const params = new URLSearchParams(location.search);
-  const sourcerQueryId = params.get("sourcer_id"); // ← from /sourcing/orders?sourcer_id=...
+  const sourcerQueryId = params.get("sourcer_id"); // from /sourcing/orders?sourcer_id=...
+
+  // show the New Sourcing button ONLY on exact /sourcing/orders
+  const isOrdersRoute = location.pathname === "/sourcing/orders";
 
   const [filters, setFilters] = useState({
     product: "",
@@ -91,7 +99,6 @@ export default function SourcingOrdersPage() {
     setLoading(true);
     try {
       const config = {};
-      // Only admins can filter by sourcer_id and only against the all-sourcing endpoint
       if (
         isAdmin &&
         sourcerQueryId &&
@@ -120,7 +127,7 @@ export default function SourcingOrdersPage() {
       try {
         await apiClient.delete(`/api/v1/sourcing/${orderId}`);
         message.success("Sourcing request deleted");
-        fetchOrders(); // keeps current sourcer filter in place
+        fetchOrders();
       } catch (err) {
         console.error(err);
         message.error(
@@ -179,6 +186,27 @@ export default function SourcingOrdersPage() {
     });
   }, [orders, filters]);
 
+  /* ---------- Pagination reactions ---------- */
+  useEffect(() => {
+    setPage(1);
+  }, [filters]);
+
+  useEffect(() => {
+    const totalPages = Math.max(
+      1,
+      Math.ceil((filteredOrders.length || 0) / (limit || 1))
+    );
+    if (page > totalPages) setPage(totalPages);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredOrders.length, limit]);
+
+  const total = filteredOrders.length;
+  const paginatedOrders = useMemo(() => {
+    const start = (page - 1) * limit;
+    const end = start + limit;
+    return filteredOrders.slice(start, end);
+  }, [filteredOrders, page, limit]);
+
   /* ---------- Columns (shared) ---------- */
   const columns = useMemo(
     () =>
@@ -215,16 +243,9 @@ export default function SourcingOrdersPage() {
 
   return (
     <>
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
         <Card
-          title={
-            <span style={{ fontWeight: 700, letterSpacing: 0.2 }}>
-              {pageTitle}
-            </span>
-          }
+          title={<span style={{ fontWeight: 700, letterSpacing: 0.2 }}>{pageTitle}</span>}
           extra={
             <Space>
               <button
@@ -237,90 +258,31 @@ export default function SourcingOrdersPage() {
                 <RefreshCcw className="h-4 w-4" />
                 Refresh
               </button>
+
               {canEdit && (
-                <>
-                  <button
-                    onClick={() => setImportOpen(true)}
-                    className="bg-green-600 hover:bg-green-700 border-green-600 text-white px-4 py-2 rounded-md w-full md:w-auto"
-                  >
-                    Import CSV
-                  </button>
-                  <button
-                    onClick={() => navigate("/sourcing/orders/new")}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
-                  >
-                    New Sourcing
-                  </button>
-                </>
+                <button
+                  onClick={() => setImportOpen(true)}
+                  className="bg-green-600 hover:bg-green-700 border-green-600 text-white px-4 py-2 rounded-md w-full md:w-auto"
+                >
+                  Import CSV
+                </button>
+              )}
+
+              {/* Show "New Sourcing" only on /sourcing/orders */}
+              {canEdit && isOrdersRoute && (
+                <button
+                  onClick={() => navigate("/sourcing/orders/new")}
+                  className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
+                >
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                  New Sourcing
+                </button>
               )}
             </Space>
           }
           style={gradientCardStyle}
           bodyStyle={{ padding: 18 }}
         >
-          {/* Filters */}
-          {/* <Row gutter={[12, 12]} style={{ marginBottom: 10 }}>
-            <Col xs={24} sm={12} md={8} lg={6}>
-              <Input
-                placeholder="Filter by Product Name"
-                allowClear
-                onChange={(e) =>
-                  setFilters((f) => ({ ...f, product: e.target.value }))
-                }
-                style={{ borderRadius: 8 }}
-              />
-            </Col>
-            <Col xs={24} sm={12} md={8} lg={5}>
-              <Input
-                placeholder="Filter by SKU"
-                allowClear
-                onChange={(e) =>
-                  setFilters((f) => ({ ...f, sku: e.target.value }))
-                }
-                style={{ borderRadius: 8 }}
-              />
-            </Col>
-            <Col xs={24} sm={12} md={8} lg={5}>
-              <Select
-                placeholder="Filter by Status"
-                allowClear
-                style={{ width: "100%" }}
-                onChange={(val) => setFilters((f) => ({ ...f, status: val }))}
-                dropdownStyle={{ borderRadius: 10 }}
-              >
-                <Option value="Pending">Pending</Option>
-                <Option value="Assigned">Assigned</Option>
-                <Option value="Offer">Offer</Option>
-                <Option value="Purchased">Purchased</Option>
-                <Option value="Disapproved">Disapproved</Option>
-                <Option value="Sold">Sold</Option>
-                <Option value="Hold">Hold</Option>
-                <Option value="Seller Rejected">Seller Rejected</Option>
-                <Option value="Dropshipped">Dropshipped</Option>
-                <Option value="Returned">Returned</Option>
-                <Option value="Completed">Completed</Option>
-              </Select>
-            </Col>
-            <Col xs={24} sm={12} md={12} lg={5}>
-              <RangePicker
-                style={{ width: "100%" }}
-                onChange={(range) =>
-                  setFilters((f) => ({ ...f, dateRange: range }))
-                }
-              />
-            </Col>
-            <Col xs={24} sm={12} md={12} lg={3}>
-              <Input
-                placeholder="Sourcing ID (#)"
-                allowClear
-                onChange={(e) =>
-                  setFilters((f) => ({ ...f, sourcingId: e.target.value }))
-                }
-                style={{ borderRadius: 8 }}
-              />
-            </Col>
-          </Row> */}
-
           <Row gutter={[16, 16]} className="mb-2">
             <Col xs={24} sm={12} md={8} lg={6}>
               <div>
@@ -419,11 +381,11 @@ export default function SourcingOrdersPage() {
 
           <div style={tableCardStyle}>
             <Table
-              dataSource={filteredOrders}
+              dataSource={paginatedOrders}
               columns={columns}
               rowKey={(rec) => rec._id || rec.id}
               expandable={{ expandedRowRender: makeItemsTable }}
-              pagination={{ defaultPageSize: 20, showSizeChanger: true }}
+              pagination={false}
               size="middle"
               bordered={false}
               sticky
@@ -443,6 +405,14 @@ export default function SourcingOrdersPage() {
                   />
                 ),
               }}
+            />
+
+            <SleekPagination
+              page={page}
+              setPage={setPage}
+              limit={limit}
+              setLimit={setLimit}
+              total={total}
             />
           </div>
         </Card>

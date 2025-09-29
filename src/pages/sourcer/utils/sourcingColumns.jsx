@@ -1,5 +1,4 @@
 
-
 // src/pages/sourcer/utils/sourcingColumns.jsx
 import React, { useEffect, useState } from "react";
 import { Table, Tag, Space, Typography, Tooltip, Button, Popconfirm } from "antd";
@@ -14,6 +13,11 @@ const num = (v) => (typeof v === "number" ? v : Number(v) || 0);
 const fmtMoney = (v) =>
   typeof v === "number" && !Number.isNaN(v) ? `$${v.toFixed(2)}` : "$0.00";
 const fmtDateTime = (v) => (v ? dayjs(v).format("YYYY-MM-DD HH:mm") : "N/A");
+
+// NEW: local helpers for item table money/totals
+const safeNum = (v) => (typeof v === "number" ? v : Number(v) || 0);
+const round2 = (n) => Math.round((safeNum(n) + Number.EPSILON) * 100) / 100;
+const money = (v) => fmtMoney(safeNum(v));
 
 const formatOid = (id) =>
   id ? String(id).slice(0, 6) + "…" + String(id).slice(-4) : "—";
@@ -105,6 +109,31 @@ function MarketName({ market }) {
   return <span>{name}</span>;
 }
 
+
+
+const STATUS_BADGE_CLASS = {
+  Pending:        "bg-gray-100 text-gray-800",
+  Assigned:       "bg-amber-100 text-amber-800",
+  Offer:          "bg-blue-100 text-blue-800",
+  Purchased:      "bg-green-100 text-green-800",
+  Disapproved:    "bg-red-100 text-red-800",
+  Sold:           "bg-purple-100 text-purple-800",
+  Hold:           "bg-orange-100 text-orange-800",
+  "Seller Rejected": "bg-rose-100 text-rose-800",
+  Dropshipped:    "bg-cyan-100 text-cyan-800",
+  Returned:       "bg-rose-100 text-rose-800",
+};
+
+function StatusBadge({ status }) {
+  const s = String(status || "Pending");
+  const cls = STATUS_BADGE_CLASS[s] || STATUS_BADGE_CLASS.Pending;
+  return (
+    <span className={`px-2 py-1 rounded text-xs font-medium ${cls}`}>
+      {s}
+    </span>
+  );
+}
+
 /* ---------- exported columns factory ---------- */
 export function getSourcingColumns({
   statusPill,
@@ -175,13 +204,32 @@ export function getSourcingColumns({
         );
       },
     },
-    {
-      title: "Status",
-      dataIndex: "status",
-      key: "status",
-      width: 130,
-      render: (s) => <Tag color={statusPill(s)}>{s || "Pending"}</Tag>,
+        {
+      title: "Efficiency $",
+      key: "purchase_efficiency",
+      width: 150,
+      render: (_, rec) => {
+        const n =
+          num(rec.target_total_cost) -
+          num(rec.sellers_price) -
+          num(rec.shipping_charges ?? rec.shipping_price) -
+          num(rec.taxes ?? rec.tax);
+        return (
+          <span style={{ fontWeight: 600, color: n >= 0 ? "green" : "red" }}>
+            {fmtMoney(n)}
+          </span>
+        );
+      },
     },
+{
+  title: "Status",
+  dataIndex: "status",
+  key: "status",
+  width: 130,
+  align: "center",
+  render: (s) => <StatusBadge status={s} />,
+},
+
     {
       title: "Seller",
       key: "seller",
@@ -248,23 +296,7 @@ export function getSourcingColumns({
       width: 150,
       render: (v) => fmtMoney(num(v)),
     },
-    {
-      title: "Efficiency $",
-      key: "purchase_efficiency",
-      width: 150,
-      render: (_, rec) => {
-        const n =
-          num(rec.target_total_cost) -
-          num(rec.sellers_price) -
-          num(rec.shipping_charges ?? rec.shipping_price) -
-          num(rec.taxes ?? rec.tax);
-        return (
-          <span style={{ fontWeight: 600, color: n >= 0 ? "green" : "red" }}>
-            {fmtMoney(n)}
-          </span>
-        );
-      },
-    },
+
     {
       title: "Created",
       dataIndex: "createdAt",
@@ -312,40 +344,105 @@ export function getSourcingColumns({
   return cols;
 }
 
-/* ---------- exported expanded-row table ---------- */
+
 export const makeItemsTable = (order) => {
-  const data = order?.items || [];
+  const rows = Array.isArray(order?.items) ? order.items : [];
+
+  // tiny helpers (self-contained)
+  const safeNum = (v) => (typeof v === "number" ? v : Number(v) || 0);
+  const round2  = (n) => Math.round((safeNum(n) + Number.EPSILON) * 100) / 100;
+  const money   = (v) =>
+    typeof fmtMoney === "function" ? fmtMoney(safeNum(v)) : `$${safeNum(v).toFixed(2)}`;
+
+  const lineTarget = (r) =>
+    Number.isFinite(Number(r?.total_target_cost))
+      ? safeNum(r.total_target_cost)
+      : round2(safeNum(r?.quantity_needed || 1) * safeNum(r?.target_cost_per_unit));
+
+  const lineActual = (r) =>
+    Number.isFinite(Number(r?.total_actual_cost))
+      ? safeNum(r.total_actual_cost)
+      : round2(safeNum(r?.quantity_needed || 1) * safeNum(r?.actual_cost_per_unit));
+
   return (
-    <Table
-      rowKey="_id"
-      size="small"
-      pagination={false}
-      dataSource={data}
-      columns={[
-        {
-          title: "Product",
-          dataIndex: "name",
-          render: (_t, r) => r?.name || r?.product_name || "Untitled",
-        },
-        {
-          title: "SKU",
-          dataIndex: "sku",
-          render: (v) => <Text type="secondary">{v || "—"}</Text>,
-        },
-        { title: "Qty", dataIndex: "quantity_needed", width: 80 },
-        {
-          title: "Seller $",
-          dataIndex: "sourced_price",
-          width: 110,
-          render: (v) => fmtMoney(num(v)),
-        },
-        {
-          title: "Condition",
-          dataIndex: "product_condition",
-          width: 140,
-          render: (v) => v || "—",
-        },
-      ]}
-    />
+    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      {/* keep top spacing (no content) */}
+      {/* <div className="px-4 py-3 bg-gray-50 border-b border-gray-200" /> */}
+
+      <Table
+        rowKey={(r) => r._id || r.id || `${r.sku}-${r.product_name}`}
+        size="small"
+        bordered
+        pagination={false}
+        dataSource={rows}
+        onRow={(_, idx) => ({ style: { backgroundColor: idx % 2 ? "#fafcff" : "#fff" } })}
+        rowClassName="hover:bg-blue-50 transition-colors"
+        columns={[
+          {
+            title: "Product",
+            key: "product",
+            width: 280,
+            render: (_t, r) => (
+              <div style={{ lineHeight: 1.2 }}>
+                <div style={{ fontWeight: 600 }}>
+                  {r?.name || r?.product_name || "Untitled"}
+                </div>
+                <span style={{ fontSize: 12, color: "#6b7280" }}>
+                  SKU: {r?.sku || "—"}
+                </span>
+              </div>
+            ),
+          },
+          {
+            title: "Qty",
+            dataIndex: "quantity_needed",
+            width: 80,
+            align: "center",
+            render: (v) => (
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>{safeNum(v)}</span>
+            ),
+          },
+          {
+            title: "Target $ / unit",
+            dataIndex: "target_cost_per_unit",
+            align: "right",
+            width: 140,
+            render: (v) => (
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>{money(v)}</span>
+            ),
+          },
+          {
+            title: "Total Target",
+            key: "total_target_cost",
+            align: "right",
+            width: 140,
+            render: (_t, r) => (
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>{money(lineTarget(r))}</span>
+            ),
+          },
+          {
+            title: "Actual $ / unit",
+            dataIndex: "actual_cost_per_unit",
+            align: "right",
+            width: 140,
+            render: (v) => (
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>{money(v)}</span>
+            ),
+          },
+          {
+            title: "Total Actual",
+            key: "total_actual_cost",
+            align: "right",
+            width: 140,
+            render: (_t, r) => (
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>{money(lineActual(r))}</span>
+            ),
+          },
+        ]}
+      />
+
+      {/* keep bottom spacing (no content) */}
+      <div className="px-4 py-3 bg-gray-50 " />
+    </div>
   );
 };
