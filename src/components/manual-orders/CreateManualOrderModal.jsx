@@ -1,7 +1,11 @@
 import React, { useState } from "react";
 import { Modal, Form, Steps } from "antd";
 import { motion, AnimatePresence } from "framer-motion";
-import { UserOutlined, ShoppingCartOutlined, EnvironmentOutlined } from "@ant-design/icons";
+import {
+  UserOutlined,
+  ShoppingCartOutlined,
+  EnvironmentOutlined,
+} from "@ant-design/icons";
 import Swal from "sweetalert2";
 import CustomerInfoStep from "./CustomerInfoStep";
 import ProductsStep from "./ProductsStep";
@@ -40,10 +44,10 @@ const CreateManualOrderModal = ({ visible, onCancel, onSuccess }) => {
   // Handle step navigation
   const handleNext = (data, stepType) => {
     if (stepType === "customer") {
-      setFormData(prev => ({ ...prev, customerData: data }));
+      setFormData((prev) => ({ ...prev, customerData: data }));
       setCurrentStep(1);
     } else if (stepType === "products") {
-      setFormData(prev => ({ ...prev, productsData: data }));
+      setFormData((prev) => ({ ...prev, productsData: data }));
       setCurrentStep(2);
     }
   };
@@ -57,7 +61,7 @@ const CreateManualOrderModal = ({ visible, onCancel, onSuccess }) => {
     setIsSubmitting(true);
     try {
       const response = await createManualOrder(finalData);
-      
+
       if (response.success) {
         Swal.fire({
           icon: "success",
@@ -85,7 +89,10 @@ const CreateManualOrderModal = ({ visible, onCancel, onSuccess }) => {
       Swal.fire({
         icon: "error",
         title: "Failed to Create Order",
-        text: error.response?.data?.message || error.message || "An error occurred while creating the order",
+        text:
+          error.response?.data?.message ||
+          error.message ||
+          "An error occurred while creating the order",
         toast: true,
         position: "top-end",
         showConfirmButton: false,
@@ -148,8 +155,12 @@ const CreateManualOrderModal = ({ visible, onCancel, onSuccess }) => {
     <Modal
       title={
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">Create Manual Order</h2>
-          <p className="text-gray-600">Fill in the details to create a new manual order</p>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">
+            Create Manual Order
+          </h2>
+          <p className="text-gray-600">
+            Fill in the details to create a new manual order
+          </p>
         </div>
       }
       open={visible}
