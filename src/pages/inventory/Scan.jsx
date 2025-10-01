@@ -210,11 +210,10 @@ export default function ScanProduct() {
             if (lastScannedDataRef.current !== code.data) {
               lastScannedDataRef.current = code.data;
 
-              console.log("Auto QR Code detected:", code.data);
-              scanSound.currentTime = 0; // rewind if needed
-              scanSound
-                .play()
-                .catch((err) => console.warn("Sound play failed:", err));
+              // scanSound.currentTime = 0; // rewind if needed
+              // scanSound
+              //   .play()
+              //   .catch((err) => console.warn("Sound play failed:", err));
 
               handleQRDetection(code.data);
             }
@@ -293,10 +292,10 @@ export default function ScanProduct() {
         setSearchResults(data.inventry);
         setTotalInventory(data.totalInventry);
 
-        scanSound.currentTime = 0;
-        scanSound
-          .play()
-          .catch((err) => console.warn("Sound play failed:", err));
+        // scanSound.currentTime = 0;
+        // scanSound
+        //   .play()
+        //   .catch((err) => console.warn("Sound play failed:", err));
         return { items: data.inventry, total: data.totalInventry };
       } else {
         throw new Error("Invalid response format");
