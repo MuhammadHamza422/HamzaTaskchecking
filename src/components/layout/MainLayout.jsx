@@ -14,9 +14,13 @@ const navLinks = [
     roles: ["sourcer", "purchaser", "admin"],
   },
   { to: "/sourcing/orders", label: "Sourcing Orders", roles: ["sourcer"] },
-  { to: "/requests/pending", label: "Pending", roles: ["purchaser"] },
+  // { to: "/requests/pending", label: "Pending", roles: ["purchaser"] },
   { to: "/requests/my", label: "Assigned to Me", roles: ["purchaser"] },
 
+
+   { to: "/purchaser/dashboard", label: "Purchaser Dashboard", app: "purchasing", roles: ["admin","purchaser"] },
+  { to: "/purchaser/pending",   label: "Pending",             app: "purchasing", roles: ["admin","purchaser"] },
+  { to: "/purchaser/listings",  label: "All Listings",        app: "purchasing", roles: ["admin","purchaser"] },
   {
     label: "Users",
     isDropdown: true,
@@ -61,12 +65,7 @@ const navLinks = [
     roles: ["admin"],
   },
   { to: "orders/kits", label: "Kits", app: "orders", roles: ["admin"] },
-  { 
-  to: "/sourcing/sellers",
-  label: "Sellers",
-  app: "sourcing",                    
-  roles: ["admin", "sourcer", "purchaser"]
-},
+
   { 
   to: "/sourcing",
   label: "Sourcing Dashboard",
@@ -79,7 +78,14 @@ const navLinks = [
   label: "All Orders",
   app: "sourcing",                    
   roles: ["admin", "sourcer", "purchaser"]
-}
+},
+  { 
+  to: "/sourcing/sellers",
+  label: "Sellers",
+  app: "sourcing",                    
+  roles: ["admin", "sourcer", "purchaser"]
+},
+
   
 ];
 
@@ -132,7 +138,8 @@ const MainLayout = () => {
         (pathName.startsWith("/orders") &&
           ["Dashboard", "Orders", "Platforms", "Kits"].includes(link.label))) ||
         (pathName.startsWith("/sourcing") &&
-        ["Sourcing", "Sellers", "Sourcing Dashboard", "All Orders", ].includes(link.label))
+        ["Sourcing", "Sourcing Dashboard", "All Orders",  "Sellers", ].includes(link.label))||
+                (pathName.startsWith("/purchaser") && ["Purchaser Dashboard", "Pending", "All Assigned", "All Listings"].includes(link.label))
 
   );
 
