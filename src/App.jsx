@@ -45,6 +45,7 @@ import SellerDetailsPage from "./pages/sellers/SellersDetailsPage";
 import SellersListPage from "./pages/sellers/SellersListPage";
 import SourcerDashboardPage from "./pages/sourcer/SourcerDashboardPage";
 import PurchaserDashboardPage from "./pages/purchaser/PurchaserDashboardPage";
+import PurchaserListingsPage from "./pages/purchaser/PurchaserListingPage";
 
 // 🔹 Role guard for specific routes
 const RequireRoles = ({ allow, children }) => {
@@ -75,10 +76,18 @@ function App() {
           <Route path="/sourcing/edit/:id" element={<SourcerPage />} /> 
           <Route path="/sourcing" element={<SourcerDashboardPage />} />
 
-          <Route path="requests/pending" element={<PurchaserPendingPage />} />
+          {/* <Route path="requests/pending" element={<PurchaserPendingPage />} /> */}
           <Route path="requests/my" element={<PurchaserPage />} />
           <Route path="requests/:sourcingId" element={<RequestDetailPage />} />
-          <Route path="/purchasing/dashboard" element={<PurchaserDashboardPage />} />
+          {/* <Route path="/purchasing/dashboard" element={<PurchaserDashboardPage />} /> */}
+
+          <Route path="purchaser">
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<PurchaserDashboardPage />} />
+            <Route path="pending" element={<PurchaserPendingPage />} />
+            {/* <Route path="assigned" element={<PurchaserAssignedPage />} /> */}
+            <Route path="listings" element={<PurchaserListingsPage />} />
+          </Route>
           
 
           {/* Admin User Routes */}

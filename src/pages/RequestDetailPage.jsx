@@ -1,8 +1,14 @@
 
-
 // src/pages/RequestDetailPage.jsx
-import React, { useState, useEffect, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+} from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { CopyOutlined } from "@ant-design/icons";
 import {
   Card,
   Form,
@@ -22,6 +28,7 @@ import {
 import Swal from "sweetalert2";
 import apiClient from "../api/client";
 import SourcingLogsTimeline from "./SourcingLogsTimeline";
+import { useAuth } from "../contexts/AuthContext";
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -44,6 +51,7 @@ const toastOk = (title, text, background = "#10b981") =>
   toast.fire({ icon: "success", title, text, background, color: "#fff" });
 
 /* ---------- helpers ---------- */
+const lower = (v) => String(v ?? "").trim().toLowerCase();
 const deslug = (slug) => {
   if (!slug) return "";
   try {
@@ -53,41 +61,77 @@ const deslug = (slug) => {
     return String(slug).replace(/[-+]/g, " ").trim();
   }
 };
-const currency = (n) => (typeof n === "number" ? n.toFixed(2) : "0.00");
+const currency2 = (n) => (typeof n === "number" ? n.toFixed(2) : "0.00");
 const ensureHttp = (v = "") => {
   const s = String(v).trim();
   if (!s) return "";
   return /^https?:\/\//i.test(s) ? s : `https://${s}`;
 };
-const isLikelyFqdn = (hostname = "") => /^[^.\/\s][^\s]*\.[^\s]+$/.test(hostname);
+const isLikelyFqdn = (hostname = "") =>
+  /^[^.\/\s][^\s]*\.[^\s]+$/.test(hostname);
+const isObjectId = (v) => typeof v === "string" && /^[0-9a-fA-F]{24}$/.test(v);
 
 /** Normalize server payload into what the form expects */
 const normalizeRequest = (raw = {}) => {
+  const sourcing_id = raw.sourcing_id ?? raw.sourcingId ?? undefined;
   const seller_name =
     raw.seller?.name ??
     raw.seller_name ??
     (typeof raw.seller === "string" ? raw.seller : "") ??
     "";
 
-  const market = raw.seller?.market ?? raw.market ?? "";
+  const market =
+    raw.seller?.market?.name ||
+    raw.seller?.market?.slug ||
+    raw.market?.name ||
+    raw.market?.slug ||
+    raw.market ||
+    "";
 
-  const sellers_price = raw.sellers_price ?? raw.seller_price ?? 0;
-  const shipping_price = raw.shipping_price ?? raw.shipping_charges ?? 0;
-  const tax = raw.tax ?? raw.taxes ?? 0;
+  const sellers_price = Number(raw.sellers_price ?? raw.seller_price ?? 0);
+  const shipping_price = Number(
+    raw.shipping_price ?? raw.shipping_charges ?? 0
+  );
+  const tax = Number(raw.tax ?? raw.taxes ?? 0);
 
   const id = raw._id ?? raw.id ?? "";
-  const createdAt = raw.created_at ?? raw.createdAt ?? raw.created_on ?? undefined;
+  const createdAt =
+    raw.created_at ?? raw.createdAt ?? raw.created_on ?? undefined;
+
+  // carrier can be ref or string
+  const carrierId =
+    (raw.carrier && typeof raw.carrier === "object" && raw.carrier._id) ||
+    (typeof raw.carrier === "string" && isObjectId(raw.carrier)
+      ? raw.carrier
+      : undefined);
+  const carrierName =
+    (raw.carrier && typeof raw.carrier === "object" && raw.carrier.name) ||
+    (typeof raw.carrier === "string" && !isObjectId(raw.carrier)
+      ? raw.carrier
+      : "") ||
+    "";
 
   const items = (Array.isArray(raw.items) ? raw.items : []).map((it, idx) => ({
     _id: it._id ?? it.id ?? `${id}-item-${idx}`,
     product_name: it.product_name ?? it.name ?? "Unnamed",
     sku: it.sku ?? "",
-    quantity_needed: it.quantity_needed ?? 1,
+    quantity_needed: Number(it.quantity_needed ?? 1),
     product_condition: it.product_condition ?? null,
     tested: !!it.tested,
+
+    // financials (read-only here)
+    target_cost_per_unit: Number(it.target_cost_per_unit ?? 0),
+    total_target_cost:
+      it.total_target_cost != null
+        ? Number(it.total_target_cost)
+        : Number(it.quantity_needed ?? 1) *
+          Number(it.target_cost_per_unit ?? 0),
+    sellers_price_per_unit: Number(it.sellers_price_per_unit ?? 0),
+    actual_cost_per_unit: Number(it.actual_cost_per_unit ?? 0),
   }));
 
   return {
+    sourcing_id,
     _id: id,
     id,
     seller_name,
@@ -100,17 +144,18 @@ const normalizeRequest = (raw = {}) => {
 
     market_order_num: raw.market_order_num ?? "",
     purchase_link: raw.purchase_link ?? "",
+
     destination_warehouse: raw.destination_warehouse ?? "",
-    tracking_status: raw.tracking_status ?? "",
-    carrier: raw.carrier ?? "",
+    tracking_status: raw.tracking_status ?? "Pending",
+    carrierId,
+    carrierName,
     tracking_id: raw.tracking_id ?? "",
     tracking_link: raw.tracking_link ?? "",
-    odoo_po_id: raw.odoo_po_id ?? "",
-    po_reference: raw.po_reference ?? "",
 
-    purchase_without_tracking: !!raw.purchase_without_tracking,
-    purchase_with_tracking: !!raw.purchase_with_tracking,
-    is_purchase_order_created: !!raw.is_purchase_order_created,
+    // Accept both, prefer offer_price (schema)
+    offer_price: Number(
+      raw.offer_price != null ? raw.offer_price : raw.offered_price ?? 0
+    ),
 
     createdAt,
     items,
@@ -118,8 +163,57 @@ const normalizeRequest = (raw = {}) => {
 };
 
 const STATUS_NEEDS_PURCHASE_DETAILS = ["Purchased", "Dropshipped"];
+const TRACKING_STATUSES = [
+  "Pending",
+  "LabelCreated",
+  "InTransit",
+  "Delivered",
+  "QC",
+  "Inventory",
+];
+
+/** Resolve a carrier {value,label} by id; falls back to id as label */
+const resolveCarrierLabel = async (idMaybe) => {
+  if (!idMaybe) return null;
+  try {
+    const direct = await apiClient.get(`/api/v1/carriers/${idMaybe}`);
+    if (direct?.data?._id) {
+      return { value: direct.data._id, label: direct.data.name };
+    }
+  } catch (_) {}
+  try {
+    const { data } = await apiClient.get("/api/v1/carriers", { params: { q: "" } });
+    const list = Array.isArray(data) ? data : data?.data || [];
+    const hit = list.find((c) => c._id === idMaybe);
+    if (hit) return { value: hit._id, label: hit.name };
+  } catch (_) {}
+  return { value: idMaybe, label: idMaybe };
+};
+
+/* ---------- permissions from /api/v1/role/all ---------- */
+const extractPerms = (roleObj) => {
+  const access = Array.isArray(roleObj?.access) ? roleObj.access : [];
+  const sourcer = access.find((a) => lower(a?.app) === "sourcer");
+  const purchaser = access.find((a) => lower(a?.app) === "purchaser");
+
+  const sourcerMenu = Array.isArray(sourcer?.menu)
+    ? sourcer.menu.map(lower)
+    : [];
+  const purchaserMenu = Array.isArray(purchaser?.menu)
+    ? purchaser.menu.map(lower)
+    : [];
+
+  return {
+    canEditMyRequests: sourcerMenu.includes("edit my requests"),
+    canMarkPurchased: purchaserMenu.includes("mark purchased"),
+    canUpdateTracking: purchaserMenu.includes("update tracking"),
+  };
+};
 
 export default function RequestDetailPage() {
+  const { user: authUser } = useAuth();
+  const roleName = lower(authUser?.roles?.role || authUser?.role || "");
+
   const { seller, sourcingId, id } = useParams();
   const navigate = useNavigate();
   const screens = useBreakpoint();
@@ -129,9 +223,118 @@ export default function RequestDetailPage() {
 
   const [request, setRequest] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [markets, setMarkets] = useState([]);
-  const [loadingMarkets, setLoadingMarkets] = useState(false);
+  const [rolesLoaded, setRolesLoaded] = useState(false);
+
+  // permissions
+  const [canEditMyRequests, setCanEditMyRequests] = useState(false);
+  const [canMarkPurchased, setCanMarkPurchased] = useState(false);
+  const [canUpdateTracking, setCanUpdateTracking] = useState(false);
+
+  const [carrierOpts, setCarrierOpts] = useState([]);
+  const [carrierLoading, setCarrierLoading] = useState(false);
+  const carrierTimer = useRef(null);
+  const lastCarrierQuery = useRef("");
   const [logsTick, setLogsTick] = useState(0);
+
+  // Load role map, derive permissions
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await apiClient.get("/api/v1/role/all");
+        const rolesArr = Array.isArray(data?.roles) ? data.roles : [];
+        const matched = rolesArr.find((r) => lower(r?.role) === roleName) || null;
+        const { canEditMyRequests, canMarkPurchased, canUpdateTracking } =
+          extractPerms(matched || {});
+        if (!cancelled) {
+          setCanEditMyRequests(!!canEditMyRequests);
+          setCanMarkPurchased(!!canMarkPurchased);
+          setCanUpdateTracking(!!canUpdateTracking);
+          setRolesLoaded(true);
+        }
+      } catch (e) {
+        console.error("Failed to load /api/v1/role/all", e);
+        if (!cancelled) {
+          setCanEditMyRequests(false);
+          setCanMarkPurchased(false);
+          setCanUpdateTracking(false);
+          setRolesLoaded(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [roleName]);
+
+  const debouncedCarrierSearch = useCallback((q) => {
+    lastCarrierQuery.current = q;
+    if (carrierTimer.current) clearTimeout(carrierTimer.current);
+    carrierTimer.current = setTimeout(async () => {
+      try {
+        setCarrierLoading(true);
+        const { data } = await apiClient.get("/api/v1/carriers", {
+          params: { q },
+        });
+        const list = Array.isArray(data) ? data : data?.data || [];
+        setCarrierOpts(
+          list.map((c) => ({ label: c.name, value: c._id, meta: c }))
+        );
+      } catch {
+        setCarrierOpts([]);
+      } finally {
+        setCarrierLoading(false);
+      }
+    }, 300);
+  }, []);
+
+  const carrierOptionsWithCreate = useMemo(() => {
+    const q = String(lastCarrierQuery.current || "").trim();
+    if (!q) return carrierOpts;
+    const exists = carrierOpts.some(
+      (o) => (o.label || "").toLowerCase() === q.toLowerCase()
+    );
+    return exists
+      ? carrierOpts
+      : [
+          ...carrierOpts,
+          {
+            label: `Create “${q}”`,
+            value: "__CREATE__",
+            meta: { createName: q },
+          },
+        ];
+  }, [carrierOpts]);
+
+  const handleCarrierSelect = async (val, option) => {
+    const rawVal = val && typeof val === "object" ? val.value : val;
+    const rawLabel =
+      (val && typeof val === "object" && val.label) || option?.label;
+
+    if (rawVal === "__CREATE__") {
+      const name = option?.meta?.createName;
+      try {
+        const { data } = await apiClient.post(
+          "/api/v1/carriers/find-or-create",
+          { name }
+        );
+        const createdOpt = { label: data.name, value: data._id, meta: data };
+        setCarrierOpts((prev) => {
+          const exists = prev.some((o) => o.value === data._id);
+          return exists ? prev : [createdOpt, ...prev];
+        });
+        form.setFieldsValue({ carrier: { value: data._id, label: data.name } });
+        toastOk("Carrier created", `${data.name}`);
+      } catch (e) {
+        toastErr("Carrier create failed", e?.response?.data?.message || "");
+      }
+      return;
+    }
+
+    form.setFieldsValue({
+      carrier: { value: rawVal, label: rawLabel || option?.label || String(rawVal) },
+    });
+  };
 
   const [form] = Form.useForm();
 
@@ -141,33 +344,18 @@ export default function RequestDetailPage() {
   const watchedTax = Form.useWatch("tax", form);
 
   const sellers_price = Number(watchedSellers ?? request?.sellers_price ?? 0);
-  const shipping_price = Number(watchedShipping ?? request?.shipping_price ?? 0);
+  const shipping_price = Number(
+    watchedShipping ?? request?.shipping_price ?? 0
+  );
   const tax = Number(watchedTax ?? request?.tax ?? 0);
   const total = sellers_price + shipping_price + tax;
 
   // API helpers
   const fetchBySeller = (sellerName) =>
-    apiClient.get(`/api/v1/sourcing/by-seller/${encodeURIComponent(sellerName)}`);
+    apiClient.get(
+      `/api/v1/sourcing/by-seller/${encodeURIComponent(sellerName)}`
+    );
   const fetchById = (docId) => apiClient.get(`/api/v1/sourcing/${docId}`);
-
-  // Load markets (display only)
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        setLoadingMarkets(true);
-        const { data } = await apiClient.get("/api/v1/markets", { params: { q: "" } });
-        if (!cancelled) setMarkets(Array.isArray(data) ? data : []);
-      } catch {
-        if (!cancelled) setMarkets([]);
-      } finally {
-        if (!cancelled) setLoadingMarkets(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const fetchRequest = useCallback(async () => {
     const sellerParam = seller || null;
@@ -176,7 +364,10 @@ export default function RequestDetailPage() {
     if (!sellerParam && !idParam) {
       setRequest(null);
       setLoading(false);
-      toastWarn("Missing parameter", "No seller or id was provided in the route.");
+      toastWarn(
+        "Missing parameter",
+        "No seller or id was provided in the route."
+      );
       return;
     }
 
@@ -190,7 +381,9 @@ export default function RequestDetailPage() {
         try {
           res = await fetchBySeller(sellerName);
         } catch {
-          res = await apiClient.get("/api/v1/sourcing", { params: { seller: sellerName } });
+          res = await apiClient.get("/api/v1/sourcing", {
+            params: { seller: sellerName },
+          });
         }
       } else {
         res = await fetchById(String(idParam));
@@ -205,39 +398,71 @@ export default function RequestDetailPage() {
       const normalized = normalizeRequest(raw);
       setRequest(normalized);
 
-      const parsedMarketOrder =
-        normalized.market_order_num !== "" && normalized.market_order_num != null
-          ? Number(normalized.market_order_num)
-          : undefined;
+      // Prepare carrier field with label
+      let carrierField;
+      if (normalized.carrierId || normalized.carrierName) {
+        if (normalized.carrierName) {
+          carrierField = {
+            value: normalized.carrierId || normalized.carrierName,
+            label: normalized.carrierName,
+          };
+          if (normalized.carrierId) {
+            setCarrierOpts((prev) => {
+              const exists = prev.some((o) => o.value === normalized.carrierId);
+              return exists
+                ? prev
+                : [
+                    {
+                      label: normalized.carrierName,
+                      value: normalized.carrierId,
+                    },
+                    ...prev,
+                  ];
+            });
+          }
+        } else if (normalized.carrierId) {
+          const resolved = await resolveCarrierLabel(normalized.carrierId);
+          carrierField = resolved;
+          setCarrierOpts((prev) => {
+            const exists = prev.some((o) => o.value === resolved.value);
+            return exists
+              ? prev
+              : [{ label: resolved.label, value: resolved.value }, ...prev];
+          });
+        }
+      }
 
+      // Fill form
       form.setFieldsValue({
         seller_name: normalized.seller_name,
-        market:
-          typeof normalized.market === "object"
-            ? normalized.market?.name || normalized.market?.slug || normalized.market?._id
-            : normalized.market,
+        market: normalized.market,
         listing_link: normalized.listing_link,
         sellers_price: normalized.sellers_price,
         shipping_price: normalized.shipping_price,
         tax: normalized.tax,
         status: normalized.status,
-        market_order_num: Number.isFinite(parsedMarketOrder) ? parsedMarketOrder : undefined,
+        offer_price: normalized.offer_price || undefined,
+
+        market_order_num:
+          normalized.market_order_num !== "" &&
+          normalized.market_order_num != null
+            ? normalized.market_order_num
+            : undefined,
         purchase_link: normalized.purchase_link,
+
         destination_warehouse: normalized.destination_warehouse,
-        tracking_status: normalized.tracking_status,
-        carrier: normalized.carrier,
+        tracking_status: normalized.tracking_status || "Pending",
+        carrier: carrierField || undefined,
         tracking_id: normalized.tracking_id,
         tracking_link: normalized.tracking_link,
-        odoo_po_id: normalized.odoo_po_id,
-        po_reference: normalized.po_reference,
-        purchase_without_tracking: normalized.purchase_without_tracking,
-        purchase_with_tracking: normalized.purchase_with_tracking,
-        is_purchase_order_created: normalized.is_purchase_order_created,
       });
+      setLogsTick((n) => n + 1);
     } catch (err) {
       console.error(err);
       const serverMsg =
-        err?.response?.data?.message || err.message || "Failed to fetch request details.";
+        err?.response?.data?.message ||
+        err.message ||
+        "Failed to fetch request details.";
       toastErr("Load failed", serverMsg);
       setRequest(null);
     } finally {
@@ -246,27 +471,77 @@ export default function RequestDetailPage() {
   }, [seller, sourcingId, id, form]);
 
   useEffect(() => {
+    if (!rolesLoaded) return; // wait for permissions for correct initial UI
     fetchRequest();
-  }, [fetchRequest]);
+  }, [rolesLoaded, fetchRequest]);
 
-  /** Build a PATCH payload that only includes editable fields, mapped to server keys,
-   *  and omits empty/undefined so we don't fail validation. */
+  /** Allowed statuses based on permissions */
+  const allowedStatusValues = useMemo(() => {
+    const base = [
+      "Pending",
+      "Assigned",
+      "Offer",
+      "Disapproved",
+      "Sold",
+      "Hold",
+      "Seller Rejected",
+      "Returned",
+    ];
+    const purch = ["Purchased", "Dropshipped"];
+    const out = [...base];
+    if (canMarkPurchased) out.push(...purch);
+    return out;
+  }, [canMarkPurchased]);
+
+  const canEditAny =
+    canEditMyRequests || canMarkPurchased || canUpdateTracking;
+
+  /** Build a PATCH payload and validate conditional rules with permissions. */
   const handleOrderUpdate = async (values) => {
     try {
-      const docId = request?._id || request?.id;
+      const original = request || {};
+      const docId = original?._id || original?.id;
       if (!docId) {
         toastWarn("No ID", "Cannot update because sourcing id is missing.");
         return;
       }
 
-      const status = String(values?.status || "").trim();
-      const needsPurchaseDetails = STATUS_NEEDS_PURCHASE_DETAILS.includes(status);
+      const desiredStatus = String(values?.status ?? original.status ?? "").trim();
 
-      // normalize + validate purchase/link only if required
+      // Block attempts to set disallowed status
+      if (!allowedStatusValues.includes(desiredStatus)) {
+        if (["Purchased", "Dropshipped"].includes(desiredStatus) && !canMarkPurchased) {
+          toastWarn("Not allowed", "You don't have permission to mark as Purchased/Dropshipped.");
+          return;
+        }
+        if (desiredStatus !== original.status && !canEditMyRequests) {
+          toastWarn("Not allowed", "You don't have permission to change the order status.");
+          return;
+        }
+      }
+
+      const wantsPurchasedDetails = STATUS_NEEDS_PURCHASE_DETAILS.includes(desiredStatus);
+
+      // Offer price rules — ALWAYS required when status is Offer (as before)
+      if (desiredStatus === "Offer") {
+        const offer = Number(values?.offer_price);
+        if (!(offer > 0)) {
+          toastWarn("Missing Offer price", 'Enter "Offer price" when status is "Offer".');
+          return;
+        }
+      }
+
+      // Purchase fields validation only if marking purchased
       const purchaseRaw = (values?.purchase_link || "").trim();
       const normalizedPurchase = purchaseRaw ? ensureHttp(purchaseRaw) : "";
+      const monRaw = values?.market_order_num;
+      const monStr = monRaw === 0 || monRaw ? String(monRaw).trim() : "";
 
-      if (needsPurchaseDetails) {
+      if (wantsPurchasedDetails) {
+        if (!canMarkPurchased) {
+          toastWarn("Not allowed", "You don't have permission to mark this as Purchased/Dropshipped.");
+          return;
+        }
         if (!normalizedPurchase) {
           toastWarn("Missing purchase link", 'Required when status is "Purchased" or "Dropshipped".');
           return;
@@ -281,34 +556,90 @@ export default function RequestDetailPage() {
           toastWarn("Invalid URL", "Purchase link looks malformed.");
           return;
         }
+        if (!monStr) {
+          toastWarn(
+            "Missing Market Order #",
+            'Required when status is "Purchased" or "Dropshipped".'
+          );
+          return;
+        }
       }
 
-      // market_order_num must be a STRING on your backend (when required)
-      const monRaw = values?.market_order_num;
-      const monStr = needsPurchaseDetails
-        ? (monRaw === 0 || monRaw ? String(monRaw).trim() : "")
-        : undefined; // omit when not required
+      // Tracking validations (based on current tracking_status value)
+      const tStatus = values?.tracking_status || original.tracking_status || "Pending";
+      const carrierField = values?.carrier;
+      const carrierId =
+        carrierField && typeof carrierField === "object"
+          ? carrierField.value
+          : carrierField || undefined;
 
-      // Build minimal, server-friendly payload
-      const patch = {
-        status: values?.status,
+      const trackingLinkRaw = (values?.tracking_link || "").trim();
+      const trackingLinkNorm = trackingLinkRaw ? ensureHttp(trackingLinkRaw) : "";
 
-        // only send when required
-        ...(needsPurchaseDetails && monStr ? { market_order_num: monStr } : {}),
-        ...(needsPurchaseDetails ? { purchase_link: normalizedPurchase } : {}),
+      if (tStatus && tStatus !== "Pending") {
+        if (!carrierId) {
+          toastWarn("Carrier required", "Select a carrier when tracking status is not Pending.");
+          return;
+        }
+        if (!trackingLinkNorm) {
+          toastWarn("Tracking link required", "Enter a tracking link when tracking status is not Pending.");
+          return;
+        }
+        try {
+          const u = new URL(trackingLinkNorm);
+          if (!isLikelyFqdn(u.hostname)) {
+            toastWarn("Invalid tracking URL", "Enter a full domain, e.g. https://example.com/track/123");
+            return;
+          }
+        } catch {
+          toastWarn("Invalid tracking URL", "Tracking link looks malformed.");
+          return;
+        }
+      }
 
-        destination_warehouse: values?.destination_warehouse,
-        tracking_status: values?.tracking_status,
-        carrier: values?.carrier,
-        tracking_id: values?.tracking_id,
-        tracking_link: values?.tracking_link,
-        odoo_po_id: values?.odoo_po_id,
-        po_reference: values?.po_reference,
-      };
+      // Build payload
+      const patch = {};
 
-      // Remove undefined/empty string
+      // Status + offer price
+      if (canEditMyRequests || canMarkPurchased) {
+        if (allowedStatusValues.includes(desiredStatus)) {
+          patch.status = desiredStatus;
+        }
+      }
+      // Always persist offer_price when provided (matches previous behavior)
+      if (values?.offer_price != null) {
+        patch.offer_price = Number(values.offer_price);
+      }
+
+      // Purchasing details (only when allowed)
+      if (canMarkPurchased) {
+        if (monStr) patch.market_order_num = monStr;
+        if (normalizedPurchase) patch.purchase_link = normalizedPurchase;
+      }
+
+      // Tracking fields: Only tracking_status is permission-gated for editing.
+      if (canUpdateTracking) {
+        patch.tracking_status = tStatus || "Pending";
+      }
+      patch.carrier = carrierId || undefined;
+      if (values?.tracking_id != null && String(values.tracking_id).trim() !== "") {
+        patch.tracking_id = values.tracking_id;
+      }
+      if (trackingLinkNorm) patch.tracking_link = trackingLinkNorm;
+      if (values?.destination_warehouse) {
+        patch.destination_warehouse = values.destination_warehouse;
+      }
+
+      if (Object.keys(patch).length === 0) {
+        toastWarn("No changes", "Nothing to save.");
+        return;
+      }
+
+      // Strip empties (keep numeric 0)
       const cleaned = Object.fromEntries(
-        Object.entries(patch).filter(([_, v]) => v !== undefined && v !== "")
+        Object.entries(patch).filter(
+          ([_, v]) => v !== undefined && v !== "" && !(typeof v === "number" && Number.isNaN(v))
+        )
       );
 
       await apiClient.patch(`/api/v1/sourcing/${docId}`, cleaned);
@@ -318,26 +649,10 @@ export default function RequestDetailPage() {
     } catch (err) {
       console.error(err);
       const serverMsg =
-        err?.response?.data?.message || err.message || "Failed to update order details.";
+        err?.response?.data?.message ||
+        err.message ||
+        "Failed to update order details.";
       toastErr("Update failed", serverMsg);
-    }
-  };
-
-  // Save inline item edits
-  const handleItemUpdate = async (itemId, field, value) => {
-    try {
-      if (!itemId) {
-        toastWarn("Missing item id", "We couldn't identify which item to update.");
-        return;
-      }
-      await apiClient.patch(`/api/v1/sourcing/items/${itemId}`, { [field]: value });
-      toastOk("Item updated", `#${itemId} saved`);
-      fetchRequest();
-      setLogsTick((n) => n + 1);
-    } catch (err) {
-      console.error(err);
-      const serverMsg = err?.response?.data?.message || err.message || "Failed to update item.";
-      toastErr("Item update failed", serverMsg);
     }
   };
 
@@ -350,14 +665,140 @@ export default function RequestDetailPage() {
     size: controlSize,
   };
 
-  if (loading) {
+  if (loading || !rolesLoaded) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 280 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          height: 280,
+        }}
+      >
         <Spin size="large" />
       </div>
     );
   }
   if (!request) return <p>No request found.</p>;
+
+  // Table columns for Items (inline edits always allowed for non-financials)
+  const itemColumns = [
+    { title: "Product Name", dataIndex: "product_name", key: "product_name" },
+    { title: "SKU", dataIndex: "sku", key: "sku" },
+    { title: "Qty", dataIndex: "quantity_needed", key: "quantity_needed", width: 90 },
+    {
+      title: "Condition",
+      dataIndex: "product_condition",
+      key: "product_condition",
+      render: (val, record) => (
+        <Select
+          value={val || undefined}
+          style={{ width: 160 }}
+          onChange={(value) =>
+            apiClient
+              .patch(`/api/v1/sourcing/items/${record._id || record.id}`, { product_condition: value })
+              .then(() => {
+                toastOk("Item updated", `#${record._id || record.id} saved`);
+                fetchRequest();
+                setLogsTick((n) => n + 1);
+              })
+              .catch((err) =>
+                toastErr("Item update failed", err?.response?.data?.message || err.message || "")
+              )
+          }
+          size={controlSize}
+        >
+          <Option value="Excellent">Excellent</Option>
+          <Option value="Refurbished">Refurbished</Option>
+          <Option value="Acceptable">Acceptable</Option>
+          <Option value="Scratched">Scratched</Option>
+          <Option value="Unacceptable">Unacceptable</Option>
+        </Select>
+      ),
+    },
+    {
+      title: "Tested",
+      dataIndex: "tested",
+      key: "tested",
+      render: (val, record) => (
+        <Checkbox
+          checked={!!val}
+          onChange={(e) =>
+            apiClient
+              .patch(`/api/v1/sourcing/items/${record._id || record.id}`, { tested: e.target.checked })
+              .then(() => {
+                toastOk("Item updated", `#${record._id || record.id} saved`);
+                fetchRequest();
+                setLogsTick((n) => n + 1);
+              })
+              .catch((err) =>
+                toastErr("Item update failed", err?.response?.data?.message || err.message || "")
+              )
+          }
+        />
+      ),
+      width: 110,
+    },
+
+    // FINANCIAL COLUMNS (read-only)
+    {
+      title: "Target $ / unit",
+      key: "target_cost_per_unit",
+      dataIndex: "target_cost_per_unit",
+      align: "right",
+      width: 140,
+      render: (v) => `$${currency2(Number(v || 0))}`,
+    },
+    {
+      title: "Total Target (line)",
+      key: "total_target_cost",
+      align: "right",
+      width: 160,
+      render: (_, rec) =>
+        `$${currency2(
+          Number(rec.quantity_needed || 0) * Number(rec.target_cost_per_unit || 0)
+        )}`,
+    },
+    {
+      title: "Seller $ / unit",
+      key: "sellers_price_per_unit",
+      align: "right",
+      width: 140,
+      render: (_, rec) => `$${currency2(rec.sellers_price_per_unit || 0)}`,
+    },
+    {
+      title: "Actual $ / unit",
+      key: "actual_cost_per_unit",
+      align: "right",
+      width: 140,
+      render: (_, rec) => `$${currency2(rec.actual_cost_per_unit || 0)}`,
+    },
+  ];
+
+  // US STATE options (static)
+  const US_STATES = [
+    { abbr: "AL", name: "Alabama" }, { abbr: "AK", name: "Alaska" }, { abbr: "AZ", name: "Arizona" },
+    { abbr: "AR", name: "Arkansas" }, { abbr: "CA", name: "California" }, { abbr: "CO", name: "Colorado" },
+    { abbr: "CT", name: "Connecticut" }, { abbr: "DE", name: "Delaware" }, { abbr: "FL", name: "Florida" },
+    { abbr: "GA", name: "Georgia" }, { abbr: "HI", name: "Hawaii" }, { abbr: "ID", name: "Idaho" },
+    { abbr: "IL", name: "Illinois" }, { abbr: "IN", name: "Indiana" }, { abbr: "IA", name: "Iowa" },
+    { abbr: "KS", name: "Kansas" }, { abbr: "KY", name: "Kentucky" }, { abbr: "LA", name: "Louisiana" },
+    { abbr: "ME", name: "Maine" }, { abbr: "MD", name: "Maryland" }, { abbr: "MA", name: "Massachusetts" },
+    { abbr: "MI", name: "Michigan" }, { abbr: "MN", name: "Minnesota" }, { abbr: "MS", name: "Mississippi" },
+    { abbr: "MO", name: "Missouri" }, { abbr: "MT", name: "Montana" }, { abbr: "NE", name: "Nebraska" },
+    { abbr: "NV", name: "Nevada" }, { abbr: "NH", name: "New Hampshire" }, { abbr: "NJ", name: "New Jersey" },
+    { abbr: "NM", name: "New Mexico" }, { abbr: "NY", name: "New York" }, { abbr: "NC", name: "North Carolina" },
+    { abbr: "ND", name: "North Dakota" }, { abbr: "OH", name: "Ohio" }, { abbr: "OK", name: "Oklahoma" },
+    { abbr: "OR", name: "Oregon" }, { abbr: "PA", name: "Pennsylvania" }, { abbr: "TX", name: "Texas" },
+    { abbr: "RI", name: "Rhode Island" }, { abbr: "SC", name: "South Carolina" }, { abbr: "SD", name: "South Dakota" },
+    { abbr: "TN", name: "Tennessee" }, { abbr: "UT", name: "Utah" }, { abbr: "VT", name: "Vermont" },
+    { abbr: "VA", name: "Virginia" }, { abbr: "WA", name: "Washington" }, { abbr: "WV", name: "West Virginia" },
+    { abbr: "WI", name: "Wisconsin" }, { abbr: "WY", name: "Wyoming" },
+  ];
+  const US_STATE_OPTIONS = US_STATES.map((s) => ({
+    value: `US_${s.abbr}`,
+    label: `${s.abbr} — ${s.name}`,
+  }));
 
   return (
     <div className="page-container" style={{ padding: screens.xs ? 12 : 16 }}>
@@ -373,24 +814,41 @@ export default function RequestDetailPage() {
         }}
       >
         <Title level={screens.xs ? 4 : 2} style={{ margin: 0 }}>
-          {request.seller_name ? `Seller: ${request.seller_name}` : `Sourcing Request #${request.id}`}
+          {`Sourcing ID: ${request.sourcing_id || request._id || "—"}`}
         </Title>
+
         <Space wrap>
           {!!request.listing_link && (
             <Button
+              icon={<CopyOutlined />}
               size={controlSize}
-              onClick={() => {
+              onClick={async () => {
                 try {
-                  const url = /^https?:\/\//i.test(request.listing_link)
-                    ? request.listing_link
-                    : `https://${request.listing_link}`;
-                  window.open(url, "_blank", "noopener,noreferrer");
+                  const raw = (request?.listing_link || "").trim();
+                  if (!raw) {
+                    toastWarn("No link", "This request has no listing link.");
+                    return;
+                  }
+                  const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+                  if (navigator?.clipboard?.writeText) {
+                    await navigator.clipboard.writeText(url);
+                  } else {
+                    const ta = document.createElement("textarea");
+                    ta.value = url;
+                    ta.style.position = "fixed";
+                    ta.style.left = "-9999px";
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand("copy");
+                    document.body.removeChild(ta);
+                  }
+                  toastOk("Copied", "Listing link copied to clipboard.");
                 } catch {
-                  toastWarn("Invalid URL", "This listing link looks malformed.");
+                  toastWarn("Copy failed", "Could not copy the listing link.");
                 }
               }}
             >
-              View on Listing
+              Copy Listing
             </Button>
           )}
           <Button size={controlSize} onClick={() => navigate(-1)}>
@@ -458,36 +916,50 @@ export default function RequestDetailPage() {
                   fontWeight: 600,
                 }}
               >
-                Total Order Value: ${currency(total)}
+                Total Order Value: ${currency2(total)}
               </div>
             </Col>
           </Row>
         </Card>
 
-        {/* PURCHASE / TRACKING — CONDITIONAL REQUIRED FIELDS */}
+        {/* UPDATE PURCHASE & TRACKING */}
         <Card
           title={<span className="font-semibold">Update Purchase & Tracking Details</span>}
           bodyStyle={{ padding: cardPad }}
         >
           <Row gutter={gutter}>
+            {/* Order Status (options restricted by permissions) */}
             <Col xs={24} md={12} lg={8}>
-              <Form.Item name="status" label="Order Status" rules={[{ required: true }]}>
-                <Select allowClear size={controlSize}>
-                  <Option value="Pending">Pending</Option>
-                  <Option value="Assigned">Assigned</Option>
-                  <Option value="Offer">Offer</Option>
-                  <Option value="Purchased">Purchased</Option>
-                  <Option value="Disapproved">Disapproved</Option>
-                  <Option value="Sold">Sold</Option>
-                  <Option value="Hold">Hold</Option>
-                  <Option value="Seller Rejected">Seller Rejected</Option>
-                  <Option value="Dropshipped">Dropshipped</Option>
-                  <Option value="Returned">Returned</Option>
+              <Form.Item
+                name="status"
+                label="Order Status"
+                rules={[{ required: true }]}
+              >
+                <Select
+                  allowClear
+                  size={controlSize}
+                  disabled={!(canEditMyRequests || canMarkPurchased)}
+                >
+                  {[
+                    "Pending",
+                    "Assigned",
+                    "Offer",
+                    "Disapproved",
+                    "Sold",
+                    "Hold",
+                    "Seller Rejected",
+                    "Returned",
+                    ...(canMarkPurchased ? ["Purchased", "Dropshipped"] : []),
+                  ].map((s) => (
+                    <Option key={s} value={s}>
+                      {s}
+                    </Option>
+                  ))}
                 </Select>
               </Form.Item>
             </Col>
 
-            {/* Market Order # — required & numeric when Purchased or Dropshipped; sent as STRING */}
+            {/* Market Order # — required when Purchased/Dropshipped by allowed users */}
             <Col xs={24} md={12} lg={8}>
               <Form.Item
                 name="market_order_num"
@@ -497,7 +969,8 @@ export default function RequestDetailPage() {
                   ({ getFieldValue }) => ({
                     validator(_, value) {
                       const st = getFieldValue("status");
-                      const required = STATUS_NEEDS_PURCHASE_DETAILS.includes(st);
+                      const required =
+                        canMarkPurchased && STATUS_NEEDS_PURCHASE_DETAILS.includes(st);
                       if (!required && (value === undefined || value === null || value === "")) {
                         return Promise.resolve();
                       }
@@ -507,7 +980,9 @@ export default function RequestDetailPage() {
                         return Promise.reject(new Error("Please enter a valid number."));
                       }
                       return Promise.reject(
-                        new Error('Market Order # is required when status is "Purchased" or "Dropshipped".')
+                        new Error(
+                          'Market Order # is required when status is "Purchased" or "Dropshipped".'
+                        )
                       );
                     },
                   }),
@@ -522,11 +997,12 @@ export default function RequestDetailPage() {
                   stringMode={false}
                   placeholder='Required when "Purchased" or "Dropshipped"'
                   size={controlSize}
+                  disabled={!canMarkPurchased}
                 />
               </Form.Item>
             </Col>
 
-            {/* Purchase Link — required & valid URL when Purchased or Dropshipped */}
+            {/* Purchase Link — required when Purchased/Dropshipped by allowed users */}
             <Col xs={24} md={12} lg={8}>
               <Form.Item
                 name="purchase_link"
@@ -536,23 +1012,31 @@ export default function RequestDetailPage() {
                   ({ getFieldValue }) => ({
                     validator(_, value) {
                       const st = getFieldValue("status");
-                      const required = STATUS_NEEDS_PURCHASE_DETAILS.includes(st);
+                      const required =
+                        canMarkPurchased && STATUS_NEEDS_PURCHASE_DETAILS.includes(st);
                       const raw = (value || "").trim();
                       if (!required && !raw) return Promise.resolve();
                       if (required && !raw) {
                         return Promise.reject(
-                          new Error('Purchase Link is required when status is "Purchased" or "Dropshipped".')
+                          new Error(
+                            'Purchase Link is required when status is "Purchased" or "Dropshipped".'
+                          )
                         );
                       }
                       try {
                         const u = new URL(ensureHttp(raw));
                         const ok =
-                          (u.protocol === "http:" || u.protocol === "https:") && isLikelyFqdn(u.hostname);
+                          (u.protocol === "http:" || u.protocol === "https:") &&
+                          isLikelyFqdn(u.hostname);
                         return ok
                           ? Promise.resolve()
-                          : Promise.reject(new Error("Enter a full domain, e.g., https://example.com"));
+                          : Promise.reject(
+                              new Error("Enter a full domain, e.g., https://example.com")
+                            );
                       } catch {
-                        return Promise.reject(new Error("Enter a valid URL, e.g., https://example.com"));
+                        return Promise.reject(
+                          new Error("Enter a valid URL, e.g., https://example.com")
+                        );
                       }
                     },
                   }),
@@ -560,114 +1044,177 @@ export default function RequestDetailPage() {
                 validateTrigger={["onBlur", "onChange"]}
                 hasFeedback
               >
-                <Input placeholder='Required when "Purchased" or "Dropshipped"' size={controlSize} />
+                <Input
+                  placeholder='Required when "Purchased" or "Dropshipped"'
+                  size={controlSize}
+                  disabled={!canMarkPurchased}
+                />
               </Form.Item>
             </Col>
 
+            {/* Destination (always editable) */}
             <Col xs={24} md={12} lg={8}>
               <Form.Item name="destination_warehouse" label="Destination">
-                <Select allowClear size={controlSize}>
-                  <Option value="US_CA">US_CA</Option>
-                  <Option value="US_TX">US_TX</Option>
-                </Select>
+                <Select
+                  allowClear
+                  showSearch
+                  size={controlSize}
+                  placeholder="Select a state…"
+                  options={US_STATE_OPTIONS}
+                  optionFilterProp="label"
+                  filterOption={(input, option) =>
+                    (option?.label || "").toLowerCase().includes(input.toLowerCase())
+                  }
+                />
               </Form.Item>
             </Col>
 
+            {/* Tracking Status (only this gets disabled when update-tracking is OFF) */}
             <Col xs={24} md={12} lg={8}>
               <Form.Item name="tracking_status" label="Tracking Status">
-                <Select allowClear size={controlSize}>
-                  <Option value="LabelCreated">LabelCreated</Option>
-                  <Option value="InTransit">InTransit</Option>
-                  <Option value="Delivered">Delivered</Option>
+                <Select
+                  allowClear
+                  size={controlSize}
+                  placeholder="Select status"
+                  disabled={!canUpdateTracking}
+                >
+                  {TRACKING_STATUSES.map((s) => (
+                    <Option key={s} value={s}>
+                      {s}
+                    </Option>
+                  ))}
                 </Select>
               </Form.Item>
             </Col>
 
+            {/* Carrier (always editable; validation based on tracking_status) */}
             <Col xs={24} md={12} lg={8}>
-              <Form.Item name="carrier" label="Carrier">
-                <Select allowClear size={controlSize}>
-                  <Option value="FedEx">FedEx</Option>
-                  <Option value="USPS">USPS</Option>
-                  <Option value="UPS">UPS</Option>
-                </Select>
+              <Form.Item
+                name="carrier"
+                label="Carrier"
+                dependencies={["tracking_status"]}
+                rules={[
+                  ({ getFieldValue }) => ({
+                    validator(_, value) {
+                      const st = getFieldValue("tracking_status");
+                      if (!st || st === "Pending") return Promise.resolve();
+                      return value?.value
+                        ? Promise.resolve()
+                        : Promise.reject(new Error("Carrier is required."));
+                    },
+                  }),
+                ]}
+                validateTrigger={["onBlur", "onChange"]}
+                hasFeedback
+              >
+                <Select
+                  showSearch
+                  allowClear
+                  labelInValue
+                  size={controlSize}
+                  placeholder="Search or create a carrier…"
+                  onSearch={debouncedCarrierSearch}
+                  filterOption={false}
+                  options={carrierOptionsWithCreate}
+                  loading={carrierLoading}
+                  onSelect={handleCarrierSelect}
+                  onChange={(val) => form.setFieldsValue({ carrier: val || undefined })}
+                  notFoundContent={carrierLoading ? "Loading..." : null}
+                />
               </Form.Item>
             </Col>
 
+            {/* Tracking Link (always editable; validation based on tracking_status) */}
             <Col xs={24} md={12} lg={8}>
-              <Form.Item name="tracking_id" label="Tracking ID">
+              <Form.Item
+                name="tracking_link"
+                label="Tracking Link"
+                dependencies={["tracking_status"]}
+                rules={[
+                  ({ getFieldValue }) => ({
+                    validator(_, value) {
+                      const st = getFieldValue("tracking_status");
+                      const raw = (value || "").trim();
+                      if (!st || st === "Pending") return Promise.resolve();
+                      if (!raw)
+                        return Promise.reject(new Error("Tracking link is required."));
+                      try {
+                        const u = new URL(ensureHttp(raw));
+                        const ok =
+                          (u.protocol === "http:" || u.protocol === "https:") &&
+                          isLikelyFqdn(u.hostname);
+                        return ok
+                          ? Promise.resolve()
+                          : Promise.reject(
+                              new Error(
+                                "Enter a full domain, e.g., https://example.com/track/123"
+                              )
+                            );
+                      } catch {
+                        return Promise.reject(
+                          new Error(
+                            "Enter a valid URL, e.g., https://example.com/track/123"
+                          )
+                        );
+                      }
+                    },
+                  }),
+                ]}
+                validateTrigger={["onBlur", "onChange"]}
+                hasFeedback
+              >
                 <Input size={controlSize} />
               </Form.Item>
             </Col>
 
+            {/* Offer price — visible ANY time status === "Offer" (no permission gate) */}
             <Col xs={24} md={12} lg={8}>
-              <Form.Item name="tracking_link" label="Tracking Link">
-                <Input size={controlSize} />
-              </Form.Item>
-            </Col>
-
-            <Col xs={24} md={12} lg={8}>
-              <Form.Item name="odoo_po_id" label="Odoo Purchase Order ID">
-                <Input size={controlSize} />
-              </Form.Item>
-            </Col>
-
-            <Col xs={24} md={12} lg={8}>
-              <Form.Item name="po_reference" label="PO Reference">
-                <Input size={controlSize} />
+              <Form.Item shouldUpdate={(prev, cur) => prev.status !== cur.status} noStyle>
+                {({ getFieldValue }) =>
+                  getFieldValue("status") === "Offer" ? (
+                    <Form.Item
+                      name="offer_price"
+                      label="Offer Price"
+                      rules={[
+                        {
+                          validator: (_, v) =>
+                            Number(v) > 0
+                              ? Promise.resolve()
+                              : Promise.reject(new Error("Enter a positive offer price.")),
+                        },
+                      ]}
+                    >
+                      <InputNumber {...moneyProps} />
+                    </Form.Item>
+                  ) : null
+                }
               </Form.Item>
             </Col>
           </Row>
 
-          <Button type="primary" htmlType="submit" style={{ marginTop: 12 }} size={controlSize}>
+          <Button
+            type="primary"
+            htmlType="submit"
+            style={{ marginTop: 12 }}
+            size={controlSize}
+            disabled={!canEditAny}
+          >
             Save All Changes
           </Button>
         </Card>
       </Form>
 
-      <Card title="Items in this Request" style={{ marginTop: 16 }} bodyStyle={{ padding: cardPad }}>
+      <Card
+        title="Items in this Request"
+        style={{ marginTop: 16 }}
+        bodyStyle={{ padding: cardPad }}
+      >
         <Table
-          columns={[
-            { title: "Product Name", dataIndex: "product_name", key: "product_name" },
-            { title: "SKU", dataIndex: "sku", key: "sku" },
-            { title: "Qty", dataIndex: "quantity_needed", key: "quantity_needed", width: 90 },
-            {
-              title: "Condition",
-              dataIndex: "product_condition",
-              key: "product_condition",
-              render: (val, record) => (
-                <Select
-                  value={val || undefined}
-                  style={{ width: 160 }}
-                  onChange={(value) =>
-                    handleItemUpdate(record._id || record.id, "product_condition", value)
-                  }
-                  size={controlSize}
-                >
-                  <Option value="Excellent">Excellent</Option>
-                  <Option value="Refurbished">Refurbished</Option>
-                  <Option value="Acceptable">Acceptable</Option>
-                  <Option value="Scratched">Scratched</Option>
-                  <Option value="Unacceptable">Unacceptable</Option>
-                </Select>
-              ),
-            },
-            {
-              title: "Tested",
-              dataIndex: "tested",
-              key: "tested",
-              render: (val, record) => (
-                <Checkbox
-                  checked={!!val}
-                  onChange={(e) =>
-                    handleItemUpdate(record._id || record.id, "tested", e.target.checked)
-                  }
-                />
-              ),
-              width: 110,
-            },
-          ]}
+          columns={itemColumns}
           dataSource={request.items || []}
-          rowKey={(r) => r._id || r.id || `${request._id}-row-${r.sku}-${r.product_name}`}
+          rowKey={(r) =>
+            r._id || r.id || `${request._id}-row-${r.sku}-${r.product_name}`
+          }
           pagination={false}
           scroll={{ x: "max-content" }}
           size={screens.xs ? "small" : "middle"}

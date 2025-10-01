@@ -100,7 +100,7 @@ export const normalizeRequests = (payload) => {
       purchase_efficiency:
         typeof doc.purchase_efficiency === "number"
           ? doc.purchase_efficiency
-          : (Number(doc.target_total_cost) || 0) - (Number(doc.total_actual_cost) || 0),
+          : (Number(doc.total_actual_cost) || 0)-(Number(doc.target_total_cost) || 0)  ,
       status: doc.status ?? "Pending",
       listing_link: doc.listing_link ?? doc.listingLink ?? doc.url ?? null,
       listing_id: doc.listing_id ?? doc.listingId ?? null,
@@ -266,7 +266,7 @@ export const buildTop5PurchasedDetailedRows = (
     const efficiency =
       typeof r?.purchase_efficiency === "number"
         ? r.purchase_efficiency
-        : (Number(r?.target_total_cost) || 0) - (Number(r?.total_actual_cost) || 0);
+        : (Number(r?.total_actual_cost) || 0)-(Number(r?.target_total_cost) || 0)  ;
 
     return {
       key: r._id || r.id || i,
@@ -303,7 +303,7 @@ export const createTop5PurchasedDetailedColumns = (currency = "USD") => [
     width: 120,
     render: (v) => {
       const n = typeof v === "number" ? v : Number(v) || 0;
-      const color = n >= 0 ? "#16a34a" : "#ef4444";
+      const color = n <= 0 ? "#16a34a" : "#ef4444";
       return (
         <span style={{ color, fontWeight: 600 }}>
           {money(Math.abs(n), currency)}

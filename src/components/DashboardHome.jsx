@@ -103,7 +103,7 @@ export default function DashboardCards() {
       color: "text-green-500",
       accessKey: "timeoff",
       hoverColor: "group-hover:text-green-600",
-      link: "requests/my", // 🔹 single entry point
+      link: "/purchaser/dashboard", // 🔹 single entry point
       bgColor: "bg-green-50",
       border: "border-green-500",
     },
