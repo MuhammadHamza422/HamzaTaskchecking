@@ -15,6 +15,7 @@ import {
 import InventoryDisplay from "./inventory-display";
 import apiClient from "../../api/client";
 import { useSelector } from "react-redux";
+import { Switch } from "antd";
 
 export default function ScanProduct() {
   const [mode, setMode] = useState("select");
@@ -33,7 +34,8 @@ export default function ScanProduct() {
   const [barcodeDetected, setBarcodeDetected] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [activeLocationCode, setActiveLocationCode] = useState("");
-  const scanSound = new Audio("/scansound.mp3");
+  const [isSoundEnabled, setIsSoundEnabled] = useState(true);
+  const scanSound = new Audio(isSoundEnabled ? "/scansound.mp3" : "");
   scanSound.preload = "auto";
   const lastScannedDataRef = useRef(null);
   const zoneId = useSelector((s) => s.app.selectedZoneId);
@@ -47,6 +49,16 @@ export default function ScanProduct() {
   const scanningActiveRef = useRef(false);
   const barcodeTimeoutRef = useRef(null);
   const hiddenInputRef = useRef(null);
+
+  useEffect(() => {
+    const sound = localStorage.getItem("isSoundEnabled");
+
+    if (sound === "false") {
+      setIsSoundEnabled(false);
+    } else {
+      setIsSoundEnabled(true);
+    }
+  }, []);
 
   useEffect(() => {
     const handleKeyPress = (e) => {
@@ -210,10 +222,10 @@ export default function ScanProduct() {
             if (lastScannedDataRef.current !== code.data) {
               lastScannedDataRef.current = code.data;
 
-              // scanSound.currentTime = 0; // rewind if needed
-              // scanSound
-              //   .play()
-              //   .catch((err) => console.warn("Sound play failed:", err));
+              scanSound.currentTime = 0; // rewind if needed
+              scanSound
+                .play()
+                .catch((err) => console.warn("Sound play failed:", err));
 
               handleQRDetection(code.data);
             }
@@ -292,10 +304,10 @@ export default function ScanProduct() {
         setSearchResults(data.inventry);
         setTotalInventory(data.totalInventry);
 
-        // scanSound.currentTime = 0;
-        // scanSound
-        //   .play()
-        //   .catch((err) => console.warn("Sound play failed:", err));
+        scanSound.currentTime = 0;
+        scanSound
+          .play()
+          .catch((err) => console.warn("Sound play failed:", err));
         return { items: data.inventry, total: data.totalInventry };
       } else {
         throw new Error("Invalid response format");
@@ -427,7 +439,7 @@ export default function ScanProduct() {
         aria-hidden="true"
       />
 
-      <div className="bg-white border-b rounded-xl border-slate-200 px-6 py-4 shadow-sm">
+      <div className="bg-white flex items-start flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b rounded-xl border-slate-200 px-6 py-4 shadow-sm">
         <div className="flex items-center gap-4">
           {mode !== "select" && (
             <button
@@ -451,6 +463,24 @@ export default function ScanProduct() {
               </p>
             )}
           </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <label
+            htmlFor="sound"
+            className="text-sm font-semibold text-slate-700 font-sans"
+          >
+            Enable Sound
+          </label>
+
+          <Switch
+            id="sound"
+            checked={isSoundEnabled}
+            onChange={(checked) => {
+              setIsSoundEnabled(checked);
+              localStorage.setItem("isSoundEnabled", String(checked));
+            }}
+          />
         </div>
       </div>
 
