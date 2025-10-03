@@ -508,6 +508,7 @@ export default function InventoryDisplay({
             console.warn("Refetch after create failed:", e);
           } finally {
             setIsRefreshing(false);
+            setIsSaving(false);
           }
         }
 
@@ -1518,15 +1519,10 @@ export default function InventoryDisplay({
                 </button>
                 <button
                   type="submit"
-                  disabled={
-                    isSaving ||
-                    createInv.isLoading ||
-                    !form.productId ||
-                    !form.quantity
-                  }
+                  disabled={isSaving || !form.productId || !form.quantity}
                   className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white disabled:opacity-60 flex items-center gap-2"
                 >
-                  {isSaving || createInv.isLoading ? (
+                  {isSaving ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Saving…
