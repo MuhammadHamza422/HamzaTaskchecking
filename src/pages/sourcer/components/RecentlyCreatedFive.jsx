@@ -1,110 +1,166 @@
-// // RecentlyCreatedFive.jsx (or place this above your export in the same file)
+
+
+// // // src/pages/sourcer/components/RecentlyCreatedFive.jsx
+// // import React, { useMemo } from "react";
+// // import { Card, Table, Empty } from "antd";
+// // import { getSourcingColumns } from "../utils/sourcingColumns"; // adjust path if needed
+// // import { statusPill as statusPillHelper } from "../utils/helpers"; // adjust path if needed
+
+// // // Consistent created timestamp getter
+// // const getCreated = (r) => r.createdAt || r.created_at || r.created_on;
+
+// // export default function RecentlyCreatedFive({
+// //   orders = [],
+// //   loading = false,
+// //   title = "My 5 Most Recent Requests",
+
+// //   // make it look/behave like your main table
+// //   canEdit = false,
+// //   navigate = () => {},
+// //   handleDeleteOrder = () => {},
+// //   statusPill = statusPillHelper,
+
+// //   // optional: match main table expansion
+// //   itemTable, // (order) => <Table ... />
+// // }) {
+// //   // Use shared columns EXACTLY (no local Purchaser injection)
+// //   const columns = useMemo(
+// //     () =>
+// //       getSourcingColumns({
+// //         statusPill,
+// //         canEdit,
+// //         navigate,
+// //         handleDeleteOrder,
+// //       }),
+// //     [statusPill, canEdit, navigate, handleDeleteOrder]
+// //   );
+
+// //   // Top 5 most recent by created timestamp
+// //   const data = useMemo(
+// //     () =>
+// //       [...orders]
+// //         .sort(
+// //           (a, b) =>
+// //             new Date(getCreated(b)).getTime() -
+// //             new Date(getCreated(a)).getTime()
+// //         )
+// //         .slice(0, 5),
+// //     [orders]
+// //   );
+
+// //   return (
+// //     <Card
+// //       title={<span style={{ fontWeight: 700 }}>{title}</span>}
+// //       style={{
+// //         marginTop: 16,
+// //         background: "#fff",
+// //         borderRadius: 12,
+// //         border: "1px solid #eef2ff",
+// //       }}
+// //       bodyStyle={{ padding: 0 }}
+// //     >
+// //       <Table
+// //         columns={columns}
+// //         dataSource={data}
+// //         rowKey={(r) => r._id || r.id || r.sourcing_id}
+// //         pagination={false}
+// //         size="middle"
+// //         loading={loading}
+// //         locale={{ emptyText: <Empty description="No requests found" /> }}
+// //         className="overflow-x-auto"
+// //         {...(itemTable ? { expandable: { expandedRowRender: itemTable } } : {})}
+// //       />
+// //     </Card>
+// //   );
+// // }
+
+
+
+
+// // src/pages/sourcer/components/RecentlyCreatedFive.jsx
 // import React, { useMemo } from "react";
-// import { Card, Table, Tag, Space, Typography, Empty, Tooltip } from "antd";
-// import dayjs from "dayjs";
-// const { Text } = Typography;
+// import { Card, Table, Empty } from "antd";
+// import { getSourcingColumns } from "../utils/sourcingColumns";
+// import { statusPill as statusPillHelper } from "../utils/helpers";
 
-// const fmtDateTime = (v) => (v ? dayjs(v).format("YYYY-MM-DD HH:mm") : "N/A");
-// const num = (v) => (typeof v === "number" ? v : Number(v) || 0);
+// // Consistent created timestamp getter
+// const getCreated = (r) => r.createdAt || r.created_at || r.created_on;
 
-// // optional: reuse your color map if you have it; otherwise a simple one:
-// const statusColor = (s) =>
-//   s === "Pending" ? "gold"
-//   : s === "Purchased" ? "green"
-//   : s === "Assigned" ? "purple"
-//   : s === "Completed" ? "geekblue"
-//   : s === "Disapproved" ? "volcano"
-//   : s === "Returned" ? "red"
-//   : s === "Offer" ? "cyan"
-//   : s === "Hold" ? "orange"
-//   : s === "Seller Rejected" ? "magenta"
-//   : s === "Dropshipped" ? "blue"
-//   : "default";
+// export default function RecentlyCreatedFive({
+//   orders = [],
+//   loading = false,
+//   title = "My 5 Most Recent Requests",
 
-// export default function RecentlyCreatedFive({ orders = [], loading = false, title = "My 5 Most Recent Requests" }) {
-//   const getCreated = (r) => r.createdAt || r.created_at || r.created_on;
+//   // permissions
+//   canViewMyRequests = true,     // 🚦 if false -> no rows displayed
+//   canEdit = false,              // controls Edit button
+//   canCancel = false,            // controls Delete button
 
-//   const data = useMemo(
-//     () => [...orders].sort((a, b) => new Date(getCreated(b)) - new Date(getCreated(a))).slice(0, 5),
-//     [orders]
+//   // navigation & actions
+//   navigate = () => {},
+//   handleDeleteOrder = () => {},
+//   statusPill = statusPillHelper,
+
+//   // optional: match main table expansion
+//   itemTable,                    // (order) => <Table ... />
+
+//   // optional: customize edit URL (default matches your current route)
+//   buildEditUrl,                 // (id) => string
+// }) {
+//   // Columns match main table behavior; wire both canEdit & canCancel
+//   const columns = useMemo(
+//     () =>
+//       getSourcingColumns({
+//         statusPill,
+//         canEdit,
+//         canCancel,
+//         navigate,
+//         handleDeleteOrder,
+//         buildEditUrl,     // defaults to /sourcing/edit/:id inside columns if not provided
+//       }),
+//     [statusPill, canEdit, canCancel, navigate, handleDeleteOrder, buildEditUrl]
 //   );
 
-//   const columns = [
-//     {
-//       title: "ID",
-//       dataIndex: "sourcing_id",
-//       key: "sourcing_id",
-//       width: 90,
-//       render: (v, rec) => (
-//         <Tooltip title={`MongoID: ${rec._id || rec.id || "N/A"}`}>
-//           <span>{v != null ? `#${v}` : "—"}</span>
-//         </Tooltip>
-//       ),
-//     },
-//     {
-//       title: "Status",
-//       dataIndex: "status",
-//       key: "status",
-//       render: (s) => <Tag color={statusColor(s)}>{s || "Pending"}</Tag>,
-//       width: 130,
-//     },
-//     {
-//       title: "Product(s)",
-//       dataIndex: "items",
-//       key: "items",
-//       render: (items) => (
-//         <Space direction="vertical" size="small">
-//           {(items || []).map((item, i) => (
-//             <Text key={i}>{item.product_name || item.name || "Unnamed Product"}</Text>
-//           ))}
-//         </Space>
-//       ),
-//     },
-//     {
-//       title: "Baseline $",
-//       dataIndex: "target_total",
-//       key: "target_total",
-//       render: (v) => <Tag color="purple">${num(v).toFixed(2)}</Tag>,
-//       width: 130,
-//     },
-//     {
-//       title: "Efficiency $",
-//       dataIndex: "savings_dollar",
-//       key: "savings_dollar",
-//       render: (v) => <Tag color={num(v) >= 0 ? "green" : "red"}>${num(v).toFixed(2)}</Tag>,
-//       width: 140,
-//     },
-//     {
-//       title: "Efficiency %",
-//       dataIndex: "efficiency_pct",
-//       key: "efficiency_pct",
-//       render: (v) => <Tag color={num(v) >= 0 ? "geekblue" : "volcano"}>{num(v).toFixed(1)}%</Tag>,
-//       width: 130,
-//     },
-//     {
-//       title: "Created On",
-//       dataIndex: "createdAt",
-//       key: "createdAt",
-//       width: 170,
-//       render: (_dt, rec) => fmtDateTime(getCreated(rec)),
-//     },
-//   ];
+//   // Top 5 most recent (or none if permission is off)
+//   const data = useMemo(() => {
+//     if (!canViewMyRequests) return [];
+//     const arr = Array.isArray(orders) ? orders : [];
+//     return [...arr]
+//       .sort(
+//         (a, b) =>
+//           new Date(getCreated(b)).getTime() - new Date(getCreated(a)).getTime()
+//       )
+//       .slice(0, 5);
+//   }, [orders, canViewMyRequests]);
+
+//   // Empty-state message respects permission
+//   const emptyNode = canViewMyRequests ? (
+//     <Empty description="No requests found" />
+//   ) : (
+//     <Empty description='No permission to view "My Requests"' />
+//   );
 
 //   return (
 //     <Card
 //       title={<span style={{ fontWeight: 700 }}>{title}</span>}
-//       style={{ marginTop: 16, background: "#fff", borderRadius: 12, border: "1px solid #eef2ff" }}
+//       style={{
+//         marginTop: 16,
+//         background: "#fff",
+//         borderRadius: 12,
+//         border: "1px solid #eef2ff",
+//       }}
 //       bodyStyle={{ padding: 0 }}
 //     >
 //       <Table
-//         dataSource={data}
 //         columns={columns}
-//         rowKey={(r) => r._id || r.sourcing_id || r.id}
+//         dataSource={data}
+//         rowKey={(r) => r._id || r.id || r.sourcing_id}
 //         pagination={false}
 //         size="middle"
 //         loading={loading}
-//         locale={{ emptyText: <Empty description="No requests found" /> }}
+//         locale={{ emptyText: emptyNode }}
 //         className="overflow-x-auto"
+//         {...(itemTable ? { expandable: { expandedRowRender: itemTable } } : {})}
 //       />
 //     </Card>
 //   );
@@ -112,50 +168,72 @@
 
 
 
-// RecentlyCreatedFive.jsx
+
+
+// src/pages/sourcer/components/RecentlyCreatedFive.jsx
 import React, { useMemo } from "react";
 import { Card, Table, Empty } from "antd";
-import dayjs from "dayjs";
-import { getSourcingColumns } from "../utils/sourcingColumns"; // ← adjust path
-import { statusPill as statusPillHelper } from "../utils/helpers"; // ← adjust path
+import { getSourcingColumns } from "../utils/sourcingColumns";
+import { statusPill as statusPillHelper } from "../utils/helpers";
 
-// pick created timestamp in the same way everywhere
+// Consistent created timestamp getter
 const getCreated = (r) => r.createdAt || r.created_at || r.created_on;
 
 export default function RecentlyCreatedFive({
+  // data
   orders = [],
   loading = false,
+
+  // UI
   title = "My 5 Most Recent Requests",
 
-  // keep it looking exactly like the main table:
-  // pass the same values you use there
-  canEdit = false,
+  // permissions (derive these from /api/v1/role/all in the parent)
+  canViewMyRequests = true,   // if false: show no rows + permission empty state
+  canEdit = false,            // controls Edit button visibility
+  canCancel = false,          // controls Delete button visibility
+
+  // navigation & actions (from parent)
   navigate = () => {},
   handleDeleteOrder = () => {},
   statusPill = statusPillHelper,
 
-  // optional: pass your expanded row renderer if you want the same expansion UI
-  itemTable, // (order) => <Table ... />
+  // optional: expanded row like the main table
+  itemTable,                  // (order) => <Table ... />
+
+  // optional: customize edit URL; otherwise your columns default applies
+  buildEditUrl,               // (id) => string
 }) {
-  // same columns as the main table (Actions only if canEdit is true)
+  // Use the shared columns (already contain stopPropagation + Popconfirm fixes)
   const columns = useMemo(
     () =>
       getSourcingColumns({
         statusPill,
         canEdit,
+        canCancel,           // IMPORTANT: pass canCancel so the Delete button shows
         navigate,
         handleDeleteOrder,
+        buildEditUrl,        // optional override; columns default to /sourcing/edit/:id
       }),
-    [statusPill, canEdit, navigate, handleDeleteOrder]
+    [statusPill, canEdit, canCancel, navigate, handleDeleteOrder, buildEditUrl]
   );
 
-  // top 5 most recently created
-  const data = useMemo(
-    () =>
-      [...orders]
-        .sort((a, b) => new Date(getCreated(b)) - new Date(getCreated(a)))
-        .slice(0, 5),
-    [orders]
+  // Prepare top 5 most recent (or none if permission is off)
+  const data = useMemo(() => {
+    if (!canViewMyRequests) return [];
+    const arr = Array.isArray(orders) ? orders : [];
+    return [...arr]
+      .sort(
+        (a, b) =>
+          new Date(getCreated(b)).getTime() - new Date(getCreated(a)).getTime()
+      )
+      .slice(0, 5);
+  }, [orders, canViewMyRequests]);
+
+  // Empty-state text matches permission
+  const emptyNode = canViewMyRequests ? (
+    <Empty description="No requests found" />
+  ) : (
+    <Empty description='No permission to view "My Requests"' />
   );
 
   return (
@@ -176,12 +254,9 @@ export default function RecentlyCreatedFive({
         pagination={false}
         size="middle"
         loading={loading}
-        locale={{ emptyText: <Empty description="No requests found" /> }}
+        locale={{ emptyText: emptyNode }}
         className="overflow-x-auto"
-        // make expansion match the main table if you pass itemTable
-        {...(itemTable
-          ? { expandable: { expandedRowRender: itemTable } }
-          : {})}
+        {...(itemTable ? { expandable: { expandedRowRender: itemTable } } : {})}
       />
     </Card>
   );
