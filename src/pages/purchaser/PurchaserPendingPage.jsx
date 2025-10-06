@@ -1,7 +1,6 @@
 
-
 // /src/pages/purchaser/PurchaserPendingPage.jsx
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Card,
   Table,
@@ -11,13 +10,20 @@ import {
   message,
   Modal,
   Select,
+  Tooltip,
+  Spin,
 } from "antd";
-import { ReloadOutlined, LoadingOutlined } from "@ant-design/icons";
+import {
+  ReloadOutlined,
+  LoadingOutlined,
+  UserAddOutlined,       // Assign to Me
+  UserSwitchOutlined,    // Assign to Purchaser
+} from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import dayjs from "dayjs";
 import apiClient from "../../api/client";
+import { useAuth } from "../../contexts/AuthContext";
 
-// shared utils you already had
 import {
   normalizeRequests,
   statusColor,
@@ -25,60 +31,153 @@ import {
   ExpandedItemsTable,
 } from "./utils/PurchaseTableUtils.jsx";
 
-const MAX_FETCH = 200; // how many purchasers to show initially
+const MAX_FETCH = 200;
 
-// open raw URL or add https://
+/* --------------------------- helpers --------------------------- */
+const lower = (v) => String(v ?? "").trim().toLowerCase();
+
 const toListingUrl = (url) =>
   !url ? "#" : /^https?:\/\//i.test(url) ? url : `https://${url}`;
 
-export default function PurchaserPendingPage({ onAssigned, isAdmin = false }) {
+const pickRows = (payload) => {
+  if (!payload) return [];
+  if (Array.isArray(payload)) return payload;
+  const maybe =
+    payload.results ??
+    payload.data ??
+    payload.docs ??
+    payload.items ??
+    payload.rows ??
+    payload.list ??
+    null;
+  return Array.isArray(maybe) ? maybe : [];
+};
+
+const hasRows = (arr) => Array.isArray(arr) && arr.length > 0;
+
+/* permissions from /api/v1/role/all → Purchaser app menu */
+const extractPurchaserPerms = (roleObj) => {
+  const access = Array.isArray(roleObj?.access) ? roleObj.access : [];
+  const purchaser = access.find((a) => lower(a?.app) === "purchaser");
+  const menu = Array.isArray(purchaser?.menu) ? purchaser.menu.map(lower) : [];
+  return {
+    canViewPendingQueue: menu.includes("pending queue"),
+    canAssignToMe: menu.includes("assign to me"),
+  };
+};
+
+/* =============================================================== */
+export default function PurchaserPendingPage({ onAssigned }) {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  // Robust admin check (kept as-is)
+  const isAdmin = useMemo(() => {
+    const r = user?.roles;
+    if (Array.isArray(r)) {
+      return r
+        .map((x) =>
+          typeof x === "string"
+            ? x.toLowerCase()
+            : String(x?.role || "").toLowerCase()
+        )
+        .includes("admin");
+    }
+    return String(r?.role || r || "").toLowerCase() === "admin";
+  }, [user]);
+
+  // ── Role/permission state
+  const roleName = useMemo(
+    () => lower(user?.roles?.role || user?.role || ""),
+    [user]
+  );
+  const [rolesLoaded, setRolesLoaded] = useState(false);
+  const [canViewPendingQueue, setCanViewPendingQueue] = useState(false);
+  const [canAssignToMe, setCanAssignToMe] = useState(false);
+
+  // ── Data/UI state
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [assigningId, setAssigningId] = useState(null);
+  const [assigningId, setAssigningId] = useState(null); // holds the _id of the row being assigned
 
-  // --- assign-to-purchaser modal state ---
+  // admin modal
   const [assignModalOpen, setAssignModalOpen] = useState(false);
-  const [assignTargetId, setAssignTargetId] = useState(null);
-
-  const [purchaserOptions, setPurchaserOptions] = useState([]); // [{value,label,search,email,raw}]
+  const [assignTargetId, setAssignTargetId] = useState(null); // holds the _id for admin-assign
+  const [purchaserOptions, setPurchaserOptions] = useState([]);
   const [purchaserLoading, setPurchaserLoading] = useState(false);
   const [selectedPurchaserId, setSelectedPurchaserId] = useState(null);
   const [hasPrefetched, setHasPrefetched] = useState(false);
 
-  const navigate = useNavigate();
+  /* ----------------------- load roles → permissions ----------------------- */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await apiClient.get("/api/v1/role/all");
+        const rolesArr = Array.isArray(data?.roles) ? data.roles : [];
+        const matched = rolesArr.find((r) => lower(r?.role) === roleName) || null;
+        const { canViewPendingQueue, canAssignToMe } =
+          extractPurchaserPerms(matched || {});
+        if (!cancelled) {
+          setCanViewPendingQueue(!!canViewPendingQueue);
+          setCanAssignToMe(!!canAssignToMe);
+          setRolesLoaded(true);
+        }
+      } catch (e) {
+        console.error("Failed to load /api/v1/role/all", e);
+        if (!cancelled) {
+          // secure defaults
+          setCanViewPendingQueue(false);
+          setCanAssignToMe(false);
+          setRolesLoaded(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [roleName]);
 
-  /* ------------------- fetch pending ------------------- */
+  /* ----------------------- fetch pending (fixed endpoints) ----------------------- */
   const fetchPending = useCallback(async () => {
+    // respect permission: if no pending queue, do not fetch
+    if (!canViewPendingQueue) {
+      setRequests([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const res = await apiClient.get("/api/v1/sourcing/pending");
-      setRequests(normalizeRequests(res.data));
+      const res =
+        (await apiClient.get("/api/v1/sourcing/pending")) ||
+        (await apiClient.get("/api/v1/sourcing", { params: { status: "Pending" } }));
+
+      const rows = normalizeRequests(pickRows(res?.data));
+      setRequests(hasRows(rows) ? rows : []);
     } catch (err) {
       console.error(err);
-      message.error("Failed to fetch pending requests.");
+      message.error(err?.response?.data?.message || "Failed to fetch pending requests.");
       setRequests([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [canViewPendingQueue]);
 
+  // Wait for roles before first fetch to avoid flash
   useEffect(() => {
+    if (!rolesLoaded) return;
     fetchPending();
-  }, [fetchPending]);
+  }, [rolesLoaded, fetchPending]);
 
-  /* ------------------- assign to me ------------------- */
-  const handleAssignToMe = async (sourcingId) => {
-    setAssigningId(sourcingId);
+  /* -------------------- assign to me (must use Mongo _id) -------------------- */
+  const handleAssignToMe = async (docId, humanId) => {
+    if (!docId) return;
+    setAssigningId(docId);
     try {
-      const res = await apiClient.post(`/api/v1/sourcing/${sourcingId}/assign`);
-      // (optional) set assignedAt for consistency with your previous behavior
-      const assignedAt = new Date().toISOString();
-      await apiClient.patch(`/api/v1/sourcing/${sourcingId}`, { assignedAt });
-
-      // remove from local list & notify parent
-      setRequests((prev) => prev.filter((r) => String(r._id) !== String(sourcingId)));
-      onAssigned?.({ ...res.data, assignedAt });
-      message.success(`Assigned #${res.data?.sourcing_id ?? res.data?._id} to you.`);
+      const res = await apiClient.post(`/api/v1/sourcing/${docId}/assign`);
+      setRequests((prev) => prev.filter((r) => String(r._id) !== String(docId)));
+      onAssigned?.({ ...(res?.data || {}), _id: docId, sourcing_id: humanId });
+      message.success(`Assigned #${humanId ?? ""}`.trim());
     } catch (e) {
       console.error(e);
       message.error(e?.response?.data?.message || "Failed to assign request.");
@@ -87,26 +186,16 @@ export default function PurchaserPendingPage({ onAssigned, isAdmin = false }) {
     }
   };
 
-  /* ------------------- assign to purchaser (admin) ------------------- */
-  const openAssignModal = (sourcingId) => {
-    setAssignTargetId(sourcingId);
+  /* -------------------- assign to purchaser (admin) -------------------- */
+  const openAssignModal = (docId) => {
+    setAssignTargetId(docId);
     setSelectedPurchaserId(null);
     setAssignModalOpen(true);
-    // fetch the list once when the modal opens
     if (!hasPrefetched) prefetchAllPurchasers();
   };
 
   const normalizePurchaserList = (payload) => {
-    const list = Array.isArray(payload?.results)
-      ? payload.results
-      : Array.isArray(payload?.data)
-      ? payload.data
-      : Array.isArray(payload?.users)
-      ? payload.users
-      : Array.isArray(payload)
-      ? payload
-      : [];
-
+    const list = pickRows(payload);
     return list
       .map((u) => {
         const id = String(u.value || u._id || u.id || "");
@@ -118,31 +207,32 @@ export default function PurchaserPendingPage({ onAssigned, isAdmin = false }) {
           "Unnamed";
         const email = u.email || "";
         const search = `${name} ${email}`.toLowerCase();
-        return {
-          value: id,
-          label: (
-            <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
-              <span style={{ fontWeight: 600 }}>{name}</span>
-              {email ? <span style={{ color: "#888" }}>· {email}</span> : null}
-            </div>
-          ),
-          search, // used for client filtering
-          email,
-          raw: u,
-        };
+        return id
+          ? {
+              value: id,
+              label: (
+                <div className="flex items-baseline gap-2">
+                  <span className="font-semibold">{name}</span>
+                  {email ? <span className="text-gray-500">· {email}</span> : null}
+                </div>
+              ),
+              search,
+              email,
+              raw: u,
+            }
+          : null;
       })
-      .filter((o) => o.value);
+      .filter(Boolean);
   };
 
   const prefetchAllPurchasers = async () => {
     setPurchaserLoading(true);
     try {
-      // fetch an initial page of purchasers (no query) so dropdown shows them all
-      const { data } = await apiClient.get("/api/v1/sourcing/purchasers/search", {
-        params: { q: "", page: 1, limit: MAX_FETCH },
-      });
-      const opts = normalizePurchaserList(data);
-      setPurchaserOptions(opts);
+      const { data } = await apiClient.get(
+        "/api/v1/sourcing/purchasers/search",
+        { params: { q: "", page: 1, limit: MAX_FETCH } }
+      );
+      setPurchaserOptions(normalizePurchaserList(data));
       setHasPrefetched(true);
     } catch (e) {
       const status = e?.response?.status;
@@ -157,13 +247,13 @@ export default function PurchaserPendingPage({ onAssigned, isAdmin = false }) {
   const submitAssignTo = async () => {
     if (!assignTargetId || !selectedPurchaserId) return;
     try {
-      await apiClient.post(`/api/v1/sourcing/${assignTargetId}/assign-to`, {
-        purchaserId: selectedPurchaserId,
-      });
-      // update UI
+      const res = await apiClient.post(
+        `/api/v1/sourcing/${assignTargetId}/assign-to`,
+        { purchaserId: selectedPurchaserId }
+      );
       setRequests((prev) => prev.filter((r) => String(r._id) !== String(assignTargetId)));
       setAssignModalOpen(false);
-      onAssigned?.({ _id: assignTargetId, purchaserId: selectedPurchaserId });
+      onAssigned?.({ ...(res?.data || {}), _id: assignTargetId });
       message.success("Assigned to purchaser.");
     } catch (e) {
       console.error(e);
@@ -171,26 +261,58 @@ export default function PurchaserPendingPage({ onAssigned, isAdmin = false }) {
     }
   };
 
-  /* ------------------- columns ------------------- */
-  const columns = useMemo(
-    () => [
+  /* --------------------------- columns --------------------------- */
+  const actionsColNeeded = canAssignToMe || isAdmin;
+
+  const columns = useMemo(() => {
+    const baseCols = [
       {
         title: "ID",
         dataIndex: "sourcing_id",
-        width: 90,
-        align: "left",
-        render: (_, rec) => (
-          <strong>#{String(rec.sourcing_id ?? rec.id ?? rec._id).slice(-6)}</strong>
-        ),
+        width: 84,
+        fixed: "left",
+        className: "px-2",
+        onHeaderCell: () => ({ className: "px-2" }),
+        render: (sid) => <strong>#{sid}</strong>,
       },
-      { title: "Sourcer", dataIndex: "sourcer_name", width: 160, render: (v) => v || "—" },
+      {
+        title: "Sourcer",
+        dataIndex: "sourcer_name",
+        width: 140,
+        ellipsis: true,
+        className: "px-2",
+        onHeaderCell: () => ({ className: "px-2" }),
+        render: (v) => v || "—",
+      },
+      {
+        title: "Efficiency",
+        key: "efficiency",
+        width: 100,
+        align: "right",
+        className: "px-1",
+        onHeaderCell: () => ({ className: "px-1" }),
+        render: (_, rec) => {
+          const eff =
+            typeof rec.purchase_efficiency === "number"
+              ? rec.purchase_efficiency
+              : safeNum(rec.target_total_cost) - safeNum(rec.total_actual_cost);
+          const color = eff >= 0 ? "#16a34a" : "#ef4444";
+          return <span style={{ color }}>{`$${(Number(eff) || 0).toFixed(2)}`}</span>;
+        },
+        responsive: ["sm"],
+      },
       {
         title: "Status",
         dataIndex: "status",
-        width: 140,
+        width: 110,
         align: "center",
+        className: "px-1",
+        onHeaderCell: () => ({ className: "px-1" }),
         render: (s) => (
-          <Tag color={statusColor(s)} style={{ fontWeight: 400, fontSize: 14, borderRadius: 6 }}>
+          <Tag
+            color={statusColor(s)}
+            style={{ fontWeight: 500, fontSize: 12, borderRadius: 8, padding: "2px 8px" }}
+          >
             {s}
           </Tag>
         ),
@@ -198,110 +320,186 @@ export default function PurchaserPendingPage({ onAssigned, isAdmin = false }) {
       {
         title: "Seller",
         dataIndex: "seller_name",
-        width: 180,
+        width: 160,
         ellipsis: true,
-        render: (v) => (v ? <p className="m-0">{v}</p> : "—"),
+        className: "px-2",
+        onHeaderCell: () => ({ className: "px-2" }),
+        render: (v) => (v ? <p className="m-0 truncate">{v}</p> : "—"),
       },
-      { title: "Market", dataIndex: "market", width: 100, render: (v) => v || "—" },
       {
-        title: "Seller Price",
+        title: "Market",
+        dataIndex: "market",
+        width: 100,
+        ellipsis: true,
+        className: "px-2",
+        onHeaderCell: () => ({ className: "px-2" }),
+        render: (v) => v || "—",
+      },
+
+      // Seller-entered totals
+      {
+        title: "Seller $",
         dataIndex: "sellers_price",
-        width: 120,
-        align: "right",
-        render: (v) => (v ? <p className="m-0">${parseFloat(v).toFixed(2)}</p> : "—"),
-      },
-      {
-        title: "Ship Charges",
-        dataIndex: "shipping_charges",
-        width: 110,
-        align: "right",
-        render: (v) => (v ? <p className="m-0">${parseFloat(v).toFixed(2)}</p> : "—"),
-      },
-      {
-        title: "Tax",
-        dataIndex: "taxes",
         width: 100,
         align: "right",
-        render: (v) => (v ? <p className="m-0">${parseFloat(v).toFixed(2)}</p> : "—"),
+        className: "px-1",
+        onHeaderCell: () => ({ className: "px-1" }),
+        render: (v) => (Number.isFinite(+v) && +v ? `$${(+v).toFixed(2)}` : "—"),
       },
       {
-        title: "Target Cost",
+        title: "Ship $",
+        dataIndex: "shipping_charges",
+        width: 96,
+        align: "right",
+        className: "px-1",
+        onHeaderCell: () => ({ className: "px-1" }),
+        render: (v) => (Number.isFinite(+v) && +v ? `$${(+v).toFixed(2)}` : "—"),
+      },
+      {
+        title: "Tax $",
+        dataIndex: "taxes",
+        width: 84,
+        align: "right",
+        className: "px-1",
+        onHeaderCell: () => ({ className: "px-1" }),
+        render: (v) => (Number.isFinite(+v) && +v ? `$${(+v).toFixed(2)}` : "—"),
+      },
+
+      // Rollups
+      {
+        title: "Target $",
         dataIndex: "target_total_cost",
-        width: 130,
+        width: 110,
         align: "right",
-        render: (v) => (v ? <p className="m-0">${parseFloat(v).toFixed(2)}</p> : "—"),
-        responsive: ["sm"],
+        className: "px-1",
+        onHeaderCell: () => ({ className: "px-1" }),
+        render: (v) => (Number.isFinite(+v) && +v ? `$${(+v).toFixed(2)}` : "—"),
       },
       {
-        title: "Actual Cost",
+        title: "Actual $",
         dataIndex: "total_actual_cost",
-        width: 130,
+        width: 110,
         align: "right",
-        render: (v) => (v ? <p className="m-0">${parseFloat(v).toFixed(2)}</p> : "—"),
-        responsive: ["sm"],
+        className: "px-1",
+        onHeaderCell: () => ({ className: "px-1" }),
+        render: (v) => (Number.isFinite(+v) && +v ? `$${(+v).toFixed(2)}` : "—"),
       },
+
       {
-        title: "Efficiency",
-        key: "efficiency",
-        width: 140,
-        align: "right",
-        render: (_, rec) => {
-          const eff =
-            typeof rec.purchase_efficiency === "number"
-              ? rec.purchase_efficiency
-              : safeNum(rec.target_total_cost) - safeNum(rec.total_actual_cost);
-          const color = eff >= 0 ? "#16a34a" : "#ef4444";
-          return <p className="m-0" style={{ color }}>${eff ? parseFloat(eff).toFixed(2) : "0.00"}</p>;
-        },
-        responsive: ["md"],
-      },
-      {
-        title: "Created At",
+        title: "Created",
         dataIndex: "created_at",
-        width: 190,
+        width: 160,
+        className: "px-2",
+        onHeaderCell: () => ({ className: "px-2" }),
         render: (date, rec) => {
           const d = new Date(date || rec.createdAt || rec.created_on || 0);
-          return <span style={{ fontWeight: 400 }}>{dayjs(d).format("MM/DD/YYYY hh:mm A")}</span>;
+          return <span className="font-normal">{dayjs(d).format("MM/DD/YY hh:mm A")}</span>;
         },
       },
-      {
-        title: "Actions",
-        key: "actions",
-        width: isAdmin ? 300 : 170,
-        fixed: "right",
-        align: "right",
-        render: (_, record) => (
-          <div className="flex gap-2 justify-end">
-            <Button
-              type="primary"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleAssignToMe(record._id);
-              }}
-              loading={assigningId === record._id}
-              disabled={assigningId !== null}
-              style={{ border: "none", borderRadius: 8, fontWeight: 600 }}
-            >
-              Assign to Me
-            </Button>
+    ];
+
+    if (!actionsColNeeded) return baseCols;
+
+    baseCols.push({
+      title: "Actions",
+      key: "actions",
+      fixed: "right",
+      width: isAdmin && canAssignToMe ? 92 : 60,
+      align: "right",
+      className: "px-1",
+      onHeaderCell: () => ({ className: "px-1" }),
+      render: (_, record) => {
+        const docId = record?._id;            // Mongo ObjectId for API
+        const humanId = record?.sourcing_id;  // numeric for UI
+        const busy = assigningId === docId;
+
+        return (
+          <div className="inline-flex items-center gap-2">
+            {canAssignToMe && (
+              <Tooltip title="Assign to Me">
+                <Button
+                  type="primary"
+                  size="middle"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleAssignToMe(docId, humanId);
+                  }}
+                  loading={busy}
+                  disabled={assigningId !== null && !busy}
+                  className="
+                    !p-0 !w-9 !h-9
+                    !rounded-md
+                    !inline-flex !items-center !justify-center
+                    shadow-sm hover:shadow
+                  "
+                  aria-label="Assign to me"
+                >
+                  <UserAddOutlined className="text-[16px] leading-none" />
+                </Button>
+              </Tooltip>
+            )}
 
             {isAdmin && (
-              <Button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openAssignModal(record._id);
-                }}
-                style={{ borderRadius: 8, fontWeight: 600 }}
-              >
-                Assign to Purchaser
-              </Button>
+              <Tooltip title="Assign to Purchaser">
+                <Button
+                  size="middle"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openAssignModal(docId);
+                  }}
+                  className="
+                    !p-0 !w-9 !h-9
+                    !rounded-md
+                    !inline-flex !items-center !justify-center
+                    bg-white hover:!bg-gray-50
+                    border border-gray-200
+                    shadow-sm hover:shadow
+                  "
+                  aria-label="Assign to purchaser"
+                >
+                  <UserSwitchOutlined className="text-[16px] leading-none" />
+                </Button>
+              </Tooltip>
             )}
           </div>
-        ),
+        );
       },
-    ],
-    [assigningId, isAdmin]
-  );
+    });
+
+    return baseCols;
+  }, [assigningId, isAdmin, canAssignToMe, actionsColNeeded]);
+
+  /* --------------------------- render --------------------------- */
+  if (!rolesLoaded) {
+    return (
+      <div style={{ display: "grid", placeItems: "center", height: 240 }}>
+        <Spin />
+      </div>
+    );
+  }
+
+  // If “pending queue” is OFF: show a gentle notice and no data
+  if (!canViewPendingQueue) {
+    return (
+      <Card
+        style={{
+          borderRadius: 16,
+          background: "rgba(255,255,255,0.95)",
+          boxShadow: "0 10px 40px rgba(0,0,0,0.06)",
+        }}
+        bodyStyle={{ padding: 20 }}
+      >
+        <Empty
+          description={
+            <div className="text-center">
+              <div className="font-semibold">No permission to view Pending Queue</div>
+              <div className="text-gray-500">Ask an admin to enable Purchaser → “pending queue”.</div>
+            </div>
+          }
+        />
+      </Card>
+    );
+  }
 
   return (
     <>
@@ -313,9 +511,18 @@ export default function PurchaserPendingPage({ onAssigned, isAdmin = false }) {
         }}
         bodyStyle={{ padding: 16 }}
         extra={
-          <Button icon={<ReloadOutlined />} onClick={fetchPending} aria-label="Refresh pending">
-            Refresh
-          </Button>
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={fetchPending}
+            aria-label="Refresh pending"
+            className="
+              !rounded-full !p-0 !w-10 !h-10
+              grid place-items-center
+              bg-white hover:!bg-gray-50
+              border border-gray-200
+              shadow-sm hover:shadow
+            "
+          />
         }
       >
         <Table
@@ -323,7 +530,7 @@ export default function PurchaserPendingPage({ onAssigned, isAdmin = false }) {
           locale={{ emptyText: <Empty description="No pending requests" /> }}
           dataSource={requests}
           columns={columns}
-          rowKey={(rec) => rec._id}
+          rowKey={(rec) => String(rec?._id ?? rec?.id ?? rec?.sourcing_id)}
           loading={{
             spinning: loading,
             indicator: <LoadingOutlined style={{ fontSize: 24 }} spin />,
@@ -331,26 +538,26 @@ export default function PurchaserPendingPage({ onAssigned, isAdmin = false }) {
           pagination={{ pageSize: 10, responsive: true }}
           onRow={(record) => ({
             onClick: () => {
-              const url = toListingUrl(record.listing_link);
+              const url = toListingUrl(record?.listing_link);
               if (url !== "#") window.open(url, "_blank", "noopener,noreferrer");
             },
-            style: { cursor: record.listing_link ? "pointer" : "default" },
+            style: { cursor: record?.listing_link ? "pointer" : "default" },
           })}
           tableLayout="fixed"
-          scroll={{ x: 1600 }}
+          scroll={{ x: 1500 }}
           sticky
           expandable={{
             expandedRowRender: (record) => (
               <ExpandedItemsTable order={record} onOpen={(to) => navigate(to)} />
             ),
-            rowExpandable: (record) => Array.isArray(record.items) && record.items.length > 0,
+            rowExpandable: (record) =>
+              Array.isArray(record?.items) && record.items.length > 0,
           }}
         />
 
         <style>{`
           .pending-table .ant-table-thead > tr > th { white-space: nowrap; }
-          .prod-cell { display: flex; flex-wrap: wrap; gap: 6px; overflow: hidden; }
-          .prod-chip.ant-tag { margin: 0; border-radius: 6px; max-width: 100%; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+          .pending-table .ant-table-cell { padding-top: 8px; padding-bottom: 8px; }
         `}</style>
       </Card>
 
@@ -378,10 +585,10 @@ export default function PurchaserPendingPage({ onAssigned, isAdmin = false }) {
           options={purchaserOptions}
           filterOption={(input, option) => {
             const term = (input || "").toLowerCase().trim();
-            if (!term) return true; // show all when input empty
+            if (!term) return true;
             return (option?.search || "").includes(term);
           }}
-          optionFilterProp="search" // so built-in also knows our field
+          optionFilterProp="search"
           dropdownMatchSelectWidth
           getPopupContainer={() => document.body}
         />
