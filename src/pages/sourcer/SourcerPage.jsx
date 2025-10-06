@@ -43,7 +43,7 @@ const gradientStyle = {
 const toNum = (v) => (typeof v === "number" ? v : Number(v) || 0);
 
 // clamp to ≤ N decimals but keep a Number (not string)
-const toFixedN = (n, digits = 4) => Number((toNum(n)).toFixed(digits));
+const toFixedN = (n, digits = 4) => Number(toNum(n).toFixed(digits));
 
 // UI: always show 2 decimals
 const fmt2 = (n) => toNum(n).toFixed(2);
@@ -134,8 +134,6 @@ export default function SourcerPage() {
   const cart = useCart(totals);
   const cartRef = useRef(cart);
   useEffect(() => { cartRef.current = cart; }, [cart]);
-
-  
 
   useEffect(() => {
     const onDocClick = (e) => {
@@ -241,6 +239,25 @@ export default function SourcerPage() {
     failed.forEach((r) => console.error("target_cost update failed:", r.reason?.response?.data || r.reason));
     return { ok: failed.length === 0, failed: failed.length, total: results.length };
   }, []);
+
+  /* ----------------------- itemsOps logger (NEW) --------------------- */
+  const logItemsOps = useCallback(
+    async (ops = []) => {
+      try {
+        if (!isEdit || !id || !ops.length) return;
+        await apiClient.post("/api/v1/userlogs", {
+          targetId: id,
+          action: "UPDATE",
+          meta: { itemsOps: ops },
+        });
+        setLogsTick((n) => n + 1);
+      } catch (e) {
+        // best-effort; don't block UX
+        console.warn("log itemsOps failed:", e?.response?.data || e.message);
+      }
+    },
+    [isEdit, id]
+  );
 
   /* ----------------------- markets / sellers ------------------------ */
 
@@ -695,14 +712,25 @@ export default function SourcerPage() {
             size="large"
             icon={<DeleteOutlined />}
             danger
-            onClick={() => {
+            onClick={async () => {
+              // remove locally
               cart.remove(rec.id);
+
+              // log the removal against the order (if editing)
+              await logItemsOps([
+                {
+                  op: "REMOVE",
+                  name: rec.product_name || "Item",
+                  sku: rec.sku || undefined,
+                  qty: rec.quantity_needed ?? undefined,
+                },
+              ]);
             }}
           />
         ),
       },
     ],
-    [cart, sellerAllocFactor, actualAllocFactor]
+    [cart, sellerAllocFactor, actualAllocFactor, logItemsOps]
   );
 
   /* -------------------------------- render ------------------------------- */
@@ -710,26 +738,27 @@ export default function SourcerPage() {
   return (
     <div style={{ padding: "1.5rem", borderRadius: 10, position: "relative" }}>
 
-        <div className="mb-2">
-    <Button
-      size="middle"
-      icon={<ArrowLeftOutlined />}
-      onClick={() => {
-        if (window.history.length > 1) navigate(-1);
-        else navigate("/sourcing/orders");
-      }}
-      className="
-        !rounded-md        /* rectangular corners */
-        !h-9 !px-3         /* tidy height & padding */
-        bg-white hover:!bg-gray-50
-        border border-gray-300
-        shadow-sm hover:shadow
-        text-gray-700
-      "
-    >
-      Back
-    </Button>
-  </div>
+      <div className="mb-2">
+        <Button
+          size="middle"
+          icon={<ArrowLeftOutlined />}
+          onClick={() => {
+            if (window.history.length > 1) navigate(-1);
+            else navigate("/sourcing/orders");
+          }}
+          className="
+            !rounded-md
+            !h-9 !px-3
+            bg-white hover:!bg-gray-50
+            border border-gray-300
+            shadow-sm hover:shadow
+            text-gray-700
+          "
+        >
+          Back
+        </Button>
+      </div>
+
       <AppBreadcrumbs fromLocation hide={["orders"]} />
 
       {isEdit && loadingOrder && (
