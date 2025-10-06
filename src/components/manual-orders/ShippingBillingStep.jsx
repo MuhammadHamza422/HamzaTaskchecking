@@ -17,22 +17,22 @@ const ShippingBillingStep = ({
   const copyShippingToBilling = () => {
     const allValues = form.getFieldsValue();
     const shipTo = allValues.shipTo || {};
-    
+
     form.setFieldsValue({
       billTo: {
-        name: shipTo.name || '',
-        company: shipTo.company || '',
-        street1: shipTo.street1 || '',
+        name: shipTo.name || "",
+        company: shipTo.company || "",
+        street1: shipTo.street1 || "",
         street2: shipTo.street2 || null,
         street3: shipTo.street3 || null,
-        city: shipTo.city || '',
-        state: shipTo.state || '',
-        postalCode: shipTo.postalCode || '',
-        country: shipTo.country || '',
-        phone: shipTo.phone || '',
+        city: shipTo.city || "",
+        state: shipTo.state || "",
+        postalCode: shipTo.postalCode || "",
+        country: shipTo.country || "",
+        phone: shipTo.phone || "",
         residential: shipTo.residential || false,
         addressVerified: shipTo.addressVerified || false,
-      }
+      },
     });
   };
 
@@ -235,7 +235,7 @@ const ShippingBillingStep = ({
       </div>
 
       {/* Same as Shipping Checkbox */}
-      <div className="bg-blue-50 p-4 rounded-lg">
+      {/* <div className="bg-blue-50 p-4 rounded-lg">
         <div className="flex items-center justify-between">
           <Checkbox
             checked={sameAsShipping}
@@ -254,10 +254,10 @@ const ShippingBillingStep = ({
             </button>
           )}
         </div>
-      </div>
+      </div> */}
 
       {/* Billing Information */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
+      {/* <div className="bg-white rounded-lg border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">
           Billing Address
         </h3>
@@ -407,7 +407,7 @@ const ShippingBillingStep = ({
             <Checkbox disabled={sameAsShipping}>Address Verified</Checkbox>
           </Form.Item>
         </div>
-      </div>
+      </div> */}
 
       {/* Additional Order Details */}
       <div className="bg-white rounded-lg border border-gray-200 p-6">

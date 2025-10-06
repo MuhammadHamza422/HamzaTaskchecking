@@ -26,9 +26,14 @@ export default function LocationForm({
   const [zoneType, setZoneType] = useState("");
 
   useEffect(() => {
-    const ztype = JSON.parse(localStorage.getItem("zoneType"));
-
-    setZoneType(ztype);
+    const stored = localStorage.getItem("zoneType");
+    let ztype = stored;
+    try {
+      ztype = stored ? JSON.parse(stored) : "";
+    } catch (e) {
+      // Stored value is not JSON; use as-is
+    }
+    setZoneType(ztype || "");
   }, []);
 
   console.log("zonType", zoneType);

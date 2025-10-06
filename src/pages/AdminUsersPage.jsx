@@ -65,8 +65,6 @@ const AdminUsersPage = () => {
   const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
   const [warehouses, setWarehouses] = useState([]);
 
-  
-
   const loadRoles = useCallback(async () => {
     setLoading(true);
     try {
@@ -130,10 +128,10 @@ const AdminUsersPage = () => {
           [];
         const normalized = Array.isArray(list)
           ? list.map((c) => ({
-            _id: c._id || c.id,
-            name: c.name || c.companyName || c.title || "Unnamed",
-            timezone: c.timezone,
-          }))
+              _id: c._id || c.id,
+              name: c.name || c.companyName || c.title || "Unnamed",
+              timezone: c.timezone,
+            }))
           : [];
         setCompanies(normalized);
       })
@@ -221,8 +219,6 @@ const AdminUsersPage = () => {
 
   const handleFieldChange = (fieldName, value) => {
     if (!editingUser) return;
-
-    console.log("value", value);
 
     const originalUser = users.find((u) => u.id === editingUser.id);
     if (!originalUser) return;
@@ -637,15 +633,16 @@ const AdminUsersPage = () => {
       {total > 0 && (
         <div className="mt-6 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-6">
           <div className="text-center sm:text-left text-sm text-gray-600 font-medium mb-4 sm:mb-2">
-            Showing {" "}
+            Showing{" "}
             <span className="font-semibold text-gray-900">
               {Math.min((page - 1) * limit + 1, total)}
             </span>{" "}
-            to {" "}
+            to{" "}
             <span className="font-semibold text-gray-900">
               {Math.min(page * limit, total)}
             </span>{" "}
-            of <span className="font-semibold text-gray-900">{total}</span> users
+            of <span className="font-semibold text-gray-900">{total}</span>{" "}
+            users
           </div>
 
           {/* Desktop Pagination */}
@@ -682,7 +679,10 @@ const AdminUsersPage = () => {
                 }
                 return nums.map((n, idx) =>
                   n === "..." ? (
-                    <span key={`ellipsis-${idx}`} className="px-3 py-2 text-sm text-gray-400">
+                    <span
+                      key={`ellipsis-${idx}`}
+                      className="px-3 py-2 text-sm text-gray-400"
+                    >
                       ...
                     </span>
                   ) : (
@@ -756,7 +756,9 @@ const AdminUsersPage = () => {
                 </button>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600">Page {page} of {totalPages}</span>
+                <span className="text-sm text-gray-600">
+                  Page {page} of {totalPages}
+                </span>
               </div>
             </div>
 
@@ -768,9 +770,13 @@ const AdminUsersPage = () => {
                   onChange={(e) => setPage(Number(e.target.value))}
                   className="px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none"
                 >
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
-                    <option key={n} value={n}>Page {n}</option>
-                  ))}
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                    (n) => (
+                      <option key={n} value={n}>
+                        Page {n}
+                      </option>
+                    )
+                  )}
                 </select>
               </div>
               <div className="flex items-center gap-2">
@@ -784,7 +790,9 @@ const AdminUsersPage = () => {
                   className="px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none"
                 >
                   {[10, 20, 30, 50, 100, 200, 500].map((n) => (
-                    <option key={n} value={n}>{n}</option>
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -825,9 +833,13 @@ const AdminUsersPage = () => {
                   onChange={(e) => setPage(Number(e.target.value))}
                   className="px-2 py-1 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-100 outline-none"
                 >
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
-                    <option key={n} value={n}>{n}</option>
-                  ))}
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                    (n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    )
+                  )}
                 </select>
               </div>
               <div className="flex items-center gap-2">
@@ -841,7 +853,9 @@ const AdminUsersPage = () => {
                   className="px-2 py-1 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-100 outline-none"
                 >
                   {[10, 20, 30, 50, 100].map((n) => (
-                    <option key={n} value={n}>{n}</option>
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -1051,9 +1065,9 @@ const AdminUsersPage = () => {
             <Form.Item
               label="Assign Warehouses"
               name="warehouse"
-            // rules={[
-            //   { required: true, message: "Please select at least one ware" },
-            // ]}
+              // rules={[
+              //   { required: true, message: "Please select at least one ware" },
+              // ]}
             >
               <Select
                 mode="multiple"

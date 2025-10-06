@@ -288,6 +288,44 @@ export default function AddProductModal({
     return price;
   };
 
+  // Get the selected line item's quantity based on platform
+  const getSelectedLineItemQuantity = () => {
+    try {
+      if (!selectedLineItemId) return 1;
+
+      if (activeTab === "woocommerce") {
+        const order = orderDetails?.order;
+        const lineItem = order?.line_items?.find(
+          (item) => String(item?.id) === String(selectedLineItemId) ||
+                    String(item?.product_id) === String(selectedLineItemId)
+        );
+        const qty = Number(lineItem?.quantity || 1);
+        return Number.isFinite(qty) && qty > 0 ? qty : 1;
+      }
+
+      if (activeTab === "walmart") {
+        const order = orderDetails?.order?.order;
+        const lineItem = order?.orderLines?.orderLine?.find(
+          (line) => String(line?.lineNumber || line?.orderLineId) === String(selectedLineItemId)
+        );
+        const qty = Number(lineItem?.orderLineQuantity?.amount || 1);
+        return Number.isFinite(qty) && qty > 0 ? qty : 1;
+      }
+
+      if (activeTab === "shopify") {
+        const order = orderDetails?.order;
+        const node = order?.lineItems?.edges?.find(
+          (edge) => String(edge?.node?.id) === String(selectedLineItemId)
+        )?.node;
+        const qty = Number(node?.quantity || 1);
+        return Number.isFinite(qty) && qty > 0 ? qty : 1;
+      }
+    } catch (e) {
+      console.error("Failed to get selected line item quantity", e);
+    }
+    return 1;
+  };
+
   // Handle submit
   const handleSubmit = async () => {
     if (selectedProducts.length === 0) {
@@ -414,6 +452,9 @@ export default function AddProductModal({
       }
       console.log("orderQty", orderQty);
 
+      // Multiply picking quantities by the selected line item's quantity
+      const lineQty = getSelectedLineItemQuantity();
+
       const payload = {
         plateform_id: selectedPlatformId,
         productId: productIdToSend,
@@ -421,7 +462,7 @@ export default function AddProductModal({
         product_title: uniqueProductTitle,
         skus: selectedProducts.map((product) => ({
           pId: product._id,
-          quantity: product.quantity.toString(),
+          quantity: String((Number(product.quantity || 1)) * lineQty),
           price: handlePrice(product.sale_price).toFixed(2),
         })),
         orderQty: orderQty,

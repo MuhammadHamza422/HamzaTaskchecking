@@ -508,6 +508,7 @@ export default function InventoryDisplay({
             console.warn("Refetch after create failed:", e);
           } finally {
             setIsRefreshing(false);
+            setIsSaving(false);
           }
         }
 
@@ -891,7 +892,7 @@ export default function InventoryDisplay({
                           {r?.productData?.pro_title}
                         </td>
                         <td className="px-4 py-3 text-xs whitespace-nowrap font-mono border-b">
-                          {r?.productData.sku || "N/A"}
+                          {r?.productData?.sku || "N/A"}
                         </td>
 
                         <td className="px-4 py-3 text-sm text-gray-500 border-b">
@@ -1084,7 +1085,7 @@ export default function InventoryDisplay({
                             {r?.productData?.pro_title}
                           </div>
                           <div className="mt-1 text-xs text-gray-500 font-mono">
-                            {r?.productData.sku || "N/A"}
+                            {r?.productData?.sku || "N/A"}
                           </div>
                         </div>
                         <div className="text-xs text-gray-600">
@@ -1463,16 +1464,16 @@ export default function InventoryDisplay({
                                 setForm((prev) => ({
                                   ...prev,
                                   productId: p._id,
-                                  productSearch: p.pro_title || p.sku,
+                                  productSearch: p.pro_title || p?.sku,
                                   showProductDropdown: false,
                                   selectedProduct: p, // Store the selected product
                                 }));
                               }}
                               className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm border-b last:border-b-0"
                             >
-                              <div className="font-medium">{p.pro_title}</div>
+                              <div className="font-medium">{p?.pro_title}</div>
                               <div className="text-xs text-gray-500">
-                                {p.sku}
+                                {p?.sku}
                               </div>
                             </div>
                           ))
@@ -1518,15 +1519,10 @@ export default function InventoryDisplay({
                 </button>
                 <button
                   type="submit"
-                  disabled={
-                    isSaving ||
-                    createInv.isLoading ||
-                    !form.productId ||
-                    !form.quantity
-                  }
+                  disabled={isSaving || !form.productId || !form.quantity}
                   className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white disabled:opacity-60 flex items-center gap-2"
                 >
-                  {isSaving || createInv.isLoading ? (
+                  {isSaving ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Saving…

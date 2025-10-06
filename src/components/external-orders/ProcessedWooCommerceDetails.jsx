@@ -314,7 +314,7 @@ export default function ProcessedWooCommerceDetails({
       </Card>
 
       {/* Order Notes */}
-      {order?.meta_data?.find((m) => m.key === "_aftership_order_notes")
+      {/* {order?.meta_data?.find((m) => m.key === "_aftership_order_notes")
         ?.value && (
         <Card
           size="small"
@@ -339,7 +339,7 @@ export default function ProcessedWooCommerceDetails({
               ))}
           </div>
         </Card>
-      )}
+      )} */}
     </div>
   );
 }
