@@ -517,8 +517,12 @@ export default function ProcessedOrdersPage() {
             continue;
           }
           console.log("Fetching kits for selected order", orderId);
+          const numericOrderId =
+            activeTab === "shopify"
+              ? String(orderId).replace("gid://shopify/Order/", "")
+              : orderId;
           const res = await apiClient.get(
-            `/api/v1/kit/order/kits/${encodeURIComponent(orderId)}`
+            `/api/v1/kit/order/kits/${encodeURIComponent(numericOrderId)}`
           );
           console.log("Kits fetched for selected order", orderId, res?.data);
           setKitsByOrderId((prev) => ({ ...prev, [orderId]: res?.data }));
@@ -793,6 +797,28 @@ export default function ProcessedOrdersPage() {
       }
     }
 
+    // Fallback: if no kits found, derive items from Shopify order line items (production safety)
+    if (items.length === 0) {
+      const sfLineNodes = Array.isArray(sf?.lineItems?.edges)
+        ? sf.lineItems.edges.map((e) => e?.node).filter(Boolean)
+        : [];
+      for (const node of sfLineNodes) {
+        if (node?.name) {
+          productTitles.push(node.name);
+        }
+        items.push({
+          sku: node?.sku || String(node?.id || ""),
+          name: node?.name || "Product",
+          imageUrl: null,
+          quantity: Number(node?.quantity || 1),
+          unitPrice: Number(node?.originalUnitPriceSet?.shopMoney?.amount || 0),
+          taxAmount: null,
+          shippingAmount: null,
+          productId: undefined,
+        });
+      }
+    }
+
     const orderDate = formatDateForShipStation(
       sf?.createdAt || tableOrder?.createdAt || new Date()
     );
@@ -904,8 +930,12 @@ export default function ProcessedOrdersPage() {
               console.log("Using cached kits for move", ord?.orderId, kitsData);
             } else {
               console.log("Fetching kits for move", ord?.orderId);
+              const numericOrderId =
+                activeTab === "shopify"
+                  ? String(ord?.orderId).replace("gid://shopify/Order/", "")
+                  : ord?.orderId;
               const kitsRes = await apiClient.get(
-                `/api/v1/kit/order/kits/${encodeURIComponent(ord?.orderId)}`
+                `/api/v1/kit/order/kits/${encodeURIComponent(numericOrderId)}`
               );
               console.log("Kits Data", kitsRes?.data);
               kitsData = kitsRes?.data;
