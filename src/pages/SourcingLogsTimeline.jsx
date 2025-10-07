@@ -237,12 +237,15 @@ function changesWithValues(before = {}, after = {}) {
       return { field: k, from, to, _atomic: false };
     });
 
-  // final normalization-based equality filter
+  // -------- FIX #1: don't drop atomic changes when not ObjectIDs ----------
   rows = rows.filter(({ field, from, to, _atomic }) => {
+    // If both sides are ObjectIDs, compare by id; otherwise compare normalized values.
     if (_atomic) {
       const aId = extractId(from);
       const bId = extractId(to);
-      if (aId && bId && aId === bId) return false;
+      if (aId && bId) {
+        return aId !== bId;
+      }
     }
     const nf = normalizeForDiff(from);
     const nt = normalizeForDiff(to);
@@ -371,6 +374,7 @@ export default function SourcingLogsTimeline({ targetId, title = "Activity Log",
       list.sort((a, b) => new Date(getDate(b.createdAt)) - new Date(getDate(a.createdAt)));
       setRows(list);
     } catch (e) {
+      // eslint-disable-next-line no-console
       console.error("Failed to fetch logs", e?.response?.data || e.message);
       setErr(e);
       setRows([]);
@@ -485,7 +489,9 @@ export default function SourcingLogsTimeline({ targetId, title = "Activity Log",
     if (String(fromStr) === String(toStr)) return null;
     return {
       color,
-      key: `${who}-${when}-${label}-${main ?? ""}-${sku ?? ""}-${Math.random().toString(36).slice(2, 7)}`,
+      key: `${who}-${when}-${label}-${main ?? ""}-${sku ?? ""}-${Math.random()
+        .toString(36)
+        .slice(2, 7)}`,
       children: (
         <RowLine who={who} when={when}>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "baseline" }}>
@@ -591,28 +597,100 @@ export default function SourcingLogsTimeline({ targetId, title = "Activity Log",
                   // 1) itemsOps from meta (preferred)
                   const itemsOps = Array.isArray(log?.meta?.itemsOps) ? log.meta.itemsOps : [];
                   if (itemsOps.length) {
-                    return itemsOps.map((op, idx) => {
-                      const title =
-                        op.op === "ADD"
-                          ? "added"
-                          : op.op === "REMOVE"
-                          ? "removed"
-                          : op.op === "QTY"
-                          ? "changed quantity"
-                          : "updated item";
-                      const main = op.name || op.sku || "Item";
+                    return itemsOps
+                      .map((op, idx) => {
+                        const title =
+                          op.op === "ADD"
+                            ? "added"
+                            : op.op === "REMOVE"
+                            ? "removed"
+                            : op.op === "QTY"
+                            ? "changed quantity"
+                            : "updated item";
+                        const main = op.name || op.sku || "Item";
 
-                      if (op.op === "QTY") {
-                        const sub =
-                          op.from != null || op.to != null
-                            ? ` ${op.from ?? 0} → ${op.to ?? 0}`
-                            : "";
+                        if (op.op === "QTY") {
+                          const sub =
+                            op.from != null || op.to != null
+                              ? ` ${op.from ?? 0} → ${op.to ?? 0}`
+                              : "";
+                          return {
+                            color,
+                            key: `${log._id || logIdx}-op-${idx}`,
+                            children: (
+                              <RowLine who={who} when={when}>
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    flexWrap: "wrap",
+                                    gap: 6,
+                                    alignItems: "baseline",
+                                  }}
+                                >
+                                  <Text strong>{who}</Text>
+                                  <Text>{title}</Text>
+                                  <Text code>{main}</Text>
+                                  {op.sku && (
+                                    <Text type="secondary" code>
+                                      {op.sku}
+                                    </Text>
+                                  )}
+                                  <Text>{sub}</Text>
+                                </div>
+                              </RowLine>
+                            ),
+                          };
+                        }
+
+                        if (op.op === "UPDATE" && op.field) {
+                          const label = ITEM_FIELD_LABELS[op.field] || op.field;
+                          const fromStr = renderVal(op.field, op.from);
+                          const toStr = renderVal(op.field, op.to);
+                          if (String(fromStr) === String(toStr)) return null;
+                          return {
+                            color,
+                            key: `${log._id || logIdx}-op-${idx}`,
+                            children: (
+                              <RowLine who={who} when={when}>
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    flexWrap: "wrap",
+                                    gap: 6,
+                                    alignItems: "baseline",
+                                  }}
+                                >
+                                  <Text strong>{who}</Text>
+                                  <Text>{title}</Text>
+                                  <Text code>{main}</Text>
+                                  {op.sku && (
+                                    <Text type="secondary" code>
+                                      {op.sku}
+                                    </Text>
+                                  )}
+                                  <Text>— changed</Text>
+                                  <Text code>{label}</Text>
+                                </div>
+                                <FromTo fromStr={fromStr} toStr={toStr} />
+                              </RowLine>
+                            ),
+                          };
+                        }
+
+                        // ADD / REMOVE
                         return {
                           color,
                           key: `${log._id || logIdx}-op-${idx}`,
                           children: (
                             <RowLine who={who} when={when}>
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "baseline" }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexWrap: "wrap",
+                                  gap: 6,
+                                  alignItems: "baseline",
+                                }}
+                              >
                                 <Text strong>{who}</Text>
                                 <Text>{title}</Text>
                                 <Text code>{main}</Text>
@@ -621,64 +699,16 @@ export default function SourcingLogsTimeline({ targetId, title = "Activity Log",
                                     {op.sku}
                                   </Text>
                                 )}
-                                <Text>{sub}</Text>
+                                {op.qty != null &&
+                                  (op.op === "ADD" || op.op === "REMOVE") && (
+                                    <Text type="secondary">qty {op.qty}</Text>
+                                  )}
                               </div>
                             </RowLine>
                           ),
                         };
-                      }
-
-                      if (op.op === "UPDATE" && op.field) {
-                        const label = ITEM_FIELD_LABELS[op.field] || op.field;
-                        const fromStr = renderVal(op.field, op.from);
-                        const toStr = renderVal(op.field, op.to);
-                        if (String(fromStr) === String(toStr)) return null;
-                        return {
-                          color,
-                          key: `${log._id || logIdx}-op-${idx}`,
-                          children: (
-                            <RowLine who={who} when={when}>
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "baseline" }}>
-                                <Text strong>{who}</Text>
-                                <Text>{title}</Text>
-                                <Text code>{main}</Text>
-                                {op.sku && (
-                                  <Text type="secondary" code>
-                                    {op.sku}
-                                  </Text>
-                                )}
-                                <Text>— changed</Text>
-                                <Text code>{label}</Text>
-                              </div>
-                              <FromTo fromStr={fromStr} toStr={toStr} />
-                            </RowLine>
-                          ),
-                        };
-                      }
-
-                      // ADD / REMOVE
-                      return {
-                        color,
-                        key: `${log._id || logIdx}-op-${idx}`,
-                        children: (
-                          <RowLine who={who} when={when}>
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "baseline" }}>
-                              <Text strong>{who}</Text>
-                              <Text>{title}</Text>
-                              <Text code>{main}</Text>
-                              {op.sku && (
-                                <Text type="secondary" code>
-                                  {op.sku}
-                                </Text>
-                              )}
-                              {op.qty != null && (op.op === "ADD" || op.op === "REMOVE") && (
-                                <Text type="secondary">qty {op.qty}</Text>
-                              )}
-                            </div>
-                          </RowLine>
-                        ),
-                      };
-                    }).filter(Boolean);
+                      })
+                      .filter(Boolean);
                   }
 
                   // 2) diffs: prefer server diff; fallback to client diff
@@ -692,6 +722,19 @@ export default function SourcingLogsTimeline({ targetId, title = "Activity Log",
                             _k: i,
                           }))
                           .filter((c) => !shouldHideFieldPath(c.field))
+                          // -------- FIX #2: allow atomic fields that are strings/slugs ----------
+                          .filter((c) => {
+                            const root = c.field.split(".")[0];
+                            if (ATOMIC_ROOTS.has(root) && !c.field.includes(".")) {
+                              const aId = extractId(c.from);
+                              const bId = extractId(c.to);
+                              if (aId && bId) return aId !== bId; // both ObjectIDs → compare ids
+                              const nf = normalizeForDiff(c.from);
+                              const nt = normalizeForDiff(c.to);
+                              return JSON.stringify(nf) !== JSON.stringify(nt);
+                            }
+                            return true;
+                          })
                       : changesWithValues(log.before, log.after);
 
                   // transform & filter
@@ -708,7 +751,12 @@ export default function SourcingLogsTimeline({ targetId, title = "Activity Log",
                     const isItemPath = !!m;
                     const sub = isItemPath ? m[2] : null;
 
-                    if (isItemPath && !sub && (typeof from === "object" || from == null) && (typeof to === "object" || to == null)) {
+                    if (
+                      isItemPath &&
+                      !sub &&
+                      (typeof from === "object" || from == null) &&
+                      (typeof to === "object" || to == null)
+                    ) {
                       if (from == null && to && typeof to === "object") {
                         // Added item
                         const main = to.product_name || to.name || "Item";
@@ -718,7 +766,14 @@ export default function SourcingLogsTimeline({ targetId, title = "Activity Log",
                           key: `${log._id || "log"}-${field || "field"}-${_k ?? idx}-add`,
                           children: (
                             <RowLine who={who} when={when}>
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "baseline" }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexWrap: "wrap",
+                                  gap: 6,
+                                  alignItems: "baseline",
+                                }}
+                              >
                                 <Text strong>{who}</Text>
                                 <Text>added</Text>
                                 <Text code>{main}</Text>
@@ -742,7 +797,14 @@ export default function SourcingLogsTimeline({ targetId, title = "Activity Log",
                           key: `${log._id || "log"}-${field || "field"}-${_k ?? idx}-remove`,
                           children: (
                             <RowLine who={who} when={when}>
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "baseline" }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexWrap: "wrap",
+                                  gap: 6,
+                                  alignItems: "baseline",
+                                }}
+                              >
                                 <Text strong>{who}</Text>
                                 <Text>removed</Text>
                                 <Text code>{main}</Text>
@@ -771,7 +833,16 @@ export default function SourcingLogsTimeline({ targetId, title = "Activity Log",
 
                     if (isItemPath) {
                       const ctx = getItemContext(field, log.before, log.after);
-                      const node = renderItemChangeLine(who, when, ctx.name, ctx.sku, label, fromStr, toStr, color);
+                      const node = renderItemChangeLine(
+                        who,
+                        when,
+                        ctx.name,
+                        ctx.sku,
+                        label,
+                        fromStr,
+                        toStr,
+                        color
+                      );
                       if (node) out.push(node);
                       return;
                     }
@@ -781,7 +852,14 @@ export default function SourcingLogsTimeline({ targetId, title = "Activity Log",
                       key: `${log._id || "log"}-${field || "field"}-${_k ?? idx}`,
                       children: (
                         <RowLine who={who} when={when}>
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "baseline" }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              flexWrap: "wrap",
+                              gap: 6,
+                              alignItems: "baseline",
+                            }}
+                          >
                             <Text strong>{who}</Text>
                             <Text>changed</Text>
                             <Text code>{label}</Text>
@@ -802,7 +880,14 @@ export default function SourcingLogsTimeline({ targetId, title = "Activity Log",
                         key: `${log._id || "status"}-only`,
                         children: (
                           <RowLine who={who} when={when}>
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "baseline" }}>
+                            <div
+                              style={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: 6,
+                                alignItems: "baseline",
+                              }}
+                            >
                               <Text strong>{who}</Text>
                               <Text>changed</Text>
                               <Text code>Status</Text>
@@ -860,9 +945,7 @@ function FromTo({ fromStr, toStr }) {
           {short(fromStr)}
         </Text>
       </Tooltip>
-      <Text type="secondary" style={{ margin: "0 4px" }}>
-        →
-      </Text>
+      <Text type="secondary" style={{ margin: "0 4px" }}>→</Text>
       <Text type="secondary">to</Text>
       <Tooltip title={String(toStr)}>
         <Text
