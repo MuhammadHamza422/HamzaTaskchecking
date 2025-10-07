@@ -68,9 +68,6 @@ const rolesOptions = [
     menu: ["my requests", "requests", "types", "allocation"],
   },
 
-
-
-
     {
     app: "sourcer",
     label: "Sourcing (Sourcer)",
@@ -79,6 +76,7 @@ const rolesOptions = [
       "my requests",        // list requests I created
       "edit my requests",   // allow editing own pending requests
       "cancel my requests", // allow canceling before purchase
+      "view all",
     ],
   },
   {

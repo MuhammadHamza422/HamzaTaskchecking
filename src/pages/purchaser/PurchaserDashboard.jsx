@@ -26,11 +26,9 @@ import { useNavigate, useLocation } from "react-router-dom";
 import PurchasedTop5Table from "./components/PurchasedTop5Table";
 import PurchaserFilters from "./components/PurchaserFilters";
 import {
-  num,
-  getCreated,
-  statusColor,
   labelFromMarket,
   normalizeRequests,
+  statusColor,
 } from "./utils/PurchaseTableUtils";
 
 import { useAuth } from "../../contexts/AuthContext";
@@ -38,7 +36,6 @@ import apiClient from "../../api/client";
 
 const { Title, Text } = Typography;
 
-/* --------------------------- small helpers --------------------------- */
 const lower = (v) => String(v ?? "").trim().toLowerCase();
 function toDate(v) {
   const d = v ? new Date(v) : null;
@@ -167,7 +164,13 @@ export default function PurchaserDashboard() {
   /* -------------------------- filters & scope -------------------------- */
   const [statusFilter, setStatusFilter] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [dateRange, setDateRange] = useState([]);
+
+  // 🔹 Default to current month
+  const [dateRange, setDateRange] = useState(() => [
+    dayjs().startOf("month"),
+    dayjs().endOf("month"),
+  ]);
+
   const [selectedPurchaser, setSelectedPurchaser] = useState(null);
 
   const {
@@ -199,18 +202,16 @@ export default function PurchaserDashboard() {
     }
 
     if (statusFilter) params.status = statusFilter;
+
+    // 🔹 Include current-month range by default (and whenever user changes it)
     if (dateRange?.length === 2 && dateRange[0] && dateRange[1]) {
       params.start_date = dayjs(dateRange[0]).startOf("day").toISOString();
       params.end_date = dayjs(dateRange[1]).endOf("day").toISOString();
     }
-    if (searchTerm?.trim()) params.q = searchTerm.trim();
 
+    if (searchTerm?.trim()) params.q = searchTerm.trim();
     return params;
   }, [isAdmin, canSeeAllAssigned, canSeeAssignedMine, selectedPurchaser, statusFilter, dateRange, searchTerm]);
-
-  useEffect(() => {
-    // If any filter changes, we just refetch (no pagination here)
-  }, [statusFilter, searchTerm, dateRange, selectedPurchaser]);
 
   const fetchData = useCallback(async () => {
     if (!serverParams) {
@@ -220,8 +221,7 @@ export default function PurchaserDashboard() {
     }
     setLoading(true);
     try {
-      // Dashboard: fetch a generous number so metrics are meaningful
-      const LIMIT = 500;
+      const LIMIT = 500; // plenty for dashboard metrics
       const { data } = await apiClient.get("/api/v1/sourcing/all-sourcing", {
         params: { ...serverParams, page: 1, limit: LIMIT, sort: "-createdAt" },
       });
@@ -253,7 +253,8 @@ export default function PurchaserDashboard() {
   const clearAll = () => {
     setStatusFilter("");
     setSearchTerm("");
-    setDateRange([]);
+    // 🔹 Reset back to "this month" when clearing filters
+    setDateRange([dayjs().startOf("month"), dayjs().endOf("month")]);
     setSelectedPurchaser(null);
     fetchData();
   };
