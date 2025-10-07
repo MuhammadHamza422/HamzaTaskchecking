@@ -1,5 +1,6 @@
 import React from "react";
-import { Minus, Plus } from "lucide-react";
+import { Delete, Minus, Plus } from "lucide-react";
+import { AiTwotoneDelete } from "react-icons/ai";
 
 export default function NotShelfTable({
   items,
@@ -9,6 +10,7 @@ export default function NotShelfTable({
   handleUpdateQty,
   onOpenMove,
   role,
+  handleDeleteInventory,
 }) {
   if (!Array.isArray(items) || items.length === 0) return null;
 
@@ -51,35 +53,48 @@ export default function NotShelfTable({
               <td className="px-4 py-3">
                 <div className="flex items-center gap-1">
                   <div className="flex items-center rounded-lg overflow-hidden border border-gray-200 shadow-sm bg-gray-50 h-9">
-                    <button
-                      disabled={
-                        Number(item.quantity) <= 0 || role === "Technician"
-                      }
-                      onClick={() => {
-                        const currentPending = pendingQtyChanges.get(item.id);
-                        const baseQty = currentPending
-                          ? currentPending.newQty
-                          : Number(item.quantity);
-                        const newQty = Math.max(0, baseQty - 1);
-                        setPendingQtyChanges((prev) => {
-                          const newMap = new Map(prev);
-                          newMap.set(item.id, {
-                            currentQty: Number(item.quantity),
-                            newQty,
-                            type: "decrease",
+                    {item.quantity > 0 ? (
+                      <button
+                        disabled={
+                          Number(item.quantity) <= 0 || role === "Technician"
+                        }
+                        onClick={() => {
+                          const currentPending = pendingQtyChanges.get(item.id);
+                          const baseQty = currentPending
+                            ? currentPending.newQty
+                            : Number(item.quantity);
+                          const newQty = Math.max(0, baseQty - 1);
+                          setPendingQtyChanges((prev) => {
+                            const newMap = new Map(prev);
+                            newMap.set(item.id, {
+                              currentQty: Number(item.quantity),
+                              newQty,
+                              type: "decrease",
+                            });
+                            return newMap;
                           });
-                          return newMap;
-                        });
-                      }}
-                      className={`px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors ${
-                        Number(item.quantity) <= 0
-                          ? "text-gray-300 bg-gray-50 cursor-not-allowed"
-                          : "text-red-400 bg-red-100 hover:bg-red-800 hover:text-white"
-                      }`}
-                      title="Decrease by 1"
-                    >
-                      <Minus className="w-4 h-4" />
-                    </button>
+                        }}
+                        className={`px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors ${
+                          Number(item.quantity) <= 0
+                            ? "text-gray-300 bg-gray-50 cursor-not-allowed"
+                            : "text-red-400 bg-red-100 hover:bg-red-800 hover:text-white"
+                        }`}
+                        title="Decrease by 1"
+                      >
+                        <Minus className="w-4 h-4" />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          handleDeleteInventory(item.id);
+                        }}
+                        className={`px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors text-white bg-red-600`}
+                        title="Decrease by 1"
+                      >
+                        <AiTwotoneDelete className="w-4 h-4" />
+                      </button>
+                    )}
+
                     <input
                       value={
                         pendingQtyChanges.has(item.id)

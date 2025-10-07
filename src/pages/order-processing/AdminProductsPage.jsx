@@ -22,7 +22,7 @@ import {
   Switch,
   Space,
 } from "antd";
-import { debounce } from "lodash";
+import { debounce, set } from "lodash";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import Swal from "sweetalert2";
@@ -35,6 +35,7 @@ import {
   updateProduct,
 } from "../../api/warehouse";
 import useFullscreen from "../../components/useFullscreen";
+import CreatableSelect from "react-select/creatable";
 
 const { Search } = Input;
 const { Title, Text } = Typography;
@@ -259,6 +260,14 @@ const AdminProductsPage = () => {
   const [editingProduct, setEditingProduct] = useState(null);
   const [form] = Form.useForm();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [colorCode, setColorCode] = useState(null);
+
+  const options = ColorCode2.map((color) => ({
+    value: color,
+    label: color,
+  }));
+
+  console.log(colorCode);
 
   // Filter states
   const [filters, setFilters] = useState({
@@ -298,6 +307,7 @@ const AdminProductsPage = () => {
   const products = useMemo(() => {
     if (!data) return [];
     const list = Array.isArray(data?.products) ? data.products : [];
+
     return list.map((p) => {
       const rawType = String(p?.type_code || "").toUpperCase();
       return {
@@ -419,7 +429,10 @@ const AdminProductsPage = () => {
     try {
       if (isEditModal && editingProduct) {
         // Update existing product
-        await updateProduct(editingProduct._id, values);
+        await updateProduct(editingProduct._id, {
+          values,
+          color_code: colorCode,
+        });
 
         // Show success message
         Swal.fire({
@@ -441,6 +454,7 @@ const AdminProductsPage = () => {
         // Create new product with is_storable set to false by default
         const productData = {
           ...values,
+          color_code: colorCode,
           is_storable: false,
         };
         await createProduct(productData);
@@ -505,15 +519,8 @@ const AdminProductsPage = () => {
 
   // Generate SKU based on product components
   const generateSKU = (formData) => {
-    const {
-      type_code,
-      brnd_code,
-      model_code,
-      storage_code,
-      color_code,
-      cnd_code,
-      uid,
-    } = formData;
+    const { type_code, brnd_code, model_code, storage_code, cnd_code, uid } =
+      formData;
 
     // Filter out empty values and join with hyphens
     const skuParts = [
@@ -521,7 +528,7 @@ const AdminProductsPage = () => {
       brnd_code,
       model_code,
       storage_code,
-      color_code,
+      colorCode,
       cnd_code,
       uid,
     ].filter((part) => part && part.trim() !== "");
@@ -568,6 +575,7 @@ const AdminProductsPage = () => {
         product.is_storable !== undefined ? product.is_storable : true,
       seller_ids: product.seller_ids || "",
     });
+    setColorCode(product.color_code || "");
   };
 
   // Handle delete product
@@ -1338,13 +1346,14 @@ const AdminProductsPage = () => {
                 </Form.Item>
               </Col>
               <Col xs={24} sm={8}>
-                <Form.Item label="Color Code" name="color_code">
-                  <Select
+                {/* <Select
                     placeholder="Select Color Code"
                     allowClear
                     showSearch
                     filterOption={(input, option) =>
-                      option?.children?.toLowerCase().indexOf(input.toLowerCase()) >= 0
+                      option?.children
+                        ?.toLowerCase()
+                        .indexOf(input.toLowerCase()) >= 0
                     }
                     size="large"
                   >
@@ -1353,7 +1362,27 @@ const AdminProductsPage = () => {
                         {color}
                       </Option>
                     ))}
-                  </Select>
+                  </Select> */}
+                <Form.Item label="Color Code" name="color_code">
+                  <CreatableSelect
+                    isClearable
+                    placeholder="Select or type color code"
+                    value={
+                      colorCode ? { value: colorCode, label: colorCode } : null
+                    }
+                    onChange={(option) => setColorCode(option?.value || "")}
+                    options={options}
+                    formatCreateLabel={(inputValue) => `Add "${inputValue}"`}
+                    styles={{
+                      control: (base) => ({
+                        ...base,
+                        minHeight: "40px",
+                        borderRadius: "6px",
+                        borderColor: "#d9d9d9",
+                        boxShadow: "none",
+                      }),
+                    }}
+                  />
                 </Form.Item>
               </Col>
               <Col xs={24} sm={8}>

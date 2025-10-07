@@ -75,6 +75,7 @@ export default function Zones() {
       name: z.name,
       description: z.description,
       warehouseId: z.warehouse?.id ?? z.warehouse?._id ?? selectedWarehouseId,
+      qr: z.qr,
       type: z.type,
     }));
   }, [data, selectedWarehouseId]);
@@ -334,7 +335,11 @@ export default function Zones() {
                 </button>
               )}
             </div>
-
+            <img
+              src={z?.qr}
+              alt="qr"
+              className="w-full h-[9rem] rounded-md object-contain"
+            />
             <h2 className="truncate text-base font-semibold">{z.name}</h2>
             {z.description && (
               <p className="mt-1 line-clamp-3 text-xs text-zinc-500">

@@ -1,5 +1,6 @@
 import React from "react";
-import { Minus, Plus } from "lucide-react";
+import { Delete, Minus, Plus } from "lucide-react";
+import { AiTwotoneDelete } from "react-icons/ai";
 
 export default function HybridView({
   groupedByLocation,
@@ -9,6 +10,7 @@ export default function HybridView({
   handleUpdateQty,
   onOpenMove,
   userRole,
+  handleDeleteInventory,
 }) {
   if (!Array.isArray(groupedByLocation) || groupedByLocation.length === 0)
     return null;
@@ -33,50 +35,79 @@ export default function HybridView({
               <table className="min-w-full bg-white rounded-lg">
                 <thead className="border-b">
                   <tr>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700">Product</th>
-                    <th className="px-3 py-2 text-left text-xs font-mono text-gray-700">SKU</th>
-                    <th className="px-3 py-2 text-left text-xs text-gray-700">Warehouse</th>
-                    <th className="px-3 py-2 text-left text-xs text-gray-700">Qty</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700">
+                      Product
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs font-mono text-gray-700">
+                      SKU
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs text-gray-700">
+                      Warehouse
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs text-gray-700">
+                      Qty
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((r) => (
                     <tr key={r.id} className="border-t">
-                      <td className="px-3 py-2 text-sm font-medium">{r.productTitle}</td>
-                      <td className="px-3 py-2 text-xs font-mono">{r.sku || "N/A"}</td>
-                      <td className="px-3 py-2 text-sm text-gray-500">{warehouseName || r.name}</td>
+                      <td className="px-3 py-2 text-sm font-medium">
+                        {r.productTitle}
+                      </td>
+                      <td className="px-3 py-2 text-xs font-mono">
+                        {r.sku || "N/A"}
+                      </td>
+                      <td className="px-3 py-2 text-sm text-gray-500">
+                        {warehouseName || r.name}
+                      </td>
                       <td className="px-3 py-2 text-sm text-gray-700">
                         <div className="flex items-center gap-2">
                           <div className="flex items-center rounded-lg overflow-hidden border border-gray-200 shadow-sm bg-gray-50 h-9">
-                            <button
-                              disabled={
-                                Number(r.quantity) <= 0 || userRole === "Technician"
-                              }
-                              onClick={() => {
-                                const currentPending = pendingQtyChanges.get(r.id);
-                                const baseQty = currentPending
-                                  ? currentPending.newQty
-                                  : Number(r.quantity);
-                                const newQty = Math.max(0, baseQty - 1);
-                                setPendingQtyChanges((prev) => {
-                                  const newMap = new Map(prev);
-                                  newMap.set(r.id, {
-                                    currentQty: Number(r.quantity),
-                                    newQty,
-                                    type: "decrease",
+                            {r.quantity > 0 ? (
+                              <button
+                                disabled={
+                                  Number(r.quantity) <= 0 ||
+                                  userRole === "Technician"
+                                }
+                                onClick={() => {
+                                  const currentPending = pendingQtyChanges.get(
+                                    r.id
+                                  );
+                                  const baseQty = currentPending
+                                    ? currentPending.newQty
+                                    : Number(r.quantity);
+                                  const newQty = Math.max(0, baseQty - 1);
+                                  setPendingQtyChanges((prev) => {
+                                    const newMap = new Map(prev);
+                                    newMap.set(r.id, {
+                                      currentQty: Number(r.quantity),
+                                      newQty,
+                                      type: "decrease",
+                                    });
+                                    return newMap;
                                   });
-                                  return newMap;
-                                });
-                              }}
-                              className={`px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                                Number(r.quantity) <= 0
-                                  ? "text-gray-300 bg-gray-50 cursor-not-allowed"
-                                  : "text-red-400 bg-red-100 hover:bg-red-800 hover:text-white"
-                              }`}
-                              title="Decrease by 1"
-                            >
-                              <Minus className="w-4 h-4" />
-                            </button>
+                                }}
+                                className={`px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                                  Number(r.quantity) <= 0
+                                    ? "text-gray-300 bg-gray-50 cursor-not-allowed"
+                                    : "text-red-400 bg-red-100 hover:bg-red-800 hover:text-white"
+                                }`}
+                                title="Decrease by 1"
+                              >
+                                <Minus className="w-4 h-4" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  handleDeleteInventory(r.id);
+                                }}
+                                className={`px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors text-white bg-red-600`}
+                                title="Decrease by 1"
+                              >
+                                <AiTwotoneDelete className="w-4 h-4" />
+                              </button>
+                            )}
                             <input
                               value={
                                 pendingQtyChanges.has(r.id)
@@ -88,7 +119,9 @@ export default function HybridView({
                               }
                               onKeyDown={(e) => {
                                 if (e.key === "Enter") {
-                                  const pendingChange = pendingQtyChanges.get(r.id);
+                                  const pendingChange = pendingQtyChanges.get(
+                                    r.id
+                                  );
                                   if (pendingChange) {
                                     const key =
                                       pendingChange.newQty >
@@ -111,7 +144,9 @@ export default function HybridView({
                             <button
                               disabled={userRole === "Picker"}
                               onClick={() => {
-                                const currentPending = pendingQtyChanges.get(r.id);
+                                const currentPending = pendingQtyChanges.get(
+                                  r.id
+                                );
                                 const baseQty = currentPending
                                   ? currentPending.newQty
                                   : Number(r.quantity);
@@ -151,7 +186,9 @@ export default function HybridView({
                               </p>
                               <button
                                 onClick={() => {
-                                  const pendingChange = pendingQtyChanges.get(r.id);
+                                  const pendingChange = pendingQtyChanges.get(
+                                    r.id
+                                  );
                                   if (pendingChange) {
                                     const key =
                                       pendingChange.newQty >
@@ -202,5 +239,3 @@ export default function HybridView({
     </div>
   );
 }
-
-

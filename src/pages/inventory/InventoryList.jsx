@@ -25,6 +25,8 @@ import CreateInventoryModal from "./components/CreateInventoryModal";
 import MoveToZoneModal from "./components/MoveToZoneModal";
 import InventoryPagination from "./components/InventoryPagination";
 import { useAuth } from "../../contexts/AuthContext";
+import axios from "axios";
+import apiClient from "../../api/client";
 
 // product types moved to CreateInventoryModal
 
@@ -78,7 +80,6 @@ export default function InventoryList() {
   const dispatch = useDispatch();
   const warehouseId = useSelector((s) => s.app.selectedWarehouseId);
   const zoneId = useSelector((s) => s.app.selectedZoneId);
-  console.log("Zone Id", zoneId);
   const queryClient = useQueryClient();
 
   const { data, isLoading, isFetching } = useQuery({
@@ -111,7 +112,6 @@ export default function InventoryList() {
     refetchOnMount: true,
   });
 
-  
   const { data: locationsRes } = useQuery({
     queryKey: ["locations", warehouseId, zoneId],
     enabled: !!warehouseId,
@@ -169,24 +169,34 @@ export default function InventoryList() {
         // Attempt to resolve code from multiple sources
         let resolvedLocationCode =
           row.locationData?.code || row.location?.code || "";
-        
+
         // If no location code found, try to find it in our locations array
         if (!resolvedLocationCode && locationIdFromRow) {
-          const foundLoc = (locations || []).find((l) => l.id === locationIdFromRow);
-          if (foundLoc?.code) resolvedLocationCode = foundLoc.code;
-        }
-        
-        // If still no code and we have a location ID, try to match by string comparison
-        if (!resolvedLocationCode && locationIdFromRow && locations.length > 0) {
-          const foundLoc = (locations || []).find((l) => 
-            String(l.id) === String(locationIdFromRow) || 
-            String(l._id) === String(locationIdFromRow)
+          const foundLoc = (locations || []).find(
+            (l) => l.id === locationIdFromRow
           );
           if (foundLoc?.code) resolvedLocationCode = foundLoc.code;
         }
 
-        const resolvedLocationType =
-          (row.locationData?.type || row.location?.type || "").toLowerCase();
+        // If still no code and we have a location ID, try to match by string comparison
+        if (
+          !resolvedLocationCode &&
+          locationIdFromRow &&
+          locations.length > 0
+        ) {
+          const foundLoc = (locations || []).find(
+            (l) =>
+              String(l.id) === String(locationIdFromRow) ||
+              String(l._id) === String(locationIdFromRow)
+          );
+          if (foundLoc?.code) resolvedLocationCode = foundLoc.code;
+        }
+
+        const resolvedLocationType = (
+          row.locationData?.type ||
+          row.location?.type ||
+          ""
+        ).toLowerCase();
 
         return {
           id: row._id,
@@ -438,7 +448,6 @@ export default function InventoryList() {
     refetchOnReconnect: true,
     refetchOnMount: true,
   });
-
 
   // Total items for pagination (fallback to items length)
   const totalInventory = useMemo(() => {
@@ -749,6 +758,28 @@ export default function InventoryList() {
     });
   };
 
+  const handleDeleteInventory = async (id) => {
+    try {
+      const { data } = await apiClient.delete(`/api/v1/inventry/delete/${id}`);
+      if (data) {
+        window.location.reload();
+        Swal.fire({
+          icon: "success",
+          title: "Inventory Deleted",
+          text: "Inventory deleted successfully",
+          toast: true,
+          position: "top-end",
+          showConfirmButton: false,
+          timer: 3000,
+          background: "#10b981",
+          color: "#fff",
+        });
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   // Auto-expand bins and shelves when a search term matches content inside them.
   // Behavior: when searchTerm is non-empty, any bin that contains at least one item
   // whose productTitle or sku includes the search term (case-insensitive) will be added
@@ -822,7 +853,6 @@ export default function InventoryList() {
     }
     return "";
   }, [zonesRes, zoneId, locations]);
-  console.log("zoneName", zoneName);
 
   // CSV filename based on current zone name and page
   const csvFilename = useMemo(() => {
@@ -898,6 +928,7 @@ export default function InventoryList() {
               handleQuantityInputChange={handleQuantityInputChange}
               handleUpdateQty={handleUpdateQty}
               role={role}
+              handleDeleteInventory={handleDeleteInventory}
               onOpenMove={(id) => {
                 setMoveTargetId(id);
                 const found = items.find((it) => it.id === id);
@@ -929,6 +960,7 @@ export default function InventoryList() {
                 setSelectedMoveZoneId("");
                 setMoveModalOpen(true);
               }}
+              handleDeleteInventory={handleDeleteInventory}
             />
           )
         ) : groupedByLocation.length === 0 ? (
@@ -952,6 +984,7 @@ export default function InventoryList() {
               setSelectedMoveZoneId("");
               setMoveModalOpen(true);
             }}
+            handleDeleteInventory={handleDeleteInventory}
           />
         )}
         {/* Pagination */}
