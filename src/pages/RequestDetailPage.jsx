@@ -87,6 +87,13 @@ const isLikelyFqdn = (hostname = "") =>
   /^[^.\/\s][^\s]*\.[^\s]+$/.test(hostname);
 const isObjectId = (v) => typeof v === "string" && /^[0-9a-fA-F]{24}$/.test(v);
 
+// format efficiency like "9%" (or "9.5%" if not whole)
+const formatPct = (n) => {
+  if (n === null || n === undefined || isNaN(Number(n))) return "—";
+  const num = Number(n);
+  return Number.isInteger(num) ? `${num}%` : `${num.toFixed(1)}%`;
+};
+
 /** Normalize server payload into what the form expects */
 const normalizeRequest = (raw = {}) => {
   const sourcing_id = raw.sourcing_id ?? raw.sourcingId ?? undefined;
@@ -130,6 +137,17 @@ const normalizeRequest = (raw = {}) => {
   );
   const tax = Number(raw.tax ?? raw.taxes ?? 0);
 
+  // NEW: totals & efficiencies from backend
+  const target_total_cost = Number(
+    raw.target_total_cost ?? raw.targetTotalCost ?? NaN
+  );
+  const total_actual_cost = Number(
+    raw.total_actual_cost ?? raw.totalActualCost ?? NaN
+  );
+  const purchase_efficiency =
+    raw.purchase_efficiency ?? raw.purchaseEfficiency ?? null;
+  const sku_efficiency = raw.sku_efficiency ?? raw.skuEfficiency ?? null;
+
   const id = raw._id ?? raw.id ?? "";
   const createdAt =
     raw.created_at ?? raw.createdAt ?? raw.created_on ?? undefined;
@@ -147,22 +165,44 @@ const normalizeRequest = (raw = {}) => {
       : "") ||
     "";
 
-  const items = (Array.isArray(raw.items) ? raw.items : []).map((it, idx) => ({
-    _id: it._id ?? it.id ?? `${id}-item-${idx}`,
-    product_name: it.product_name ?? it.name ?? "Unnamed",
-    sku: it.sku ?? "",
-    quantity_needed: Number(it.quantity_needed ?? 1),
-    product_condition: it.product_condition ?? null,
-    tested: !!it.tested,
-    target_cost_per_unit: Number(it.target_cost_per_unit ?? 0),
-    total_target_cost:
-      it.total_target_cost != null
-        ? Number(it.total_target_cost)
-        : Number(it.quantity_needed ?? 1) *
-          Number(it.target_cost_per_unit ?? 0),
-    sellers_price_per_unit: Number(it.sellers_price_per_unit ?? 0),
-    actual_cost_per_unit: Number(it.actual_cost_per_unit ?? 0),
-  }));
+  const items = (Array.isArray(raw.items) ? raw.items : []).map(
+    (it, idx) => (
+      [
+        "_id",
+        "id",
+        "product_name",
+        "name",
+        "sku",
+        "quantity_needed",
+        "product_type",
+        "category",
+        "tested",
+        "product_condition",
+        "target_cost_per_unit",
+        "total_target_cost",
+        "sellers_price_per_unit",
+        "actual_cost_per_unit",
+      ],
+      {
+        _id: it._id ?? it.id ?? `${id}-item-${idx}`,
+        product_name: it.product_name ?? it.name ?? "Unnamed",
+        sku: it.sku ?? "",
+        quantity_needed: Number(it.quantity_needed ?? 1),
+        product_type: it.product_type ?? undefined,
+        category: it.category ?? "",
+        tested: !!it.tested,
+        product_condition: it.product_condition ?? null,
+        target_cost_per_unit: Number(it.target_cost_per_unit ?? 0),
+        total_target_cost:
+          it.total_target_cost != null
+            ? Number(it.total_target_cost)
+            : Number(it.quantity_needed ?? 1) *
+              Number(it.target_cost_per_unit ?? 0),
+        sellers_price_per_unit: Number(it.sellers_price_per_unit ?? 0),
+        actual_cost_per_unit: Number(it.actual_cost_per_unit ?? 0),
+      }
+    )
+  );
 
   return {
     sourcing_id,
@@ -180,6 +220,12 @@ const normalizeRequest = (raw = {}) => {
     shipping_price,
     tax,
     status: raw.status ?? "Pending",
+
+    // NEW: bring through totals/efficiencies from backend
+    target_total_cost: isNaN(target_total_cost) ? null : target_total_cost,
+    total_actual_cost: isNaN(total_actual_cost) ? null : total_actual_cost,
+    purchase_efficiency,
+    sku_efficiency,
 
     market_order_num: raw.market_order_num ?? "",
     purchase_link: raw.purchase_link ?? "",
@@ -203,11 +249,8 @@ const normalizeRequest = (raw = {}) => {
 const STATUS_NEEDS_PURCHASE_DETAILS = ["Purchased", "Dropshipped"];
 const TRACKING_STATUSES = [
   "Pending",
-  "LabelCreated",
   "InTransit",
   "Delivered",
-  "QC",
-  "Inventory",
 ];
 
 /* ---------- label resolvers ---------- */
@@ -470,9 +513,41 @@ export default function RequestDetailPage() {
 
   const [form] = Form.useForm();
 
+  const handleCopyListing = useCallback(async () => {
+    try {
+      const raw = (
+        form.getFieldValue("listing_link") ||
+        request?.listing_link ||
+        ""
+      ).trim();
+      if (!raw) {
+        toastWarn("No link", "Listing link is empty.");
+        return;
+      }
+      const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = url;
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      toastOk("Copied", "Listing link copied to clipboard.");
+    } catch {
+      toastWarn("Copy failed", "Could not copy the listing link.");
+    }
+  }, [form, request]);
+
   const isBlank = (v) =>
     v === undefined || v === null || String(v).trim() === "";
 
+  // watched inputs (your existing live calc)
   const watchedSellers = Form.useWatch("sellers_price", form);
   const watchedShipping = Form.useWatch("shipping_price", form);
   const watchedTax = Form.useWatch("tax", form);
@@ -483,6 +558,47 @@ export default function RequestDetailPage() {
   );
   const tax = Number(watchedTax ?? request?.tax ?? 0);
   const total = sellers_price + shipping_price + tax;
+
+  // server totals / fallbacks
+  const itemsSumTarget = useMemo(() => {
+    const items = request?.items || [];
+    return items.reduce(
+      (acc, it) =>
+        acc +
+        Number(
+          it.total_target_cost != null
+            ? it.total_target_cost
+            : Number(it.quantity_needed || 0) *
+                Number(it.target_cost_per_unit || 0)
+        ),
+      0
+    );
+  }, [request]);
+
+  const itemsSumActual = useMemo(() => {
+    const items = request?.items || [];
+    return items.reduce(
+      (acc, it) =>
+        acc +
+        Number(
+          Number(it.quantity_needed || 0) * Number(it.actual_cost_per_unit || 0)
+        ),
+      0
+    );
+  }, [request]);
+
+  const backendTargetTotal =
+    request?.target_total_cost ?? (itemsSumTarget || null);
+  const backendActualTotal =
+    request?.total_actual_cost ?? (itemsSumActual || null);
+
+
+
+const totalSavings = useMemo(() => {
+  const t = Number(backendTargetTotal || 0);
+  const a = Number(backendActualTotal || 0);
+  return t - a; // Total Savings = Target Total Cost − Total Actual Cost
+}, [backendTargetTotal, backendActualTotal]);
 
   // API helpers
   const fetchBySeller = (sellerName) =>
@@ -772,6 +888,9 @@ export default function RequestDetailPage() {
         return;
       }
 
+      // CHANGE: clear potential stale field error before submit
+      form.setFields([{ name: "tracking_link", errors: [] }]);
+
       const desiredStatus = String(
         values?.status ?? original.status ?? ""
       ).trim();
@@ -905,7 +1024,7 @@ export default function RequestDetailPage() {
         } else if (typeof sellerVal === "string" && isObjectId(sellerVal)) {
           payload.seller = sellerVal;
         } else if (isBlank(sellerVal)) {
-          // payload.seller = null; // if you want to allow clearing the seller, uncomment
+          // payload.seller = null; // allow clearing if needed
         }
       }
 
@@ -1015,10 +1134,22 @@ export default function RequestDetailPage() {
       fetchRequest();
       setLogsTick((n) => n + 1);
     } catch (err) {
+      // CHANGE: handle duplicate Tracking Link (HTTP 409) gracefully
+      const status = err?.response?.status;
       const serverMsg =
         err?.response?.data?.message ||
         err?.message ||
         "Failed to update details.";
+
+      if (status === 409) {
+        // Inline field error for better UX
+        form.setFields([
+          { name: "tracking_link", errors: ["Tracking link already exists."] },
+        ]);
+        toastErrSticky("Update failed", "Tracking link already exists.");
+        return;
+      }
+
       toastErrSticky("Update failed", serverMsg);
     }
   };
@@ -1230,7 +1361,7 @@ export default function RequestDetailPage() {
       width: 110,
     },
     {
-      title: "Target $ / unit",
+      title: "Target price / unit",
       key: "target_cost_per_unit",
       dataIndex: "target_cost_per_unit",
       align: "right",
@@ -1238,7 +1369,7 @@ export default function RequestDetailPage() {
       render: (v) => `$${currency2(Number(v || 0))}`,
     },
     {
-      title: "Total Target (line)",
+      title: "Target Cost",
       key: "total_target_cost",
       align: "right",
       width: 160,
@@ -1249,14 +1380,38 @@ export default function RequestDetailPage() {
         )}`,
     },
     {
-      title: "Seller $ / unit",
+      title: "Savings",
+      key: "savings",
+      align: "right",
+      width: 140,
+      render: (_, rec) => {
+        const qty = Number(rec.quantity_needed || 0);
+        const tpu = Number(rec.target_cost_per_unit || 0);
+        const apu =
+          rec.actual_cost_per_unit !== undefined &&
+          rec.actual_cost_per_unit !== null
+            ? Number(rec.actual_cost_per_unit)
+            : Number(rec.sellers_price_per_unit || 0); // fallback if actual not set
+        const perUnit = tpu - apu;
+        const lineSavings = perUnit * qty; // this is the displayed value
+
+        return (
+          <span style={{ color: lineSavings >= 0 ? "#059669" : "#dc2626" }}>
+            ${currency2(lineSavings)}
+          </span>
+        );
+      },
+    },
+
+    {
+      title: "Seller price / unit",
       key: "sellers_price_per_unit",
       align: "right",
       width: 140,
       render: (_, rec) => `$${currency2(rec.sellers_price_per_unit || 0)}`,
     },
     {
-      title: "Actual $ / unit",
+      title: "Actual cost / unit",
       key: "actual_cost_per_unit",
       align: "right",
       width: 140,
@@ -1265,13 +1420,13 @@ export default function RequestDetailPage() {
     {
       title: "Actions",
       key: "actions",
-      className: "tw-col-actions", // keeps the cell background solid
-      fixed: screens.xs ? undefined : "right", // stick to the right on non-mobile
+      className: "tw-col-actions",
+      fixed: screens.xs ? undefined : "right",
       width: 64,
       align: "center",
       render: (_, record) => (
         <Button
-          type="default" // allows borders
+          type="default"
           size="small"
           aria-label="Delete item"
           icon={<DeleteOutlined />}
@@ -1281,7 +1436,7 @@ export default function RequestDetailPage() {
         !bg-white
         !border !border-rose-500
         !text-rose-600
-        rounded-md                             /* square with rounded corners */
+        rounded-md
         hover:!bg-rose-50 hover:!border-rose-600 hover:!text-rose-700
         focus:!bg-rose-50
       "
@@ -1289,6 +1444,21 @@ export default function RequestDetailPage() {
       ),
     },
   ];
+
+  // simple stat tile
+  // keep the rest the same
+  const StatTile = ({ label, value, sub }) => (
+    <div
+      className="rounded-xl border border-slate-200 bg-white h-full"
+      style={{ padding: 12 }}
+    >
+      <div className="text-xs text-slate-500">{label}</div>
+      <div className="text-xl font-semibold text-slate-800">{value}</div>
+      {sub ? (
+        <div className="text-[11px] text-slate-500 mt-1">{sub}</div>
+      ) : null}
+    </div>
+  );
 
   return (
     <div className="page-container" style={{ padding: screens.xs ? 12 : 16 }}>
@@ -1308,42 +1478,45 @@ export default function RequestDetailPage() {
         </Title>
 
         <Space wrap>
-          {!!request.listing_link && (
-            <Button
-              icon={<CopyOutlined />}
-              size={controlSize}
-              onClick={async () => {
-                try {
-                  const raw = (request?.listing_link || "").trim();
-                  const url = /^https?:\/\//i.test(raw)
-                    ? raw
-                    : `https://${raw}`;
-                  if (navigator?.clipboard?.writeText) {
-                    await navigator.clipboard.writeText(url);
-                  } else {
-                    const ta = document.createElement("textarea");
-                    ta.value = url;
-                    ta.style.position = "fixed";
-                    ta.style.left = "-9999px";
-                    document.body.appendChild(ta);
-                    ta.select();
-                    document.execCommand("copy");
-                    document.body.removeChild(ta);
-                  }
-                  toastOk("Copied", "Listing link copied to clipboard.");
-                } catch {
-                  toastWarn("Copy failed", "Could not copy the listing link.");
-                }
-              }}
-            >
-              Copy Listing
-            </Button>
-          )}
           <Button size={controlSize} onClick={() => navigate(-1)}>
             Back
           </Button>
         </Space>
       </Space>
+
+      {/* ======= NEW: Key Totals & Efficiency (from backend) ======= */}
+<div className="mb-3">
+  <Row gutter={gutter}>
+    <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+      <StatTile
+        label="Target Total Cost"
+        value={`$${currency2(backendTargetTotal ?? 0)}`}
+        sub={request?.target_total_cost == null ? "summed from items" : undefined}
+      />
+    </Col>
+    <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+      <StatTile
+        label="Total Actual Cost"
+        value={`$${currency2(backendActualTotal ?? 0)}`}
+        sub={request?.total_actual_cost == null ? "summed from items" : undefined}
+      />
+    </Col>
+    <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+      <StatTile
+        label="Purchase Efficiency"
+        value={formatPct(request?.purchase_efficiency)}
+      />
+    </Col>
+    <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+      <StatTile
+        label="Total Savings"
+        value={`$${currency2(totalSavings)}`}
+        sub="Target − Actual"
+      />
+    </Col>
+  </Row>
+</div>
+
 
       {/* ======= FORM START ======= */}
       <Form
@@ -1353,7 +1526,8 @@ export default function RequestDetailPage() {
         initialValues={{ status: request?.status }}
       >
         {/* SOURCER DETAILS — EDITABLE */}
-        <Card className="bg-sky-50/30"
+        <Card
+          className="bg-sky-50/30"
           title={<span className="font-semibold">Sourcer Details</span>}
           bodyStyle={{ padding: cardPad }}
           style={{ marginBottom: 16 }}
@@ -1468,26 +1642,32 @@ export default function RequestDetailPage() {
                 <InputNumber {...moneyProps} />
               </Form.Item>
             </Col>
+          </Row>
 
-            <Col xs={24} md={12} lg={8}>
-              <div
-                style={{
-                  padding: 12,
-                  borderRadius: 8,
-                  background: "#f6ffed",
-                  border: "1px solid #b7eb8f",
-                  fontWeight: 600,
-                }}
-              >
-                Total Actual Cost: ${currency2(total)}
-              </div>
+          {/* Bottom-right Copy Listing button */}
+          <Row justify="end">
+            <Col>
+              {form.getFieldValue("listing_link") || request?.listing_link ? (
+                <Button
+                  icon={<CopyOutlined />}
+                  size={controlSize}
+                  onClick={handleCopyListing}
+                  // make it green (Tailwind utility overrides for Ant Button)
+                  className="
+          !bg-emerald-600 !border-emerald-600 !text-white
+          hover:!bg-emerald-700 hover:!border-emerald-700
+          focus:!bg-emerald-700
+          mt-2
+        "
+                >
+                  Copy Listing
+                </Button>
+              ) : null}
             </Col>
           </Row>
         </Card>
 
-        {/* ======= MOVED UP: ITEMS IN THIS REQUEST ======= */}
-
-        {/* Items in this Request — clean, stable Tailwind + AntD */}
+        {/* ======= ITEMS IN THIS REQUEST ======= */}
         <div className="mt-0 mb-4 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           <div className="flex items-center justify-between gap-3 px-4 py-3 md:px-6 border-b bg-sky-50/40">
             <h3 className="text-base font-semibold text-slate-800">
@@ -1509,17 +1689,13 @@ export default function RequestDetailPage() {
               sticky
               scroll={{ x: "max-content" }}
               size={screens.xs ? "small" : "middle"}
-              /* Light tint per row; keeps it super subtle */
               rowClassName={() => "bg-sky-50/5 hover:bg-sky-100/10"}
-              /* Minimal, robust header + actions styling */
               className="
         [&_.ant-table-thead>tr>th]:bg-sky-50/40
         [&_.ant-table-thead>tr>th]:text-slate-700
         [&_.ant-table-thead>tr>th]:font-medium
         [&_.ant-table-thead>tr>th]:border-slate-100
         [&_.ant-table-tbody>tr>td]:border-slate-100
-
-        /* keep Actions column WHITE in header + body + hover */
         [&_.ant-table-thead>tr>th.tw-col-actions]:!bg-white
         [&_.ant-table-tbody>tr>td.tw-col-actions]:!bg-white
         [&_.ant-table-tbody>tr:hover>td.tw-col-actions]:!bg-white
@@ -1535,8 +1711,9 @@ export default function RequestDetailPage() {
           </div>
         </div>
 
-        {/* ======= NOW BELOW ITEMS: UPDATE PURCHASE & TRACKING ======= */}
-        <Card className=" bg-sky-50/30"
+        {/* ======= UPDATE PURCHASE & TRACKING ======= */}
+        <Card
+          className=" bg-sky-50/30"
           title={
             <span className="font-semibold">
               Update Purchase & Tracking Details
@@ -1562,7 +1739,6 @@ export default function RequestDetailPage() {
                     "Hold",
                     "Seller Rejected",
                     "Returned",
-                    
                   ].map((s) => (
                     <Option key={s} value={s}>
                       {s}
@@ -1826,7 +2002,7 @@ export default function RequestDetailPage() {
       {/* ======= FORM END ======= */}
 
       <div style={{ marginTop: 16 }}>
-        <SourcingLogsTimeline  
+        <SourcingLogsTimeline
           targetId={request?._id || request?.id}
           refreshKey={logsTick}
           title="Activity Log"

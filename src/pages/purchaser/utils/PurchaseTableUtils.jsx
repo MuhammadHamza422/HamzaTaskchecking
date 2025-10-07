@@ -1,6 +1,6 @@
 
 import React from "react";
-import { Table, Empty, Tag } from "antd";
+import { Table, Empty } from "antd";
 import dayjs from "dayjs";
 
 /* ---------------- core helpers (exported) ---------------- */
@@ -9,11 +9,18 @@ export const num = (v) => (typeof v === "number" ? v : Number(v) || 0);
 export const getCreated = (rec) =>
   rec?.created_at || rec?.createdAt || rec?.created_on || rec?.createdOn || null;
 
-export const money = (x, currency = "USD") =>
-  typeof x === "number"
-    ? x.toLocaleString(undefined, { style: "currency", currency })
-    : "—";
+/** Money formatter with MINUS before the $ sign, e.g. "- $123.45" */
+export const money = (x) => {
+  const n = typeof x === "number" ? x : Number(x) || 0;
+  const neg = n < 0;
+  const abs = Math.abs(n).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `${neg ? "-" : ""}$${abs}`;
+};
 
+/* --- Kept for legacy callers, but we won't use <Tag/> colors anymore --- */
 export const statusColor = (s) => {
   switch (s) {
     case "Assigned": return "gold";
@@ -28,6 +35,28 @@ export const statusColor = (s) => {
     default: return "geekblue";
   }
 };
+
+/* --------- New: same badge styling as sourcingColumns (tailwind-like) --------- */
+const STATUS_BADGE_CLASS = {
+  Pending: "bg-gray-100 text-gray-800",
+  Assigned: "bg-amber-100 text-amber-800",
+  Offer: "bg-blue-100 text-blue-800",
+  Purchased: "bg-green-100 text-green-800",
+  Disapproved: "bg-red-100 text-red-800",
+  Sold: "bg-purple-100 text-purple-800",
+  Hold: "bg-orange-100 text-orange-800",
+  "Seller Rejected": "bg-rose-100 text-rose-800",
+  Dropshipped: "bg-cyan-100 text-cyan-800",
+  Returned: "bg-rose-100 text-rose-800",
+};
+
+export function StatusBadge({ status }) {
+  const s = String(status || "Pending");
+  const cls = STATUS_BADGE_CLASS[s] || STATUS_BADGE_CLASS.Pending;
+  return <span className={`px-2 py-1 rounded text-xs font-medium ${cls}`}>{s}</span>;
+}
+
+/* ----------------------------------------------------------------------- */
 
 export const labelFromMarket = (m) => {
   if (!m) return "—";
@@ -73,6 +102,19 @@ export const normalizeRequests = (payload) => {
         ""
     );
 
+    // Resolve totals safely
+    const target = num(doc.target_total_cost);
+    const actual = num(
+      doc.total_actual_cost ||
+      (num(doc.sellers_price) + num(doc.shipping_charges ?? doc.shipping_price) + num(doc.taxes ?? doc.tax))
+    );
+
+    // Efficiency = Target − Actual (positive = savings)
+    const purchase_efficiency =
+      typeof doc.purchase_efficiency === "number"
+        ? doc.purchase_efficiency
+        : target - actual;
+
     return {
       ...doc,
       _id: id,
@@ -95,12 +137,9 @@ export const normalizeRequests = (payload) => {
       sellers_price: doc.sellers_price ?? 0,
       shipping_charges: doc.shipping_charges ?? doc.shipping_price ?? 0,
       taxes: doc.taxes ?? doc.tax ?? 0,
-      target_total_cost: doc.target_total_cost ?? 0,
-      total_actual_cost: doc.total_actual_cost ?? 0,
-      purchase_efficiency:
-        typeof doc.purchase_efficiency === "number"
-          ? doc.purchase_efficiency
-          : (Number(doc.total_actual_cost) || 0)-(Number(doc.target_total_cost) || 0)  ,
+      target_total_cost: target,
+      total_actual_cost: actual,
+      purchase_efficiency,
       status: doc.status ?? "Pending",
       listing_link: doc.listing_link ?? doc.listingLink ?? doc.url ?? null,
       listing_id: doc.listing_id ?? doc.listingId ?? null,
@@ -115,11 +154,10 @@ export function ExpandedItemsTable({ order, onOpen }) {
   const rows = Array.isArray(order?.items) ? order.items : [];
   if (!rows.length) return <Empty description="No products on this request" />;
 
-  // tiny helpers (self-contained; uses global fmtMoney if present)
+  // tiny helpers (self-contained)
   const safeNum = (v) => (typeof v === "number" ? v : Number(v) || 0);
   const round2  = (n) => Math.round((safeNum(n) + Number.EPSILON) * 100) / 100;
-  const money   = (v) =>
-    typeof fmtMoney === "function" ? fmtMoney(safeNum(v)) : `$${safeNum(v).toFixed(2)}`;
+  const fmt     = (v) => money(safeNum(v));
 
   const lineTarget = (r) =>
     Number.isFinite(Number(r?.total_target_cost))
@@ -133,9 +171,7 @@ export function ExpandedItemsTable({ order, onOpen }) {
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-      {/* top spacer (kept minimal, no metrics) */}
       <div className="px-4 py-3 bg-gray-50" />
-
       <Table
         rowKey={(r) => r._id || r.id || `${r.sku}-${r.product_name || r.name || "item"}`}
         size="small"
@@ -188,45 +224,43 @@ export function ExpandedItemsTable({ order, onOpen }) {
             ),
           },
           {
-            title: "Target $ / unit",
+            title: "Target price / unit",
             dataIndex: "target_cost_per_unit",
             align: "right",
             width: 140,
             render: (v) => (
-              <span style={{ fontVariantNumeric: "tabular-nums" }}>{money(v)}</span>
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(v)}</span>
             ),
           },
-            {
+          {
             title: "Total Target",
             key: "total_target_cost",
             align: "right",
             width: 140,
             render: (_t, r) => (
-              <span style={{ fontVariantNumeric: "tabular-nums" }}>{money(lineTarget(r))}</span>
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(lineTarget(r))}</span>
             ),
           },
           {
-            title: "Actual $ / unit",
+            title: "Actual cost / unit",
             dataIndex: "actual_cost_per_unit",
             align: "right",
             width: 140,
             render: (v) => (
-              <span style={{ fontVariantNumeric: "tabular-nums" }}>{money(v)}</span>
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(v)}</span>
             ),
           },
           {
-            title: "Total Actual",
+            title: "Total Actual Cost",
             key: "total_actual_cost",
             align: "right",
             width: 140,
             render: (_t, r) => (
-              <span style={{ fontVariantNumeric: "tabular-nums" }}>{money(lineActual(r))}</span>
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(lineActual(r))}</span>
             ),
           },
         ]}
       />
-
-      {/* bottom spacer (kept minimal, no totals row) */}
       <div className="px-4 py-3 bg-gray-50" />
     </div>
   );
@@ -263,10 +297,15 @@ export const buildTop5PurchasedDetailedRows = (
   const take = pool.sort(sortByCreatedDesc).slice(0, limit);
 
   return take.map((r, i) => {
+    const target = num(r?.target_total_cost);
+    const actual =
+      num(r?.total_actual_cost) ||
+      (num(r?.sellers_price) + num(r?.shipping_charges ?? r?.shipping_price) + num(r?.taxes ?? r?.tax));
+
     const efficiency =
       typeof r?.purchase_efficiency === "number"
         ? r.purchase_efficiency
-        : (Number(r?.total_actual_cost) || 0)-(Number(r?.target_total_cost) || 0)  ;
+        : target - actual; // Target − Actual
 
     return {
       key: r._id || r.id || i,
@@ -278,8 +317,8 @@ export const buildTop5PurchasedDetailedRows = (
       SellerPrice: r.sellers_price,
       ShipCharges: r.shipping_charges ?? r.shipping_price,
       Tax: r.taxes ?? r.tax,
-      TargetCost: r.target_total_cost,
-      ActualCost: r.total_actual_cost,
+      TargetCost: target,
+      ActualCost: actual,
       Efficiency: efficiency,
       CreatedAt: getCreated(r),
       _original: r, // keep original for expandable rows
@@ -296,17 +335,17 @@ export const createTop5PurchasedDetailedColumns = (currency = "USD") => [
     render: (v) => <strong>#{String(v).slice(-6)}</strong>,
   },
   { title: "Sourcer", dataIndex: "Sourcer", width: 160 },
-    {
+  {
     title: "Efficiency",
     dataIndex: "Efficiency",
     align: "right",
-    width: 120,
+    width: 130,
     render: (v) => {
       const n = typeof v === "number" ? v : Number(v) || 0;
-      const color = n <= 0 ? "#16a34a" : "#ef4444";
+      const color = n >= 0 ? "#16a34a" : "#ef4444";
       return (
-        <span style={{ color, fontWeight: 600 }}>
-          {money(Math.abs(n), currency)}
+        <span style={{ color, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+          {money(n, currency)}
         </span>
       );
     },
@@ -314,12 +353,8 @@ export const createTop5PurchasedDetailedColumns = (currency = "USD") => [
   {
     title: "Status",
     dataIndex: "Status",
-    width: 120,
-    render: (s) => (
-      <Tag color={statusColor(s)} style={{ borderRadius: 6}}>
-        {s}
-      </Tag>
-    ),
+    width: 130,
+    render: (s) => <StatusBadge status={s} />,
   },
   { title: "Seller", dataIndex: "Seller", width: 180, ellipsis: true },
   { title: "Market", dataIndex: "Market", width: 120, ellipsis: true },
@@ -328,37 +363,36 @@ export const createTop5PurchasedDetailedColumns = (currency = "USD") => [
     dataIndex: "SellerPrice",
     align: "right",
     width: 130,
-    render: (v) => money(typeof v === "number" ? v : Number(v) || 0, currency),
+    render: (v) => money(v, currency),
   },
   {
     title: "Shipping charges",
     dataIndex: "ShipCharges",
     align: "right",
     width: 150,
-    render: (v) => money(typeof v === "number" ? v : Number(v) || 0, currency),
+    render: (v) => money(v, currency),
   },
   {
     title: "Tax",
     dataIndex: "Tax",
     align: "right",
     width: 110,
-    render: (v) => money(typeof v === "number" ? v : Number(v) || 0, currency),
+    render: (v) => money(v, currency),
   },
   {
     title: "Target Cost",
     dataIndex: "TargetCost",
     align: "right",
     width: 130,
-    render: (v) => money(typeof v === "number" ? v : Number(v) || 0, currency),
+    render: (v) => money(v, currency),
   },
   {
     title: "Actual Cost",
     dataIndex: "ActualCost",
     align: "right",
     width: 130,
-    render: (v) => money(typeof v === "number" ? v : Number(v) || 0, currency),
+    render: (v) => money(v, currency),
   },
-
   {
     title: "Created At",
     dataIndex: "CreatedAt",

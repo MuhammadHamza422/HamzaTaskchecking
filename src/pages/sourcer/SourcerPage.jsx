@@ -41,11 +41,7 @@ const gradientStyle = {
 };
 
 const toNum = (v) => (typeof v === "number" ? v : Number(v) || 0);
-
-// clamp to ≤ N decimals but keep a Number (not string)
 const toFixedN = (n, digits = 4) => Number(toNum(n).toFixed(digits));
-
-// UI: always show 2 decimals
 const fmt2 = (n) => toNum(n).toFixed(2);
 
 const ensureHttp = (v) => {
@@ -76,8 +72,10 @@ const listingLinkRule = () => ({
     if (!value) return Promise.resolve();
     try {
       const url = new URL(ensureHttp(value));
-      if (!/^https?:$/.test(url.protocol)) return Promise.reject(new Error("Link must start with http or https"));
-      if (!url.hostname.includes(".")) return Promise.reject(new Error("URL must contain a valid domain (e.g. example.com)"));
+      if (!/^https?:$/.test(url.protocol))
+        return Promise.reject(new Error("Link must start with http or https"));
+      if (!url.hostname.includes("."))
+        return Promise.reject(new Error("URL must contain a valid domain (e.g. example.com)"));
       return Promise.resolve();
     } catch {
       return Promise.reject(new Error("Please enter a valid URL"));
@@ -109,7 +107,7 @@ const getMarketSlug = (m) => {
 
 const isMongoId = (v) => typeof v === "string" && /^[0-9a-fA-F]{24}$/.test(v);
 
-/* ----------------------------- data hooks ---------------------------- */
+/* ----------------------------- component ----------------------------- */
 
 export default function SourcerPage() {
   const [form] = Form.useForm();
@@ -118,8 +116,7 @@ export default function SourcerPage() {
   const isEdit = Boolean(id);
 
   const { user } = useAuth();
-  const totals = Form.useWatch("totals", form);
-  const headerWatch = Form.useWatch("header", form);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingOrder, setLoadingOrder] = useState(false);
   const [logsTick, setLogsTick] = useState(0);
@@ -128,29 +125,76 @@ export default function SourcerPage() {
   const [searchText, setSearchText] = useState("");
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const dropdownRef = useRef(null);
+  const inputRef = useRef(null);
 
-  const { products, loading, debouncedSearch, fetchInitialProducts } = useProductSearch(typeCode);
+  const {
+    products,
+    loading,
+    debouncedSearch,
+    fetchInitialProducts,
+    fetchProducts,
+    setTerm,
+  } = useProductSearch(typeCode);
+
+  const totals = Form.useWatch("totals", form);
+  const marketWatch = Form.useWatch(["header", "market"], form); // 👈 track marketplace changes
 
   const cart = useCart(totals);
   const cartRef = useRef(cart);
   useEffect(() => { cartRef.current = cart; }, [cart]);
 
   useEffect(() => {
-    const onDocClick = (e) => {
+    const onDocMouseDown = (e) => {
       if (!dropdownRef.current) return;
-      if (!dropdownRef.current.contains(e.target)) setShowProductDropdown(false);
+      if (!dropdownRef.current.contains(e.target)) {
+        setShowProductDropdown(false);
+      }
     };
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
   }, []);
+
+  // ----- marketplace/seller search -----
+  const [marketOpts, setMarketOpts] = useState([]);
+  const [marketLoading, setMarketLoading] = useState(false);
+  const marketTimer = useRef(null);
+  const lastMarketQuery = useRef("");
+
+  const [sellerOptions, setSellerOptions] = useState([]);
+  const [sellerLoading, setSellerLoading] = useState(false);
+  const sellerSearchTimer = useRef(null);
+  const lastSellerQuery = useRef("");
+
+  // Keep the previously saved market to detect and log changes
+  const prevMarketRef = useRef(null);
+
+  // helper to log header field changes
+  const logDiff = useCallback(
+    async (diffArr) => {
+      try {
+        if (!isEdit || !id || !Array.isArray(diffArr) || !diffArr.length) return;
+        await apiClient.post("/api/v1/userlogs", {
+          targetId: id,
+          action: "UPDATE",
+          diff: diffArr.map((d) => ({ field: d.field, from: d.from, to: d.to })),
+        });
+        setLogsTick((n) => n + 1);
+      } catch {
+        // ignore log failures
+      }
+    },
+    [isEdit, id]
+  );
+
+  /* ------------------------ product search UX ------------------------ */
 
   const handleSearchChange = (e) => {
     const val = e.target.value;
     setSearchText(val);
+    setShowProductDropdown(true);
     debouncedSearch(val);
   };
 
-  /* ----------------------- add to cart (local) ----------------------- */
   const addToCartLocal = (p) => {
     const name = p.pro_title || p.product_name || "Untitled";
     const code = p.type_code || p.product_type_code || "";
@@ -158,7 +202,7 @@ export default function SourcerPage() {
 
     cart.add({
       id: `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      product_id: p._id || p.id || null, // real Mongo _id if present
+      product_id: p._id || p.id || null,
       product_uid: p.uid || null,
       product_name: name,
       sku: p.sku || "",
@@ -172,17 +216,18 @@ export default function SourcerPage() {
 
   const onPickProduct = (p) => {
     addToCartLocal(p);
-    setShowProductDropdown(false);
     setSearchText("");
+    setTerm("");
+    fetchInitialProducts();
+    inputRef.current?.focus();
   };
 
-  /* --------------------------- totals (UI) --------------------------- */
+  /* --------------------------- totals derived --------------------------- */
 
   const sellersPrice = toNum(totals?.sellers_price);
   const shippingCharges = toNum(totals?.shipping_charges);
   const taxes = toNum(totals?.taxes);
 
-  // Total Target Cost (order) = Σ qty * target_cost_per_unit
   const targetTotalCost = useMemo(
     () =>
       cart.rawItems.reduce(
@@ -192,37 +237,33 @@ export default function SourcerPage() {
     [cart.rawItems]
   );
 
-  // Total Actual Cost (order header) = sellers_price + shipping + taxes
   const totalActualCost = useMemo(
     () => sellersPrice + shippingCharges + taxes,
     [sellersPrice, shippingCharges, taxes]
   );
 
-  // Purchase Efficiency = target_total_cost − total_actual_cost (for display)
   const purchaseEfficiency = useMemo(
     () => targetTotalCost - totalActualCost,
     [targetTotalCost, totalActualCost]
   );
 
-  // Seller allocation factor: sellers_price / target_total_cost
   const sellerAllocFactor = useMemo(
     () => (targetTotalCost > 0 ? sellersPrice / targetTotalCost : 0),
     [sellersPrice, targetTotalCost]
   );
 
-  // Actual allocation factor: total_actual_cost / target_total_cost
   const actualAllocFactor = useMemo(
     () => (targetTotalCost > 0 ? totalActualCost / targetTotalCost : 0),
     [totalActualCost, targetTotalCost]
   );
 
-  // validation: every row must have target_cost_per_unit > 0
   const invalidTargetsCount = useMemo(
     () => cart.rawItems.reduce((n, it) => n + (toNum(it.target_cost_per_unit) > 0 ? 0 : 1), 0),
     [cart.rawItems]
   );
 
-  /* --------- optional: persist product target cost by SKU ---------- */
+  /* -------- optional: persist product target cost by SKU on submit ------ */
+
   const updateProductsTargetCosts = useCallback(async (items) => {
     const ops = items
       .filter((i) => i.sku && toNum(i.target_cost_per_unit) > 0)
@@ -240,7 +281,8 @@ export default function SourcerPage() {
     return { ok: failed.length === 0, failed: failed.length, total: results.length };
   }, []);
 
-  /* ----------------------- itemsOps logger (NEW) --------------------- */
+  /* ----------------------- itemsOps logger (stable) ---------------------- */
+
   const logItemsOps = useCallback(
     async (ops = []) => {
       try {
@@ -251,21 +293,16 @@ export default function SourcerPage() {
           meta: { itemsOps: ops },
         });
         setLogsTick((n) => n + 1);
-      } catch (e) {
-        // best-effort; don't block UX
-        console.warn("log itemsOps failed:", e?.response?.data || e.message);
+      } catch {
+        // ignore log failures
       }
     },
     [isEdit, id]
   );
 
-  /* ----------------------- markets / sellers ------------------------ */
+  /* ----------------------- market / seller searchers --------------------- */
 
-  const [marketOpts, setMarketOpts] = useState([]);
-  const [marketLoading, setMarketLoading] = useState(false);
-  const marketTimer = useRef(null);
-  const lastMarketQuery = useRef("");
-
+  // Show clean slug only (e.g. "ebay")
   const debouncedMarketSearch = useCallback((q) => {
     lastMarketQuery.current = q;
     if (marketTimer.current) clearTimeout(marketTimer.current);
@@ -274,7 +311,12 @@ export default function SourcerPage() {
         setMarketLoading(true);
         const { data } = await apiClient.get("/api/v1/markets", { params: { q } });
         const list = Array.isArray(data) ? data : [];
-        setMarketOpts(list.map((m) => ({ label: `${m.name} (${m.slug})`, value: m.slug, meta: m })));
+        setMarketOpts(
+          list.map((m) => {
+            const slug = (m.slug || m.name || "").toLowerCase();
+            return { label: slug, value: slug, meta: { ...m, slug } };
+          })
+        );
       } catch {
         setMarketOpts([]);
       } finally {
@@ -284,12 +326,12 @@ export default function SourcerPage() {
   }, []);
 
   const marketOptionsWithCreate = useMemo(() => {
-    const q = String(lastMarketQuery.current || "").trim();
+    const q = String(lastMarketQuery.current || "").trim().toLowerCase();
     if (!q) return marketOpts;
     const exists = marketOpts.some(
       (o) =>
-        (o.meta?.slug || "").toLowerCase() === q.toLowerCase() ||
-        (o.meta?.name || "").toLowerCase() === q.toLowerCase()
+        (o.meta?.slug || "").toLowerCase() === q ||
+        (o.meta?.name || "").toLowerCase() === q
     );
     return exists
       ? marketOpts
@@ -298,21 +340,21 @@ export default function SourcerPage() {
 
   const onMarketSelect = async (val, option) => {
     try {
+      const hPrev = form.getFieldValue("header") || {};
       let slug = "";
+
       if (val === "__CREATE__") {
-        const createName = option?.meta?.createName;
+        const createName = (option?.meta?.createName || "").toLowerCase();
         const { data } = await apiClient.post("/api/v1/markets/find-or-create", { name: createName });
-        slug = data.slug;
-        const hPrev = form.getFieldValue("header") || {};
+        slug = (data.slug || data.name || createName).toLowerCase();
         form.setFieldsValue({ header: { ...hPrev, market: slug } });
-        toastSuccess("Market added", `${data.name} (${data.slug})`);
+        toastSuccess("Market added", slug);
       } else {
-        slug = val;
-        const hPrev = form.getFieldValue("header") || {};
+        slug = String(val).toLowerCase();
         form.setFieldsValue({ header: { ...hPrev, market: slug } });
       }
 
-      // ensure seller (by name) exists for that market if present
+      // If seller already typed, ensure it on this market
       const h = form.getFieldValue("header") || {};
       const sellerName = (h.seller_name || "").trim();
 
@@ -341,11 +383,6 @@ export default function SourcerPage() {
       toastError("Market selection failed", e?.response?.data?.message || "");
     }
   };
-
-  const [sellerOptions, setSellerOptions] = useState([]);
-  const [sellerLoading, setSellerLoading] = useState(false);
-  const sellerSearchTimer = useRef(null);
-  const lastSellerQuery = useRef("");
 
   const debouncedSellerSearch = useCallback((q, market) => {
     if (!market) {
@@ -404,11 +441,6 @@ export default function SourcerPage() {
     }
   };
 
-  useEffect(() => {
-    const market = headerWatch?.market;
-    if (!market) return;
-  }, [headerWatch?.market]); // eslint-disable-line
-
   /* -------------------------- load order (edit) -------------------------- */
 
   useEffect(() => {
@@ -421,12 +453,15 @@ export default function SourcerPage() {
         const { data } = await apiClient.get(`/api/v1/sourcing/${id}`);
         if (cancelled) return;
 
+        const marketSlug = getMarketSlug(data?.seller?.market || data?.market || "ebay");
+        prevMarketRef.current = marketSlug; // saved value for diff logging
+
         form.setFieldsValue({
           header: {
             listing_link: data?.listing_link || "",
             seller_name: data?.seller?.name || "",
             seller_id: data?.seller?._id || undefined,
-            market: getMarketSlug(data?.seller?.market || data?.market || "ebay"),
+            market: marketSlug,
             origin: data?.origin || undefined,
           },
           totals: {
@@ -436,7 +471,6 @@ export default function SourcerPage() {
           },
         });
 
-        // items -> cart
         const items = Array.isArray(data?.items) ? data.items : [];
         const totalUnits = items.reduce((s, it) => s + toNum(it.quantity_needed || 1), 0);
         const orderTargetTotal = toNum(data?.target_total_cost);
@@ -467,16 +501,26 @@ export default function SourcerPage() {
     return () => {
       cancelled = true;
     };
-  }, [isEdit, id, form]); // eslint-disable-line
+  }, [isEdit, id, form]);
+
+  /* --------- LOG MARKET CHANGES RELIABLY (edit screen only) --------- */
+  useEffect(() => {
+    if (!isEdit || !id) return;
+    const current = (marketWatch || "")?.toLowerCase() || "";
+    // Initialize baseline without logging
+    if (prevMarketRef.current === null) {
+      prevMarketRef.current = current;
+      return;
+    }
+    const prev = prevMarketRef.current || "";
+    if (current && prev && current !== prev) {
+      logDiff([{ field: "market", from: prev, to: current }]);
+      prevMarketRef.current = current;
+    }
+  }, [marketWatch, isEdit, id, logDiff]);
 
   /* ------------------ build items with per-unit fields ------------------ */
 
-  /**
-   * Per-line payload (4 dp to DB, 2 dp in UI):
-   * - total_target_cost        = qty * target_cost_per_unit
-   * - sellers_price_per_unit   = (sellers_price / target_total_cost)  * target_cost_per_unit
-   * - actual_cost_per_unit     = (total_actual_cost / target_total_cost) * target_cost_per_unit
-   */
   const buildItemsForSave = (cartItems, sellersPriceNum, totalActualCostNum, targetTotalCostNum) => {
     const sellerAlloc = targetTotalCostNum > 0 ? sellersPriceNum    / targetTotalCostNum : 0;
     const actualAlloc = targetTotalCostNum > 0 ? totalActualCostNum / targetTotalCostNum : 0;
@@ -497,7 +541,6 @@ export default function SourcerPage() {
         tested: !!i.tested,
         product_condition: i.product_condition ?? null,
 
-        // financials to DB (4 dp)
         target_cost_per_unit:     toFixedN(tpu, 4),
         total_target_cost:        toFixedN(qty * tpu, 4),
         sellers_price_per_unit:   toFixedN(sellerAlloc * tpu, 4),
@@ -517,8 +560,8 @@ export default function SourcerPage() {
       Swal.fire({
         ...baseToast,
         icon: "error",
-        title: "Missing Target $ per unit",
-        text: "Please enter a positive Target $ per unit for every item.",
+        title: "Missing Target price per unit",
+        text: "Please enter a positive Target price per unit for every item.",
         background: "#ef4444",
         color: "#fff",
       });
@@ -533,7 +576,6 @@ export default function SourcerPage() {
     try {
       const itemsLive = cartRef.current.rawItems;
 
-      // optional: persist product target costs (by SKU)
       const upd = await updateProductsTargetCosts(itemsLive);
       if (upd?.failed > 0) {
         toastError("Some products were not updated", `${upd.failed}/${upd.total} target costs failed to save to product.`);
@@ -541,12 +583,10 @@ export default function SourcerPage() {
 
       const values = await form.validateFields();
 
-      // order header numbers
       const sellersPriceNum = toNum(values?.totals?.sellers_price);
       const shippingNum = toNum(values?.totals?.shipping_charges);
       const taxesNum = toNum(values?.totals?.taxes);
 
-      // rollups (Numbers)
       const liveTargetTotal = itemsLive.reduce(
         (sum, i) => sum + toNum(i.target_cost_per_unit) * toNum(i.quantity_needed),
         0
@@ -566,20 +606,16 @@ export default function SourcerPage() {
         listing_link: normalizeListingLink(values.header?.listing_link),
         origin: values.header?.origin ?? "",
 
-        // header totals (Numbers → 4 dp)
         sellers_price: toFixedN(sellersPriceNum, 4),
         shipping_charges: toFixedN(shippingNum, 4),
         taxes: toFixedN(taxesNum, 4),
 
-        // order rollups (Numbers → 4 dp)
-        target_total_cost: toFixedN(liveTargetTotal, 4),                     // ← Total Target Cost
+        target_total_cost: toFixedN(liveTargetTotal, 4),
         total_actual_cost: toFixedN(liveActualTotal, 4),
         purchase_efficiency: toFixedN(liveTargetTotal - liveActualTotal, 4),
 
         items: itemsPayload,
       };
-
-      console.log("Sourcing payload (submit)", payload);
 
       if (isEdit) {
         await apiClient.patch(`/api/v1/sourcing/${id}`, payload, { headers: { "Content-Type": "application/json" } });
@@ -647,7 +683,7 @@ export default function SourcerPage() {
         ),
       },
       {
-        title: "Target $ / unit *",
+        title: "Target price / unit",
         dataIndex: "target_cost_per_unit",
         width: 180,
         render: (v, rec) => {
@@ -675,7 +711,7 @@ export default function SourcerPage() {
         },
       },
       {
-        title: "Total Target (line)",
+        title: "Target Cost",
         key: "total_target_cost_line",
         width: 150,
         render: (_v, rec) => {
@@ -685,22 +721,22 @@ export default function SourcerPage() {
         },
       },
       {
-        title: "Seller $ / unit",
+        title: "Seller price / unit",
         key: "sellers_price_per_unit",
         width: 150,
         render: (_v, rec) => {
           const tpu = toNum(rec.target_cost_per_unit);
-          const perUnit = sellerAllocFactor * tpu; // (sellers_price / target_total_cost) * tpu
+          const perUnit = sellerAllocFactor * tpu;
           return <InputNumber disabled size="large" value={Number(fmt2(perUnit))} />;
         },
       },
       {
-        title: "Actual $ / unit",
+        title: "Actual cost / unit",
         key: "actual_cost_per_unit",
         width: 150,
         render: (_v, rec) => {
           const tpu = toNum(rec.target_cost_per_unit);
-          const perUnit = actualAllocFactor * tpu; // (total_actual_cost / target_total_cost) * tpu
+          const perUnit = actualAllocFactor * tpu;
           return <InputNumber disabled size="large" value={Number(fmt2(perUnit))} />;
         },
       },
@@ -713,10 +749,7 @@ export default function SourcerPage() {
             icon={<DeleteOutlined />}
             danger
             onClick={async () => {
-              // remove locally
               cart.remove(rec.id);
-
-              // log the removal against the order (if editing)
               await logItemsOps([
                 {
                   op: "REMOVE",
@@ -737,7 +770,6 @@ export default function SourcerPage() {
 
   return (
     <div style={{ padding: "1.5rem", borderRadius: 10, position: "relative" }}>
-
       <div className="mb-2">
         <Button
           size="middle"
@@ -746,14 +778,7 @@ export default function SourcerPage() {
             if (window.history.length > 1) navigate(-1);
             else navigate("/sourcing/orders");
           }}
-          className="
-            !rounded-md
-            !h-9 !px-3
-            bg-white hover:!bg-gray-50
-            border border-gray-300
-            shadow-sm hover:shadow
-            text-gray-700
-          "
+          className="!rounded-md !h-9 !px-3 bg-white hover:!bg-gray-50 border border-gray-300 shadow-sm hover:shadow text-gray-700"
         >
           Back
         </Button>
@@ -790,6 +815,7 @@ export default function SourcerPage() {
           <Title level={3}>{isEdit ? "Edit Sourcing Order" : "New Sourcing Order"}</Title>
         </motion.div>
 
+        {/* Header card */}
         <Card style={gradientStyle}>
           <Row gutter={[12, 12]} align="top">
             <Col xs={24} sm={12} md={6}>
@@ -850,7 +876,6 @@ export default function SourcerPage() {
                     setSellerOptions([]);
                   }}
                   value={form.getFieldValue(["header", "market"]) || undefined}
-                  notFoundContent={marketLoading ? "Loading..." : null}
                 />
               </Form.Item>
             </Col>
@@ -876,8 +901,6 @@ export default function SourcerPage() {
                     form.setFieldsValue({ header: { ...h, seller_id: undefined, seller_name: undefined } });
                   }}
                   value={form.getFieldValue(["header", "seller_name"]) || undefined}
-                  onChange={() => {}}
-                  notFoundContent={sellerLoading ? "Loading..." : null}
                 />
               </Form.Item>
             </Col>
@@ -905,25 +928,40 @@ export default function SourcerPage() {
                   placeholder="Select country"
                   options={COUNTRY_OPTIONS}
                   optionFilterProp="label"
-                  filterOption={(input, option) => (option?.label ?? "").toLowerCase().includes(input.toLowerCase())}
+                  filterOption={(input, option) =>
+                    (option?.label ?? "").toLowerCase().includes(input.toLowerCase())
+                  }
                 />
               </Form.Item>
             </Col>
           </Row>
         </Card>
 
+        {/* Product search + efficiency */}
         <Card style={gradientStyle}>
           <Row gutter={[16, 16]}>
             <Col xs={24} md={16}>
               <div className="relative" ref={dropdownRef} style={{ position: "relative" }}>
                 <Input
+                  ref={inputRef}
                   size="large"
                   placeholder="Search products…"
                   value={searchText}
                   onChange={handleSearchChange}
-                  onFocus={() => {
+                  onFocus={async () => {
                     setShowProductDropdown(true);
-                    if (!products?.length) fetchInitialProducts();
+                    if (searchText.trim()) {
+                      await fetchProducts(searchText.trim());
+                    } else {
+                      await fetchInitialProducts();
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && products?.length) {
+                      e.preventDefault();
+                      onPickProduct(products[0]);
+                    }
+                    if (e.key === "Escape") setShowProductDropdown(false);
                   }}
                 />
 
@@ -939,10 +977,18 @@ export default function SourcerPage() {
                       <button
                         key={t.code}
                         type="button"
-                        onClick={() => {
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={async () => {
                           const next = active ? "" : t.code;
                           debouncedSearch.cancel?.();
                           setTypeCode(next);
+                          setShowProductDropdown(true);
+                          if (searchText.trim()) {
+                            await fetchProducts(searchText.trim());
+                          } else {
+                            await fetchInitialProducts();
+                          }
+                          inputRef.current?.focus();
                         }}
                         style={{
                           padding: "6px 10px",
@@ -975,12 +1021,15 @@ export default function SourcerPage() {
                       maxHeight: 280,
                       overflowY: "auto",
                     }}
+                    onMouseDown={(e) => e.preventDefault()}
                   >
                     {loading ? (
-                      <div style={{ padding: "10px 12px", color: "#6b7280", fontSize: 13 }}>Loading products…</div>
+                      <div style={{ padding: "10px 12px", color: "#6b7280", fontSize: 13 }}>
+                        Loading products…
+                      </div>
                     ) : Array.isArray(products) && products.length ? (
-                      products.map((p) => {
-                        const idp = p._id || p.id;
+                      products.map((p, idx) => {
+                        const idp = p._id || p.id || idx;
                         const title = p.pro_title || p.product_name || "Untitled";
                         const sku = p.sku || "";
                         return (
@@ -988,7 +1037,6 @@ export default function SourcerPage() {
                             key={idp}
                             onClick={() => onPickProduct(p)}
                             style={{ padding: "10px 12px", borderBottom: "1px solid #f3f4f6", cursor: "pointer" }}
-                            onMouseDown={(e) => e.preventDefault()}
                           >
                             <div style={{ fontWeight: 600, fontSize: 14 }}>{title}</div>
                             <div style={{ fontSize: 12, color: "#6b7280" }}>{sku}</div>
@@ -996,7 +1044,9 @@ export default function SourcerPage() {
                         );
                       })
                     ) : (
-                      <div style={{ padding: "10px 12px", color: "#6b7280", fontSize: 13 }}>No products found</div>
+                      <div style={{ padding: "10px 12px", color: "#6b7280", fontSize: 13 }}>
+                        No products found
+                      </div>
                     )}
                   </div>
                 )}
@@ -1015,6 +1065,7 @@ export default function SourcerPage() {
           </Row>
         </Card>
 
+        {/* Cart table */}
         <Card style={gradientStyle}>
           {invalidTargetsCount > 0 && (
             <Alert
@@ -1051,6 +1102,7 @@ export default function SourcerPage() {
           </Row>
         </Card>
 
+        {/* Totals */}
         <Card style={gradientStyle}>
           <Row gutter={[12, 12]}>
             <Col xs={24} sm={8}>
@@ -1083,6 +1135,7 @@ export default function SourcerPage() {
           </Row>
         </Card>
 
+        {/* Submit */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
