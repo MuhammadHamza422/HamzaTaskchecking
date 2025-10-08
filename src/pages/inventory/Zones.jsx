@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiPlus, FiEdit2, FiTrash2, FiSearch } from "react-icons/fi";
+import { FiPlus, FiEdit2, FiTrash2, FiSearch, FiPrinter } from "react-icons/fi";
 import { useDispatch, useSelector } from "react-redux";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -16,6 +16,7 @@ import useFullscreen from "../../components/useFullscreen.jsx";
 import { Modal } from "antd";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import { useEffect } from "react";
+import ZonePrintModal from "./components/ZonePrintModal.jsx";
 
 export default function Zones() {
   const navigate = useNavigate();
@@ -44,6 +45,10 @@ export default function Zones() {
   const [znType, setZnType] = useState("shelf");
   const [znLoading, setZnLoading] = useState(false);
   const [znFormError, setZnFormError] = useState("");
+
+  // Print functionality state
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [printOpen, setPrintOpen] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["zones", selectedWarehouseId],
@@ -225,6 +230,42 @@ export default function Zones() {
     queryClient.invalidateQueries({ queryKey: ["zones", selectedWarehouseId] });
   }
 
+  // Selection handlers
+  const toggleSelected = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSelectAll = (checked) => {
+    if (checked) {
+      const allIds = zones.map((zone) => zone.id);
+      setSelectedIds(new Set(allIds));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  // Print handlers
+  const handleOpenPrint = () => {
+    if (zones.length === 0) {
+      Swal.fire({
+        icon: "warning",
+        title: "No Zones",
+        text: "There are no zones to print.",
+        showConfirmButton: false,
+        timer: 3000,
+        background: "#f59e0b",
+        color: "#fff",
+      });
+      return;
+    }
+    setPrintOpen(true);
+  };
+
   function openEditWh(w) {
     setWhEdit(w);
     setWhName(w.name);
@@ -262,6 +303,15 @@ export default function Zones() {
             {selectedWarehouseId ? `— ${warehouseName || "Warehouse"}` : ""}
           </h1>
           <div className="flex items-center gap-2 w-full sm:w-fit justify-end">
+            {zones.length > 0 && (
+              <button
+                onClick={handleOpenPrint}
+                className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-sm text-white hover:bg-green-700"
+              >
+                <FiPrinter /> 
+                {selectedIds.size > 0 ? `Print ${selectedIds.size} Zone${selectedIds.size !== 1 ? 's' : ''}` : 'Print Zones'}
+              </button>
+            )}
             {role !== "Technician" && role !== "Picker" && (
               <button
                 onClick={openCreateZn}
@@ -273,16 +323,34 @@ export default function Zones() {
           </div>
         </div>
 
-        {/* Search */}
+        {/* Search and Selection */}
         <div className="px-4 pb-4 pt-3">
-          <div className="relative">
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search zones…"
-              className="w-full rounded-lg border border-zinc-300 bg-white px-9 py-2 text-sm outline-none placeholder:text-zinc-400 focus:border-zinc-400"
-            />
-            <FiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+          <div className="flex items-center gap-4">
+            <div className="relative flex-1">
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search zones…"
+                className="w-full rounded-lg border border-zinc-300 bg-white px-9 py-2 text-sm outline-none placeholder:text-zinc-400 focus:border-zinc-400"
+              />
+              <FiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+            </div>
+            {zones.length > 0 && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-blue-600"
+                  checked={selectedIds.size === zones.length}
+                  ref={(input) => {
+                    if (input) input.indeterminate = selectedIds.size > 0 && selectedIds.size < zones.length;
+                  }}
+                  onChange={(e) => handleSelectAll(e.target.checked)}
+                />
+                <span className="text-sm text-zinc-600">
+                  {selectedIds.size > 0 ? `${selectedIds.size} selected` : "Select all"}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -320,6 +388,15 @@ export default function Zones() {
                 : "border-zinc-200 bg-white"
             }`}
           >
+            {/* Selection checkbox */}
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-blue-600 cursor-pointer"
+                checked={selectedIds.has(z.id)}
+                onChange={() => toggleSelected(z.id)}
+                onClick={(e) => e.stopPropagation()}
+              />
+            
             {/* Actions */}
             <div className="absolute right-2 top-2 hidden gap-1 group-hover:flex">
               {role !== "Technician" && role !== "Picker" && (
@@ -335,12 +412,12 @@ export default function Zones() {
                 </button>
               )}
             </div>
-            <img
+            {/* <img
               src={z?.qr}
               alt="qr"
               className="w-full h-[9rem] rounded-md object-contain"
-            />
-            <h2 className="truncate text-base font-semibold">{z.name}</h2>
+            /> */}
+            <h2 className="truncate text-base mt-2 font-semibold">{z.name}</h2>
             {z.description && (
               <p className="mt-1 line-clamp-3 text-xs text-zinc-500">
                 {z.description}
@@ -472,6 +549,15 @@ export default function Zones() {
           </div>
         </Modal>
       </div>
+
+      {/* Zone Print Modal */}
+      <ZonePrintModal
+        isOpen={printOpen}
+        onClose={() => setPrintOpen(false)}
+        zones={zones}
+        selectedIds={selectedIds}
+        warehouseName={warehouseName}
+      />
     </div>
   );
 }

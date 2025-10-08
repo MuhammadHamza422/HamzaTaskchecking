@@ -9,6 +9,7 @@ import { getPlatformConfig } from "../../config/platforms";
 import apiClient from "../../api/client";
 import OrderFilters from "../../components/external-orders/OrderFilters";
 import OrderTable from "../../components/external-orders/OrderTable";
+import ShopifyOrderTable from "../../components/external-orders/ShopifyOrderTable";
 import ProcessedOrderDetailsDrawer from "../../components/external-orders/ProcessedOrderDetailsDrawer";
 import OrderEditModal from "../../components/external-orders/OrderEditModal";
 import PlatformTabs, {
@@ -833,7 +834,7 @@ export default function ProcessedOrdersPage() {
 
     return {
       orderNumber: String(tableOrder?.orderId || sf?.id || ""),
-      orderKey: String(tableOrder?._id || sf?.id || ""),
+      orderKey: String(tableOrder?.order_key || sf?.name || sf?.id || ""),
       orderDate: orderDate,
       orderStatus: "awaiting_shipment",
       customerId: undefined,
@@ -1128,23 +1129,42 @@ export default function ProcessedOrdersPage() {
         )}
 
         {/* Order Table */}
-        <OrderTable
-          orders={filteredOrders}
-          loading={isLoading}
-          currentPage={currentPage}
-          pageSize={pageSize}
-          totalOrders={ordersData?.totalOrders || totalFilteredOrders}
-          onPageChange={handlePageChange}
-          onRowClick={handleDrawerOpen}
-          showPagination={true}
-          onEditClick={handleEditClick}
-          activeTab={activeTab}
-          showCheckboxes={true}
-          selectedOrders={selectedOrders}
-          onOrderSelect={handleOrderSelect}
-          selectAll={selectAll}
-          onSelectAll={handleSelectAll}
-        />
+        {activeTab === "shopify" ? (
+          <ShopifyOrderTable
+            orders={filteredOrders}
+            loading={isLoading}
+            currentPage={currentPage}
+            pageSize={pageSize}
+            totalOrders={ordersData?.totalOrders || totalFilteredOrders}
+            onPageChange={handlePageChange}
+            onRowClick={handleDrawerOpen}
+            showPagination={true}
+            onEditClick={handleEditClick}
+            showCheckboxes={true}
+            selectedOrders={selectedOrders}
+            onOrderSelect={handleOrderSelect}
+            selectAll={selectAll}
+            onSelectAll={handleSelectAll}
+          />
+        ) : (
+          <OrderTable
+            orders={filteredOrders}
+            loading={isLoading}
+            currentPage={currentPage}
+            pageSize={pageSize}
+            totalOrders={ordersData?.totalOrders || totalFilteredOrders}
+            onPageChange={handlePageChange}
+            onRowClick={handleDrawerOpen}
+            showPagination={true}
+            onEditClick={handleEditClick}
+            activeTab={activeTab}
+            showCheckboxes={true}
+            selectedOrders={selectedOrders}
+            onOrderSelect={handleOrderSelect}
+            selectAll={selectAll}
+            onSelectAll={handleSelectAll}
+          />
+        )}
       </div>
     );
   };
