@@ -1,4 +1,3 @@
-
 import React, {
   useState,
   useEffect,
@@ -27,7 +26,10 @@ import Swal from "sweetalert2"; // <-- needed for toast
 const { useBreakpoint } = Grid;
 
 /* --------------------------- helpers --------------------------- */
-const lower = (v) => String(v ?? "").trim().toLowerCase();
+const lower = (v) =>
+  String(v ?? "")
+    .trim()
+    .toLowerCase();
 const pickRows = (body) =>
   Array.isArray(body)
     ? body
@@ -457,28 +459,27 @@ export default function PurchaserListingsPage() {
 
   /* --------------------------- columns --------------------------- */
   const TrackingBadge = ({ value }) => {
-    const styles =
-      {
-        InTransit: {
-          bg: "bg-sky-50",
-          text: "text-sky-700",
-          ring: "ring-sky-200",
-        },
-        Delivered: {
-          bg: "bg-emerald-50",
-          text: "text-emerald-700",
-          ring: "ring-emerald-200",
-        },
-        Pending: {
-          bg: "bg-amber-50",
-          text: "text-amber-700",
-          ring: "ring-amber-200",
-        },
-      }[value] || {
-        bg: "bg-slate-50",
-        text: "text-slate-700",
-        ring: "ring-slate-200",
-      };
+    const styles = {
+      InTransit: {
+        bg: "bg-sky-50",
+        text: "text-sky-700",
+        ring: "ring-sky-200",
+      },
+      Delivered: {
+        bg: "bg-emerald-50",
+        text: "text-emerald-700",
+        ring: "ring-emerald-200",
+      },
+      Pending: {
+        bg: "bg-amber-50",
+        text: "text-amber-700",
+        ring: "ring-amber-200",
+      },
+    }[value] || {
+      bg: "bg-slate-50",
+      text: "text-slate-700",
+      ring: "ring-slate-200",
+    };
 
     return (
       <span
@@ -499,7 +500,15 @@ export default function PurchaserListingsPage() {
     {
       title: "ID",
       dataIndex: "sourcing_id",
-      width: 120,
+      width: 60,
+      onCell: () => ({
+        style: {
+          maxWidth: 60,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        },
+      }),
       sorter: (a, b) =>
         String(a?.sourcing_id ?? a?.id ?? a?._id ?? "").localeCompare(
           String(b?.sourcing_id ?? b?.id ?? b?._id ?? "")
@@ -514,32 +523,57 @@ export default function PurchaserListingsPage() {
     {
       title: "Sourcer",
       dataIndex: "sourcer_name",
-      width: 160,
+      width: 150,
+      onCell: () => ({
+        style: {
+          maxWidth: 150,
+
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        },
+      }),
       render: (v) => (v ? <p className="m-0">{v}</p> : "—"),
     },
     {
       title: "Efficiency",
       key: "efficiency",
-      align: "right",
+      align: "center",
+      width: 120,
+      onCell: () => ({
+        style: {
+          maxWidth: 120,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        },
+      }),
       render: (_, rec) => {
-        const eff =
-          typeof rec.purchase_efficiency === "number"
-            ? rec.purchase_efficiency
-            : safeNum(rec.target_total_cost) - safeNum(rec.total_actual_cost);
-        const color = eff >= 0 ? "#16a34a" : "#ef4444";
+        const target = safeNum(rec.target_total_cost);
+        const actual = safeNum(rec.total_actual_cost);
+
+        if (!target) return "—"; // avoid divide-by-zero / undefined
+        const pct = (1 - actual / target) * 100; // 1 - a/c
+
+        const color = pct >= 0 ? "#16a34a" : "#ef4444";
         return (
-          <p className="m-0 font-semibold" style={{ color }}>
-            {moneyUSD(eff)}
-          </p>
+          <span style={{ color, fontWeight: 600 }}>{pct.toFixed(1)}%</span>
         );
       },
     },
 
-        {
+    {
       title: "Savings",
       key: "savings",
-      width: 150,
-      align: "right",
+      width: 120,
+      onCell: () => ({
+        style: {
+          maxWidth: 120,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        },
+      }),
+      align: "center",
       render: (_, rec) => {
         let savings = 0;
 
@@ -560,7 +594,8 @@ export default function PurchaserListingsPage() {
           rec.total_actual_cost !== undefined &&
           rec.total_actual_cost !== null
         ) {
-          savings = Number(rec.target_total_cost) - Number(rec.total_actual_cost);
+          savings =
+            Number(rec.target_total_cost) - Number(rec.total_actual_cost);
         }
 
         const color = savings >= 0 ? "#16a34a" : "#ef4444";
@@ -572,7 +607,15 @@ export default function PurchaserListingsPage() {
     {
       title: "Status",
       dataIndex: "status",
-      width: 160,
+      width: 120,
+      onCell: () => ({
+        style: {
+          maxWidth: 120,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        },
+      }),
       align: "center",
       render: (s) => <StatusBadge status={s} />,
     },
@@ -586,29 +629,64 @@ export default function PurchaserListingsPage() {
     {
       title: "Seller",
       dataIndex: "seller_name",
-      width: 200,
+      width: 120,
+      align: "center",
+      onCell: () => ({
+        style: {
+          maxWidth: 120,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        },
+      }),
       ellipsis: true,
       render: (v) => (v ? <p className="m-0">{v}</p> : "—"),
     },
     {
       title: "Market",
       dataIndex: "market",
-      width: 140,
+      width: 120,
+      align: "center",
+      onCell: () => ({
+        style: {
+          maxWidth: 120,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        },
+      }),
       ellipsis: true,
       render: (v) => (v ? <p className="m-0">{v}</p> : "—"),
     },
     {
       title: "Seller Price",
       dataIndex: "sellers_price",
-      width: 160,
-      align: "right",
+      align: "center",
+      width: 120,
+      onCell: () => ({
+        style: {
+          maxWidth: 120,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        },
+      }),
       render: (p) => money(p),
     },
+
     {
-      title: "Shipping",
+      title: "Shipping Charges",
       dataIndex: "shipping_charges",
-      width: 140,
-      align: "right",
+      width: 130,
+      align: "center",
+      onCell: () => ({
+        style: {
+          maxWidth: 130,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        },
+      }),
       render: (p, rec) => money(p ?? rec?.shipping_price ?? 0),
     },
     {
@@ -625,10 +703,9 @@ export default function PurchaserListingsPage() {
       align: "right",
       render: (p) => money(p),
     },
-    // ===== Savings column (item-level calc; fallback to totals) =====
 
     {
-      title: "Actual Cost",
+      title: "Total Actual Cost",
       dataIndex: "total_actual_cost",
       width: 150,
       align: "right",
@@ -838,72 +915,116 @@ export default function PurchaserListingsPage() {
       transition={{ duration: 0.45, ease: "easeOut" }}
     >
       {/* Header + COMPACT Tabs */}
-      <div className="mb-3 rounded-xl border border-slate-200 bg-white/90 shadow-sm">
-        {/* Header row */}
-        <div className="flex items-center justify-between px-4 py-2">
-          <div className="text-slate-800 font-semibold text-sm tracking-wide">
-            Listings
-          </div>
-          <button
-            onClick={handleRefreshClick}
-            disabled={isRefreshing}
-            className="text-xs px-3 py-1.5 rounded-md border border-slate-300 hover:bg-slate-50 disabled:opacity-60"
-          >
-            {isRefreshing ? "Refreshing…" : "Refresh"}
-          </button>
-        </div>
+{/* LISTINGS FILTER BAR — compact, no extra gaps */}
+<div className="mb-2 rounded-lg border border-slate-200 bg-white/95 shadow-sm">
+  {/* Header */}
+  <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-100">
+    <div className="text-slate-800 font-semibold text-xs tracking-wide">Listings</div>
+    <div className="flex items-center gap-2">
+      {(trackingFilter || activeStatusKey !== "all") && (
+        <button
+          type="button"
+          onClick={() => {
+            setTrackingFilter("");
+            const all = STATUS_OPTIONS.find((s) => s.key === "all");
+            setStatusFilter(all ? all.value : "");
+          }}
+          className="text-[11px] px-2.5 py-1 rounded-md border border-slate-300 hover:bg-slate-50"
+        >
+          Reset
+        </button>
+      )}
 
-        {/* Status Tabs (compact, no bottom line, no overflow '...') */}
-        <div className="px-2 pt-1 pb-1 overflow-x-auto no-scrollbar">
-          <Tabs
-            items={statusTabItems}
-            activeKey={activeStatusKey}
-            onChange={(key) => {
-              const found = STATUS_OPTIONS.find((s) => s.key === key);
-              setStatusFilter(found ? found.value : "");
-            }}
-            destroyInactiveTabPane={false}
-            animated
-            className="
-              [&_.ant-tabs-nav]:mb-0
-              [&_.ant-tabs-nav]:min-h-0
-              [&_.ant-tabs-nav::before]:hidden
-              [&_.ant-tabs-ink-bar]:hidden
-              [&_.ant-tabs-tab]:px-0
-              [&_.ant-tabs-tab]:py-0
-              [&_.ant-tabs-tab]:m-0
-              [&_.ant-tabs-tab]:mr-1.5
-              [&_.ant-tabs-tab-btn]:leading-none
-              [&_.ant-tabs-nav-more]:hidden
-            "
-            tabBarGutter={2}
-            tabBarStyle={{ margin: 0, whiteSpace: "nowrap" }}
-            moreIcon={null}
-          />
-        </div>
+    </div>
+  </div>
 
-        {/* Tracking Pills (no 'All'; compact) */}
-        <div className="px-4 pt-2 pb-3 -mt-1 flex items-center gap-2 overflow-x-auto no-scrollbar">
-          {TRACKING_ORDER.map((id) => (
-            <TrackingPill
-              key={id}
-              id={id}
-              label={TRACKING_META[id].label}
-              count={trackingCounts[id] ?? 0}
-              active={trackingFilter === id}
-            />
-          ))}
-          {trackingFilter && (
-            <button
-              type="button"
-              onClick={() => setTrackingFilter("")}
-              className="text-xs px-2.5 py-1 rounded-full border border-slate-200 text-slate-600 hover:bg-slate-50"
-            >
-              Clear
-            </button>
-          )}
-        </div>
+  {/* Filters */}
+  <div className="px-3 py-1">
+    {/* Row 1: STATUS (Ant Tabs with hard-kill for bottom spacing) */}
+    <div className="flex items-center gap-1.5">
+      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+        Status
+      </span>
+
+      <div className="flex-1 overflow-x-auto no-scrollbar">
+        <Tabs
+          items={statusTabItems}
+          activeKey={activeStatusKey}
+          onChange={(key) => {
+            const found = STATUS_OPTIONS.find((s) => s.key === key);
+            setStatusFilter(found ? found.value : "");
+          }}
+          destroyInactiveTabPane={false}
+          animated
+          tabBarGutter={0}
+          tabBarStyle={{ margin: 0, marginBottom: 0, whiteSpace: "nowrap", lineHeight: 1 }}
+          moreIcon={null}
+          className="
+            [&_.ant-tabs-nav]:!mb-0
+            [&_.ant-tabs-nav]:!p-0
+            [&_.ant-tabs-nav::before]:hidden
+            [&_.ant-tabs-ink-bar]:hidden
+            [&_.ant-tabs-nav-more]:hidden
+
+            /* remove inter-tab gaps */
+            [&_.ant-tabs-tab]:!m-0
+            [&_.ant-tabs-tab+.ant-tabs-tab]:!ml-0
+
+            /* compact pill */
+            [&_.ant-tabs-tab-btn]:!px-2
+            [&_.ant-tabs-tab-btn]:!py-1
+            [&_.ant-tabs-tab-btn]:!rounded
+            [&_.ant-tabs-tab-btn]:!text-[12px]
+            [&_.ant-tabs-tab-btn]:!leading-none
+            hover:[&_.ant-tabs-tab-btn]:!bg-slate-50
+
+            /* kill content-holder height reservation */
+            [&_.ant-tabs-content-holder]:hidden
+          "
+        />
+        {/* Safety net overrides in case global styles fight us */}
+        <style>{`
+          .ant-tabs-top > .ant-tabs-nav { margin-bottom: 0 !important; }
+          .ant-tabs .ant-tabs-tab + .ant-tabs-tab { margin-left: 0 !important; }
+        `}</style>
       </div>
+    </div>
+
+    {/* hairline divider with *minimal* spacing */}
+    {/* <div className="h-px bg-slate-100 mt-1 mb-0" /> */}
+
+    {/* Row 2: TRACKING (pills) */}
+    <div className="flex items-center gap-1.5 pt-1">
+      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+        Tracking
+      </span>
+
+      <div className="flex-1 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+        {TRACKING_ORDER.map((id) => (
+          <TrackingPill
+            key={id}
+            id={id}
+            label={TRACKING_META[id].label}
+            count={trackingCounts[id] ?? 0}
+            active={trackingFilter === id}
+          />
+        ))}
+
+        {trackingFilter && (
+          <button
+            type="button"
+            onClick={() => setTrackingFilter("")}
+            className="text-[11px] px-2 py-1 rounded-full border border-slate-200 text-slate-600 hover:bg-slate-50"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+    </div>
+  </div>
+</div>
+
+
 
       {/* Filters */}
       <PurchaserFilters
@@ -970,7 +1091,9 @@ export default function PurchaserListingsPage() {
             },
             style: { cursor: "pointer" },
           })}
-          rowClassName={() => "row-clickable"}
+          rowClassName={(_, idx) =>
+            `row-clickable ${idx % 2 ? "row-odd" : "row-even"}`
+          }
           scroll={{ x: "max-content" }}
           tableLayout="fixed"
           sticky
@@ -998,6 +1121,10 @@ export default function PurchaserListingsPage() {
         .row-clickable:hover { background-color: #f0f9ff !important; transition: background 0.2s ease; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+
+        .ant-table-tbody > tr.row-even > td { background: #fafafa; } 
+.ant-table-tbody > tr.row-odd  > td { background: #ffffff; } 
       `}</style>
     </motion.div>
   );

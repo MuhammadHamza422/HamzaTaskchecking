@@ -68,6 +68,7 @@ const lower = (v) =>
   String(v ?? "")
     .trim()
     .toLowerCase();
+
 const deslug = (slug) => {
   if (!slug) return "";
   try {
@@ -77,15 +78,22 @@ const deslug = (slug) => {
     return String(slug).replace(/[-+]/g, " ").trim();
   }
 };
+
 const currency2 = (n) => (typeof n === "number" ? n.toFixed(2) : "0.00");
+
 const ensureHttp = (v = "") => {
   const s = String(v).trim();
   if (!s) return "";
   return /^https?:\/\//i.test(s) ? s : `https://${s}`;
 };
+
 const isLikelyFqdn = (hostname = "") =>
   /^[^.\/\s][^\s]*\.[^\s]+$/.test(hostname);
+
 const isObjectId = (v) => typeof v === "string" && /^[0-9a-fA-F]{24}$/.test(v);
+
+// ✅ define before use
+const safeNum = (v) => (v == null || v === "" ? 0 : Number(v) || 0);
 
 // format efficiency like "9%" (or "9.5%" if not whole)
 const formatPct = (n) => {
@@ -137,7 +145,7 @@ const normalizeRequest = (raw = {}) => {
   );
   const tax = Number(raw.tax ?? raw.taxes ?? 0);
 
-  // NEW: totals & efficiencies from backend
+  // totals & efficiencies from backend
   const target_total_cost = Number(
     raw.target_total_cost ?? raw.targetTotalCost ?? NaN
   );
@@ -221,7 +229,7 @@ const normalizeRequest = (raw = {}) => {
     tax,
     status: raw.status ?? "Pending",
 
-    // NEW: bring through totals/efficiencies from backend
+    // totals/efficiencies from backend
     target_total_cost: isNaN(target_total_cost) ? null : target_total_cost,
     total_actual_cost: isNaN(total_actual_cost) ? null : total_actual_cost,
     purchase_efficiency,
@@ -247,11 +255,7 @@ const normalizeRequest = (raw = {}) => {
 };
 
 const STATUS_NEEDS_PURCHASE_DETAILS = ["Purchased", "Dropshipped"];
-const TRACKING_STATUSES = [
-  "Pending",
-  "InTransit",
-  "Delivered",
-];
+const TRACKING_STATUSES = ["Pending", "InTransit", "Delivered"];
 
 /* ---------- label resolvers ---------- */
 const resolveCarrierLabel = async (idMaybe) => {
@@ -333,7 +337,6 @@ export default function RequestDetailPage() {
   const [canUpdateTracking, setCanUpdateTracking] = useState(false);
 
   // Carrier search
-  theLogs: null;
   const [carrierOpts, setCarrierOpts] = useState([]);
   const [carrierLoading, setCarrierLoading] = useState(false);
   const carrierTimer = useRef(null);
@@ -547,7 +550,7 @@ export default function RequestDetailPage() {
   const isBlank = (v) =>
     v === undefined || v === null || String(v).trim() === "";
 
-  // watched inputs (your existing live calc)
+  // watched inputs (live calc)
   const watchedSellers = Form.useWatch("sellers_price", form);
   const watchedShipping = Form.useWatch("shipping_price", form);
   const watchedTax = Form.useWatch("tax", form);
@@ -592,13 +595,18 @@ export default function RequestDetailPage() {
   const backendActualTotal =
     request?.total_actual_cost ?? (itemsSumActual || null);
 
+  const totalSavings = useMemo(() => {
+    const t = Number(backendTargetTotal || 0);
+    const a = Number(backendActualTotal || 0);
+    return t - a; // Total Savings = Target − Actual
+  }, [backendTargetTotal, backendActualTotal]);
 
-
-const totalSavings = useMemo(() => {
-  const t = Number(backendTargetTotal || 0);
-  const a = Number(backendActualTotal || 0);
-  return t - a; // Total Savings = Target Total Cost − Total Actual Cost
-}, [backendTargetTotal, backendActualTotal]);
+  // ✅ compute efficiency & colors here (after totals exist)
+  const target = safeNum(request?.target_total_cost ?? backendTargetTotal);
+  const actual = safeNum(request?.total_actual_cost ?? backendActualTotal);
+  const effPct = target ? (1 - actual / target) * 100 : null;
+  const effColor = effPct >= 0 ? "#16a34a" : "#ef4444";
+  const savingsColor = (totalSavings ?? 0) >= 0 ? "#16a34a" : "#ef4444";
 
   // API helpers
   const fetchBySeller = (sellerName) =>
@@ -888,7 +896,7 @@ const totalSavings = useMemo(() => {
         return;
       }
 
-      // CHANGE: clear potential stale field error before submit
+      // clear potential stale field error before submit
       form.setFields([{ name: "tracking_link", errors: [] }]);
 
       const desiredStatus = String(
@@ -949,7 +957,7 @@ const totalSavings = useMemo(() => {
         "tracking_status"
       );
       const tStatus = trackingStatusProvided
-        ? values.tracking_status || "Pending" // if user cleared, force "Pending"
+        ? values.tracking_status || "Pending"
         : original.tracking_status || "Pending";
 
       const carrierField = values?.carrier;
@@ -1023,8 +1031,6 @@ const totalSavings = useMemo(() => {
           payload.seller = String(sellerVal.value);
         } else if (typeof sellerVal === "string" && isObjectId(sellerVal)) {
           payload.seller = sellerVal;
-        } else if (isBlank(sellerVal)) {
-          // payload.seller = null; // allow clearing if needed
         }
       }
 
@@ -1041,8 +1047,6 @@ const totalSavings = useMemo(() => {
           payload.market = String(marketVal.value);
         } else if (typeof marketVal === "string" && isObjectId(marketVal)) {
           payload.market = marketVal;
-        } else if (isBlank(marketVal)) {
-          // payload.market = null;
         }
       }
 
@@ -1072,7 +1076,9 @@ const totalSavings = useMemo(() => {
 
       // Market Order #
       if (Object.prototype.hasOwnProperty.call(values, "market_order_num")) {
-        payload.market_order_num = wantsPurchased
+        payload.market_order_num = ["Purchased", "Dropshipped"].includes(
+          desiredStatus
+        )
           ? monStr
           : isBlank(values.market_order_num)
           ? null
@@ -1081,7 +1087,9 @@ const totalSavings = useMemo(() => {
 
       // Purchase Link
       if (Object.prototype.hasOwnProperty.call(values, "purchase_link")) {
-        payload.purchase_link = wantsPurchased
+        payload.purchase_link = ["Purchased", "Dropshipped"].includes(
+          desiredStatus
+        )
           ? normalizedPurchase
           : isBlank(values.purchase_link)
           ? null
@@ -1134,7 +1142,6 @@ const totalSavings = useMemo(() => {
       fetchRequest();
       setLogsTick((n) => n + 1);
     } catch (err) {
-      // CHANGE: handle duplicate Tracking Link (HTTP 409) gracefully
       const status = err?.response?.status;
       const serverMsg =
         err?.response?.data?.message ||
@@ -1142,7 +1149,6 @@ const totalSavings = useMemo(() => {
         "Failed to update details.";
 
       if (status === 409) {
-        // Inline field error for better UX
         form.setFields([
           { name: "tracking_link", errors: ["Tracking link already exists."] },
         ]);
@@ -1185,8 +1191,6 @@ const totalSavings = useMemo(() => {
           meta: { itemsOps: ops },
         });
       } catch (e) {
-        // Best-effort; don't block UX
-        // eslint-disable-next-line no-console
         console.warn("log itemsOps failed:", e?.response?.data || e.message);
       }
     },
@@ -1364,14 +1368,14 @@ const totalSavings = useMemo(() => {
       title: "Target price / unit",
       key: "target_cost_per_unit",
       dataIndex: "target_cost_per_unit",
-      align: "right",
+      align: "center",
       width: 140,
       render: (v) => `$${currency2(Number(v || 0))}`,
     },
     {
       title: "Target Cost",
       key: "total_target_cost",
-      align: "right",
+      align: "center",
       width: 160,
       render: (_, rec) =>
         `$${currency2(
@@ -1382,7 +1386,7 @@ const totalSavings = useMemo(() => {
     {
       title: "Savings",
       key: "savings",
-      align: "right",
+      align: "center",
       width: 140,
       render: (_, rec) => {
         const qty = Number(rec.quantity_needed || 0);
@@ -1393,7 +1397,7 @@ const totalSavings = useMemo(() => {
             ? Number(rec.actual_cost_per_unit)
             : Number(rec.sellers_price_per_unit || 0); // fallback if actual not set
         const perUnit = tpu - apu;
-        const lineSavings = perUnit * qty; // this is the displayed value
+        const lineSavings = perUnit * qty;
 
         return (
           <span style={{ color: lineSavings >= 0 ? "#059669" : "#dc2626" }}>
@@ -1406,14 +1410,14 @@ const totalSavings = useMemo(() => {
     {
       title: "Seller price / unit",
       key: "sellers_price_per_unit",
-      align: "right",
+      align: "center",
       width: 140,
       render: (_, rec) => `$${currency2(rec.sellers_price_per_unit || 0)}`,
     },
     {
       title: "Actual cost / unit",
       key: "actual_cost_per_unit",
-      align: "right",
+     align: "center",
       width: 140,
       render: (_, rec) => `$${currency2(rec.actual_cost_per_unit || 0)}`,
     },
@@ -1446,7 +1450,6 @@ const totalSavings = useMemo(() => {
   ];
 
   // simple stat tile
-  // keep the rest the same
   const StatTile = ({ label, value, sub }) => (
     <div
       className="rounded-xl border border-slate-200 bg-white h-full"
@@ -1484,39 +1487,59 @@ const totalSavings = useMemo(() => {
         </Space>
       </Space>
 
-      {/* ======= NEW: Key Totals & Efficiency (from backend) ======= */}
-<div className="mb-3">
-  <Row gutter={gutter}>
-    <Col xs={24} sm={12} md={6} lg={6} xl={6}>
-      <StatTile
-        label="Target Total Cost"
-        value={`$${currency2(backendTargetTotal ?? 0)}`}
-        sub={request?.target_total_cost == null ? "summed from items" : undefined}
-      />
-    </Col>
-    <Col xs={24} sm={12} md={6} lg={6} xl={6}>
-      <StatTile
-        label="Total Actual Cost"
-        value={`$${currency2(backendActualTotal ?? 0)}`}
-        sub={request?.total_actual_cost == null ? "summed from items" : undefined}
-      />
-    </Col>
-    <Col xs={24} sm={12} md={6} lg={6} xl={6}>
-      <StatTile
-        label="Purchase Efficiency"
-        value={formatPct(request?.purchase_efficiency)}
-      />
-    </Col>
-    <Col xs={24} sm={12} md={6} lg={6} xl={6}>
-      <StatTile
-        label="Total Savings"
-        value={`$${currency2(totalSavings)}`}
-        sub="Target − Actual"
-      />
-    </Col>
-  </Row>
-</div>
+      {/* ======= Key Totals & Efficiency ======= */}
+      <div className="mb-3">
+        <Row gutter={gutter}>
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <StatTile
+              label="Target Total Cost"
+              value={`$${currency2(backendTargetTotal ?? 0)}`}
+              sub={
+                request?.target_total_cost == null
+                  ? "summed from items"
+                  : undefined
+              }
+            />
+          </Col>
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <StatTile
+              label="Total Actual Cost"
+              value={`$${currency2(backendActualTotal ?? 0)}`}
+              sub={
+                request?.total_actual_cost == null
+                  ? "summed from items"
+                  : undefined
+              }
+            />
+          </Col>
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <StatTile
+              label="Purchase Efficiency"
+              value={
+                effPct == null ? (
+                  "—"
+                ) : (
+                  <span style={{ color: effColor, fontWeight: 600 }}>
+                    {effPct.toFixed(1)}%
+                  </span>
+                )
+              }
+            />
+          </Col>
 
+          <Col xs={24} sm={12} md={6} lg={6} xl={6}>
+            <StatTile
+              label="Total Savings"
+              value={
+                <span style={{ color: savingsColor, fontWeight: 600 }}>
+                  ${currency2(totalSavings)}
+                </span>
+              }
+              sub="Target − Actual"
+            />
+          </Col>
+        </Row>
+      </div>
 
       {/* ======= FORM START ======= */}
       <Form
@@ -1533,7 +1556,7 @@ const totalSavings = useMemo(() => {
           style={{ marginBottom: 16 }}
         >
           <Row gutter={gutter}>
-            {/* Seller (search/select/create) */}
+            {/* Seller */}
             <Col xs={24} md={12} lg={8}>
               <Form.Item name="seller" label="Seller Name">
                 <Select
@@ -1555,7 +1578,7 @@ const totalSavings = useMemo(() => {
               </Form.Item>
             </Col>
 
-            {/* Market (search/select/create) */}
+            {/* Market */}
             <Col xs={24} md={12} lg={8}>
               <Form.Item name="market" label="Marketplace">
                 <Select
@@ -1644,7 +1667,7 @@ const totalSavings = useMemo(() => {
             </Col>
           </Row>
 
-          {/* Bottom-right Copy Listing button */}
+          {/* Copy Listing button */}
           <Row justify="end">
             <Col>
               {form.getFieldValue("listing_link") || request?.listing_link ? (
@@ -1652,13 +1675,12 @@ const totalSavings = useMemo(() => {
                   icon={<CopyOutlined />}
                   size={controlSize}
                   onClick={handleCopyListing}
-                  // make it green (Tailwind utility overrides for Ant Button)
                   className="
-          !bg-emerald-600 !border-emerald-600 !text-white
-          hover:!bg-emerald-700 hover:!border-emerald-700
-          focus:!bg-emerald-700
-          mt-2
-        "
+                    !bg-emerald-600 !border-emerald-600 !text-white
+                    hover:!bg-emerald-700 hover:!border-emerald-700
+                    focus:!bg-emerald-700
+                    mt-2
+                  "
                 >
                   Copy Listing
                 </Button>
@@ -1691,15 +1713,15 @@ const totalSavings = useMemo(() => {
               size={screens.xs ? "small" : "middle"}
               rowClassName={() => "bg-sky-50/5 hover:bg-sky-100/10"}
               className="
-        [&_.ant-table-thead>tr>th]:bg-sky-50/40
-        [&_.ant-table-thead>tr>th]:text-slate-700
-        [&_.ant-table-thead>tr>th]:font-medium
-        [&_.ant-table-thead>tr>th]:border-slate-100
-        [&_.ant-table-tbody>tr>td]:border-slate-100
-        [&_.ant-table-thead>tr>th.tw-col-actions]:!bg-white
-        [&_.ant-table-tbody>tr>td.tw-col-actions]:!bg-white
-        [&_.ant-table-tbody>tr:hover>td.tw-col-actions]:!bg-white
-      "
+                [&_.ant-table-thead>tr>th]:bg-sky-50/40
+                [&_.ant-table-thead>tr>th]:text-slate-700
+                [&_.ant-table-thead>tr>th]:font-medium
+                [&_.ant-table-thead>tr>th]:border-slate-100
+                [&_.ant-table-tbody>tr>td]:border-slate-100
+                [&_.ant-table-thead>tr>th.tw-col-actions]:!bg-white
+                [&_.ant-table-tbody>tr>td.tw-col-actions]:!bg-white
+                [&_.ant-table-tbody>tr:hover>td.tw-col-actions]:!bg-white
+              "
               locale={{
                 emptyText: (
                   <div className="py-10 text-center text-slate-500">
