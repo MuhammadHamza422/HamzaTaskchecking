@@ -18,6 +18,7 @@ import {
   LoadingOutlined,
   UserAddOutlined,       // Assign to Me
   UserSwitchOutlined,    // Assign to Purchaser
+  CopyOutlined,          // Copy listing link
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import dayjs from "dayjs";
@@ -66,12 +67,53 @@ const extractPurchaserPerms = (roleObj) => {
   };
 };
 
+/* ---- money / url helpers ---- */
+const money = (v) => (Number.isFinite(+v) ? `$${(+v).toFixed(2)}` : "—");
+const moneyUSD = (v) => (Number.isFinite(+v) ? `$${(+v).toFixed(2)}` : "$0.00");
+const ensureHttp = (v = "") => {
+  const s = String(v || "").trim();
+  if (!s) return "";
+  return /^https?:\/\//i.test(s) ? s : `https://${s}`;
+};
+
+/* ---- tracking helpers ---- */
+const mapTrackingBucket = (v) => {
+  const s = String(v || "").toLowerCase();
+  if (s.includes("transit")) return "In Transit";
+  if (s.includes("deliver")) return "Delivered";
+  if (s.includes("pending") || !s) return "Pending";
+  return "Unknown";
+};
+
+/* ---- simple badges (match your style) ---- */
+const StatusBadge = ({ status }) => (
+  <Tag
+    color={statusColor(status)}
+    style={{ fontWeight: 500, fontSize: 12, borderRadius: 8, padding: "2px 8px" }}
+  >
+    {status}
+  </Tag>
+);
+
+const TrackingBadge = ({ value }) => {
+  const v = mapTrackingBucket(value);
+  const color =
+    v === "Delivered" ? "green" :
+    v === "In Transit" ? "blue" :
+    v === "Pending" ? "default" : "orange";
+  return (
+    <Tag color={color} style={{ borderRadius: 8, padding: "2px 8px" }}>
+      {v}
+    </Tag>
+  );
+};
+
 /* =============================================================== */
 export default function PurchaserPendingPage({ onAssigned }) {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  // Robust admin check (kept as-is)
+  // Robust admin check
   const isAdmin = useMemo(() => {
     const r = user?.roles;
     if (Array.isArray(r)) {
@@ -265,208 +307,371 @@ export default function PurchaserPendingPage({ onAssigned }) {
   const actionsColNeeded = canAssignToMe || isAdmin;
 
   const columns = useMemo(() => {
-    const baseCols = [
+    const base = [
       {
         title: "ID",
         dataIndex: "sourcing_id",
-        width: 84,
+        width: 60,
+        onCell: () => ({
+          style: {
+            maxWidth: 60,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          },
+        }),
+        sorter: (a, b) =>
+          String(a?.sourcing_id ?? a?.id ?? a?._id ?? "").localeCompare(
+            String(b?.sourcing_id ?? b?.id ?? b?._id ?? "")
+          ),
+        render: (_, rec) => (
+          <strong className="text-[#2c2c2c]">
+            #{String(rec.sourcing_id ?? rec.id ?? rec._id).slice(-6)}
+          </strong>
+        ),
+        responsive: ["sm"],
         fixed: "left",
         className: "px-2",
         onHeaderCell: () => ({ className: "px-2" }),
-        render: (sid) => <strong>#{sid}</strong>,
       },
       {
         title: "Sourcer",
         dataIndex: "sourcer_name",
-        width: 140,
-        ellipsis: true,
+        width: 150,
+        onCell: () => ({
+          style: {
+            maxWidth: 150,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          },
+        }),
+        render: (v) => (v ? <p className="m-0">{v}</p> : "—"),
         className: "px-2",
         onHeaderCell: () => ({ className: "px-2" }),
-        render: (v) => v || "—",
       },
       {
         title: "Efficiency",
         key: "efficiency",
-        width: 100,
-        align: "right",
+        align: "center",
+        width: 120,
+        onCell: () => ({
+          style: {
+            maxWidth: 120,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          },
+        }),
+        render: (_, rec) => {
+          const target = safeNum(rec.target_total_cost);
+          const actual = safeNum(rec.total_actual_cost);
+          if (!target) return "—"; // avoid divide-by-zero / undefined
+          const pct = (1 - actual / target) * 100; // 1 - a/c (as percent)
+          const color = pct >= 0 ? "#16a34a" : "#ef4444";
+          return (
+            <span style={{ color, fontWeight: 600 }}>{pct.toFixed(1)}%</span>
+          );
+        },
         className: "px-1",
         onHeaderCell: () => ({ className: "px-1" }),
+      },
+      {
+        title: "Savings",
+        key: "savings",
+        width: 120,
+        onCell: () => ({
+          style: {
+            maxWidth: 120,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          },
+        }),
+        align: "center",
         render: (_, rec) => {
-          const eff =
-            typeof rec.purchase_efficiency === "number"
-              ? rec.purchase_efficiency
-              : safeNum(rec.target_total_cost) - safeNum(rec.total_actual_cost);
-          const color = eff >= 0 ? "#16a34a" : "#ef4444";
-          return <span style={{ color }}>{`$${(Number(eff) || 0).toFixed(2)}`}</span>;
+          let savings = 0;
+
+          if (Array.isArray(rec.items) && rec.items.length) {
+            savings = rec.items.reduce((acc, it) => {
+              const qty = Number(it.quantity_needed || 0);
+              const tpu = Number(it.target_cost_per_unit || 0);
+              const apu =
+                it.actual_cost_per_unit !== undefined &&
+                it.actual_cost_per_unit !== null
+                  ? Number(it.actual_cost_per_unit)
+                  : Number(it.sellers_price_per_unit || 0);
+              return acc + (tpu - apu) * qty;
+            }, 0);
+          } else if (
+            rec.target_total_cost !== undefined &&
+            rec.target_total_cost !== null &&
+            rec.total_actual_cost !== undefined &&
+            rec.total_actual_cost !== null
+          ) {
+            savings =
+              Number(rec.target_total_cost) - Number(rec.total_actual_cost);
+          }
+
+          const color = savings >= 0 ? "#16a34a" : "#ef4444";
+          return (
+            <span style={{ color, fontWeight: 600 }}>{moneyUSD(savings)}</span>
+          );
         },
-        responsive: ["sm"],
+        className: "px-1",
+        onHeaderCell: () => ({ className: "px-1" }),
       },
       {
         title: "Status",
         dataIndex: "status",
-        width: 110,
+        width: 120,
+        onCell: () => ({
+          style: {
+            maxWidth: 120,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          },
+        }),
         align: "center",
+        render: (s) => <StatusBadge status={s} />,
         className: "px-1",
         onHeaderCell: () => ({ className: "px-1" }),
-        render: (s) => (
-          <Tag
-            color={statusColor(s)}
-            style={{ fontWeight: 500, fontSize: 12, borderRadius: 8, padding: "2px 8px" }}
-          >
-            {s}
-          </Tag>
-        ),
+      },
+      {
+        title: "Tracking",
+        dataIndex: "tracking_status",
+        width: 140,
+        align: "center",
+        render: (v) => <TrackingBadge value={mapTrackingBucket(v)} />,
+        className: "px-1",
+        onHeaderCell: () => ({ className: "px-1" }),
       },
       {
         title: "Seller",
         dataIndex: "seller_name",
-        width: 160,
+        width: 120,
+        align: "center",
+        onCell: () => ({
+          style: {
+            maxWidth: 120,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          },
+        }),
         ellipsis: true,
+        render: (v) => (v ? <p className="m-0">{v}</p> : "—"),
         className: "px-2",
         onHeaderCell: () => ({ className: "px-2" }),
-        render: (v) => (v ? <p className="m-0 truncate">{v}</p> : "—"),
       },
       {
         title: "Market",
         dataIndex: "market",
-        width: 100,
+        width: 120,
+        align: "center",
+        onCell: () => ({
+          style: {
+            maxWidth: 120,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          },
+        }),
         ellipsis: true,
+        render: (v) => (v ? <p className="m-0">{v}</p> : "—"),
         className: "px-2",
         onHeaderCell: () => ({ className: "px-2" }),
-        render: (v) => v || "—",
       },
-
-      // Seller-entered totals
       {
-        title: "Seller $",
+        title: "Seller Price",
         dataIndex: "sellers_price",
-        width: 100,
-        align: "right",
+        align: "center",
+        width: 120,
+        onCell: () => ({
+          style: {
+            maxWidth: 120,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          },
+        }),
+        render: (p) => money(p),
         className: "px-1",
         onHeaderCell: () => ({ className: "px-1" }),
-        render: (v) => (Number.isFinite(+v) && +v ? `$${(+v).toFixed(2)}` : "—"),
       },
       {
-        title: "Ship $",
+        title: "Shipping Charges",
         dataIndex: "shipping_charges",
-        width: 96,
-        align: "right",
+        width: 130,
+        align: "center",
+        onCell: () => ({
+          style: {
+            maxWidth: 130,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          },
+        }),
+        render: (p, rec) => money(p ?? rec?.shipping_price ?? 0),
         className: "px-1",
         onHeaderCell: () => ({ className: "px-1" }),
-        render: (v) => (Number.isFinite(+v) && +v ? `$${(+v).toFixed(2)}` : "—"),
       },
       {
-        title: "Tax $",
+        title: "Tax",
         dataIndex: "taxes",
-        width: 84,
+        width: 120,
         align: "right",
+        render: (p, rec) => money(p ?? rec?.tax ?? 0),
         className: "px-1",
         onHeaderCell: () => ({ className: "px-1" }),
-        render: (v) => (Number.isFinite(+v) && +v ? `$${(+v).toFixed(2)}` : "—"),
       },
-
-      // Rollups
       {
-        title: "Target $",
+        title: "Target Cost",
         dataIndex: "target_total_cost",
-        width: 110,
+        width: 150,
         align: "right",
+        render: (p) => money(p),
         className: "px-1",
         onHeaderCell: () => ({ className: "px-1" }),
-        render: (v) => (Number.isFinite(+v) && +v ? `$${(+v).toFixed(2)}` : "—"),
       },
       {
-        title: "Actual $",
+        title: "Total Actual Cost",
         dataIndex: "total_actual_cost",
-        width: 110,
+        width: 150,
         align: "right",
+        render: (p) => money(p),
         className: "px-1",
         onHeaderCell: () => ({ className: "px-1" }),
-        render: (v) => (Number.isFinite(+v) && +v ? `$${(+v).toFixed(2)}` : "—"),
       },
-
+      // ===== Copy listing link action (fixed right) =====
       {
-        title: "Created",
-        dataIndex: "created_at",
-        width: 160,
-        className: "px-2",
-        onHeaderCell: () => ({ className: "px-2" }),
-        render: (date, rec) => {
-          const d = new Date(date || rec.createdAt || rec.created_on || 0);
-          return <span className="font-normal">{dayjs(d).format("MM/DD/YY hh:mm A")}</span>;
+        title: "",
+        key: "copy_listing_link",
+        width: 64,
+        align: "center",
+        fixed: "right",
+        render: (_, rec) => {
+          const raw = rec?.listing_link ?? rec?.listingLink ?? "";
+          const url = ensureHttp(raw);
+          const disabled = !url;
+
+          const handleCopy = async (e) => {
+            e.stopPropagation(); // don't trigger row navigation
+            if (!url) {
+              message.warning("This row has no listing link.");
+              return;
+            }
+            try {
+              if (navigator?.clipboard?.writeText) {
+                await navigator.clipboard.writeText(url);
+              } else {
+                const ta = document.createElement("textarea");
+                ta.value = url;
+                ta.style.position = "fixed";
+                ta.style.left = "-9999px";
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand("copy");
+                document.body.removeChild(ta);
+              }
+              message.success("Listing link copied to clipboard.");
+            } catch {
+              message.error("Could not copy the listing link.");
+            }
+          };
+
+          return (
+            <button
+              type="button"
+              onClick={handleCopy}
+              disabled={disabled}
+              title="Copy listing link"
+              className={[
+                "inline-flex items-center justify-center h-8 w-8 rounded-md border",
+                disabled
+                  ? "opacity-40 cursor-not-allowed border-slate-200 bg-white"
+                  : "cursor-pointer border-emerald-500 bg-white hover:bg-emerald-50",
+              ].join(" ")}
+            >
+              <CopyOutlined
+                style={{ fontSize: 16, color: disabled ? "#9ca3af" : "#059669" }}
+              />
+            </button>
+          );
         },
       },
     ];
 
-    if (!actionsColNeeded) return baseCols;
+    // Append Actions (assign) if needed
+    if (actionsColNeeded) {
+      base.push({
+        title: "Actions",
+        key: "actions",
+        fixed: "right",
+        width: isAdmin && canAssignToMe ? 92 : 60,
+        align: "right",
+        className: "px-1",
+        onHeaderCell: () => ({ className: "px-1" }),
+        render: (_, record) => {
+          const docId = record?._id;            // Mongo ObjectId for API
+          const humanId = record?.sourcing_id;  // numeric for UI
+          const busy = assigningId === docId;
 
-    baseCols.push({
-      title: "Actions",
-      key: "actions",
-      fixed: "right",
-      width: isAdmin && canAssignToMe ? 92 : 60,
-      align: "right",
-      className: "px-1",
-      onHeaderCell: () => ({ className: "px-1" }),
-      render: (_, record) => {
-        const docId = record?._id;            // Mongo ObjectId for API
-        const humanId = record?.sourcing_id;  // numeric for UI
-        const busy = assigningId === docId;
+          return (
+            <div className="inline-flex items-center gap-2">
+              {canAssignToMe && (
+                <Tooltip title="Assign to Me">
+                  <Button
+                    type="primary"
+                    size="middle"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleAssignToMe(docId, humanId);
+                    }}
+                    loading={busy}
+                    disabled={assigningId !== null && !busy}
+                    className="
+                      !p-0 !w-9 !h-9
+                      !rounded-md
+                      !inline-flex !items-center !justify-center
+                      shadow-sm hover:shadow
+                    "
+                    aria-label="Assign to me"
+                  >
+                    <UserAddOutlined className="text-[16px] leading-none" />
+                  </Button>
+                </Tooltip>
+              )}
 
-        return (
-          <div className="inline-flex items-center gap-2">
-            {canAssignToMe && (
-              <Tooltip title="Assign to Me">
-                <Button
-                  type="primary"
-                  size="middle"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleAssignToMe(docId, humanId);
-                  }}
-                  loading={busy}
-                  disabled={assigningId !== null && !busy}
-                  className="
-                    !p-0 !w-9 !h-9
-                    !rounded-md
-                    !inline-flex !items-center !justify-center
-                    shadow-sm hover:shadow
-                  "
-                  aria-label="Assign to me"
-                >
-                  <UserAddOutlined className="text-[16px] leading-none" />
-                </Button>
-              </Tooltip>
-            )}
+              {isAdmin && (
+                <Tooltip title="Assign to Purchaser">
+                  <Button
+                    size="middle"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openAssignModal(docId);
+                    }}
+                    className="
+                      !p-0 !w-9 !h-9
+                      !rounded-md
+                      !inline-flex !items-center !justify-center
+                      bg-white hover:!bg-gray-50
+                      border border-gray-200
+                      shadow-sm hover:shadow
+                    "
+                    aria-label="Assign to purchaser"
+                  >
+                    <UserSwitchOutlined className="text-[16px] leading-none" />
+                  </Button>
+                </Tooltip>
+              )}
+            </div>
+          );
+        },
+      });
+    }
 
-            {isAdmin && (
-              <Tooltip title="Assign to Purchaser">
-                <Button
-                  size="middle"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openAssignModal(docId);
-                  }}
-                  className="
-                    !p-0 !w-9 !h-9
-                    !rounded-md
-                    !inline-flex !items-center !justify-center
-                    bg-white hover:!bg-gray-50
-                    border border-gray-200
-                    shadow-sm hover:shadow
-                  "
-                  aria-label="Assign to purchaser"
-                >
-                  <UserSwitchOutlined className="text-[16px] leading-none" />
-                </Button>
-              </Tooltip>
-            )}
-          </div>
-        );
-      },
-    });
-
-    return baseCols;
+    return base;
   }, [assigningId, isAdmin, canAssignToMe, actionsColNeeded]);
 
   /* --------------------------- render --------------------------- */
@@ -544,7 +749,7 @@ export default function PurchaserPendingPage({ onAssigned }) {
             style: { cursor: record?.listing_link ? "pointer" : "default" },
           })}
           tableLayout="fixed"
-          scroll={{ x: 1500 }}
+          scroll={{ x: "max-content" }}
           sticky
           expandable={{
             expandedRowRender: (record) => (

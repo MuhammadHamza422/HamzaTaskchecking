@@ -49,6 +49,7 @@ const statsCardStyle = {
 const cardHoverEffect = { whileHover: { scale: 1.01 }, whileTap: { scale: 0.99 } };
 const num = (v) => (typeof v === "number" ? v : Number(v) || 0);
 
+
 // ✅ Actual total from header numbers
 const calcActualTotal = (r) =>
   num(r.sellers_price) + num(r.shipping_charges ?? r.shipping_price) + num(r.taxes ?? r.tax);
@@ -422,6 +423,8 @@ export default function SourcerDashboardPage() {
     [filtered]
   );
 
+  const savingsColor = totalSavings >= 0 ? "#16a34a" : "#ef4444";
+
   const handleDeleteOrder = useCallback(
     async (orderId) => {
       if (!orderId) return;
@@ -663,36 +666,49 @@ export default function SourcerDashboardPage() {
         </div>
 
         {/* Stats */}
-        <Row gutter={[16, 16]}>
-          {[
-            {
-              title: roleName === "admin" && sourcerId ? "Total Requests (Selected Sourcer)" : "Total Requests Submitted",
-              value: filtered.length, // ✅ count respects current filters/month
-            },
-            { title: "Total Savings Generated", value: totalSavings, prefix: "$", precision: 2 },
-            { title: "Requests Pending", value: requestsPending },
-            { title: "Requests Purchased", value: requestsPurchased },
-          ].map((stat, index) => (
-            <Col xs={24} sm={12} md={8} lg={6} key={index}>
-              <motion.div {...cardHoverEffect}>
-                <Card style={statsCardStyle} bodyStyle={{ padding: 16 }}>
-                  {statsLoading ? (
-                    <Skeleton active paragraph={{ rows: 2 }} title={{ width: "80%" }} />
-                  ) : (
-                    <Statistic
-                      title={<span style={{ fontWeight: 600 }}>{stat.title}</span>}
-                      value={stat.value}
-                      prefix={stat.prefix}
-                      suffix={stat.suffix}
-                      precision={stat.precision}
-                      valueStyle={{ fontWeight: 700 }}
-                    />
-                  )}
-                </Card>
-              </motion.div>
-            </Col>
-          ))}
-        </Row>
+{/* Stats */}
+<Row gutter={[16, 16]}>
+  {[
+    {
+      key: "count",
+      title:
+        roleName === "admin" && sourcerId
+          ? "Total Requests (Selected Sourcer)"
+          : "Total Requests Submitted",
+      value: filtered.length,
+    },
+    {
+      key: "savings",
+      title: "Total Savings Generated",
+      value: totalSavings,
+      prefix: "$",
+      precision: 2,
+      valueStyle: { fontWeight: 700, color: savingsColor }, // <= color by sign
+    },
+    { key: "pending", title: "Requests Pending", value: requestsPending },
+    { key: "purchased", title: "Requests Purchased", value: requestsPurchased },
+  ].map((stat) => (
+    <Col xs={24} sm={12} md={8} lg={6} key={stat.key}>
+      <motion.div {...cardHoverEffect}>
+        <Card style={statsCardStyle} bodyStyle={{ padding: 16 }}>
+          {statsLoading ? (
+            <Skeleton active paragraph={{ rows: 2 }} title={{ width: "80%" }} />
+          ) : (
+            <Statistic
+              title={<span style={{ fontWeight: 600 }}>{stat.title}</span>}
+              value={stat.value}
+              prefix={stat.prefix}
+              suffix={stat.suffix}
+              precision={stat.precision}
+              valueStyle={stat.valueStyle || { fontWeight: 700 }}
+            />
+          )}
+        </Card>
+      </motion.div>
+    </Col>
+  ))}
+</Row>
+
 
         {/* Recent requests table */}
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="mt-4">

@@ -1,5 +1,3 @@
-
-
 // /src/pages/sourcer/SourcingOrdersPage.jsx
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
@@ -56,7 +54,10 @@ const normalizeArray = (data) =>
       [];
 
 /* ---------- helpers ---------- */
-const lower = (v) => String(v ?? "").trim().toLowerCase();
+const lower = (v) =>
+  String(v ?? "")
+    .trim()
+    .toLowerCase();
 
 const sourcerPermsFromRole = (roleObj) => {
   const acc = (roleObj?.access || []).find((a) => lower(a?.app) === "sourcer");
@@ -117,12 +118,8 @@ export default function SourcingOrdersPage() {
         const matched =
           rolesArr.find((r) => lower(r?.role) === roleName) || null;
 
-        const {
-          createOrder,
-          myRequests,
-          editMyRequests,
-          cancelMyRequests,
-        } = sourcerPermsFromRole(matched);
+        const { createOrder, myRequests, editMyRequests, cancelMyRequests } =
+          sourcerPermsFromRole(matched);
 
         if (!cancelled) {
           setCanCreateOrder(!!createOrder);
@@ -224,7 +221,9 @@ export default function SourcingOrdersPage() {
       const matchesSku =
         !filters.sku ||
         items.some((i) =>
-          (i.sku || "").toLowerCase().includes((filters.sku || "").toLowerCase())
+          (i.sku || "")
+            .toLowerCase()
+            .includes((filters.sku || "").toLowerCase())
         );
 
       const matchesStatus = !filters.status || order.status === filters.status;
@@ -289,7 +288,9 @@ export default function SourcingOrdersPage() {
   /* ---------- Loader: wait for roles OR data ---------- */
   if (!rolesLoaded || (canSeeAnyList && loading)) {
     return (
-      <div style={{ display: "flex", justifyContent: "center", paddingTop: 64 }}>
+      <div
+        style={{ display: "flex", justifyContent: "center", paddingTop: 64 }}
+      >
         <Spin size="large" />
       </div>
     );
@@ -304,7 +305,8 @@ export default function SourcingOrdersPage() {
             No permission to view “My Requests”
           </h3>
           <p className="text-gray-600">
-            Access to <b>Sourcer → “my requests”</b> is required to view this page.
+            Access to <b>Sourcer → “my requests”</b> is required to view this
+            page.
           </p>
 
           {isOrdersRoute && canCreateOrder && (
@@ -329,9 +331,16 @@ export default function SourcingOrdersPage() {
   /* ---------- Render ---------- */
   return (
     <>
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
         <Card
-          title={<span style={{ fontWeight: 700, letterSpacing: 0.2 }}>{pageTitle}</span>}
+          title={
+            <span style={{ fontWeight: 700, letterSpacing: 0.2 }}>
+              {pageTitle}
+            </span>
+          }
           extra={
             <Space>
               <button
@@ -477,14 +486,14 @@ export default function SourcingOrdersPage() {
               bordered={false}
               sticky
               scroll={{ x: 1350, y: 520 }}
-              loading={loading}      
-              onRow={() => ({
-                style: { transition: "background 0.2s" },
-                onMouseEnter: (e) =>
-                  (e.currentTarget.style.background = "#fafbff"),
-                onMouseLeave: (e) =>
-                  (e.currentTarget.style.background = "unset"),
-              })}
+              loading={loading}
+              // onRow={() => ({
+              //   style: { transition: "background 0.2s" },
+              //   onMouseEnter: (e) =>
+              //     (e.currentTarget.style.background = "#fafbff"),
+              //   onMouseLeave: (e) =>
+              //     (e.currentTarget.style.background = "unset"),
+              // })}
               locale={{
                 emptyText: (
                   <Empty
@@ -493,6 +502,12 @@ export default function SourcingOrdersPage() {
                   />
                 ),
               }}
+              className={`
+    [&_.ant-table-tbody>tr:nth-child(odd)>td]:bg-[#f8fbff]
+    [&_.ant-table-tbody>tr:nth-child(even)>td]:bg-white
+    [&_.ant-table-tbody>tr:hover>td]:!bg-[#f0f7ff]
+    transition-colors
+  `}
             />
 
             <SleekPagination

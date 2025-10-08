@@ -1,5 +1,3 @@
-
-
 // src/pages/sourcer/utils/sourcingColumns.jsx
 import React, { useEffect, useState } from "react";
 import { Table, Space, Typography, Tooltip, Button, Popconfirm } from "antd";
@@ -41,12 +39,15 @@ const getSellerName = (rec) => {
   if (rec?.seller && typeof rec.seller === "object") {
     return rec.seller.name || `Seller ${formatOid(rec.seller._id)}`;
   }
-  return rec?.seller_name || (rec?.seller ? `Seller ${formatOid(rec.seller)}` : "—");
+  return (
+    rec?.seller_name || (rec?.seller ? `Seller ${formatOid(rec.seller)}` : "—")
+  );
 };
 
 /* ---------- MarketName (cached resolver) ---------- */
 const _marketCache = new Map();
-const isObjectIdLike = (v) => typeof v === "string" && /^[a-f0-9]{24}$/i.test(v);
+const isObjectIdLike = (v) =>
+  typeof v === "string" && /^[a-f0-9]{24}$/i.test(v);
 
 function MarketName({ market }) {
   const [name, setName] = useState("—");
@@ -90,7 +91,9 @@ function MarketName({ market }) {
           rec =
             list.find(
               (m) => (m.slug || "").toLowerCase() === key.toLowerCase()
-            ) || list[0] || null;
+            ) ||
+            list[0] ||
+            null;
         }
 
         if (!cancelled) {
@@ -129,7 +132,9 @@ const STATUS_BADGE_CLASS = {
 function StatusBadge({ status }) {
   const s = String(status || "Pending");
   const cls = STATUS_BADGE_CLASS[s] || STATUS_BADGE_CLASS.Pending;
-  return <span className={`px-2 py-1 rounded text-xs font-medium ${cls}`}>{s}</span>;
+  return (
+    <span className={`px-2 py-1 rounded text-xs font-medium ${cls}`}>{s}</span>
+  );
 }
 
 /* ---------- rollup resolvers used by multiple columns ---------- */
@@ -166,12 +171,12 @@ const resolveActualTotal = (rec) => {
 
 /* ---------- exported columns factory ---------- */
 export function getSourcingColumns({
-  statusPill,             // kept for backward compatibility (unused here)
-  canEdit = false,        // SHOW Edit when true
-  canCancel = false,      // SHOW Delete when true
+  statusPill, // kept for backward compatibility (unused here)
+  canEdit = false, // SHOW Edit when true
+  canCancel = false, // SHOW Delete when true
   navigate,
   handleDeleteOrder,
-  buildEditUrl,           // optional: custom route builder
+  buildEditUrl, // optional: custom route builder
 }) {
   const mkEditUrl = buildEditUrl || ((id) => `/sourcing/edit/${id}`);
 
@@ -180,7 +185,16 @@ export function getSourcingColumns({
       title: "ID",
       dataIndex: "sourcing_id",
       key: "sourcing_id",
-      width: 110,
+
+      width: 70,
+      onCell: () => ({
+        style: {
+          maxWidth: 70,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        },
+      }),
       sorter: (a, b) => idNum(a) - idNum(b),
       defaultSortOrder: "descend",
       sortDirections: ["descend", "ascend"],
@@ -196,20 +210,32 @@ export function getSourcingColumns({
       title: "Sourcer Name",
       dataIndex: "sourcerName",
       key: "sourcerName",
-      width: 230,
+      width: 170,
+      onCell: () => ({
+        style: {
+          whiteSpace: "normal",
+          wordBreak: "break-word",
+          overflowWrap: "anywhere",
+        },
+      }),
       render: (val, rec) => {
         const fallback =
           [rec?.sourcer_id?.firstName, rec?.sourcer_id?.lastName]
             .filter(Boolean)
-            .join(" ") || rec?.sourcer_id?.email || "—";
+            .join(" ") ||
+          rec?.sourcer_id?.email ||
+          "—";
         const display = val || fallback;
+
         return (
           <div style={{ lineHeight: 1.2 }}>
             <div style={{ fontWeight: 600 }}>{display}</div>
             {rec?.sourcer_id?.email && (
-              <Text type="secondary" style={{ fontSize: 12 }}>
+              <span
+                style={{ fontSize: 12, color: "#6b7280", display: "block" }}
+              >
                 {rec.sourcer_id.email}
-              </Text>
+              </span>
             )}
           </div>
         );
@@ -219,7 +245,14 @@ export function getSourcingColumns({
       title: "Purchaser",
       dataIndex: "purchaserName",
       key: "purchaserName",
-      width: 230,
+      width: 170,
+      onCell: () => ({
+        style: {
+          whiteSpace: "normal",
+          wordBreak: "break-word",
+          overflowWrap: "anywhere",
+        },
+      }),
       render: (val, rec) => {
         const full = [rec?.purchaser_id?.firstName, rec?.purchaser_id?.lastName]
           .filter(Boolean)
@@ -230,28 +263,39 @@ export function getSourcingColumns({
           <div style={{ lineHeight: 1.2 }}>
             <div style={{ fontWeight: 600 }}>{display}</div>
             {rec?.purchaser_id?.email && (
-              <Text type="secondary" style={{ fontSize: 12 }}>
+              <span
+                style={{ fontSize: 12, color: "#6b7280", display: "block" }}
+              >
                 {rec.purchaser_id.email}
-              </Text>
+              </span>
             )}
           </div>
         );
       },
     },
-
-    /* ------------ EFFICIENCY COLUMN (fixed math + formatting) ------------ */
     {
       title: "Efficiency",
       key: "purchase_efficiency",
-      width: 150,
+      width: 100,
+      align: "center",
       render: (_v, rec) => {
-        const target = resolveTargetTotal(rec);
-        const actual = resolveActualTotal(rec);
-        const eff = round2(target - actual);   // Savings = Target − Actual
-        const color = eff >= 0 ? "#16a34a" : "#ef4444"; // green / red
+        const target = Number(resolveTargetTotal(rec));
+        const actual = Number(resolveActualTotal(rec));
+
+        if (!target) return "—"; // avoid ÷0 / missing data
+
+        const pct = (1 - (actual || 0) / target) * 100; // 1 - a/c (as percent)
+        const color = pct >= 0 ? "#16a34a" : "#ef4444";
+
         return (
-          <span style={{ fontWeight: 600, color, fontVariantNumeric: "tabular-nums" }}>
-            {fmtMoneySignFirst(eff)}
+          <span
+            style={{
+              fontWeight: 600,
+              color,
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {pct.toFixed(1)}%
           </span>
         );
       },
@@ -269,6 +313,7 @@ export function getSourcingColumns({
       title: "Seller",
       key: "seller",
       width: 100,
+      align: "center",
       render: (_, rec) => (
         <span style={{ fontWeight: 600 }}>{getSellerName(rec)}</span>
       ),
@@ -277,6 +322,7 @@ export function getSourcingColumns({
       title: "Market",
       key: "market",
       width: 100,
+      align: "center",
       render: (_, rec) => {
         const marketRef =
           rec?.seller && typeof rec.seller === "object"
@@ -295,33 +341,36 @@ export function getSourcingColumns({
         );
       },
     },
-
-    /* ----------- Money columns (kept; formatting helper used above) ----------- */
     {
       title: "Seller Price",
       dataIndex: "sellers_price",
       key: "sellers_price",
       width: 110,
+      align: "center",
       render: (v) => <span>{fmtMoneySignFirst(num(v))}</span>,
     },
     {
       title: "Shipping Charges",
       dataIndex: "shipping_charges",
       key: "shipping_charges",
-      width: 110,
-      render: (_v, rec) => fmtMoneySignFirst(num(rec.shipping_charges ?? rec.shipping_price)),
+      align: "center",
+      width: 130,
+      render: (_v, rec) =>
+        fmtMoneySignFirst(num(rec.shipping_charges ?? rec.shipping_price)),
     },
     {
       title: "Tax",
       dataIndex: "taxes",
       key: "taxes",
       width: 110,
+      align: "center",
       render: (_v, rec) => fmtMoneySignFirst(num(rec.taxes ?? rec.tax)),
     },
     {
       title: "Total Target Cost",
       key: "target_total_cost",
       width: 150,
+      align: "center",
       render: (_v, rec) => fmtMoneySignFirst(resolveTargetTotal(rec)),
     },
     {
@@ -329,6 +378,7 @@ export function getSourcingColumns({
       dataIndex: "total_actual_cost",
       key: "total_actual_cost",
       width: 150,
+      align: "center",
       render: (_v, rec) => fmtMoneySignFirst(resolveActualTotal(rec)),
     },
     {
@@ -336,18 +386,17 @@ export function getSourcingColumns({
       dataIndex: "createdAt",
       key: "createdAt",
       width: 170,
+      align: "center",
       render: (dt, rec) => {
         const actual = dt || rec.created_at || rec.created_on;
         return fmtDateTime(actual);
       },
     },
-
-    // 🔒 Actions: presence controlled by canEdit / canCancel
     {
       title: "Actions",
       key: "actions",
       fixed: "right",
-      width: 140,
+      width: 110,
       render: (_, rec) => {
         const id = rec._id || rec.id;
         const parts = [];
@@ -364,6 +413,13 @@ export function getSourcingColumns({
                   e.stopPropagation();
                   navigate(mkEditUrl(id));
                 }}
+                className="
+              !inline-flex !items-center !justify-center
+              !w-8 !h-8 !p-0
+              !bg-white !border !border-slate-200
+              !rounded-md
+              hover:!bg-slate-50 hover:!border-slate-300
+            "
               />
             </Tooltip>
           );
@@ -382,18 +438,23 @@ export function getSourcingColumns({
               <Button
                 data-testid="delete-btn"
                 type="text"
-                danger
                 icon={<Trash2 size={16} />}
                 aria-label="Delete"
                 onClick={(e) => e.stopPropagation()}
+                className="
+              !inline-flex !items-center !justify-center
+              !w-8 !h-8 !p-0
+              !bg-white !border !border-red-500
+              !text-red-600
+              !rounded-md
+              hover:!bg-rose-50 hover:!border-red-600 hover:!text-red-700
+            "
               />
             </Popconfirm>
           );
         }
 
-        if (!parts.length) {
-          return <span style={{ color: "#9ca3af" }}>—</span>;
-        }
+        if (!parts.length) return <span className="text-slate-400">—</span>;
         return <Space size={4}>{parts}</Space>;
       },
     },
@@ -409,25 +470,27 @@ export const makeItemsTable = (order) => {
     const n = safeNum(v);
     try {
       return new Intl.NumberFormat(undefined, {
-        style: "currency",
-        currency: "USD",
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
-      }).format(n);
+      }).format(n); // e.g., 1,234.56
     } catch {
-      return `$${n.toFixed(2)}`;
+      return `${n.toFixed(2)}`;
     }
   };
 
   const lineTarget = (r) =>
     Number.isFinite(Number(r?.total_target_cost))
       ? safeNum(r.total_target_cost)
-      : round2(safeNum(r?.quantity_needed || 1) * safeNum(r?.target_cost_per_unit));
+      : round2(
+          safeNum(r?.quantity_needed || 1) * safeNum(r?.target_cost_per_unit)
+        );
 
   const lineActual = (r) =>
     Number.isFinite(Number(r?.total_actual_cost))
       ? safeNum(r.total_actual_cost)
-      : round2(safeNum(r?.quantity_needed || 1) * safeNum(r?.actual_cost_per_unit));
+      : round2(
+          safeNum(r?.quantity_needed || 1) * safeNum(r?.actual_cost_per_unit)
+        );
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
@@ -437,7 +500,9 @@ export const makeItemsTable = (order) => {
         bordered
         pagination={false}
         dataSource={rows}
-        onRow={(_, idx) => ({ style: { backgroundColor: idx % 2 ? "#fafcff" : "#fff" } })}
+        onRow={(_, idx) => ({
+          style: { backgroundColor: idx % 2 ? "#fafcff" : "#fff" },
+        })}
         rowClassName="hover:bg-blue-50 transition-colors"
         columns={[
           {
@@ -461,16 +526,20 @@ export const makeItemsTable = (order) => {
             width: 80,
             align: "center",
             render: (v) => (
-              <span style={{ fontVariantNumeric: "tabular-nums" }}>{safeNum(v)}</span>
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                {safeNum(v)}
+              </span>
             ),
           },
           {
-            title: "Target $ / unit",
+            title: "Target price / unit",
             dataIndex: "target_cost_per_unit",
             align: "right",
             width: 140,
             render: (v) => (
-              <span style={{ fontVariantNumeric: "tabular-nums" }}>{money(v)}</span>
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                {money(v)}
+              </span>
             ),
           },
           {
@@ -479,16 +548,20 @@ export const makeItemsTable = (order) => {
             align: "right",
             width: 140,
             render: (_t, r) => (
-              <span style={{ fontVariantNumeric: "tabular-nums" }}>{money(lineTarget(r))}</span>
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                {money(lineTarget(r))}
+              </span>
             ),
           },
           {
-            title: "Actual $ / unit",
+            title: "Actual Cost / unit",
             dataIndex: "actual_cost_per_unit",
             align: "right",
             width: 140,
             render: (v) => (
-              <span style={{ fontVariantNumeric: "tabular-nums" }}>{money(v)}</span>
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                {money(v)}
+              </span>
             ),
           },
           {
@@ -497,7 +570,9 @@ export const makeItemsTable = (order) => {
             align: "right",
             width: 140,
             render: (_t, r) => (
-              <span style={{ fontVariantNumeric: "tabular-nums" }}>{money(lineActual(r))}</span>
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                {money(lineActual(r))}
+              </span>
             ),
           },
         ]}

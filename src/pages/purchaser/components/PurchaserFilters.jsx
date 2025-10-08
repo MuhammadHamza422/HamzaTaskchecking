@@ -1,3 +1,5 @@
+
+
 // src/pages/purchaser/components/PurchaserFilters.jsx
 import React from "react";
 import { Row, Col, Select, Input, DatePicker } from "antd";
@@ -15,14 +17,25 @@ export default function PurchaserFilters({
   setDateRange,
   AdminScopeControl,
   onClear,
-  showStatusNote = "", // optional text hint
+  showStatusNote = "",
 }) {
   return (
-    <div className="bg-white rounded-lg p-4 mb-4 shadow-sm border border-gray-200">
+    <div
+      className={`
+        rounded-lg p-4 mb-4 shadow-sm
+        border border-gray-200
+        bg-gradient-to-b from-white via-white to-slate-50
+      `}
+    >
+      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
-        <h4 style={{ margin: 0 }} className="text-gray-700">
-          Filters {showStatusNote && <span style={{ color: "#6b7280" }}>· {showStatusNote}</span>}
+        <h4 className="m-0 text-gray-700">
+          Filters{" "}
+          {showStatusNote && (
+            <span style={{ color: "#6b7280" }}>· {showStatusNote}</span>
+          )}
         </h4>
+
         <div className="flex gap-2 items-center">
           {AdminScopeControl}
           <button
@@ -34,6 +47,7 @@ export default function PurchaserFilters({
         </div>
       </div>
 
+      {/* Controls */}
       <Row gutter={[8, 8]}>
         <Col xs={24} sm={12} md={6} lg={5}>
           <Select

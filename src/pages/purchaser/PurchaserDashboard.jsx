@@ -1,6 +1,11 @@
-
 // /src/pages/purchaser/PurchaserDashboard.jsx
-import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
+import React, {
+  useMemo,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+} from "react";
 import {
   Row,
   Col,
@@ -33,10 +38,61 @@ import {
 
 import { useAuth } from "../../contexts/AuthContext";
 import apiClient from "../../api/client";
+import { PieChart, ShoppingBag, Store, Users } from "lucide-react";
+
+// Colors match your KPI cards: from-white via-white to-slate-50 + ring-slate-200
+const slateTheme = {
+  panelBg: "bg-gradient-to-b from-white via-white to-slate-50/20",
+  panelRing: "ring-1 ring-slate-200",
+  textPrimary: "text-slate-800",
+  textAccent: "text-slate-600",
+  badge: "text-slate-700 bg-slate-50 ring-1 ring-inset ring-slate-200",
+  tableBlend: `
+    [&_.ant-table]:bg-transparent
+    [&_.ant-table-container]:bg-transparent
+    [&_.ant-table-thead>tr>th]:bg-transparent
+    [&_.ant-table-thead>tr>th]:text-slate-700
+    [&_.ant-table-tbody>tr>td]:bg-transparent
+    [&_.ant-table-tbody>tr:hover>td]:bg-slate-50
+    [&_.ant-table-cell]:border-slate-100
+  `,
+};
+
+function StatPanel({ icon: Icon, title, count, children, className }) {
+  return (
+    <div
+      className={[
+        "flex-1 rounded-lg p-3 sm:p-4 shadow-sm",
+        slateTheme.panelBg,
+        slateTheme.panelRing,
+        className || "",
+      ].join(" ")}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <div className={`flex items-center gap-2 ${slateTheme.textPrimary}`}>
+          {Icon ? (
+            <Icon className={`h-4 w-4 ${slateTheme.textAccent}`} />
+          ) : null}
+          <span className="font-semibold">{title}</span>
+        </div>
+        <span
+          className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ${slateTheme.badge}`}
+        >
+          {count}
+        </span>
+      </div>
+
+      <div className={slateTheme.tableBlend}>{children}</div>
+    </div>
+  );
+}
 
 const { Title, Text } = Typography;
 
-const lower = (v) => String(v ?? "").trim().toLowerCase();
+const lower = (v) =>
+  String(v ?? "")
+    .trim()
+    .toLowerCase();
 function toDate(v) {
   const d = v ? new Date(v) : null;
   return d && !isNaN(d.getTime()) ? d : null;
@@ -52,7 +108,9 @@ function formatDuration(ms) {
   return `${m}m`;
 }
 const pickRows = (body) =>
-  Array.isArray(body) ? body : body?.docs || body?.data || body?.results || body?.items || [];
+  Array.isArray(body)
+    ? body
+    : body?.docs || body?.data || body?.results || body?.items || [];
 
 /* -------------------- permissions from /api/v1/role/all -------------------- */
 const extractPurchaserPerms = (roleObj) => {
@@ -75,7 +133,9 @@ function usePurchaserSearch() {
     value: String(u.value),
     label: (
       <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
-        <span style={{ fontWeight: 600 }}>{u.label || u.email || "Unnamed"}</span>
+        <span style={{ fontWeight: 600 }}>
+          {u.label || u.email || "Unnamed"}
+        </span>
         {u.email ? <span style={{ color: "#999" }}>· {u.email}</span> : null}
       </div>
     ),
@@ -93,7 +153,10 @@ function usePurchaserSearch() {
     } catch (e) {
       const status = e?.response?.status;
       if (status === 403) message.warning("Only admins can search purchasers.");
-      else message.error(e?.response?.data?.message || "Failed to search purchasers.");
+      else
+        message.error(
+          e?.response?.data?.message || "Failed to search purchasers."
+        );
       setOptions([]);
     } finally {
       setLoading(false);
@@ -114,7 +177,9 @@ function usePurchaserSearch() {
 export default function PurchaserDashboard() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const base = pathname.startsWith("/purchasing") ? "/purchasing" : "/purchaser";
+  const base = pathname.startsWith("/purchasing")
+    ? "/purchasing"
+    : "/purchaser";
 
   const { user: authUser } = useAuth();
   const roleName = lower(authUser?.roles?.role || authUser?.role || "");
@@ -123,7 +188,11 @@ export default function PurchaserDashboard() {
     const r = authUser?.roles;
     if (Array.isArray(r)) {
       return r
-        .map((x) => (typeof x === "string" ? x.toLowerCase() : String(x?.role || "").toLowerCase()))
+        .map((x) =>
+          typeof x === "string"
+            ? x.toLowerCase()
+            : String(x?.role || "").toLowerCase()
+        )
         .includes("admin");
     }
     return String(r?.role || r || "").toLowerCase() === "admin";
@@ -140,8 +209,11 @@ export default function PurchaserDashboard() {
       try {
         const { data } = await apiClient.get("/api/v1/role/all");
         const rolesArr = Array.isArray(data?.roles) ? data.roles : [];
-        const matched = rolesArr.find((r) => lower(r?.role) === roleName) || null;
-        const { canSeeAssignedMine, canSeeAllAssigned } = extractPurchaserPerms(matched || {});
+        const matched =
+          rolesArr.find((r) => lower(r?.role) === roleName) || null;
+        const { canSeeAssignedMine, canSeeAllAssigned } = extractPurchaserPerms(
+          matched || {}
+        );
         if (!cancelled) {
           setCanSeeAssignedMine(!!canSeeAssignedMine);
           setCanSeeAllAssigned(!!canSeeAllAssigned);
@@ -196,7 +268,8 @@ export default function PurchaserDashboard() {
 
     const params = {};
     if (isAdmin) {
-      if (selectedPurchaser?.value) params.purchaser_id = selectedPurchaser.value;
+      if (selectedPurchaser?.value)
+        params.purchaser_id = selectedPurchaser.value;
     } else {
       params.mine = true;
     }
@@ -211,7 +284,15 @@ export default function PurchaserDashboard() {
 
     if (searchTerm?.trim()) params.q = searchTerm.trim();
     return params;
-  }, [isAdmin, canSeeAllAssigned, canSeeAssignedMine, selectedPurchaser, statusFilter, dateRange, searchTerm]);
+  }, [
+    isAdmin,
+    canSeeAllAssigned,
+    canSeeAssignedMine,
+    selectedPurchaser,
+    statusFilter,
+    dateRange,
+    searchTerm,
+  ]);
 
   const fetchData = useCallback(async () => {
     if (!serverParams) {
@@ -228,7 +309,10 @@ export default function PurchaserDashboard() {
       const rows = pickRows(data);
       setRequests(normalizeRequests(rows));
     } catch (err) {
-      console.error("Failed to fetch dashboard data:", err?.response?.data || err?.message);
+      console.error(
+        "Failed to fetch dashboard data:",
+        err?.response?.data || err?.message
+      );
       message.error(err?.response?.data?.message || "Failed to fetch data.");
       setRequests([]);
     } finally {
@@ -294,7 +378,8 @@ export default function PurchaserDashboard() {
       if (s === "Purchased") agg.purchasedCount += 1;
 
       const assignedAt = toDate(d?.assignedAt);
-      const actionAt = toDate(d?.purchaserActionTime) || toDate(d?.purchaserResponseTime);
+      const actionAt =
+        toDate(d?.purchaserActionTime) || toDate(d?.purchaserResponseTime);
       if (assignedAt && actionAt) {
         const delta = actionAt.getTime() - assignedAt.getTime();
         if (Number.isFinite(delta) && delta >= 0) {
@@ -305,7 +390,10 @@ export default function PurchaserDashboard() {
     }
 
     const sortDesc = (arr) => arr.sort((a, b) => b[1] - a[1]);
-    const byMarketArr = sortDesc(Array.from(agg.byMarket.entries())).slice(0, 6);
+    const byMarketArr = sortDesc(Array.from(agg.byMarket.entries())).slice(
+      0,
+      6
+    );
     const bySellerArr = sortDesc(Array.from(agg.bySeller.entries()));
     const bySellerTop5 = bySellerArr.slice(0, 5);
 
@@ -316,7 +404,9 @@ export default function PurchaserDashboard() {
       bySellerAllCount: bySellerArr.length,
       bySellerTop5,
       purchasedCount: agg.purchasedCount,
-      avgResponseMs: agg.responseCount ? Math.round(agg.responseSumMs / agg.responseCount) : null,
+      avgResponseMs: agg.responseCount
+        ? Math.round(agg.responseSumMs / agg.responseCount)
+        : null,
       responseCount: agg.responseCount,
     };
   }, [requests]);
@@ -336,8 +426,12 @@ export default function PurchaserDashboard() {
         <Empty
           description={
             <div className="text-center">
-              <div className="font-semibold">No permission to view “All Assigned”</div>
-              <div className="text-gray-500">Ask an admin to enable Purchaser → “all assigned”.</div>
+              <div className="font-semibold">
+                No permission to view “All Assigned”
+              </div>
+              <div className="text-gray-500">
+                Ask an admin to enable Purchaser → “all assigned”.
+              </div>
             </div>
           }
         />
@@ -351,8 +445,12 @@ export default function PurchaserDashboard() {
         <Empty
           description={
             <div className="text-center">
-              <div className="font-semibold">No permission to view “Assigned to Me”</div>
-              <div className="text-gray-500">Ask an admin to enable Purchaser → “assigned to me”.</div>
+              <div className="font-semibold">
+                No permission to view “Assigned to Me”
+              </div>
+              <div className="text-gray-500">
+                Ask an admin to enable Purchaser → “assigned to me”.
+              </div>
             </div>
           }
         />
@@ -397,7 +495,11 @@ export default function PurchaserDashboard() {
             Purchaser Dashboard
           </Title>
           <Text type="secondary">
-            {loading ? "Loading…" : `Showing ${count} records${responseCount ? ` · ${responseCount} with response time` : ""}`}
+            {loading
+              ? "Loading…"
+              : `Showing ${count} records${
+                  responseCount ? ` · ${responseCount} with response time` : ""
+                }`}
           </Text>
 
           {showAdminScopeControl && selectedPurchaser ? (
@@ -419,7 +521,11 @@ export default function PurchaserDashboard() {
         <Col>
           <Space wrap>
             {AdminScopeControl}
-            <Button icon={<ReloadOutlined />} onClick={onRefresh} disabled={loading || isRefreshing}>
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={onRefresh}
+              disabled={loading || isRefreshing}
+            >
               Refresh
             </Button>
           </Space>
@@ -445,7 +551,10 @@ export default function PurchaserDashboard() {
         {[
           { title: "Total Orders", value: count },
           { title: "Purchased", value: purchasedCount },
-          { title: "Average Response Time", value: avgResponseMs === null ? "—" : formatDuration(avgResponseMs) },
+          {
+            title: "Average Response Time",
+            value: avgResponseMs === null ? "—" : formatDuration(avgResponseMs),
+          },
         ].map((kpi, i) => (
           <Col xs={12} md={8} key={i} style={{ display: "flex" }}>
             <div
@@ -459,7 +568,11 @@ export default function PurchaserDashboard() {
                 <Skeleton active paragraph={false} />
               ) : (
                 <Statistic
-                  title={<span className="font-medium text-slate-600">{kpi.title}</span>}
+                  title={
+                    <span className="font-medium text-slate-600">
+                      {kpi.title}
+                    </span>
+                  }
                   value={kpi.value}
                   valueStyle={{ fontWeight: 700, color: "#0f172a" }}
                 />
@@ -469,17 +582,22 @@ export default function PurchaserDashboard() {
         ))}
       </Row>
 
-      <Divider className="!my-4" />
-
       {/* Breakdowns */}
-      <Row gutter={[12, 12]} align="stretch">
+
+      <Row gutter={[12, 12]} align="stretch" className="mt-3">
         {/* By Status */}
-        <Col xs={24} md={8} style={{ display: "flex" }}>
-          <div className="flex-1 rounded-lg p-3 bg-gradient-to-b from-white via-white to-slate-50 ring-1 ring-slate-200">
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-medium text-slate-700">By Status</span>
-              <Text type="secondary">({byStatus.length})</Text>
-            </div>
+        <Col xs={24} md={8} className="flex">
+          <StatPanel
+            icon={PieChart}
+            title="By Status"
+            count={byStatus.length}
+            className="
+        bg-gradient-to-b from-[#f7fbff] via-white to-[#eef6ff]
+        ring-1 ring-sky-200 shadow-sm
+        [&_.stat-title]:text-sky-800
+        [&_.stat-count]:bg-sky-50 [&_.stat-count]:text-sky-700 [&_.stat-count]:ring-sky-200
+      "
+          >
             <Table
               size="small"
               pagination={false}
@@ -490,67 +608,113 @@ export default function PurchaserDashboard() {
                 {
                   title: "Status",
                   dataIndex: "status",
-                  render: (s) => <Tag color={statusColor(s)} style={{ borderRadius: 6 }}>{s}</Tag>,
+                  render: (s) => (
+                    <Tag color={statusColor(s)} style={{ borderRadius: 6 }}>
+                      {s}
+                    </Tag>
+                  ),
                 },
-                { title: "Count", dataIndex: "cnt", align: "right", width: 90 },
+                { title: "Count", dataIndex: "cnt", align: "right", width: 96 },
               ]}
               locale={{ emptyText: <Empty description="No data" /> }}
-              className="bg-transparent"
+              className="
+          bg-transparent
+          [&_.ant-table]:!bg-transparent
+          [&_.ant-table-thead>tr>th]:!bg-sky-50
+          [&_.ant-table-thead>tr>th]:!text-sky-800
+          [&_.ant-table-thead>tr>th]:!border-sky-100
+          [&_.ant-table-tbody>tr>td]:!border-sky-100
+          [&_.ant-table-tbody>tr:hover>td]:!bg-sky-50/50
+        "
             />
-          </div>
+          </StatPanel>
         </Col>
 
         {/* Top Markets */}
-        <Col xs={24} md={8} style={{ display: "flex" }}>
-          <div className="flex-1 rounded-lg p-3 bg-gradient-to-b from-white via-white to-slate-50 ring-1 ring-slate-200">
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-medium text-slate-700">Top Markets</span>
-              <Text type="secondary">({byMarket.length})</Text>
-            </div>
+        <Col xs={24} md={8} className="flex">
+          <StatPanel
+            icon={Store}
+            title="Top Markets"
+            count={byMarket.length}
+            className="
+        bg-gradient-to-b from-[#f7fbff] via-white to-[#eef6ff]
+        ring-1 ring-sky-200 shadow-sm
+        [&_.stat-title]:text-sky-800
+        [&_.stat-count]:bg-sky-50 [&_.stat-count]:text-sky-700 [&_.stat-count]:ring-sky-200
+      "
+          >
             <Table
               size="small"
               pagination={false}
               loading={loading}
               rowKey="market"
-              dataSource={byMarket.map(([market, cnt]) => ({ market: market || "—", cnt }))}
+              dataSource={byMarket.map(([market, cnt]) => ({
+                market: market || "—",
+                cnt,
+              }))}
               columns={[
                 { title: "Market", dataIndex: "market" },
-                { title: "Count", dataIndex: "cnt", align: "right", width: 90 },
+                { title: "Count", dataIndex: "cnt", align: "right", width: 96 },
               ]}
               locale={{ emptyText: <Empty description="No data" /> }}
-              className="bg-transparent"
+              className="
+          bg-transparent
+          [&_.ant-table]:!bg-transparent
+          [&_.ant-table-thead>tr>th]:!bg-sky-50
+          [&_.ant-table-thead>tr>th]:!text-sky-800
+          [&_.ant-table-thead>tr>th]:!border-sky-100
+          [&_.ant-table-tbody>tr>td]:!border-sky-100
+          [&_.ant-table-tbody>tr:hover>td]:!bg-sky-50/50
+        "
             />
-          </div>
+          </StatPanel>
         </Col>
 
         {/* Top Sellers (top 5) */}
-        <Col xs={24} md={8} style={{ display: "flex" }}>
-          <div className="flex-1 rounded-lg p-3 bg-gradient-to-b from-white via-white to-slate-50 ring-1 ring-slate-200">
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-medium text-slate-700">Top Sellers</span>
-              <Text type="secondary">({bySellerAllCount})</Text>
-            </div>
+        <Col xs={24} md={8} className="flex">
+          <StatPanel
+            icon={ShoppingBag}
+            title="Top Sellers"
+            count={bySellerAllCount}
+            className="
+        bg-gradient-to-b from-[#f7fbff] via-white to-[#eef6ff]
+        ring-1 ring-sky-200 shadow-sm
+        [&_.stat-title]:text-sky-800
+        [&_.stat-count]:bg-sky-50 [&_.stat-count]:text-sky-700 [&_.stat-count]:ring-sky-200
+      "
+          >
             <Table
               size="small"
               pagination={false}
               loading={loading}
               rowKey="seller"
-              dataSource={bySellerTop5.map(([seller, cnt]) => ({ seller: seller || "—", cnt }))}
+              dataSource={bySellerTop5.map(([seller, cnt]) => ({
+                seller: seller || "—",
+                cnt,
+              }))}
               columns={[
                 { title: "Seller", dataIndex: "seller" },
-                { title: "Count", dataIndex: "cnt", align: "right", width: 90 },
+                { title: "Count", dataIndex: "cnt", align: "right", width: 96 },
               ]}
               locale={{ emptyText: <Empty description="No data" /> }}
-              className="bg-transparent"
+              className="
+          bg-transparent
+          [&_.ant-table]:!bg-transparent
+          [&_.ant-table-thead>tr>th]:!bg-sky-50
+          [&_.ant-table-thead>tr>th]:!text-sky-800
+          [&_.ant-table-thead>tr>th]:!border-sky-100
+          [&_.ant-table-tbody>tr>td]:!border-sky-100
+          [&_.ant-table-tbody>tr:hover>td]:!bg-sky-50/50
+        "
             />
-          </div>
+          </StatPanel>
         </Col>
       </Row>
 
-      <Divider className="!my-4" />
+
 
       {/* Latest Purchased (quick view only) */}
-      <div className="rounded-lg p-3 bg-gradient-to-b from-white via-white to-slate-50 ring-1 ring-slate-200">
+      <div className="mt-4 rounded-lg p-3 bg-gradient-to-b from-white via-white to-slate-50 ring-1 ring-slate-200">
         <PurchasedTop5Table
           data={requests}
           loading={loading}
