@@ -16,6 +16,7 @@ import InventoryDisplay from "./inventory-display";
 import apiClient from "../../api/client";
 import { useSelector } from "react-redux";
 import { Switch } from "antd";
+import { useSearchParams } from "react-router-dom";
 
 export default function ScanProduct() {
   const [mode, setMode] = useState("select");
@@ -39,6 +40,16 @@ export default function ScanProduct() {
   scanSound.preload = "auto";
   const lastScannedDataRef = useRef(null);
   const zoneId = useSelector((s) => s.app.selectedZoneId);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [type, setType] = useState(searchParams.get("type") || "location");
+  const [zone, setZone] = useState(null);
+
+  // Update URL param when `type` changes
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams);
+    params.set("type", type);
+    setSearchParams(params);
+  }, [type, setSearchParams, searchParams]);
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -295,6 +306,7 @@ export default function ScanProduct() {
 
       if (data) {
         setLocationId(data.locations[0]._id);
+        setZone(data?.zone);
         setActiveLocationCode(data.locations[0].code);
         if (!data.locations) {
           setSearchQuery("");
@@ -498,9 +510,35 @@ export default function ScanProduct() {
         {mode === "select" && (
           <div className="space-y-6 cursor-pointer">
             <div className="space-y-4">
-              <h2 className="text-lg font-semibold text-slate-800 font-sans">
-                Choose Search Method
-              </h2>
+              <div className="flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
+                <h2 className="text-lg font-semibold text-slate-800 font-sans">
+                  Choose Search Method
+                </h2>
+                <div className="flex items-center gap-1 border border-gray-300 rounded-md px-2 py-1">
+                  <button
+                    onClick={() => setType("location")}
+                    className={`py-1.5 px-5  ${
+                      type === "location"
+                        ? "bg-blue-600 text-white"
+                        : "bg-gray-200 text-black"
+                    } rounded-md `}
+                  >
+                    Location
+                  </button>
+                  <button
+                    onClick={() => {
+                      setType("zone");
+                    }}
+                    className={`py-1.5 px-5  ${
+                      type === "zone"
+                        ? "bg-blue-600 text-white"
+                        : "bg-gray-200 text-black"
+                    } rounded-md  `}
+                  >
+                    Zone
+                  </button>
+                </div>
+              </div>
 
               <div className="grid grid-cols-1 gap-4">
                 <div
@@ -603,6 +641,7 @@ export default function ScanProduct() {
               isLoading={isSearching}
               scannedData={scannedData}
               locationid={locationId}
+              zone={zone}
             />
           </div>
         )}
@@ -763,6 +802,7 @@ export default function ScanProduct() {
                 isLoading={isSearching}
                 scannedData={scannedData || searchQuery}
                 locationid={locationId}
+                zone={zone}
               />
             </div>
           </div>
@@ -830,6 +870,7 @@ export default function ScanProduct() {
                 scannedData={
                   activeLocationCode ? activeLocationCode : searchQuery
                 }
+                zone={zone}
                 locationid={locationId}
               />
             </div>
