@@ -100,9 +100,9 @@ export default function ShopifyOrderTable({
   const getPaymentStatusDot = (status) => {
     switch (status?.toLowerCase()) {
       case "paid":
-        return <div className="w-2 h-2 bg-gray-600 rounded-full"></div>;
+        return <div className="w-2 h-2 bg-green-500 rounded-full"></div>;
       case "refunded":
-        return <div className="w-2 h-2 bg-gray-400 rounded-full"></div>;
+        return <div className="w-2 h-2 bg-red-500 rounded-full"></div>;
       default:
         return <div className="w-2 h-2 bg-gray-300 rounded-full"></div>;
     }
@@ -110,26 +110,29 @@ export default function ShopifyOrderTable({
 
   // Get fulfillment status
   const getFulfillmentStatus = (status) => {
+    // Handle null/undefined as unfulfilled
+    if (!status || status === null) {
+      return (
+        <div className="flex items-center justify-center gap-2 bg-yellow-400 rounded-full text-black p-0.5">
+          <div className="w-2 h-2 bg-white rounded-full"></div>
+          <span className="text-sm font-medium">Unfulfilled</span>
+        </div>
+      );
+    }
+
     switch (status?.toLowerCase()) {
-      case "unfulfilled":
-        return (
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-            <span className="text-sm text-gray-600">Unfulfilled</span>
-          </div>
-        );
       case "fulfilled":
         return (
           <div className="flex items-center gap-1">
-            <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-            <span className="text-sm text-gray-600">Fulfilled</span>
+            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+            <span className="text-sm text-green-700 font-medium">Fulfilled</span>
           </div>
         );
       default:
         return (
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-2 bg-gray-300 rounded-full"></div>
-            <span className="text-sm text-gray-600">Unknown</span>
+          <div className="flex items-center justify-center gap-2 bg-yellow-400 rounded-full text-black p-1">
+            <div className="w-2 h-2 bg-white rounded-full"></div>
+            <span className="text-sm font-medium">Unfulfilled</span>
           </div>
         );
     }
@@ -137,22 +140,39 @@ export default function ShopifyOrderTable({
 
   // Get delivery status
   const getDeliveryStatus = (status) => {
+    if (!status) {
+      return <span className="text-sm text-gray-400">—</span>;
+    }
+
     switch (status?.toLowerCase()) {
+      case "awaiting_shipment":
+        return (
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+            <span className="text-sm text-yellow-700 font-medium">Awaiting Shipment</span>
+          </div>
+        );
       case "in_transit":
         return (
-          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-            In transit
-          </span>
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+            <span className="text-sm text-blue-700 font-medium">In Transit</span>
+          </div>
         );
       case "delivered":
         return (
           <div className="flex items-center gap-1">
-            <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-            <span className="text-sm text-gray-600">Delivered</span>
+            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+            <span className="text-sm text-green-700 font-medium">Delivered</span>
           </div>
         );
       default:
-        return <span className="text-sm text-gray-400">—</span>;
+        return (
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+            <span className="text-sm text-gray-600">{status}</span>
+          </div>
+        );
     }
   };
 
@@ -160,6 +180,27 @@ export default function ShopifyOrderTable({
   const getDeliveryMethod = (method) => {
     if (!method) return <span className="text-sm text-gray-400">—</span>;
     return <span className="text-sm text-gray-600">{method}</span>;
+  };
+
+  // Get cancel reason badge
+  const getCancelReasonBadge = (cancelReason) => {
+    if (!cancelReason || cancelReason === "null") return null;
+
+    const reasonConfig = {
+      customer: { color: "bg-blue-100 text-blue-800", text: "Customer" },
+      inventory: { color: "bg-orange-100 text-orange-800", text: "Inventory" },
+      fraud: { color: "bg-red-100 text-red-800", text: "Fraud" },
+      staff: { color: "bg-purple-100 text-purple-800", text: "Staff" },
+      cancel: { color: "bg-gray-100 text-gray-800", text: "Cancelled" }
+    };
+
+    const config = reasonConfig[cancelReason] || { color: "bg-gray-100 text-gray-800", text: cancelReason };
+    
+    return (
+      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${config.color}`}>
+        {config.text}
+      </span>
+    );
   };
 
   // Check if order has fraud/cancel issues
@@ -179,23 +220,27 @@ export default function ShopifyOrderTable({
 
     // Check for cancelled orders
     if (shopifyDetails.cancelled_at) {
+      const cancelReason = shopifyDetails.cancel_reason;
+      // Apply strikethrough only for customer and staff cancellations
+      const shouldStrikeThrough = cancelReason && ["customer", "staff"].includes(cancelReason);
+      
       return {
-        type: "cancelled",
+        type: shouldStrikeThrough ? "cancel" : "cancelled",
         icon: <WarningOutlined className="text-orange-500" />,
-        tooltip: `Order cancelled: ${shopifyDetails.cancel_reason || "Unknown reason"}`,
-        reason: shopifyDetails.cancel_reason || "Cancelled"
+        tooltip: `Order cancelled: ${cancelReason || "Unknown reason"}`,
+        reason: cancelReason || "Cancel"
       };
     }
 
     // Check for refunded orders
-    if (shopifyDetails.financial_status === "refunded") {
-      return {
-        type: "refunded",
-        icon: <WarningOutlined className="text-blue-500" />,
-        tooltip: "This order has been refunded.",
-        reason: "Refunded"
-      };
-    }
+    // if (shopifyDetails.financial_status === "refunded") {
+    //   return {
+    //     type: "refunded",
+    //     icon: <WarningOutlined className="text-blue-500" />,
+    //     tooltip: "This order has been refunded.",
+    //     reason: "Refunded"
+    //   };
+    // }
 
     return null;
   };
@@ -272,15 +317,19 @@ export default function ShopifyOrderTable({
       render: (text, record) => {
         const numericId = text?.replace('gid://shopify/Order/', '') || text;
         const warning = getOrderWarning(record);
+        const cancelReason = record?.shopifyDetails?.cancel_reason;
         
         return (
-          <div className="flex items-center gap-2">
-            {warning && (
-              <Tooltip title={warning.tooltip} placement="top">
-                {warning.icon}
-              </Tooltip>
-            )}
-            <span className="font-semibold text-gray-900">{record?.shopifyDetails?.name || `RF${numericId}`}</span>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              {warning && (
+                <Tooltip title={warning.tooltip} placement="top">
+                  {warning.icon}
+                </Tooltip>
+              )}
+              <span className="font-semibold text-gray-900">{record?.shopifyDetails?.name || `RF${numericId}`}</span>
+            </div>
+            {getCancelReasonBadge(cancelReason)}
           </div>
         );
       },
@@ -334,7 +383,7 @@ export default function ShopifyOrderTable({
       render: (shopifyDetails) => (
         <div className="flex items-center gap-2">
           {getPaymentStatusDot(shopifyDetails?.financial_status)}
-          <span className="text-sm text-gray-600 capitalize">
+          <span className={`text-sm ${shopifyDetails?.financial_status === "paid" ? "text-green-700" : "text-red-500"} capitalize`}>
             {shopifyDetails?.financial_status || "Unknown"}
           </span>
         </div>
@@ -374,6 +423,22 @@ export default function ShopifyOrderTable({
       key: "deliveryMethod",
       width: 140,
       render: (shopifyDetails) => getDeliveryMethod(shopifyDetails?.shipping_lines?.[0]?.title),
+    },
+    {
+      title: "Tracking",
+      dataIndex: "tracking_number",
+      key: "trackingNumber",
+      width: 120,
+      render: (trackingNumber) => {
+        if (!trackingNumber || trackingNumber.trim() === "") {
+          return <span className="text-sm text-gray-400">—</span>;
+        }
+        return (
+          <span className="text-sm text-blue-600 font-medium">
+            {trackingNumber}
+          </span>
+        );
+      },
     },
     {
       title: "Tags",
@@ -425,7 +490,7 @@ export default function ShopifyOrderTable({
     return (
       <div
         className={`relative cursor-pointer hover:shadow-md transition-shadow rounded-lg text-sm text-black p-0 bg-white mb-4 border border-gray-200 ${
-          warning && warning.type === "fraud" ? "line-through text-gray-500" : ""
+          warning && warning.type === "cancel" ? "line-through text-gray-500" : ""
         }`}
         onClick={() => onRowClick(order)}
       >
@@ -464,11 +529,14 @@ export default function ShopifyOrderTable({
                 <div className="text-sm text-gray-500">
                   {formatDate(order?.createdAt)}
                 </div>
-                {warning && (
-                  <div className="text-xs text-red-600 mt-1">
-                    {warning.reason}
-                  </div>
-                )}
+                <div className="flex items-center gap-2 mt-1">
+                  {getCancelReasonBadge(order?.shopifyDetails?.cancel_reason)}
+                  {warning && (
+                    <div className="text-xs text-red-600">
+                      {warning.reason}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             <div className="flex flex-col gap-1">
@@ -505,6 +573,16 @@ export default function ShopifyOrderTable({
               </div>
             </div>
           </div>
+
+          {/* Tracking Number */}
+          {order?.tracking_number && order.tracking_number.trim() !== "" && (
+            <div className="text-sm">
+              <span className="text-gray-500">Tracking:</span>
+              <div className="font-semibold text-blue-600">
+                {order.tracking_number}
+              </div>
+            </div>
+          )}
 
           {/* Footer */}
           <div className="flex justify-between items-center pt-2 border-t border-gray-100">
@@ -608,7 +686,7 @@ export default function ShopifyOrderTable({
               classes.push("opacity-60");
             }
             
-            if (warning && warning.type === "fraud") {
+            if (warning && warning.type === "cancel") {
               classes.push("line-through text-gray-500");
             }
             
