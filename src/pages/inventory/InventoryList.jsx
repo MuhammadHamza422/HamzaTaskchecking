@@ -154,10 +154,6 @@ export default function InventoryList() {
     const list = Array.isArray(data?.inventry) ? data.inventry : [];
 
     const mapped = list
-      .filter((row) => {
-        const itemWarehouseId = row.warehouseData?._id;
-        return itemWarehouseId === warehouseId;
-      })
       .map((row) => {
         const locationIdFromRow =
           row.locationData?._id ||
@@ -198,19 +194,25 @@ export default function InventoryList() {
           ""
         ).toLowerCase();
 
+        // Handle zone-only inventory (no location)
+        const isZoneOnly = !locationIdFromRow && !resolvedLocationCode && row.zoneData;
+        const displayLocationCode = isZoneOnly ? (row.zoneData?.name || "Zone") : resolvedLocationCode;
+
         return {
           id: row._id,
           quantity: row.quantity,
           updatedAt: row.updatedAt,
           productTitle: row.productData?.pro_title,
-          locationCode: resolvedLocationCode,
+          locationCode: displayLocationCode,
           sku: row.productData?.sku,
           modelCode: row.productData?.model_code,
-          name: row.warehouseData?.name,
-          country: row.warehouseData?.country,
-          warehouseId: row.warehouseData?._id,
+          name: row.warehouseData?.name || "Unknown Warehouse",
+          country: row.warehouseData?.country || "",
+          warehouseId: row.warehouseData?._id || warehouseId,
           locationId: locationIdFromRow,
           locationType: resolvedLocationType,
+          isZoneOnly: isZoneOnly,
+          zoneData: row.zoneData,
         };
       });
 
@@ -337,12 +339,25 @@ export default function InventoryList() {
       { label: "SKU", key: "sku" },
       { label: "Quantity", key: "quantity" },
       { label: "Location Code", key: "locationCode" },
+      { label: "Zone Name", key: "zoneName" },
       { label: "Warehouse Name", key: "name" },
       { label: "Warehouse Country", key: "country" },
       { label: "Model Code", key: "modelCode" },
       { label: "Updated At", key: "updatedAt" },
     ];
   }, []);
+
+  // Resolve zone name: prefer zones list (selected zoneId), fallback to locations data
+  const zoneName = useMemo(() => {
+    const list = Array.isArray(zonesRes?.zones) ? zonesRes.zones : [];
+    const found = list.find((z) => (z._id ?? z.id) === zoneId);
+    if (found?.name) return found.name;
+    if (locations.length > 0) {
+      const firstLocation = locations[0];
+      return firstLocation?.zone?.name || "";
+    }
+    return "";
+  }, [zonesRes, zoneId, locations]);
 
   // Use current page items only for CSV (no checkbox selection)
   const csvData = useMemo(() => {
@@ -352,12 +367,13 @@ export default function InventoryList() {
       sku: r.sku,
       quantity: r.quantity,
       locationCode: r.locationCode,
+      zoneName: r.zoneData?.name || zoneName || "",
       name: r.name,
       country: r.country,
       modelCode: r.modelCode,
       updatedAt: r.updatedAt,
     }));
-  }, [items]);
+  }, [items, zoneName]);
 
   // Group inventory items by shelf base, nest BINs under their parent shelf
   const groupedByShelf = useMemo(() => {
@@ -673,22 +689,8 @@ export default function InventoryList() {
       return;
     }
 
-    // In hybrid (and optionally shelf) zones, require a location to be selected
-    const requiresLocation = warehouseType === "hybrid";
-    if (requiresLocation && !form.locationId) {
-      Swal.fire({
-        icon: "error",
-        title: "Location Required",
-        text: "Please select a location for this inventory.",
-        toast: true,
-        position: "top-end",
-        showConfirmButton: false,
-        timer: 3000,
-        background: "#ef4444",
-        color: "#fff",
-      });
-      return;
-    }
+    // Location is optional for hybrid zones - can add inventory directly to zone
+    // No location validation needed for hybrid zones
 
     // Ensure we have a valid warehouse ID
     if (!warehouseId) {
@@ -842,17 +844,6 @@ export default function InventoryList() {
     }
   }, [searchTerm, groupedByShelf]);
 
-  // Resolve zone name: prefer zones list (selected zoneId), fallback to locations data
-  const zoneName = useMemo(() => {
-    const list = Array.isArray(zonesRes?.zones) ? zonesRes.zones : [];
-    const found = list.find((z) => (z._id ?? z.id) === zoneId);
-    if (found?.name) return found.name;
-    if (locations.length > 0) {
-      const firstLocation = locations[0];
-      return firstLocation?.zone?.name || "";
-    }
-    return "";
-  }, [zonesRes, zoneId, locations]);
 
   // CSV filename based on current zone name and page
   const csvFilename = useMemo(() => {

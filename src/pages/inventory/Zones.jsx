@@ -309,7 +309,7 @@ export default function Zones() {
                 className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-sm text-white hover:bg-green-700"
               >
                 <FiPrinter /> 
-                {selectedIds.size > 0 ? `Print ${selectedIds.size} Zone${selectedIds.size !== 1 ? 's' : ''}` : 'Print Zones'}
+                {selectedIds.size > 0 ? `Print ${selectedIds.size} Zone${selectedIds.size !== 1 ? 's' : ''}` : 'Print Labels'}
               </button>
             )}
             {role !== "Technician" && role !== "Picker" && (

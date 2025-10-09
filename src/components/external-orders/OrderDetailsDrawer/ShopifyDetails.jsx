@@ -65,6 +65,52 @@ export default function ShopifyDetails({
     }).format(parseFloat(amount));
   };
 
+  // Get order status message with background highlighting
+  const getOrderStatusMessage = (selectedOrder) => {
+    const shopifyDetails = selectedOrder?.shopifyDetails;
+    if (!shopifyDetails) return null;
+
+    // Check for fraud
+    if (shopifyDetails.cancel_reason === "fraud") {
+      return {
+        message: "⚠️ This order has a high risk of fraud and should be reviewed carefully.",
+        bgColor: "bg-red-50 border-red-200",
+        textColor: "text-red-800",
+        icon: "🚨"
+      };
+    }
+
+    // Check for cancelled orders
+    if (shopifyDetails.cancelled_at) {
+      const cancelReason = shopifyDetails.cancel_reason;
+      const reasonText = {
+        customer: "Customer requested cancellation",
+        staff: "Cancelled by staff",
+        inventory: "Cancelled due to inventory issues",
+        fraud: "Cancelled due to fraud detection"
+      }[cancelReason] || `Cancelled: ${cancelReason || "Unknown reason"}`;
+
+      return {
+        message: `❌ Order cancelled: ${reasonText}`,
+        bgColor: "bg-orange-50 border-orange-200",
+        textColor: "text-orange-800",
+        icon: "⚠️"
+      };
+    }
+
+    // Check for refunded orders
+    // if (shopifyDetails.financial_status === "refunded") {
+    //   return {
+    //     message: "💸 This order has been refunded.",
+    //     bgColor: "bg-blue-50 border-blue-200",
+    //     textColor: "text-blue-800",
+    //     icon: "💰"
+    //   };
+    // }
+
+    return null;
+  };
+
   // Handle checkbox selection
   const handleItemSelect = (itemId, checked) => {
     if (checked) {
@@ -375,8 +421,22 @@ export default function ShopifyDetails({
       .filter((item) => !hiddenLineItemIds.has(item.id));
   }, [order?.lineItems?.edges, hiddenLineItemIds]);
 
+  const statusMessage = getOrderStatusMessage(selectedOrder);
+
   return (
     <div className="space-y-4">
+      {/* Status Message */}
+      {statusMessage && (
+        <div className={`p-4 rounded-lg border-2 ${statusMessage.bgColor}`}>
+          <div className="flex items-center gap-2">
+            <span className="text-lg">{statusMessage.icon}</span>
+            <span className={`font-medium ${statusMessage.textColor}`}>
+              {statusMessage.message}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Order Information */}
       <Card
         size="small"
