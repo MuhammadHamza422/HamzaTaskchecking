@@ -15,9 +15,242 @@ export default function HybridView({
   if (!Array.isArray(groupedByLocation) || groupedByLocation.length === 0)
     return null;
 
+  // Separate zone-only items from location-based items
+  // Find items that are zone-only (have zoneData but no specific location)
+  const zoneOnlyGroups = groupedByLocation.filter(group => {
+    // Check if this group contains zone-only items
+    return group.rows.some(row => row.isZoneOnly);
+  });
+  const locationGroups = groupedByLocation.filter(group => {
+    // Check if this group contains location-based items
+    return group.rows.some(row => !row.isZoneOnly);
+  });
+
   return (
     <div className="space-y-6">
-      {groupedByLocation.map(({ locationCode, rows, warehouseName }) => (
+      {/* Zone-only items section */}
+      {zoneOnlyGroups.map(({ locationCode, rows }) => (
+        <div key={locationCode} className="rounded-lg border overflow-hidden">
+          <div className="flex items-center justify-between gap-4 px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200">
+            <div>
+              <p className="font-bold text-xl uppercase tracking-wide">
+                {locationCode}
+              </p>
+              <p className="text-sm text-gray-500 mt-0.5">
+                {`Items in zone: ${rows.length}`}
+              </p>
+            </div>
+          </div>
+
+          <div className="p-4 bg-gray-100">
+            <div className="overflow-x-auto">
+              <table className="min-w-full bg-white rounded-lg">
+                <thead className="border-b">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700">
+                      Product
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs font-mono text-gray-700">
+                      SKU
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs text-gray-700">
+                      Warehouse
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs text-gray-700">
+                      Qty
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.id} className="border-t">
+                      <td className="px-3 py-2 text-sm font-medium">
+                        {r.productTitle}
+                      </td>
+                      <td className="px-3 py-2 text-xs font-mono">
+                        {r.sku || "N/A"}
+                      </td>
+                      <td className="px-3 py-2 text-sm text-gray-500">
+                        {r.name}
+                      </td>
+                      <td className="px-3 py-2 text-sm text-gray-700">
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center rounded-lg overflow-hidden border border-gray-200 shadow-sm bg-gray-50 h-9">
+                            {r.quantity > 0 ? (
+                              <button
+                                disabled={
+                                  Number(r.quantity) <= 0 ||
+                                  userRole === "Technician"
+                                }
+                                onClick={() => {
+                                  const currentPending = pendingQtyChanges.get(
+                                    r.id
+                                  );
+                                  const baseQty = currentPending
+                                    ? currentPending.newQty
+                                    : Number(r.quantity);
+                                  const newQty = Math.max(0, baseQty - 1);
+                                  setPendingQtyChanges((prev) => {
+                                    const newMap = new Map(prev);
+                                    newMap.set(r.id, {
+                                      currentQty: Number(r.quantity),
+                                      newQty,
+                                      type: "decrease",
+                                    });
+                                    return newMap;
+                                  });
+                                }}
+                                className={`px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                                  Number(r.quantity) <= 0
+                                    ? "text-gray-300 bg-gray-50 cursor-not-allowed"
+                                    : "text-red-400 bg-red-100 hover:bg-red-800 hover:text-white"
+                                }`}
+                                title="Decrease by 1"
+                              >
+                                <Minus className="w-4 h-4" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  handleDeleteInventory(r.id);
+                                }}
+                                className={`px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors text-white bg-red-600`}
+                                title="Decrease by 1"
+                              >
+                                <AiTwotoneDelete className="w-4 h-4" />
+                              </button>
+                            )}
+                            <input
+                              value={
+                                pendingQtyChanges.has(r.id)
+                                  ? pendingQtyChanges.get(r.id).newQty
+                                  : r.quantity || ""
+                              }
+                              onChange={(e) =>
+                                handleQuantityInputChange(r.id, e.target.value)
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  const pendingChange = pendingQtyChanges.get(
+                                    r.id
+                                  );
+                                  if (pendingChange) {
+                                    const key =
+                                      pendingChange.newQty >
+                                      pendingChange.currentQty
+                                        ? "added"
+                                        : "removed";
+                                    handleUpdateQty(
+                                      r.id,
+                                      pendingChange.newQty,
+                                      key
+                                    );
+                                  }
+                                }
+                              }}
+                              className="w-14 text-center px-3 py-2 text-sm bg-white border-l border-r outline-none focus:ring-2 focus:ring-blue-500 focus:bg-blue-50 transition-colors"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              placeholder="0"
+                            />
+                            <button
+                              disabled={userRole === "Picker"}
+                              onClick={() => {
+                                const currentPending = pendingQtyChanges.get(
+                                  r.id
+                                );
+                                const baseQty = currentPending
+                                  ? currentPending.newQty
+                                  : Number(r.quantity);
+                                const newQty = baseQty + 1;
+                                setPendingQtyChanges((prev) => {
+                                  const newMap = new Map(prev);
+                                  newMap.set(r.id, {
+                                    currentQty: Number(r.quantity),
+                                    newQty,
+                                    type: "increase",
+                                  });
+                                  return newMap;
+                                });
+                              }}
+                              className="px-3 h-full flex items-center justify-center text-sm duration-300 ease-in-out transition-colors bg-green-100 text-green-600 hover:bg-green-900 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Increase by 1"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <button
+                            onClick={() => onOpenMove(r.id)}
+                            className="p-2 h-9 rounded-md bg-purple-600 text-white text-xs hover:bg-purple-700"
+                          >
+                            Move
+                          </button>
+                        </div>
+
+                        {pendingQtyChanges.has(r.id) && (
+                          <div className="fixed left-0 bottom-0 w-full p-5 bg-white flex flex-col sm:flex-row sm:items-center gap-y-2 justify-between duration-300 ease-in-out">
+                            <h2 className="text-xl sm:text-2xl font-bold">
+                              {r.productTitle}
+                            </h2>
+                            <div className="flex items-center max-sm:justify-end space-x-2">
+                              <p className="text-sm font-medium text-blue-700">
+                                New qty: {pendingQtyChanges.get(r.id)?.newQty}
+                              </p>
+                              <button
+                                onClick={() => {
+                                  const pendingChange = pendingQtyChanges.get(
+                                    r.id
+                                  );
+                                  if (pendingChange) {
+                                    const key =
+                                      pendingChange.newQty >
+                                      pendingChange.currentQty
+                                        ? "added"
+                                        : "removed";
+                                    handleUpdateQty(
+                                      r.id,
+                                      pendingChange.newQty,
+                                      key
+                                    );
+                                  }
+                                }}
+                                className="px-3 py-2 text-sm tracking-wide bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+                              >
+                                Validate
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setPendingQtyChanges((prev) => {
+                                    const newMap = new Map(prev);
+                                    newMap.delete(r.id);
+                                    return newMap;
+                                  });
+                                }}
+                                className="px-3 py-2 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {rows.length === 0 && (
+              <div className="px-4 py-8 text-center bg-white text-gray-500">
+                No items in this zone
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+
+      {/* Location-based items */}
+      {locationGroups.map(({ locationCode, rows, warehouseName }) => (
         <div key={locationCode} className="rounded-lg border overflow-hidden">
           <div className="flex items-center justify-between gap-4 px-4 py-3 bg-gradient-to-r from-amber-50 to-yellow-50 border-b border-gray-200">
             <div>

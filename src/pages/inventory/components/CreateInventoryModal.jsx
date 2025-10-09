@@ -50,14 +50,15 @@ export default function CreateInventoryModal({
 
           {warehouseType === "hybrid" && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Location <span className="text-gray-400 text-xs">(Optional - leave empty to add to zone directly)</span>
+              </label>
               <select
                 value={form.locationId}
                 onChange={(e) => setForm((prev) => ({ ...prev, locationId: e.target.value }))}
                 className="w-full rounded-md border px-3 py-2 text-sm"
-                required
               >
-                <option value="">Select location</option>
+                <option value="">No specific location (add to zone)</option>
                 {locations.map((loc) => (
                   <option key={loc.id} value={loc.id}>
                     {loc.code}
