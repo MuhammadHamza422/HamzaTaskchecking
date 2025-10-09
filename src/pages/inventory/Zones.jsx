@@ -308,17 +308,12 @@ export default function Zones() {
                 onClick={handleOpenPrint}
                 className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-sm text-white hover:bg-green-700"
               >
-<<<<<<< HEAD
                 <FiPrinter />
                 {selectedIds.size > 0
                   ? `Print ${selectedIds.size} Zone${
                       selectedIds.size !== 1 ? "s" : ""
                     }`
                   : "Print Zones"}
-=======
-                <FiPrinter /> 
-                {selectedIds.size > 0 ? `Print ${selectedIds.size} Zone${selectedIds.size !== 1 ? 's' : ''}` : 'Print Labels'}
->>>>>>> ccc5ffa06ffe3458b1211e40d5c1017dd37816ff
               </button>
             )}
             {role !== "Technician" && role !== "Picker" && (
