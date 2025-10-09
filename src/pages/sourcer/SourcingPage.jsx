@@ -24,6 +24,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { statusPill } from "./utils/helpers";
 import { getSourcingColumns, makeItemsTable } from "./utils/sourcingColumns";
 import SleekPagination from "./components/Sleekpagination";
+import SourcingExportButton from "./components/SourcingExportButton";
 
 const { Option } = Select;
 const { RangePicker } = DatePicker;
@@ -363,6 +364,21 @@ export default function SourcingOrdersPage() {
                   Import CSV
                 </button>
               )}
+
+              <SourcingExportButton
+                orders={filteredOrders}
+                filenameBase="sourcing_orders"
+                className="
+                  border border-orange-800
+                  bg-orange-600 hover:bg-orange-800 active:bg-orange-900
+                  text-white
+                  shadow-sm hover:shadow
+                  focus-visible:ring-2 focus-visible:ring-orange-300
+                  disabled:opacity-60 disabled:cursor-not-allowed
+                  w-full md:w-auto
+                "
+              />
+
 
               {isOrdersRoute && canCreateOrder && (
                 <button
