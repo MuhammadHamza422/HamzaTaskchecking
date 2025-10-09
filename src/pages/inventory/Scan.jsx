@@ -17,6 +17,7 @@ import apiClient from "../../api/client";
 import { useSelector } from "react-redux";
 import { Switch } from "antd";
 import { useSearchParams } from "react-router-dom";
+import ZoneInvertoryDisplay from "./zone-invertory-display";
 
 export default function ScanProduct() {
   const [mode, setMode] = useState("select");
@@ -43,6 +44,8 @@ export default function ScanProduct() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [type, setType] = useState(searchParams.get("type") || "location");
   const [zone, setZone] = useState(null);
+
+  console.log("searchResults", searchResults);
 
   // Update URL param when `type` changes
   useEffect(() => {
@@ -286,14 +289,15 @@ export default function ScanProduct() {
     lastScanTimeRef.current = 0;
   };
 
+  // Search Inventry
   const searchProducts = async (query) => {
     setIsSearching(true);
 
     try {
       const { data } = await apiClient.get(
-        `/api/v1/inventry/all?search=${encodeURIComponent(
-          query
-        )}&zoneId=${zoneId}`,
+        `/api/v1/inventry/all?search=${encodeURIComponent(query)}&zoneId=${
+          type === "location" ? zoneId : ""
+        }`,
         {
           method: "GET",
           headers: {
@@ -305,16 +309,17 @@ export default function ScanProduct() {
       setIsSearching(false);
 
       if (data) {
-        setLocationId(data.locations[0]._id);
         setZone(data?.zone);
-        setActiveLocationCode(data.locations[0].code);
+        setSearchResults(data.inventry);
+        console.log("data.inventry:", data.inventry);
+        setTotalInventory(data.totalInventry);
+        setLocationId(data?.locations[0]?._id);
+        setActiveLocationCode(data.locations[0]?.code);
         if (!data.locations) {
           setSearchQuery("");
         } else {
           setSearchQuery(data.locations[0].code);
         }
-        setSearchResults(data.inventry);
-        setTotalInventory(data.totalInventry);
 
         scanSound.currentTime = 0;
         scanSound
@@ -339,11 +344,13 @@ export default function ScanProduct() {
     try {
       const { items, total } = await searchProducts(query);
 
-      setSearchResults(items);
-      setTotalInventory(total);
+      // console.log("items:", items);ss
+
+      // setSearchResults(items);
+      // setTotalInventory(total);
     } catch (error) {
       console.error("Search failed:", error);
-      setSearchResults([]);
+      // setSearchResults([]);
       setTotalInventory(0);
     }
   };
@@ -642,6 +649,7 @@ export default function ScanProduct() {
               scannedData={scannedData}
               locationid={locationId}
               zone={zone}
+              type={type}
             />
           </div>
         )}
@@ -803,6 +811,7 @@ export default function ScanProduct() {
                 scannedData={scannedData || searchQuery}
                 locationid={locationId}
                 zone={zone}
+                type={type}
               />
             </div>
           </div>
@@ -871,6 +880,7 @@ export default function ScanProduct() {
                   activeLocationCode ? activeLocationCode : searchQuery
                 }
                 zone={zone}
+                type={type}
                 locationid={locationId}
               />
             </div>

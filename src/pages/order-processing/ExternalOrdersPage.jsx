@@ -7,6 +7,7 @@ import { Loader2 } from "lucide-react";
 
 import OrderFilters from "../../components/external-orders/OrderFilters";
 import OrderTable from "../../components/external-orders/OrderTable";
+import ShopifyOrderTable from "../../components/external-orders/ShopifyOrderTable";
 import OrderDetailsDrawer from "../../components/external-orders/OrderDetailsDrawer";
 import OrderEditModal from "../../components/external-orders/OrderEditModal";
 import PlatformTabs, {
@@ -508,18 +509,32 @@ export default function ExternalOrdersPage() {
     return (
       <div className="mt-2 md:mt-6">
         {/* Order Table */}
-        <OrderTable
-          orders={filteredOrders}
-          loading={isLoading}
-          currentPage={currentPage}
-          pageSize={pageSize}
-          totalOrders={ordersData?.totalOrders || totalFilteredOrders}
-          onPageChange={handlePageChange}
-          onRowClick={handleDrawerOpen}
-          showPagination={true}
-          onEditClick={handleEditClick}
-          activeTab={activeTab}
-        />
+        {activeTab === "shopify" ? (
+          <ShopifyOrderTable
+            orders={filteredOrders}
+            loading={isLoading}
+            currentPage={currentPage}
+            pageSize={pageSize}
+            totalOrders={ordersData?.totalOrders || totalFilteredOrders}
+            onPageChange={handlePageChange}
+            onRowClick={handleDrawerOpen}
+            showPagination={true}
+            onEditClick={handleEditClick}
+          />
+        ) : (
+          <OrderTable
+            orders={filteredOrders}
+            loading={isLoading}
+            currentPage={currentPage}
+            pageSize={pageSize}
+            totalOrders={ordersData?.totalOrders || totalFilteredOrders}
+            onPageChange={handlePageChange}
+            onRowClick={handleDrawerOpen}
+            showPagination={true}
+            onEditClick={handleEditClick}
+            activeTab={activeTab}
+          />
+        )}
       </div>
     );
   };
