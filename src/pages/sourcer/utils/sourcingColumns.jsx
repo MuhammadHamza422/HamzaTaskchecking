@@ -1,6 +1,8 @@
+
 // src/pages/sourcer/utils/sourcingColumns.jsx
 import React, { useEffect, useState } from "react";
 import { Table, Space, Typography, Tooltip, Button, Popconfirm } from "antd";
+import { InfoCircleOutlined } from "@ant-design/icons";
 import { Pencil, Trash2 } from "lucide-react";
 import dayjs from "dayjs";
 import apiClient from "../../../api/client";
@@ -169,6 +171,22 @@ const resolveActualTotal = (rec) => {
   );
 };
 
+/* ---------- column title helper (like Form.Item tooltip) ---------- */
+/* Wrap the ENTIRE header in a Tooltip, render to body, bump z-index. */
+const colTitle = (label, tip) => (
+  <Tooltip
+    title={tip}
+    placement="top"
+    getPopupContainer={() => document.body}
+    overlayStyle={{ zIndex: 1090 }}
+  >
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "help" }}>
+      {label}
+      <InfoCircleOutlined style={{ fontSize: 14, color: "#64748b" }} />
+    </span>
+  </Tooltip>
+);
+
 /* ---------- exported columns factory ---------- */
 export function getSourcingColumns({
   statusPill, // kept for backward compatibility (unused here)
@@ -182,11 +200,13 @@ export function getSourcingColumns({
 
   const cols = [
     {
-      title: "ID",
+      title: colTitle(
+        "ID",
+        "Internal sourcing ID (shown as #xxxx). Full Mongo ObjectId is available on row hover."
+      ),
       dataIndex: "sourcing_id",
       key: "sourcing_id",
-
-      width: 70,
+      width: 85,
       onCell: () => ({
         style: {
           maxWidth: 70,
@@ -199,7 +219,11 @@ export function getSourcingColumns({
       defaultSortOrder: "descend",
       sortDirections: ["descend", "ascend"],
       render: (sid, rec) => (
-        <Tooltip title={`MongoID: ${rec._id || rec.id || "N/A"}`}>
+        <Tooltip
+          title={`MongoID: ${rec._id || rec.id || "N/A"}`}
+          getPopupContainer={() => document.body}
+          overlayStyle={{ zIndex: 1090 }}
+        >
           <span style={{ fontWeight: 700, letterSpacing: 0.2 }}>
             {sid != null ? `#${sid}` : "—"}
           </span>
@@ -207,7 +231,10 @@ export function getSourcingColumns({
       ),
     },
     {
-      title: "Sourcer Name",
+      title: colTitle(
+        "Sourcer Name",
+        "Person who created the sourcing request. Falls back to the sourcer’s profile."
+      ),
       dataIndex: "sourcerName",
       key: "sourcerName",
       width: 170,
@@ -242,7 +269,7 @@ export function getSourcingColumns({
       },
     },
     {
-      title: "Purchaser",
+      title: colTitle("Purchaser", "Assigned purchaser (name or email)."),
       dataIndex: "purchaserName",
       key: "purchaserName",
       width: 170,
@@ -274,7 +301,10 @@ export function getSourcingColumns({
       },
     },
     {
-      title: "Efficiency",
+      title: colTitle(
+        "Efficiency",
+        "Formula: (1 − Actual / Target) × 100. Positive = under target (good), negative = over target."
+      ),
       key: "purchase_efficiency",
       width: 100,
       align: "center",
@@ -300,9 +330,62 @@ export function getSourcingColumns({
         );
       },
     },
-
     {
-      title: "Status",
+      title: colTitle(
+        "Savings",
+        "If items exist: Σ[(Target/Unit − Actual(or Seller)/Unit) × Qty]. Else: Target Total − Actual Total. Positive = savings."
+      ),
+      key: "savings",
+      width: 120,
+      align: "center",
+      onCell: () => ({
+        style: {
+          maxWidth: 120,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        },
+      }),
+      render: (_v, rec) => {
+        let savings = 0;
+
+        if (Array.isArray(rec.items) && rec.items.length) {
+          // Sum item-level savings: (target/unit − actual(or seller)/unit) × qty
+          savings = rec.items.reduce((acc, it) => {
+            const qty = safeNum(it?.quantity_needed || 0);
+            const tpu = safeNum(it?.target_cost_per_unit);
+            const apu =
+              (it?.actual_cost_per_unit ?? it?.sellers_price_per_unit) != null
+                ? safeNum(it?.actual_cost_per_unit ?? it?.sellers_price_per_unit)
+                : 0;
+            return acc + round2((tpu - apu) * qty);
+          }, 0);
+        } else {
+          // Fallback to rollups: target total − actual total
+          const target = safeNum(resolveTargetTotal(rec));
+          const actual = safeNum(resolveActualTotal(rec));
+          savings = round2(target - actual);
+        }
+
+        const color = savings >= 0 ? "#16a34a" : "#ef4444";
+        return (
+          <span
+            style={{
+              color,
+              fontWeight: 600,
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {fmtMoneySignFirst(savings)}
+          </span>
+        );
+      },
+    },
+    {
+      title: colTitle(
+        "Status",
+        "Current state of the request (e.g., Pending, Purchased, etc.)."
+      ),
       dataIndex: "status",
       key: "status",
       width: 130,
@@ -310,7 +393,10 @@ export function getSourcingColumns({
       render: (s) => <StatusBadge status={s} />,
     },
     {
-      title: "Seller",
+      title: colTitle(
+        "Seller",
+        "Seller name from the record; falls back to ID if not present."
+      ),
       key: "seller",
       width: 100,
       align: "center",
@@ -319,7 +405,10 @@ export function getSourcingColumns({
       ),
     },
     {
-      title: "Market",
+      title: colTitle(
+        "Market",
+        "Resolved from seller.market or record.market (cached lookup by id/slug). ‘Origin’ shown below."
+      ),
       key: "market",
       width: 100,
       align: "center",
@@ -342,7 +431,10 @@ export function getSourcingColumns({
       },
     },
     {
-      title: "Seller Price",
+      title: colTitle(
+        "Seller Price",
+        "Total seller price at order level."
+      ),
       dataIndex: "sellers_price",
       key: "sellers_price",
       width: 110,
@@ -350,7 +442,10 @@ export function getSourcingColumns({
       render: (v) => <span>{fmtMoneySignFirst(num(v))}</span>,
     },
     {
-      title: "Shipping Charges",
+      title: colTitle(
+        "Shipping Charges",
+        "Shipping cost at order level (uses shipping_charges or shipping_price)."
+      ),
       dataIndex: "shipping_charges",
       key: "shipping_charges",
       align: "center",
@@ -359,7 +454,10 @@ export function getSourcingColumns({
         fmtMoneySignFirst(num(rec.shipping_charges ?? rec.shipping_price)),
     },
     {
-      title: "Tax",
+      title: colTitle(
+        "Tax",
+        "Tax at order level (uses taxes or tax)."
+      ),
       dataIndex: "taxes",
       key: "taxes",
       width: 110,
@@ -367,14 +465,20 @@ export function getSourcingColumns({
       render: (_v, rec) => fmtMoneySignFirst(num(rec.taxes ?? rec.tax)),
     },
     {
-      title: "Total Target Cost",
+      title: colTitle(
+        "Total Target Cost",
+        "Resolver: backend rollup if present; else Σ(item qty × target/unit) or item total_target_cost."
+      ),
       key: "target_total_cost",
       width: 150,
       align: "center",
       render: (_v, rec) => fmtMoneySignFirst(resolveTargetTotal(rec)),
     },
     {
-      title: "Total Actual Cost",
+      title: colTitle(
+        "Total Actual Cost",
+        "Resolver: backend rollup if present; else Seller Price + Shipping + Tax."
+      ),
       dataIndex: "total_actual_cost",
       key: "total_actual_cost",
       width: 150,
@@ -382,7 +486,10 @@ export function getSourcingColumns({
       render: (_v, rec) => fmtMoneySignFirst(resolveActualTotal(rec)),
     },
     {
-      title: "Created",
+      title: colTitle(
+        "Created",
+        "Creation timestamp, formatted as YYYY-MM-DD HH:mm."
+      ),
       dataIndex: "createdAt",
       key: "createdAt",
       width: 170,
@@ -403,7 +510,12 @@ export function getSourcingColumns({
 
         if (canEdit && id) {
           parts.push(
-            <Tooltip key="edit" title="Edit">
+            <Tooltip
+              key="edit"
+              title="Edit"
+              getPopupContainer={() => document.body}
+              overlayStyle={{ zIndex: 1090 }}
+            >
               <Button
                 data-testid="edit-btn"
                 type="text"
@@ -434,6 +546,7 @@ export function getSourcingColumns({
               okText="Delete"
               okButtonProps={{ danger: true }}
               onConfirm={() => handleDeleteOrder(id)}
+              getPopupContainer={() => document.body}
             >
               <Button
                 data-testid="delete-btn"
@@ -463,6 +576,141 @@ export function getSourcingColumns({
   return cols;
 }
 
+/* ---------------------- Expandable Items Table (with tooltips) ---------------------- */
+// export const makeItemsTable = (order) => {
+//   const rows = Array.isArray(order?.items) ? order.items : [];
+
+//   const money = (v) => {
+//     const n = safeNum(v);
+//     try {
+//       return new Intl.NumberFormat(undefined, {
+//         minimumFractionDigits: 2,
+//         maximumFractionDigits: 2,
+//       }).format(n); // e.g., 1,234.56
+//     } catch {
+//       return `${n.toFixed(2)}`;
+//     }
+//   };
+
+//   const lineTarget = (r) =>
+//     Number.isFinite(Number(r?.total_target_cost))
+//       ? safeNum(r.total_target_cost)
+//       : round2(
+//           safeNum(r?.quantity_needed || 1) * safeNum(r?.target_cost_per_unit)
+//         );
+
+//   const lineActual = (r) =>
+//     Number.isFinite(Number(r?.total_actual_cost))
+//       ? safeNum(r.total_actual_cost)
+//       : round2(
+//           safeNum(r?.quantity_needed || 1) * safeNum(r?.actual_cost_per_unit)
+//         );
+
+//   return (
+//     <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+//       <Table
+//         rowKey={(r) => r._id || r.id || `${r.sku}-${r.product_name}`}
+//         size="small"
+//         bordered
+//         pagination={false}
+//         dataSource={rows}
+//         onRow={(_, idx) => ({
+//           style: { backgroundColor: idx % 2 ? "#fafcff" : "#fff" },
+//         })}
+//         rowClassName="hover:bg-blue-50 transition-colors"
+//         columns={[
+//           {
+//             title: colTitle("Product", "Item name and SKU."),
+//             key: "product",
+//             width: 280,
+//             render: (_t, r) => (
+//               <div style={{ lineHeight: 1.2 }}>
+//                 <div style={{ fontWeight: 600 }}>
+//                   {r?.name || r?.product_name || "Untitled"}
+//                 </div>
+//                 <span style={{ fontSize: 12, color: "#6b7280" }}>
+//                   SKU: {r?.sku || "—"}
+//                 </span>
+//               </div>
+//             ),
+//           },
+//           {
+//             title: colTitle("Qty", "Quantity needed for this line item."),
+//             dataIndex: "quantity_needed",
+//             width: 80,
+//             align: "center",
+//             render: (v) => (
+//               <span style={{ fontVariantNumeric: "tabular-nums" }}>
+//                 {safeNum(v)}
+//               </span>
+//             ),
+//           },
+//           {
+//             title: colTitle(
+//               "Target price / unit",
+//               "Target cost per unit set for this item."
+//             ),
+//             dataIndex: "target_cost_per_unit",
+//             align: "right",
+//             width: 160,
+//             render: (v) => (
+//               <span style={{ fontVariantNumeric: "tabular-nums" }}>
+//                 {money(v)}
+//               </span>
+//             ),
+//           },
+//           {
+//             title: colTitle(
+//               "Total Target",
+//               "If item.total_target_cost present, use it; else Qty × Target/unit."
+//             ),
+//             key: "total_target_cost",
+//             align: "right",
+//             width: 160,
+//             render: (_t, r) => (
+//               <span style={{ fontVariantNumeric: "tabular-nums" }}>
+//                 {money(lineTarget(r))}
+//               </span>
+//             ),
+//           },
+//           {
+//             title: colTitle(
+//               "Actual Cost / unit",
+//               "Actual per-unit cost (or seller per-unit if actual missing)."
+//             ),
+//             dataIndex: "actual_cost_per_unit",
+//             align: "right",
+//             width: 160,
+//             render: (v) => (
+//               <span style={{ fontVariantNumeric: "tabular-nums" }}>
+//                 {money(v)}
+//               </span>
+//             ),
+//           },
+//           {
+//             title: colTitle(
+//               "Total Actual Cost",
+//               "If item.total_actual_cost present, use it; else Qty × Actual/unit."
+//             ),
+//             key: "total_actual_cost",
+//             align: "right",
+//             width: 160,
+//             render: (_t, r) => (
+//               <span style={{ fontVariantNumeric: "tabular-nums" }}>
+//                 {money(lineActual(r))}
+//               </span>
+//             ),
+//           },
+//         ]}
+//       />
+//       <div className="px-4 py-3 bg-gray-50 " />
+//     </div>
+//   );
+// };
+
+
+
+/* ---------------------- Compact Expandable Items Table (no left gutter) ---------------------- */
 export const makeItemsTable = (order) => {
   const rows = Array.isArray(order?.items) ? order.items : [];
 
@@ -472,112 +720,134 @@ export const makeItemsTable = (order) => {
       return new Intl.NumberFormat(undefined, {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
-      }).format(n); // e.g., 1,234.56
+      }).format(n);
     } catch {
       return `${n.toFixed(2)}`;
     }
   };
 
-  const lineTarget = (r) =>
+  const qtyOf = (r) => Math.max(1, safeNum(r?.quantity_needed));
+  const targetPerUnit = (r) => safeNum(r?.target_cost_per_unit);
+  const totalTarget = (r) =>
     Number.isFinite(Number(r?.total_target_cost))
       ? safeNum(r.total_target_cost)
-      : round2(
-          safeNum(r?.quantity_needed || 1) * safeNum(r?.target_cost_per_unit)
-        );
-
-  const lineActual = (r) =>
-    Number.isFinite(Number(r?.total_actual_cost))
-      ? safeNum(r.total_actual_cost)
-      : round2(
-          safeNum(r?.quantity_needed || 1) * safeNum(r?.actual_cost_per_unit)
-        );
+      : round2(qtyOf(r) * targetPerUnit(r));
+  const actualPerUnit = (r) =>
+    (r?.actual_cost_per_unit ?? r?.sellers_price_per_unit) != null
+      ? safeNum(r?.actual_cost_per_unit ?? r?.sellers_price_per_unit)
+      : 0;
+  const savingPerUnit = (r) => round2(targetPerUnit(r) - actualPerUnit(r));
+  const savingPerSku = (r) => round2(qtyOf(r) * savingPerUnit(r));
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+    <div className="overflow-x-auto"> {/* no border/padding to avoid extra space */}
       <Table
         rowKey={(r) => r._id || r.id || `${r.sku}-${r.product_name}`}
         size="small"
-        bordered
+        bordered={false}
         pagination={false}
         dataSource={rows}
+        scroll={{ x: "max-content" }}
+        style={{ margin: 0 }}                /* kill default wrapper margin */
+        className="!m-0"               /* safety: remove margin via Tailwind override */
+
+        expandable={{                        /* << remove expand icon column (the gutter) */
+          showExpandColumn: false,
+          expandIcon: () => null,
+        }}
+        
         onRow={(_, idx) => ({
           style: { backgroundColor: idx % 2 ? "#fafcff" : "#fff" },
         })}
         rowClassName="hover:bg-blue-50 transition-colors"
         columns={[
           {
-            title: "Product",
+            title: colTitle("Product", "Item name and SKU."),
             key: "product",
-            width: 280,
+            width: 360,                       /* give Product more room */
             render: (_t, r) => (
-              <div style={{ lineHeight: 1.2 }}>
-                <div style={{ fontWeight: 600 }}>
+              <div className="leading-tight">
+                <div className="font-semibold text-gray-900">
                   {r?.name || r?.product_name || "Untitled"}
                 </div>
-                <span style={{ fontSize: 12, color: "#6b7280" }}>
+                <span className="text-xs text-gray-500">
                   SKU: {r?.sku || "—"}
                 </span>
               </div>
             ),
           },
           {
-            title: "Qty",
+            title: colTitle("Qty", "Quantity needed for this line item."),
             dataIndex: "quantity_needed",
-            width: 80,
+            width: 64,
             align: "center",
-            render: (v) => (
-              <span style={{ fontVariantNumeric: "tabular-nums" }}>
-                {safeNum(v)}
-              </span>
-            ),
+            render: (v) => <span className="tabular-nums">{safeNum(v)}</span>,
           },
           {
-            title: "Target price / unit",
+            title: colTitle("Type", "Product type/category."),
+            dataIndex: "product_type",
+            width: 96,
+            align: "center",
+            render: (v) => v || "—",
+          },
+          {
+            title: colTitle("Target Cost / unit", "Set target per unit for this item."),
             dataIndex: "target_cost_per_unit",
             align: "right",
             width: 140,
-            render: (v) => (
-              <span style={{ fontVariantNumeric: "tabular-nums" }}>
-                {money(v)}
-              </span>
-            ),
+            render: (v) => <span className="tabular-nums">{money(v)}</span>,
           },
           {
-            title: "Total Target",
+            title: colTitle("Target Cost", "Qty × Target Cost / unit (or total_target_cost if present)."),
             key: "total_target_cost",
             align: "right",
             width: 140,
-            render: (_t, r) => (
-              <span style={{ fontVariantNumeric: "tabular-nums" }}>
-                {money(lineTarget(r))}
-              </span>
-            ),
+            render: (_t, r) => <span className="tabular-nums">{money(totalTarget(r))}</span>,
           },
           {
-            title: "Actual Cost / unit",
+            title: colTitle("Seller price / unit", "Derived seller-per-unit or provided value."),
+            dataIndex: "sellers_price_per_unit",
+            align: "right",
+            width: 150,
+            render: (v) => <span className="tabular-nums">{money(v)}</span>,
+          },
+          {
+            title: colTitle("Actual cost / unit", "Actual per-unit cost (fallback to seller per unit if missing)."),
             dataIndex: "actual_cost_per_unit",
             align: "right",
-            width: 140,
-            render: (v) => (
-              <span style={{ fontVariantNumeric: "tabular-nums" }}>
-                {money(v)}
-              </span>
-            ),
+            width: 150,
+            render: (v) => <span className="tabular-nums">{money(v)}</span>,
           },
           {
-            title: "Total Actual Cost",
-            key: "total_actual_cost",
+            title: colTitle("Saving / Unit", "Target/unit − Actual/unit. Positive = under target."),
+            key: "saving_per_unit",
             align: "right",
             width: 140,
-            render: (_t, r) => (
-              <span style={{ fontVariantNumeric: "tabular-nums" }}>
-                {money(lineActual(r))}
-              </span>
-            ),
+            render: (_t, r) => {
+              const val = savingPerUnit(r);
+              return (
+                <span className={`font-semibold tabular-nums ${val >= 0 ? "text-green-600" : "text-red-600"}`}>
+                  {money(val)}
+                </span>
+              );
+            },
+          },
+          {
+            title: colTitle("Saving / SKU", "Qty × (Target/unit − Actual/unit). Positive = under target."),
+            key: "saving_per_sku",
+            align: "right",
+            width: 150,
+            render: (_t, r) => {
+              const val = savingPerSku(r);
+              return (
+                <span className={`font-semibold tabular-nums ${val >= 0 ? "text-green-600" : "text-red-600"}`}>
+                  {money(val)}
+                </span>
+              );
+            },
           },
         ]}
       />
-      <div className="px-4 py-3 bg-gray-50 " />
     </div>
   );
 };

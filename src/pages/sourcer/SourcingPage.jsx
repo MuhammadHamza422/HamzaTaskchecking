@@ -379,7 +379,6 @@ export default function SourcingOrdersPage() {
                 "
               />
 
-
               {isOrdersRoute && canCreateOrder && (
                 <button
                   onClick={() => navigate("/sourcing/orders/new")}
@@ -496,7 +495,11 @@ export default function SourcingOrdersPage() {
               dataSource={paginatedOrders}
               columns={columns}
               rowKey={(rec) => rec._id || rec.id}
-              expandable={{ expandedRowRender: makeItemsTable }}
+              expandable={{
+                expandedRowRender: (rec) => makeItemsTable(rec),
+
+                indentSize: 0, // no indent
+              }}
               pagination={false}
               size="middle"
               bordered={false}
@@ -544,6 +547,49 @@ export default function SourcingOrdersPage() {
         orders={orders}
         onImported={fetchOrders}
       />
+
+      {canCreateOrder && (
+        <div className="fixed bottom-6 right-6 z-50">
+          <button
+            type="button"
+            onClick={() => navigate("/sourcing/orders/new")}
+            aria-label="Create new sourcing order"
+            className="
+              group relative
+              h-14 w-14 hover:w-44 focus-visible:w-44
+              rounded-full bg-blue-600 text-white
+              shadow-lg shadow-blue-600/30
+              ring-1 ring-white/40 backdrop-blur
+              transition-all duration-300 ease-out
+              focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70
+            "
+          >
+            {/* Icon: perfectly centered by default, slides left on hover */}
+            <span
+              className="
+                absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2
+                grid h-10 w-10 place-items-center rounded-full
+                transition-all duration-300
+                group-hover:left-6 group-focus-visible:left-6
+              "
+            >
+              <Plus className="h-7 w-7 text-white" strokeWidth={3} />
+            </span>
+
+            {/* Label appears smoothly */}
+            <span
+              className="
+                absolute top-1/2 -translate-y-1/2 left-14 right-3
+                opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100
+                transition-opacity duration-200
+                font-medium tracking-tight whitespace-nowrap
+              "
+            >
+              New Sourcing
+            </span>
+          </button>
+        </div>
+      )}
     </>
   );
 }

@@ -1,5 +1,4 @@
 
-
 // src/pages/purchaser/components/PurchaserFilters.jsx
 import React from "react";
 import { Row, Col, Select, Input, DatePicker } from "antd";
@@ -21,18 +20,19 @@ export default function PurchaserFilters({
 }) {
   return (
     <div
-      className={`
-        rounded-lg p-4 mb-4 shadow-sm
-        border border-gray-200
-        bg-gradient-to-b from-white via-white to-slate-50
-      `}
+      className="
+        rounded-xl p-5 mb-4 shadow-md
+        border border-sky-200
+        bg-gradient-to-b from-[rgb(219,234,254)] to-[rgb(191,219,254)]
+        transition-all duration-200 hover:shadow-lg
+      "
     >
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
-        <h4 className="m-0 text-gray-700">
+        <h4 className="m-0 text-slate-800 font-semibold text-base tracking-tight">
           Filters{" "}
           {showStatusNote && (
-            <span style={{ color: "#6b7280" }}>· {showStatusNote}</span>
+            <span className="text-slate-600 font-normal">· {showStatusNote}</span>
           )}
         </h4>
 
@@ -40,7 +40,12 @@ export default function PurchaserFilters({
           {AdminScopeControl}
           <button
             onClick={onClear}
-            className="sm:w-auto w-full flex min-w-fit text-sm sm:text-base items-center justify-center gap-2 px-4 py-1 bg-red-500 text-white rounded-lg hover:bg-red-700 transition-colors duration-200 shadow-sm"
+            className="
+              sm:w-auto w-full flex min-w-fit text-sm sm:text-base
+              items-center justify-center gap-2 px-4 py-1.5
+              bg-rose-500 text-white rounded-lg
+              hover:bg-rose-600 transition-colors duration-150 shadow-sm
+            "
           >
             Clear
           </button>
@@ -57,6 +62,10 @@ export default function PurchaserFilters({
             allowClear
             value={statusFilter || undefined}
             size={screens.xs ? "middle" : "large"}
+            className="bg-white/90 text-slate-800 rounded-md"
+            dropdownStyle={{
+              background: "white",
+            }}
           >
             {[
               "Assigned",
@@ -85,6 +94,7 @@ export default function PurchaserFilters({
             onSearch={(v) => setSearchTerm(v)}
             style={{ width: "100%" }}
             size={screens.xs ? "middle" : "large"}
+            className="bg-white/90 text-slate-800 rounded-md"
           />
         </Col>
 
@@ -94,6 +104,7 @@ export default function PurchaserFilters({
             onChange={(dates) => setDateRange(dates ?? [])}
             value={dateRange}
             size={screens.xs ? "middle" : "large"}
+            className="bg-white/90 text-slate-800 rounded-md"
           />
         </Col>
       </Row>
