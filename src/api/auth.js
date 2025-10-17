@@ -29,7 +29,11 @@ export const fetchUserActivity = async ({
 };
 
 export const fetchAllUsers = async () => {
-  const { data } = await apiClient.get("/api/v1/auth/all");
+  const params = new URLSearchParams({
+    page: "1",
+    limit: "1000",
+    });
+  const { data } = await apiClient.get(`/api/v1/auth/all?${params.toString()}`);
   return Array.isArray(data?.users) ? data.users : [];
 };
 
