@@ -1,3 +1,5 @@
+
+
 import React, {
   useState,
   useEffect,
@@ -5,7 +7,17 @@ import React, {
   useMemo,
   useRef,
 } from "react";
-import { Table, message, Select, Grid, Empty, Spin, Card, Tabs } from "antd";
+import {
+  Table,
+  message,
+  Select,
+  Grid,
+  Empty,
+  Spin,
+  Card,
+  Tabs,
+  Tooltip,
+} from "antd";
 import { motion } from "framer-motion";
 import dayjs from "dayjs";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -20,7 +32,7 @@ import {
   money,
 } from "./utils/PurchaseTableUtils";
 import PurchaserFilters from "./components/PurchaserFilters";
-import { CopyOutlined } from "@ant-design/icons";
+import { CopyOutlined, InfoCircleOutlined } from "@ant-design/icons";
 import Swal from "sweetalert2"; // <-- needed for toast
 
 const { useBreakpoint } = Grid;
@@ -61,6 +73,29 @@ const toast = Swal.mixin({
   timerProgressBar: true,
   customClass: { popup: "rounded-lg" },
 });
+
+/* ---------- Tooltip helpers (compact & consistent) ---------- */
+const tipCommon = {
+  getPopupContainer: () => document.body,
+  overlayStyle: { zIndex: 1090 },
+  placement: "top",
+};
+const TitleWithTip = ({ label, tip }) => (
+  <Tooltip title={tip} {...tipCommon}>
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        cursor: "help",
+      }}
+    >
+      {label}
+      <InfoCircleOutlined style={{ fontSize: 14, color: "#64748b" }} />
+    </span>
+  </Tooltip>
+);
+const colTitle = (label, tip) => <TitleWithTip label={label} tip={tip} />;
 
 /* ---------------------- STATUS (business) ---------------------- */
 const STATUS_META = {
@@ -498,7 +533,7 @@ export default function PurchaserListingsPage() {
 
   const columns = [
     {
-      title: "ID",
+      title: colTitle("ID", "Sourcing request ID (table shows last 6 digits)."),
       dataIndex: "sourcing_id",
       width: 60,
       onCell: () => ({
@@ -521,13 +556,12 @@ export default function PurchaserListingsPage() {
       responsive: ["sm"],
     },
     {
-      title: "Sourcer",
+      title: colTitle("Sourcer", "Person who created the sourcing request."),
       dataIndex: "sourcer_name",
       width: 150,
       onCell: () => ({
         style: {
           maxWidth: 150,
-
           overflow: "hidden",
           textOverflow: "ellipsis",
         },
@@ -535,7 +569,10 @@ export default function PurchaserListingsPage() {
       render: (v) => (v ? <p className="m-0">{v}</p> : "—"),
     },
     {
-      title: "Efficiency",
+      title: colTitle(
+        "Efficiency",
+        "Percent version of Savings: (1 − Total Actual Cost ÷ Target Cost) × 100. Positive = under target."
+      ),
       key: "efficiency",
       align: "center",
       width: 120,
@@ -562,7 +599,10 @@ export default function PurchaserListingsPage() {
     },
 
     {
-      title: "Savings",
+      title: colTitle(
+        "Savings",
+        "Dollar savings: Target Cost − Total Actual Cost. Positive = you saved; negative = over target."
+      ),
       key: "savings",
       width: 120,
       onCell: () => ({
@@ -605,7 +645,10 @@ export default function PurchaserListingsPage() {
       },
     },
     {
-      title: "Status",
+      title: colTitle(
+        "Status",
+        "Current state of the request (e.g., Pending, Assigned, Purchased)."
+      ),
       dataIndex: "status",
       width: 120,
       onCell: () => ({
@@ -620,14 +663,17 @@ export default function PurchaserListingsPage() {
       render: (s) => <StatusBadge status={s} />,
     },
     {
-      title: "Tracking",
+      title: colTitle(
+        "Tracking",
+        "Shipment tracking bucket for the request (Pending, InTransit, Delivered)."
+      ),
       dataIndex: "tracking_status",
       width: 140,
       align: "center",
       render: (v) => <TrackingBadge value={mapTrackingBucket(v)} />,
     },
     {
-      title: "Seller",
+      title: colTitle("Seller", "Seller name from the record."),
       dataIndex: "seller_name",
       width: 120,
       align: "center",
@@ -643,7 +689,10 @@ export default function PurchaserListingsPage() {
       render: (v) => (v ? <p className="m-0">{v}</p> : "—"),
     },
     {
-      title: "Market",
+      title: colTitle(
+        "Market",
+        "Marketplace where the item was sourced (e.g., ebay, amazon)."
+      ),
       dataIndex: "market",
       width: 120,
       align: "center",
@@ -659,7 +708,10 @@ export default function PurchaserListingsPage() {
       render: (v) => (v ? <p className="m-0">{v}</p> : "—"),
     },
     {
-      title: "Seller Price",
+      title: colTitle(
+        "Seller Price",
+        "Order-level amount paid to the seller (before shipping and taxes)."
+      ),
       dataIndex: "sellers_price",
       align: "center",
       width: 120,
@@ -675,7 +727,10 @@ export default function PurchaserListingsPage() {
     },
 
     {
-      title: "Shipping Charges",
+      title: colTitle(
+        "Shipping Charges",
+        "Order-level shipping charges included in Total Actual Cost."
+      ),
       dataIndex: "shipping_charges",
       width: 130,
       align: "center",
@@ -690,14 +745,17 @@ export default function PurchaserListingsPage() {
       render: (p, rec) => money(p ?? rec?.shipping_price ?? 0),
     },
     {
-      title: "Tax",
+      title: colTitle("Tax", "Order-level taxes included in Total Actual Cost."),
       dataIndex: "taxes",
       width: 120,
       align: "right",
       render: (p, rec) => money(p ?? rec?.tax ?? 0),
     },
     {
-      title: "Target Cost",
+      title: colTitle(
+        "Target Cost",
+        "Σ (Qty × Target cost per unit) for all items on the request."
+      ),
       dataIndex: "target_total_cost",
       width: 150,
       align: "right",
@@ -705,7 +763,10 @@ export default function PurchaserListingsPage() {
     },
 
     {
-      title: "Total Actual Cost",
+      title: colTitle(
+        "Total Actual Cost",
+        "Seller Price + Shipping Charges + Tax."
+      ),
       dataIndex: "total_actual_cost",
       width: 150,
       align: "right",
@@ -794,10 +855,9 @@ export default function PurchaserListingsPage() {
       style={active ? { backgroundColor: "#3B82F6" } : {}}
     >
       <span
-        className={[
-          "h-1.5 w-1.5 rounded-full",
-          active ? "bg-white" : color,
-        ].join(" ")}
+        className={["h-1.5 w-1.5 rounded-full", active ? "bg-white" : color].join(
+          " "
+        )}
       />
       <span className="font-medium">{text}</span>
       <span
@@ -848,9 +908,7 @@ export default function PurchaserListingsPage() {
         ].join(" ")}
         style={isOn ? { backgroundColor: "#3B82F6" } : {}}
       >
-        <span
-          className={`h-2 w-2 rounded-full ${isOn ? "bg-white" : meta.color}`}
-        />
+        <span className={`h-2 w-2 rounded-full ${isOn ? "bg-white" : meta.color}`} />
         <span className="font-medium">{label}</span>
         <span
           className={`ml-0.5 rounded-full px-1.5 py-[1px] text-[10px] leading-none ${
@@ -915,116 +973,140 @@ export default function PurchaserListingsPage() {
       transition={{ duration: 0.45, ease: "easeOut" }}
     >
       {/* Header + COMPACT Tabs */}
-{/* LISTINGS FILTER BAR — compact, no extra gaps */}
-<div className="mb-2 rounded-lg border border-slate-200 bg-white/95 shadow-sm">
-  {/* Header */}
-  <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-100">
-    <div className="text-slate-800 font-semibold text-xs tracking-wide">Listings</div>
-    <div className="flex items-center gap-2">
-      {(trackingFilter || activeStatusKey !== "all") && (
-        <button
-          type="button"
-          onClick={() => {
-            setTrackingFilter("");
-            const all = STATUS_OPTIONS.find((s) => s.key === "all");
-            setStatusFilter(all ? all.value : "");
-          }}
-          className="text-[11px] px-2.5 py-1 rounded-md border border-slate-300 hover:bg-slate-50"
-        >
-          Reset
-        </button>
-      )}
-
-    </div>
-  </div>
-
-  {/* Filters */}
-  <div className="px-3 py-1">
-    {/* Row 1: STATUS (Ant Tabs with hard-kill for bottom spacing) */}
-    <div className="flex items-center gap-1.5">
-      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-        Status
-      </span>
-
-      <div className="flex-1 overflow-x-auto no-scrollbar">
-        <Tabs
-          items={statusTabItems}
-          activeKey={activeStatusKey}
-          onChange={(key) => {
-            const found = STATUS_OPTIONS.find((s) => s.key === key);
-            setStatusFilter(found ? found.value : "");
-          }}
-          destroyInactiveTabPane={false}
-          animated
-          tabBarGutter={0}
-          tabBarStyle={{ margin: 0, marginBottom: 0, whiteSpace: "nowrap", lineHeight: 1 }}
-          moreIcon={null}
+      {/* LISTINGS FILTER BAR — compact, no extra gaps */}
+      <div className="mb-2 rounded-lg border border-slate-200 bg-white/95 shadow-sm">
+        <div
           className="
-            [&_.ant-tabs-nav]:!mb-0
-            [&_.ant-tabs-nav]:!p-0
-            [&_.ant-tabs-nav::before]:hidden
-            [&_.ant-tabs-ink-bar]:hidden
-            [&_.ant-tabs-nav-more]:hidden
+    flex items-center justify-between
+    px-3 py-1.5
+    border-b border-slate-200
+    rounded-t-xl
+    bg-gradient-to-r from-sky-50 via-blue-50 to-indigo-50
+    dark:from-slate-800 dark:via-slate-800 dark:to-slate-900
+  "
+        >
+          <div className="text-slate-800 dark:text-slate-100 font-semibold text-xs tracking-wide">
+            Listings
+          </div>
+          <div className="flex items-center gap-2">
+            {(trackingFilter || activeStatusKey !== "all") && (
+              <button
+                type="button"
+                onClick={() => {
+                  setTrackingFilter("");
+                  const all = STATUS_OPTIONS.find((s) => s.key === "all");
+                  setStatusFilter(all ? all.value : "");
+                }}
+                className="
+          text-[11px] px-2.5 py-1 rounded-md
+          border border-slate-300
+          bg-white/60 hover:bg-white/80
+          backdrop-blur
+          dark:bg-slate-700/40 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700/60
+        "
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        </div>
 
-            /* remove inter-tab gaps */
-            [&_.ant-tabs-tab]:!m-0
-            [&_.ant-tabs-tab+.ant-tabs-tab]:!ml-0
+        {/* Filters */}
+        <div
+          className="
+    px-3 py-1
+    rounded-b-xl
+    border-t border-slate-200
+    bg-gradient-to-r from-sky-50 via-blue-50 to-indigo-50
+    dark:from-slate-800 dark:via-slate-800 dark:to-slate-900
+    backdrop-blur
+  "
+        >
+          {/* Row 1: STATUS */}
+          <div className="flex items-center gap-1.5">
+            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-200">
+              Status
+            </span>
 
-            /* compact pill */
-            [&_.ant-tabs-tab-btn]:!px-2
-            [&_.ant-tabs-tab-btn]:!py-1
-            [&_.ant-tabs-tab-btn]:!rounded
-            [&_.ant-tabs-tab-btn]:!text-[12px]
-            [&_.ant-tabs-tab-btn]:!leading-none
-            hover:[&_.ant-tabs-tab-btn]:!bg-slate-50
+            <div className="flex-1 overflow-x-auto no-scrollbar">
+              <Tabs
+                items={statusTabItems}
+                activeKey={activeStatusKey}
+                onChange={(key) => {
+                  const found = STATUS_OPTIONS.find((s) => s.key === key);
+                  setStatusFilter(found ? found.value : "");
+                }}
+                destroyInactiveTabPane={false}
+                animated
+                tabBarGutter={0}
+                tabBarStyle={{
+                  margin: 0,
+                  marginBottom: 0,
+                  whiteSpace: "nowrap",
+                  lineHeight: 1,
+                }}
+                moreIcon={null}
+                className="
+          [&_.ant-tabs-nav]:!mb-0
+          [&_.ant-tabs-nav]:!p-0
+          [&_.ant-tabs-nav::before]:hidden
+          [&_.ant-tabs-ink-bar]:hidden
+          [&_.ant-tabs-nav-more]:hidden
+          [&_.ant-tabs-tab]:!m-0
+          [&_.ant-tabs-tab+.ant-tabs-tab]:!ml-0
+          [&_.ant-tabs-tab-btn]:!px-2
+          [&_.ant-tabs-tab-btn]:!py-1
+          [&_.ant-tabs-tab-btn]:!rounded
+          [&_.ant-tabs-tab-btn]:!text-[12px]
+          [&_.ant-tabs-tab-btn]:!leading-none
+          hover:[&_.ant-tabs-tab-btn]:!bg-white/60
+          dark:hover:[&_.ant-tabs-tab-btn]:!bg-slate-700/50
+          [&_.ant-tabs-content-holder]:hidden
+        "
+              />
+              <style>{`
+        .ant-tabs-top > .ant-tabs-nav { margin-bottom: 0 !important; }
+        .ant-tabs .ant-tabs-tab + .ant-tabs-tab { margin-left: 0 !important; }
+      `}</style>
+            </div>
+          </div>
 
-            /* kill content-holder height reservation */
-            [&_.ant-tabs-content-holder]:hidden
+          {/* Row 2: TRACKING (pills) */}
+          <div className="flex items-center gap-1.5 pt-1">
+            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-200">
+              Tracking
+            </span>
+
+            <div className="flex-1 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              {TRACKING_ORDER.map((id) => (
+                <TrackingPill
+                  key={id}
+                  id={id}
+                  label={TRACKING_META[id].label}
+                  count={trackingCounts[id] ?? 0}
+                  active={trackingFilter === id}
+                />
+              ))}
+
+              {trackingFilter && (
+                <button
+                  type="button"
+                  onClick={() => setTrackingFilter("")}
+                  className="
+            text-[11px] px-2 py-1 rounded-full
+            border border-slate-200
+            text-slate-700
+            bg-white/70 hover:bg-white/90
+            dark:bg-slate-700/40 dark:text-slate-100 dark:border-slate-600 dark:hover:bg-slate-700/60
           "
-        />
-        {/* Safety net overrides in case global styles fight us */}
-        <style>{`
-          .ant-tabs-top > .ant-tabs-nav { margin-bottom: 0 !important; }
-          .ant-tabs .ant-tabs-tab + .ant-tabs-tab { margin-left: 0 !important; }
-        `}</style>
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
-
-    {/* hairline divider with *minimal* spacing */}
-    {/* <div className="h-px bg-slate-100 mt-1 mb-0" /> */}
-
-    {/* Row 2: TRACKING (pills) */}
-    <div className="flex items-center gap-1.5 pt-1">
-      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-        Tracking
-      </span>
-
-      <div className="flex-1 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-        {TRACKING_ORDER.map((id) => (
-          <TrackingPill
-            key={id}
-            id={id}
-            label={TRACKING_META[id].label}
-            count={trackingCounts[id] ?? 0}
-            active={trackingFilter === id}
-          />
-        ))}
-
-        {trackingFilter && (
-          <button
-            type="button"
-            onClick={() => setTrackingFilter("")}
-            className="text-[11px] px-2 py-1 rounded-full border border-slate-200 text-slate-600 hover:bg-slate-50"
-          >
-            Clear
-          </button>
-        )}
-      </div>
-    </div>
-  </div>
-</div>
-
-
 
       {/* Filters */}
       <PurchaserFilters
@@ -1099,10 +1181,7 @@ export default function PurchaserListingsPage() {
           sticky
           expandable={{
             expandedRowRender: (record) => (
-              <ExpandedItemsTable
-                order={record}
-                onOpen={(to) => navigate(to)}
-              />
+              <ExpandedItemsTable order={record} onOpen={(to) => navigate(to)} />
             ),
             rowExpandable: (record) =>
               Array.isArray(record.items) && record.items.length > 0,
@@ -1122,9 +1201,8 @@ export default function PurchaserListingsPage() {
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-
         .ant-table-tbody > tr.row-even > td { background: #fafafa; } 
-.ant-table-tbody > tr.row-odd  > td { background: #ffffff; } 
+        .ant-table-tbody > tr.row-odd  > td { background: #ffffff; } 
       `}</style>
     </motion.div>
   );

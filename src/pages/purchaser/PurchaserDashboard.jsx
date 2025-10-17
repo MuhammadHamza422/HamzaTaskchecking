@@ -39,6 +39,8 @@ import {
 import { useAuth } from "../../contexts/AuthContext";
 import apiClient from "../../api/client";
 import { PieChart, ShoppingBag, Store, Users } from "lucide-react";
+import AdminOpsOverview from "./components/AdminOpsOverview";
+import StatPanels from "./components/StatsPanel";
 
 // Colors match your KPI cards: from-white via-white to-slate-50 + ring-slate-200
 const slateTheme = {
@@ -555,163 +557,81 @@ export default function PurchaserDashboard() {
             title: "Average Response Time",
             value: avgResponseMs === null ? "—" : formatDuration(avgResponseMs),
           },
-        ].map((kpi, i) => (
-          <Col xs={12} md={8} key={i} style={{ display: "flex" }}>
-            <div
-              className={`
-                flex-1 rounded-lg p-4
-                bg-gradient-to-b from-white via-white to-slate-50
-                ring-1 ring-slate-200
-              `}
-            >
-              {loading ? (
-                <Skeleton active paragraph={false} />
-              ) : (
-                <Statistic
-                  title={
-                    <span className="font-medium text-slate-600">
-                      {kpi.title}
-                    </span>
-                  }
-                  value={kpi.value}
-                  valueStyle={{ fontWeight: 700, color: "#0f172a" }}
+        ].map((kpi, i) => {
+          const tones = [
+            {
+              grad: "from-sky-50 to-sky-100",
+              ring: "ring-sky-200",
+              accent: "bg-sky-300/70",
+            },
+            {
+              grad: "from-emerald-50 to-emerald-100",
+              ring: "ring-emerald-200",
+              accent: "bg-emerald-300/70",
+            },
+            {
+              grad: "from-indigo-50 to-indigo-100",
+              ring: "ring-indigo-200",
+              accent: "bg-indigo-300/70",
+            },
+          ];
+          const t = tones[i % tones.length];
+
+          return (
+            <Col xs={12} md={8} key={i} className="flex">
+              <div
+                className={[
+                  "relative flex-1 overflow-hidden rounded-xl p-4",
+                  "bg-gradient-to-b",
+                  t.grad,
+                  t.ring,
+                  "ring-1 shadow-sm",
+                  "transition-all duration-150 hover:shadow-md hover:scale-[1.01]",
+                ].join(" ")}
+              >
+                {/* top & bottom thin accents */}
+                <div className={`absolute inset-x-0 top-0 h-0.5 ${t.accent}`} />
+                <div
+                  className={`absolute inset-x-0 bottom-0 h-[0.5px] ${t.accent}`}
                 />
-              )}
-            </div>
-          </Col>
-        ))}
+
+                {loading ? (
+                  <Skeleton active paragraph={false} />
+                ) : (
+                  <Statistic
+                    title={
+                      <span className="text-sm font-medium text-slate-700">
+                        {kpi.title}
+                      </span>
+                    }
+                    value={kpi.value}
+                    valueStyle={{
+                      fontWeight: 700,
+                      color: "#0f172a", // slate-900
+                      fontSize: "1.25rem",
+                    }}
+                  />
+                )}
+              </div>
+            </Col>
+          );
+        })}
       </Row>
 
       {/* Breakdowns */}
 
-      <Row gutter={[12, 12]} align="stretch" className="mt-3">
-        {/* By Status */}
-        <Col xs={24} md={8} className="flex">
-          <StatPanel
-            icon={PieChart}
-            title="By Status"
-            count={byStatus.length}
-            className="
-        bg-gradient-to-b from-[#f7fbff] via-white to-[#eef6ff]
-        ring-1 ring-sky-200 shadow-sm
-        [&_.stat-title]:text-sky-800
-        [&_.stat-count]:bg-sky-50 [&_.stat-count]:text-sky-700 [&_.stat-count]:ring-sky-200
-      "
-          >
-            <Table
-              size="small"
-              pagination={false}
-              loading={loading}
-              rowKey="status"
-              dataSource={byStatus.map(([status, cnt]) => ({ status, cnt }))}
-              columns={[
-                {
-                  title: "Status",
-                  dataIndex: "status",
-                  render: (s) => (
-                    <Tag color={statusColor(s)} style={{ borderRadius: 6 }}>
-                      {s}
-                    </Tag>
-                  ),
-                },
-                { title: "Count", dataIndex: "cnt", align: "right", width: 96 },
-              ]}
-              locale={{ emptyText: <Empty description="No data" /> }}
-              className="
-          bg-transparent
-          [&_.ant-table]:!bg-transparent
-          [&_.ant-table-thead>tr>th]:!bg-sky-50
-          [&_.ant-table-thead>tr>th]:!text-sky-800
-          [&_.ant-table-thead>tr>th]:!border-sky-100
-          [&_.ant-table-tbody>tr>td]:!border-sky-100
-          [&_.ant-table-tbody>tr:hover>td]:!bg-sky-50/50
-        "
-            />
-          </StatPanel>
-        </Col>
+      <StatPanels
+        loading={loading}
+        byStatus={byStatus}
+        byMarket={byMarket}
+        bySellerTop5={bySellerTop5}
+        bySellerAllCount={bySellerAllCount}
+        statusColor={statusColor}
+      />
 
-        {/* Top Markets */}
-        <Col xs={24} md={8} className="flex">
-          <StatPanel
-            icon={Store}
-            title="Top Markets"
-            count={byMarket.length}
-            className="
-        bg-gradient-to-b from-[#f7fbff] via-white to-[#eef6ff]
-        ring-1 ring-sky-200 shadow-sm
-        [&_.stat-title]:text-sky-800
-        [&_.stat-count]:bg-sky-50 [&_.stat-count]:text-sky-700 [&_.stat-count]:ring-sky-200
-      "
-          >
-            <Table
-              size="small"
-              pagination={false}
-              loading={loading}
-              rowKey="market"
-              dataSource={byMarket.map(([market, cnt]) => ({
-                market: market || "—",
-                cnt,
-              }))}
-              columns={[
-                { title: "Market", dataIndex: "market" },
-                { title: "Count", dataIndex: "cnt", align: "right", width: 96 },
-              ]}
-              locale={{ emptyText: <Empty description="No data" /> }}
-              className="
-          bg-transparent
-          [&_.ant-table]:!bg-transparent
-          [&_.ant-table-thead>tr>th]:!bg-sky-50
-          [&_.ant-table-thead>tr>th]:!text-sky-800
-          [&_.ant-table-thead>tr>th]:!border-sky-100
-          [&_.ant-table-tbody>tr>td]:!border-sky-100
-          [&_.ant-table-tbody>tr:hover>td]:!bg-sky-50/50
-        "
-            />
-          </StatPanel>
-        </Col>
-
-        {/* Top Sellers (top 5) */}
-        <Col xs={24} md={8} className="flex">
-          <StatPanel
-            icon={ShoppingBag}
-            title="Top Sellers"
-            count={bySellerAllCount}
-            className="
-        bg-gradient-to-b from-[#f7fbff] via-white to-[#eef6ff]
-        ring-1 ring-sky-200 shadow-sm
-        [&_.stat-title]:text-sky-800
-        [&_.stat-count]:bg-sky-50 [&_.stat-count]:text-sky-700 [&_.stat-count]:ring-sky-200
-      "
-          >
-            <Table
-              size="small"
-              pagination={false}
-              loading={loading}
-              rowKey="seller"
-              dataSource={bySellerTop5.map(([seller, cnt]) => ({
-                seller: seller || "—",
-                cnt,
-              }))}
-              columns={[
-                { title: "Seller", dataIndex: "seller" },
-                { title: "Count", dataIndex: "cnt", align: "right", width: 96 },
-              ]}
-              locale={{ emptyText: <Empty description="No data" /> }}
-              className="
-          bg-transparent
-          [&_.ant-table]:!bg-transparent
-          [&_.ant-table-thead>tr>th]:!bg-sky-50
-          [&_.ant-table-thead>tr>th]:!text-sky-800
-          [&_.ant-table-thead>tr>th]:!border-sky-100
-          [&_.ant-table-tbody>tr>td]:!border-sky-100
-          [&_.ant-table-tbody>tr:hover>td]:!bg-sky-50/50
-        "
-            />
-          </StatPanel>
-        </Col>
-      </Row>
-
-
+      {isAdmin && (
+        <AdminOpsOverview isAdmin={isAdmin} data={requests} loading={loading} />
+      )}
 
       {/* Latest Purchased (quick view only) */}
       <div className="mt-4 rounded-lg p-3 bg-gradient-to-b from-white via-white to-slate-50 ring-1 ring-slate-200">

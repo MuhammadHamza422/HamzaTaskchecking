@@ -18,9 +18,9 @@ const navLinks = [
   { to: "/requests/my", label: "Assigned to Me", roles: ["purchaser"] },
 
 
-   { to: "/purchaser/dashboard", label: "Purchaser Dashboard", app: "purchasing", roles: ["admin","purchaser"] },
-  { to: "/purchaser/pending",   label: "Pending",             app: "purchasing", roles: ["admin","purchaser"] },
-  { to: "/purchaser/listings",  label: "All Listings",        app: "purchasing", roles: ["admin","purchaser"] },
+   { to: "/purchaser/dashboard", label: "Dashboard", app: "purchasing", roles: ["admin","purchaser"] },
+  { to: "/purchaser/pending",   label: "All Listings",             app: "purchasing", roles: ["admin","purchaser"] },
+  { to: "/purchaser/listings",  label: "My Listings",        app: "purchasing", roles: ["admin","purchaser"] },
   {
     label: "Users",
     isDropdown: true,
@@ -68,20 +68,20 @@ const navLinks = [
 
   { 
   to: "/sourcing",
-  label: "Sourcing Dashboard",
+  label: "Dashboard",
   app: "sourcing",                    
   roles: ["admin", "sourcer", "purchaser"]
 },
 
   { 
   to: "/sourcing/orders",
-  label: "All Orders",
+  label: "My Listings",
   app: "sourcing",                    
   roles: ["admin", "sourcer", "purchaser"]
 },
   { 
   to: "/sourcing/sellers",
-  label: "Sellers",
+  label: "My Suppliers",
   app: "sourcing",                    
   roles: ["admin", "sourcer", "purchaser"]
 },
@@ -126,6 +126,10 @@ const MainLayout = () => {
     setIsMobileMenuOpen(false);
   };
 
+
+  const isPurchasingCtx =
+  pathName.startsWith("/purchaser") || pathName.startsWith("/requests");
+
   /* ✅ Filter top-level links by role + app permission */
   const filteredLinks = navLinks.filter(
     (link) =>
@@ -137,10 +141,20 @@ const MainLayout = () => {
           ["Products", "Dashboard"].includes(link.label)) || 
         (pathName.startsWith("/orders") &&
           ["Dashboard", "Orders", "Platforms", "Kits"].includes(link.label))) ||
-        (pathName.startsWith("/sourcing") &&
-        ["Sourcing", "Sourcing Dashboard", "All Orders",  "Sellers", ].includes(link.label))||
-                (pathName.startsWith("/purchaser") && ["Purchaser Dashboard", "Pending", "All Assigned", "All Listings"].includes(link.label))
-
+              (pathName.startsWith("/sourcing") &&
+        ["Sourcing", "Dashboard", "My Listings", "My Suppliers"].includes(link.label) &&
+        (link.app === "sourcing" || link.to.startsWith("/sourcing"))) ||
+                (pathName.startsWith("/purchaser") &&
+        ["Dashboard", "Pending", "All Assigned", "All Listings", "My Listings"].includes(link.label) &&
+        (link.app === "purchasing" || link.to.startsWith("/purchaser"))) ||
+               (isPurchasingCtx &&
+        ["Dashboard", "Pending", "All Assigned", "All Listings", "My Listings"].includes(link.label) &&
+        (
+          link.app === "purchasing" ||
+          link.to.startsWith("/purchaser") ||
+          link.to.startsWith("/requests")
+        )
+      )
   );
 
   const handleLogout = async () => {
