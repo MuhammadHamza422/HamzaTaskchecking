@@ -31,7 +31,7 @@ export const fetchUserActivity = async ({
 export const fetchAllUsers = async () => {
   const params = new URLSearchParams({
     page: "1",
-    limit: "1000",
+    limit: "10000",
     });
   const { data } = await apiClient.get(`/api/v1/auth/all?${params.toString()}`);
   return Array.isArray(data?.users) ? data.users : [];

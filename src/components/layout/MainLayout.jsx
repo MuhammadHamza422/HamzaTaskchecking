@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
@@ -16,11 +15,27 @@ const navLinks = [
   { to: "/sourcing/orders", label: "Sourcing Orders", roles: ["sourcer"] },
   // { to: "/requests/pending", label: "Pending", roles: ["purchaser"] },
   { to: "/requests/my", label: "Assigned to Me", roles: ["purchaser"] },
-
-
-   { to: "/purchaser/dashboard", label: "Dashboard", app: "purchasing", roles: ["admin","purchaser"] },
-  { to: "/purchaser/pending",   label: "All Listings",             app: "purchasing", roles: ["admin","purchaser"] },
-  { to: "/purchaser/listings",  label: "My Listings",        app: "purchasing", roles: ["admin","purchaser"] },
+  // Attendance navigation
+  { to: "/attendance", label: "Attendance", roles: ["admin"] },
+  { to: "/attendance-activity", label: "Attendance Activity", roles: ["admin"] },
+  {
+    to: "/purchaser/dashboard",
+    label: "Dashboard",
+    app: "purchasing",
+    roles: ["admin", "purchaser"],
+  },
+  {
+    to: "/purchaser/pending",
+    label: "All Listings",
+    app: "purchasing",
+    roles: ["admin", "purchaser"],
+  },
+  {
+    to: "/purchaser/listings",
+    label: "My Listings",
+    app: "purchasing",
+    roles: ["admin", "purchaser"],
+  },
   {
     label: "Users",
     isDropdown: true,
@@ -66,27 +81,25 @@ const navLinks = [
   },
   { to: "orders/kits", label: "Kits", app: "orders", roles: ["admin"] },
 
-  { 
-  to: "/sourcing",
-  label: "Dashboard",
-  app: "sourcing",                    
-  roles: ["admin", "sourcer", "purchaser"]
-},
+  {
+    to: "/sourcing",
+    label: "Dashboard",
+    app: "sourcing",
+    roles: ["admin", "sourcer", "purchaser"],
+  },
 
-  { 
-  to: "/sourcing/orders",
-  label: "My Listings",
-  app: "sourcing",                    
-  roles: ["admin", "sourcer", "purchaser"]
-},
-  { 
-  to: "/sourcing/sellers",
-  label: "My Suppliers",
-  app: "sourcing",                    
-  roles: ["admin", "sourcer", "purchaser"]
-},
-
-  
+  {
+    to: "/sourcing/orders",
+    label: "My Listings",
+    app: "sourcing",
+    roles: ["admin", "sourcer", "purchaser"],
+  },
+  {
+    to: "/sourcing/sellers",
+    label: "My Suppliers",
+    app: "sourcing",
+    roles: ["admin", "sourcer", "purchaser"],
+  },
 ];
 
 /* ✅ Check if user has access to app */
@@ -126,35 +139,60 @@ const MainLayout = () => {
     setIsMobileMenuOpen(false);
   };
 
-
   const isPurchasingCtx =
-  pathName.startsWith("/purchaser") || pathName.startsWith("/requests");
+    pathName.startsWith("/purchaser") || pathName.startsWith("/requests");
 
   /* ✅ Filter top-level links by role + app permission */
+  
   const filteredLinks = navLinks.filter(
     (link) =>
-      link.roles?.includes(user.roles.role) &&
-      hasAppAccess(user, link.app) &&
-      ((pathName.startsWith("/admin") &&
-        ["Users", "Dashboard"].includes(link.label)) ||
-        (pathName.startsWith("/product") &&
-          ["Products", "Dashboard"].includes(link.label)) || 
-        (pathName.startsWith("/orders") &&
-          ["Dashboard", "Orders", "Platforms", "Kits"].includes(link.label))) ||
-              (pathName.startsWith("/sourcing") &&
-        ["Sourcing", "Dashboard", "My Listings", "My Suppliers"].includes(link.label) &&
+      // Basic role check
+      (link.roles?.includes(user.roles.role) &&
+        hasAppAccess(user, link.app) &&
+        // Context-specific filtering
+        ((pathName.startsWith("/admin") &&
+          ["Users", "Dashboard"].includes(link.label)) ||
+          (pathName.startsWith("/product") &&
+            ["Products", "Dashboard"].includes(link.label)) ||
+          (pathName.startsWith("/orders") &&
+            ["Dashboard", "Orders", "Platforms", "Kits"].includes(
+              link.label
+            )) ||
+          (pathName.startsWith("/attendance") &&
+            ["Attendance", "Attendance Activity"].includes(link.label)))) ||
+      // Sourcing context
+      (pathName.startsWith("/sourcing") &&
+        ["Sourcing", "Dashboard", "My Listings", "My Suppliers"].includes(
+          link.label
+        ) &&
         (link.app === "sourcing" || link.to.startsWith("/sourcing"))) ||
-                (pathName.startsWith("/purchaser") &&
-        ["Dashboard", "Pending", "All Assigned", "All Listings", "My Listings"].includes(link.label) &&
+      // Purchaser context
+      (pathName.startsWith("/purchaser") &&
+        [
+          "Dashboard",
+          "Pending",
+          "All Assigned",
+          "All Listings",
+          "My Listings",
+        ].includes(link.label) &&
         (link.app === "purchasing" || link.to.startsWith("/purchaser"))) ||
-               (isPurchasingCtx &&
-        ["Dashboard", "Pending", "All Assigned", "All Listings", "My Listings"].includes(link.label) &&
-        (
-          link.app === "purchasing" ||
+      // Purchasing context
+      (isPurchasingCtx &&
+        [
+          "Dashboard",
+          "Pending",
+          "All Assigned",
+          "All Listings",
+          "My Listings",
+        ].includes(link.label) &&
+        (link.app === "purchasing" ||
           link.to.startsWith("/purchaser") ||
-          link.to.startsWith("/requests")
-        )
-      )
+          link.to.startsWith("/requests"))) ||
+      // Show attendance links only on attendance pages
+      (pathName.startsWith("/attendance") &&
+       link.roles?.includes(user.roles.role) && 
+       ["Attendance", "Attendance Activity"].includes(link.label) &&
+       user.roles.role === "admin")
   );
 
   const handleLogout = async () => {

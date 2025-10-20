@@ -8,7 +8,7 @@ const { RangePicker } = DatePicker;
 const getBiweeklyRange = () => {
   const today = dayjs();
   const currentDay = today.date();
-  
+
   if (currentDay <= 15) {
     // First 15 days of the month (1-15)
     return [today.startOf("month"), today.startOf("month").add(14, "day")];
@@ -16,7 +16,10 @@ const getBiweeklyRange = () => {
     // Last 15 days of the month (16-31/30)
     const lastDayOfMonth = today.endOf("month").date();
     const startDay = Math.max(16, lastDayOfMonth - 14);
-    return [today.startOf("month").add(startDay - 1, "day"), today.endOf("month")];
+    return [
+      today.startOf("month").add(startDay - 1, "day"),
+      today.endOf("month"),
+    ];
   }
 };
 
@@ -40,12 +43,18 @@ const AttendanceFilters = ({
   setSource,
   searchNote,
   setSearchNote,
+  companies,
+  loadingCompanies,
+  company,
+  setCompany,
 }) => {
   return (
     <Card size="small">
-      <Row gutter={[12, 12]} align="middle">
+      <Row gutter={[12, 12]} align="middle" className="mb-4">
         <Col xs={24} md={10} lg={8}>
-          <div style={{ marginBottom: 6, color: "rgba(0,0,0,.6)" }}>Employees</div>
+          <div style={{ marginBottom: 6, color: "rgba(0,0,0,.6)" }}>
+            Employees
+          </div>
           <Select
             mode="multiple"
             allowClear
@@ -65,28 +74,66 @@ const AttendanceFilters = ({
             }}
             options={users.map((u) => ({
               value: u._id,
-              label: `${u.firstName} ${u.lastName} ${u.email ? `(${u.email})` : ""}`,
+              label: `${u.firstName} ${u.lastName} ${
+                u.email ? `(${u.email})` : ""
+              }`,
             }))}
           />
         </Col>
 
-        <Col xs={24} sm={12} md={7} lg={6}>
-          <div style={{ marginBottom: 6, color: "rgba(0,0,0,.6)" }}>Date Range</div>
+        <Col xs={12} sm={6} md={6}>
+          <div style={{ marginBottom: 6, color: "rgba(0,0,0,.6)" }}>
+            Company
+          </div>
+          <Select
+            allowClear
+            placeholder="All companies"
+            loading={loadingCompanies}
+            value={company || undefined}
+            onChange={(v) => setCompany(v || "")}
+            showSearch
+            optionFilterProp="label"
+            style={{ width: "100%" }}
+            options={(companies || []).map((c) => ({
+              value: c._id,
+              label: c.name,
+            }))}
+          />
+        </Col>
+
+        <Col xs={24} sm={12} md={7} lg={10}>
+          <div style={{ marginBottom: 6, color: "rgba(0,0,0,.6)" }}>
+            Date Range
+          </div>
           <RangePicker
             allowClear={false}
             value={dateRange}
             onChange={(v) => setDateRange(v)}
             presets={[
-              { label: 'Biweekly (15 days)', value: quickRanges['Biweekly (15 days)'] },
-              { label: 'Today', value: quickRanges.Today },
-              { label: 'This Week', value: quickRanges['This Week'] },
-              { label: 'This Month', value: quickRanges['This Month'] },
+              {
+                label: "Biweekly (15 days)",
+                value: quickRanges["Biweekly (15 days)"],
+              },
+              { label: "Today", value: quickRanges.Today },
+              { label: "This Week", value: quickRanges["This Week"] },
+              { label: "This Month", value: quickRanges["This Month"] },
             ]}
             style={{ width: "100%" }}
           />
         </Col>
 
-        <Col xs={12} sm={6} md={3}>
+        {/* <Col xs={24} md={6} lg={7}>
+          <div style={{ marginBottom: 6, color: "rgba(0,0,0,.6)" }}>Note contains</div>
+          <Input
+            placeholder="Search notes…"
+            allowClear
+            value={searchNote}
+            onChange={(e) => setSearchNote(e.target.value)}
+          />
+        </Col> */}
+      </Row>
+      <Row gutter={[12, 12]} align="middle" className="mb-4">
+        <Col xs={12} sm={6} md={4}>
           <div style={{ marginBottom: 6, color: "rgba(0,0,0,.6)" }}>Status</div>
           <Select
             value={status}
@@ -94,14 +141,14 @@ const AttendanceFilters = ({
             style={{ width: "100%" }}
             options={[
               { value: "all", label: "All" },
-              { value: "in", label: "Checked In" },
-              { value: "break", label: "On Break" },
-              { value: "out", label: "Checked Out" },
+              { value: "checked in", label: "Checked In" },
+              { value: "checked out", label: "Checked Out" },
+              { value: "on break", label: "On Break" },
             ]}
           />
         </Col>
 
-        <Col xs={12} sm={6} md={3}>
+        <Col xs={12} sm={6} md={4}>
           <div style={{ marginBottom: 6, color: "rgba(0,0,0,.6)" }}>Source</div>
           <Select
             value={source}
@@ -109,20 +156,9 @@ const AttendanceFilters = ({
             style={{ width: "100%" }}
             options={[
               { value: "all", label: "All" },
-              { value: "kiosk", label: "Kiosk" },
               { value: "manual", label: "Manual" },
-              { value: "admin", label: "Admin" },
+              { value: "kiosk", label: "Kiosk" },
             ]}
-          />
-        </Col>
-
-        <Col xs={24} md={6} lg={7}>
-          <div style={{ marginBottom: 6, color: "rgba(0,0,0,.6)" }}>Note contains</div>
-          <Input
-            placeholder="Search notes…"
-            allowClear
-            value={searchNote}
-            onChange={(e) => setSearchNote(e.target.value)}
           />
         </Col>
       </Row>

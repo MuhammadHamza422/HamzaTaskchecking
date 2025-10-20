@@ -48,15 +48,18 @@ export const kioskEndBreak = ({ employeeId, pin }) =>
 //   return apiClient.get(`/api/v1/attendance?${p.toString()}`).then(r => r.data);
 // };
 
-export const listAttendance = async ({ user, page = 1, limit = 30, from, to } = {}) => {
+export const listAttendance = async ({ user, company, page = 1, limit = 30, from, to, status, source } = {}) => {
   try {
     const params = new URLSearchParams();
     params.append('page', String(page));
     params.append('limit', String(limit));
 
     if (user) params.append('user', String(user));
+    if (company) params.append('company', String(company));
     if (from) params.append('from', String(from));
     if (to) params.append('to', String(to));
+    if (status) params.append('status', String(status));
+    if (source) params.append('source', String(source));
 
     const response = await apiClient.get(`/api/v1/attendance?${params.toString()}`);
 
@@ -91,3 +94,38 @@ export const adminUpdateAttendance = (id, patch) =>
 
 export const adminDeleteAttendance = (id) =>
   apiClient.delete(`/api/v1/attendance/${id}`).then(r => r.data);
+
+// Get attendance activity logs
+export const getAttendanceActivity = async ({ page = 1, limit = 30, date, action, user } = {}) => {
+  try {
+    const params = new URLSearchParams();
+    params.append('page', String(page));
+    params.append('limit', String(limit));
+
+    if (date) params.append('date', String(date));
+    if (action) params.append('action', String(action));
+    if (user) params.append('user', String(user));
+
+    const response = await apiClient.get(`/api/v1/attendance/activity?${params.toString()}`);
+
+    if (response.status === 403) {
+      throw new Error('Access denied. Please check your permissions.');
+    }
+
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+
+    return {
+      activity: response.data.activity || [],
+      total: response.data.total || 0,
+      page: response.data.page || 1
+    };
+  } catch (error) {
+    console.error('Attendance activity fetch error:', error);
+    if (error.response?.status === 403) {
+      throw new Error('You do not have permission to view attendance activity data.');
+    }
+    throw error;
+  }
+};
