@@ -8,12 +8,16 @@ const ManualRecordForm = ({ canEdit, users, manual, setManual, fetchData }) => {
     if (!manual.userId || !manual.checkInAt) {
       return message.error("Employee and check-in time required");
     }
+    // Derive company from selected user if available
+    const selectedUser = (users || []).find(u => u._id === manual.userId);
+    const companyId = selectedUser?.company || undefined;
     try {
       await manualCreateAttendance({
         userId: manual.userId,
         checkInAt: manual.checkInAt,
         checkOutAt: manual.checkOutAt || null,
         note: manual.note || "",
+        company: companyId,
       });
       message.success("Record added");
       setManual({ userId: "", checkInAt: "", checkOutAt: "", note: "" });

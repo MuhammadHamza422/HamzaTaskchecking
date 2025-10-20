@@ -6,8 +6,8 @@ import { fetchCompanies } from "../api/company";
 import {
   kioskCheckIn,
   kioskCheckOut,
-  kioskStartBreak,   // <-- NEW
-  kioskEndBreak,     // <-- NEW
+  kioskStartBreak, // <-- NEW
+  kioskEndBreak, // <-- NEW
   listAttendance,
 } from "../api/attendance";
 import { useAuth } from "../contexts/AuthContext";
@@ -26,7 +26,9 @@ function AnalogClock({ now, timeZone = "UTC", size = 360 }) {
         second: "2-digit",
       });
       const parts = dtf.formatToParts(now);
-      const map = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+      const map = Object.fromEntries(
+        parts.map(({ type, value }) => [type, value])
+      );
       return {
         h: parseInt(map.hour ?? "0", 10),
         m: parseInt(map.minute ?? "0", 10),
@@ -49,7 +51,13 @@ function AnalogClock({ now, timeZone = "UTC", size = 360 }) {
   const ticks = Array.from({ length: 60 }, (_, i) => i);
 
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Analog clock">
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      role="img"
+      aria-label="Analog clock"
+    >
       <defs>
         <radialGradient id="dial" cx="50%" cy="50%" r="70%">
           <stop offset="0%" stopColor="rgba(255,255,255,0.07)" />
@@ -57,8 +65,22 @@ function AnalogClock({ now, timeZone = "UTC", size = 360 }) {
         </radialGradient>
       </defs>
 
-      <circle cx={cx} cy={cy} r={r + 8} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2" />
-      <circle cx={cx} cy={cy} r={r} fill="url(#dial)" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5" />
+      <circle
+        cx={cx}
+        cy={cy}
+        r={r + 8}
+        fill="none"
+        stroke="rgba(255,255,255,0.25)"
+        strokeWidth="2"
+      />
+      <circle
+        cx={cx}
+        cy={cy}
+        r={r}
+        fill="url(#dial)"
+        stroke="rgba(255,255,255,0.15)"
+        strokeWidth="1.5"
+      />
 
       <g transform={`translate(${cx} ${cy})`}>
         {ticks.map((i) => {
@@ -96,7 +118,13 @@ function AnalogClock({ now, timeZone = "UTC", size = 360 }) {
           const x = Math.sin(a) * dist;
           const y = -Math.cos(a) * dist + 6;
           return (
-            <text key={`n${i}`} x={x} y={y} textAnchor="middle" dominantBaseline="middle">
+            <text
+              key={`n${i}`}
+              x={x}
+              y={y}
+              textAnchor="middle"
+              dominantBaseline="middle"
+            >
               {n}
             </text>
           );
@@ -105,13 +133,36 @@ function AnalogClock({ now, timeZone = "UTC", size = 360 }) {
 
       <g transform={`translate(${cx} ${cy})`} strokeLinecap="round">
         <g transform={`rotate(${hrAngle})`}>
-          <line x1="0" y1="10" x2="0" y2={-r + 84} stroke="white" strokeOpacity="0.95" strokeWidth="6" />
+          <line
+            x1="0"
+            y1="10"
+            x2="0"
+            y2={-r + 84}
+            stroke="white"
+            strokeOpacity="0.95"
+            strokeWidth="6"
+          />
         </g>
         <g transform={`rotate(${minAngle})`}>
-          <line x1="0" y1="14" x2="0" y2={-r + 44} stroke="white" strokeOpacity="0.9" strokeWidth="4" />
+          <line
+            x1="0"
+            y1="14"
+            x2="0"
+            y2={-r + 44}
+            stroke="white"
+            strokeOpacity="0.9"
+            strokeWidth="4"
+          />
         </g>
         <g transform={`rotate(${secAngle})`}>
-          <line x1="0" y1="18" x2="0" y2={-r + 22} stroke="#60a5fa" strokeWidth="2" />
+          <line
+            x1="0"
+            y1="18"
+            x2="0"
+            y2={-r + 22}
+            stroke="#60a5fa"
+            strokeWidth="2"
+          />
         </g>
         <circle r="7" fill="#60a5fa" />
         <circle r="3" fill="white" />
@@ -126,18 +177,20 @@ export default function AttendanceKiosk() {
 
   const companyId = useMemo(() => {
     const c = currentUser?.company;
-    console.log('Current user company:', c);
+    console.log("Current user company:", c);
     if (!c) return null;
     return typeof c === "object" ? c._id || c.id || null : c;
   }, [currentUser]);
 
   const companyFromUser = useMemo(
-    () => (typeof currentUser?.company === "object" ? currentUser.company : null),
+    () =>
+      typeof currentUser?.company === "object" ? currentUser.company : null,
     [currentUser]
   );
 
   const needCompanyFetch =
-    !!companyId && !(companyFromUser && (companyFromUser.timezone || companyFromUser.name));
+    !!companyId &&
+    !(companyFromUser && (companyFromUser.timezone || companyFromUser.name));
 
   const companiesQ = useQuery({
     queryKey: ["companies"],
@@ -150,7 +203,11 @@ export default function AttendanceKiosk() {
     if (companyFromUser) {
       return {
         _id: companyFromUser._id || companyFromUser.id,
-        name: companyFromUser.name || companyFromUser.companyName || companyFromUser.title || "—",
+        name:
+          companyFromUser.name ||
+          companyFromUser.companyName ||
+          companyFromUser.title ||
+          "—",
         timezone: companyFromUser.timezone,
       };
     }
@@ -195,7 +252,8 @@ export default function AttendanceKiosk() {
         document.webkitExitFullscreen ||
         document.mozCancelFullScreen ||
         document.msExitFullscreen;
-      if (document.fullscreenElement && exit) exit.call(document).catch(() => { });
+      if (document.fullscreenElement && exit)
+        exit.call(document).catch(() => {});
     };
   }, []);
 
@@ -221,7 +279,8 @@ export default function AttendanceKiosk() {
   };
 
   const handleAnyClick = () => {
-    if (!document.fullscreenElement && fsSupported && !pinModal.open) enterFullscreen();
+    if (!document.fullscreenElement && fsSupported && !pinModal.open)
+      enterFullscreen();
   };
 
   // Reset selection on company change
@@ -257,7 +316,8 @@ export default function AttendanceKiosk() {
   const pageSize = 500;
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ["kiosk-employees", { limit: pageSize, search, companyId }],
-    queryFn: () => fetchEmployeesForKiosk({ page: 1, limit: pageSize, search, companyId }),
+    queryFn: () =>
+      fetchEmployeesForKiosk({ page: 1, limit: pageSize, search, companyId }),
     keepPreviousData: true,
     enabled: !!companyId,
     staleTime: 1000 * 60 * 2,
@@ -280,11 +340,11 @@ export default function AttendanceKiosk() {
         return await listAttendance({
           user: selected._id,
           page: 1,
-          limit: 1
+          limit: 1,
         });
       } catch (error) {
-        console.error('Status fetch error:', error);
-        message.error('Failed to fetch attendance status');
+        console.error("Status fetch error:", error);
+        message.error("Failed to fetch attendance status");
         return { items: [] };
       }
     },
@@ -292,16 +352,14 @@ export default function AttendanceKiosk() {
     staleTime: 30 * 1000,
     retry: 1,
     onError: (error) => {
-      console.error('Status query error:', error);
-      message.error('Failed to check attendance status');
-    }
+      console.error("Status query error:", error);
+      message.error("Failed to check attendance status");
+    },
   });
 
   // Add error state handling
   const latest = statusQ.data?.items?.[0] || null;
   const hasError = statusQ.isError;
-
-
 
   // const latest = statusQ.data?.items?.[0] || null;
   const selCheckedIn = !!(latest && latest.checkOutAt == null);
@@ -312,20 +370,28 @@ export default function AttendanceKiosk() {
     return lb && !lb.endAt ? lb : null;
   }, [latest]);
   const selCheckInAtText = latest?.checkInAt
-    ? new Date(latest.checkInAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    ? new Date(latest.checkInAt).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
     : null;
   const selBreakStartAtText = lastOpenBreak?.startAt
-    ? new Date(lastOpenBreak.startAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    ? new Date(lastOpenBreak.startAt).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
     : null;
 
   // ---- Mutations ----
   const invalidateAll = () => {
     qc.invalidateQueries({ queryKey: ["kiosk-employees"] });
-    if (selected?._id) qc.invalidateQueries({ queryKey: ["kiosk-user-status", selected._id] });
+    if (selected?._id)
+      qc.invalidateQueries({ queryKey: ["kiosk-user-status", selected._id] });
   };
 
   const checkInMut = useMutation({
-    mutationFn: ({ employeeId, note, pin }) => kioskCheckIn({ employeeId, note, pin }),
+    mutationFn: ({ employeeId, note, pin }) =>
+      kioskCheckIn({ employeeId, note, pin }),
     onSuccess: () => {
       message.success("Checked in");
       invalidateAll();
@@ -333,7 +399,16 @@ export default function AttendanceKiosk() {
       setPinModal({ open: false, mode: "in" });
     },
     onError: (e) => {
-      message.error(e?.response?.data?.message || "Check-in failed");
+      const msg = e?.response?.data?.message || "Check-in failed";
+      const status = e?.response?.status;
+      if (status === 400) {
+        // Backend: open session from previous day — require checkout first
+        message.warning(msg);
+        // Switch modal to checkout; preserve PIN so user can proceed
+        setPinModal((prev) => ({ ...prev, mode: "out" }));
+        return;
+      }
+      message.error(msg);
       setPin("");
     },
   });
@@ -354,7 +429,8 @@ export default function AttendanceKiosk() {
 
   // NEW: Break mutations
   const startBreakMut = useMutation({
-    mutationFn: ({ employeeId, note, pin }) => kioskStartBreak({ employeeId, note, pin }),
+    mutationFn: ({ employeeId, note, pin }) =>
+      kioskStartBreak({ employeeId, note, pin }),
     onSuccess: () => {
       message.success("Break started");
       invalidateAll();
@@ -457,18 +533,24 @@ export default function AttendanceKiosk() {
       style={{ position: "relative" }}
     >
       {/* Header */}
-      <header className="px-4 sm:px-8 py-3 shrink-0 border-b border-white/10">
+      <header className="px-4 sm:px-8 py-3 shrink-0 border-b border-white/10 bg-black/40 backdrop-blur">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
           <div>
-            <div className="text-xl sm:text-2xl font-semibold tracking-tight">Attendance Kiosk</div>
-            <div className="text-white/60 text-sm">Check-ins, breaks, and check-outs with PIN</div>
+            <div className="text-xl sm:text-2xl font-semibold tracking-tight">
+              Attendance Kiosk
+            </div>
+            <div className="text-white/60 text-sm">
+              Check-ins, breaks, and check-outs with PIN
+            </div>
           </div>
           {selectedCompany && (
             <div className="flex items-center gap-2 text-white/80">
               <span className="font-medium truncate max-w-[40vw] sm:max-w-none">
                 {selectedCompany?.name}
               </span>
-              {selectedCompany?.timezone && <Tag color="blue">{selectedCompany.timezone}</Tag>}
+              {selectedCompany?.timezone && (
+                <Tag color="geekblue">{selectedCompany.timezone}</Tag>
+              )}
             </div>
           )}
         </div>
@@ -476,26 +558,33 @@ export default function AttendanceKiosk() {
 
       {/* Main — exact 50/50 rows */}
       <main className="flex-1 min-h-0 px-4 sm:px-8 py-4">
-        <div className="max-w-7xl mx-auto h-full grid grid-rows-2 gap-4 min-h-0">
+        <div className="max-w-7xl mx-auto h-full grid grid-rows-2 gap-4 min-h-0 overflow-y-auto">
           {/* ===== Top 50% — Employee Selection ===== */}
-          <section className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-md shadow-sm flex flex-col min-h-0 overflow-hidden">
+          <section className="rounded-xl border border-white/10 bg-white/[0.06] backdrop-blur-md shadow-lg flex flex-col min-h-0 overflow-y-auto">
             <div className="p-3 sm:p-4 border-b border-white/10 flex flex-col sm:flex-row sm:items-center gap-3 shrink-0">
               <Input.Search
                 allowClear
                 size="large"
                 placeholder="Search employees by name or email…"
-                onSearch={(v) => { setSearch(v || ""); }}
-                onChange={(e) => { if (!e.target.value) setSearch(""); }}
-                className="bg-white rounded-lg w-full sm:max-w-xl"
+                onSearch={(v) => {
+                  setSearch(v || "");
+                }}
+                onChange={(e) => {
+                  if (!e.target.value) setSearch("");
+                }}
+                className="bg-white/90 text-black !rounded-lg !h-11 w-full sm:max-w-xl"
                 disabled={!companyId}
               />
-              <div className="text-white/50 text-sm">{isFetching ? "Refreshing…" : ""}</div>
+              <div className="text-white/50 text-sm">
+                {isFetching ? "Refreshing…" : ""}
+              </div>
             </div>
 
             <div className="flex-1 min-h-0">
               {!companyId ? (
                 <div className="w-full h-full grid place-items-center text-white/70 text-center px-6">
-                  This kiosk user is not associated with a company. Please contact an admin.
+                  This kiosk user is not associated with a company. Please
+                  contact an admin.
                 </div>
               ) : isLoading ? (
                 <div className="w-full h-full grid place-items-center">
@@ -509,25 +598,41 @@ export default function AttendanceKiosk() {
                 <div className="h-full overflow-auto p-3 sm:p-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
                     {users.map((u) => {
-                      const initials = `${(u.firstName || "")[0] || ""}${(u.lastName || "")[0] || ""}`.toUpperCase();
+                      const initials = `${(u.firstName || "")[0] || ""}${
+                        (u.lastName || "")[0] || ""
+                      }`.toUpperCase();
                       const isSel = selected?._id === u._id;
                       return (
                         <button
                           key={u._id}
                           onClick={() => setSelected(isSel ? null : u)}
-                          className={`group rounded-lg text-left border transition focus:outline-none focus:ring-2 focus:ring-blue-400/70
-                                      ${isSel ? "border-blue-400 bg-white/10" : "border-white/10 bg-white/[0.04] hover:bg-white/[0.08]"}`}
+                          className={`group rounded-xl text-left border transition focus:outline-none focus:ring-2 focus:ring-indigo-400/60
+                                      ${
+                                        isSel
+                                          ? "border-indigo-400 bg-white/10 shadow-[0_0_0_3px_rgba(99,102,241,0.15)]"
+                                          : "border-white/10 bg-white/[0.04] hover:bg-white/[0.08] hover:border-white/20"
+                                      }`}
                           style={{ minHeight: 88 }}
                         >
                           <div className="p-3 sm:p-4 flex items-center gap-3">
-                            <div className={`h-11 w-11 rounded-lg grid place-items-center text-base font-semibold 
-                                            bg-gradient-to-br from-white/20 to-white/5
-                                            ${isSel ? "ring-2 ring-blue-400/60" : "ring-0"}`}>
+                            <div
+                              className={`h-11 w-11 rounded-lg grid place-items-center text-base font-semibold 
+                                            bg-gradient-to-br from-indigo-400/30 to-indigo-500/10
+                                            ${
+                                              isSel
+                                                ? "ring-2 ring-indigo-400/60"
+                                                : "ring-0"
+                                            }`}
+                            >
                               {initials || "?"}
                             </div>
                             <div className="min-w-0">
-                              <div className="font-semibold truncate">{u.firstName} {u.lastName}</div>
-                              <div className="text-white/60 text-sm truncate">{u.email}</div>
+                              <div className="font-semibold truncate">
+                                {u.firstName} {u.lastName}
+                              </div>
+                              <div className="text-white/60 text-sm truncate">
+                                {u.email}
+                              </div>
                             </div>
                           </div>
                         </button>
@@ -540,92 +645,106 @@ export default function AttendanceKiosk() {
           </section>
 
           {/* ===== Bottom 50% — Two columns: Clock | Info ===== */}
-          <section className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-md shadow-sm min-h-0 overflow-hidden">
-            <div className="w-full h-full grid grid-cols-1 md:grid-cols-2 gap-0 min-h-0">
-              {/* LEFT: Clock */}
-              <div
-                ref={clockColRef}
-                className="min-h-0 h-full w-full flex items-center justify-center overflow-hidden px-4 py-4"
-              >
-                <AnalogClock now={now} timeZone={tz} size={clockSize} />
+          <section className="grid grid-cols-1 md:grid-cols-2 rounded-xl h-full border border-white/10 bg-white/[0.06] backdrop-blur-md shadow-lg overflow-y-auto">
+            {/* LEFT: Clock */}
+            <div
+              ref={clockColRef}
+              className="min-h-0 h-full w-full flex items-center justify-center overflow-hidden px-4 py-4"
+            >
+              <AnalogClock now={now} timeZone={tz} size={clockSize} />
+            </div>
+            {/* RIGHT: Info panel */}
+            <div className="min-h-0 h-full w-full border-t md:border-t-0 md:border-l border-white/10 px-5 sm:px-6 py-5 flex flex-col gap-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-base sm:text-lg font-semibold tracking-tight truncate">
+                    {selectedCompany?.name || "—"}
+                  </div>
+                  <div className="text-white/60 text-sm truncate">
+                    {selectedCompany?.timezone || "Timezone not set"}
+                  </div>
+                </div>
+                <Tag color="geekblue" className="shrink-0">
+                  {tz}
+                </Tag>
               </div>
 
-              {/* RIGHT: Info panel */}
-              <div className="min-h-0 h-full w-full border-t md:border-t-0 md:border-l border-white/10 px-5 sm:px-6 py-5 flex flex-col gap-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-base sm:text-lg font-semibold tracking-tight truncate">
-                      {selectedCompany?.name || "—"}
-                    </div>
-                    <div className="text-white/60 text-sm truncate">
-                      {selectedCompany?.timezone || "Timezone not set"}
-                    </div>
-                  </div>
-                  <Tag color="blue" className="shrink-0">{tz}</Tag>
+              <div className="rounded-lg border border-white/10 bg-white/5 p-4 shadow-md shadow-black/20">
+                <div className="text-3xl sm:text-4xl font-semibold tabular-nums leading-none">
+                  {digital}
+                </div>
+                <div className="text-white/60 text-xs sm:text-sm mt-2">
+                  Current company time
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-white/10 bg-white/5 p-4 shadow-md shadow-black/20">
+                <div className="text-sm text-white/60 mb-3">
+                  Selected employee
                 </div>
 
-                <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-                  <div className="text-3xl sm:text-4xl font-semibold tabular-nums leading-none">{digital}</div>
-                  <div className="text-white/60 text-xs sm:text-sm mt-2">Current company time</div>
-                </div>
-
-                <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-                  <div className="text-sm text-white/60 mb-3">Selected employee</div>
-
-                  {selected ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {selected ? (
+                  <div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-2">
                       <div className="sm:col-span-1">
                         <div className="text-white/60 text-xs">Name</div>
-                        <div className="font-medium truncate">{selected.firstName} {selected.lastName}</div>
+                        <div className="font-medium truncate">
+                          {selected.firstName} {selected.lastName}
+                        </div>
                       </div>
                       <div className="sm:col-span-1">
                         <div className="text-white/60 text-xs">Email</div>
-                        <div className="truncate">{selected.email}</div>
+                        <div className="">{selected.email}</div>
                       </div>
-                      <div className="sm:col-span-1">
-                        <div className="text-white/60 text-xs">Status</div>
-                        <div className="mt-0.5">
-                          {statusQ.isFetching ? (
-                            <Tag>Checking…</Tag>
-                          ) : statusQ.isError ? (
-                            <Tag color="red">Error checking status</Tag>
-                          ) : selCheckedIn ? (
-                            selOnBreak ? (
-                              <Tag color="gold">
-                                On break{selBreakStartAtText ? ` • ${selBreakStartAtText}` : ""}
-                              </Tag>
-                            ) : (
-                              <Tag color="green">
-                                Checked in{selCheckInAtText ? ` • ${selCheckInAtText}` : ""}
-                              </Tag>
-                            )
-                          ) : (
-                            <Tag>Not checked in</Tag>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Optional break note input (only when starting a break) */}
-                      {selCheckedIn && !selOnBreak && (
-                        <div className="sm:col-span-3">
-                          <div className="text-white/60 text-xs mb-1">Break note (optional)</div>
-                          <Input
-                            value={breakNote}
-                            onChange={(e) => setBreakNote(e.target.value)}
-                            placeholder="e.g., Lunch, appointment, etc."
-                          />
-                        </div>
-                      )}
                     </div>
-                  ) : (
-                    <div className="text-white/60">No employee selected</div>
-                  )}
-                </div>
+                    <div>
+                      <div className="text-white/60 text-xs">Status</div>
+                      <div className="mt-0.5">
+                        {statusQ.isFetching ? (
+                          <Tag>Checking…</Tag>
+                        ) : statusQ.isError ? (
+                          <Tag color="red">Error checking status</Tag>
+                        ) : selCheckedIn ? (
+                          selOnBreak ? (
+                            <Tag color="gold">
+                              On break
+                              {selBreakStartAtText
+                                ? ` • ${selBreakStartAtText}`
+                                : ""}
+                            </Tag>
+                          ) : (
+                            <Tag color="green">
+                              Checked in
+                              {selCheckInAtText ? ` • ${selCheckInAtText}` : ""}
+                            </Tag>
+                          )
+                        ) : (
+                          <Tag>Not checked in</Tag>
+                        )}
+                      </div>
+                    </div>
+                     {/* Optional break note input (only when starting a break) */}
+                     {selCheckedIn && !selOnBreak && (
+                      <div className="sm:col-span-3 mt-2">
+                        <div className="text-white/60 text-xs mb-1">
+                          Break note (optional)
+                        </div>
+                        <Input
+                          value={breakNote}
+                          onChange={(e) => setBreakNote(e.target.value)}
+                          placeholder="e.g., Lunch, appointment, etc."
+                        />
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-white/60">No employee selected</div>
+                )}
+              </div>
 
-                <div className="flex-1" />
-                <div className="text-xs text-white/50">
-                  {isFetching ? "Refreshing employee list…" : "Ready"}
-                </div>
+              <div className="flex-1" />
+              <div className="text-xs text-white/50">
+                {isFetching ? "Refreshing employee list…" : "Ready"}
               </div>
             </div>
           </section>
@@ -638,18 +757,24 @@ export default function AttendanceKiosk() {
           <div className="text-white/85 truncate">
             {selected ? (
               <>
-                <span className="font-semibold">{selected.firstName} {selected.lastName}</span>
+                <span className="font-semibold">
+                  {selected.firstName} {selected.lastName}
+                </span>
                 <span className="text-white/60"> • {selected.email}</span>
                 {statusQ.isFetching ? (
                   <span className="ml-2 text-white/60">• checking status…</span>
                 ) : selCheckedIn ? (
                   selOnBreak ? (
                     <span className="ml-2 text-yellow-300">
-                      • On break{selBreakStartAtText ? ` since ${selBreakStartAtText}` : ""}
+                      • On break
+                      {selBreakStartAtText
+                        ? ` since ${selBreakStartAtText}`
+                        : ""}
                     </span>
                   ) : (
                     <span className="ml-2 text-emerald-300">
-                      • Checked in{selCheckInAtText ? ` at ${selCheckInAtText}` : ""}
+                      • Checked in
+                      {selCheckInAtText ? ` at ${selCheckInAtText}` : ""}
                     </span>
                   )
                 ) : null}
@@ -661,9 +786,16 @@ export default function AttendanceKiosk() {
 
           <div className="flex gap-2 sm:gap-3">
             {/* Check In */}
-            <Tooltip title={!selected ? "Select an employee" : selCheckedIn ? "Already checked in" : ""}>
-              <Button
-                size="large"
+            <Tooltip
+              title={
+                !selected
+                  ? "Select an employee"
+                  : selCheckedIn
+                  ? "Already checked in"
+                  : ""
+              }
+            >
+              <button
                 disabled={!selected || selCheckedIn || checkInMut.isPending}
                 loading={checkInMut.isPending}
                 onClick={() => {
@@ -671,10 +803,10 @@ export default function AttendanceKiosk() {
                   setPinModal({ open: true, mode: "in" });
                   setTimeout(() => pinInputRef.current?.focus?.(), 0);
                 }}
-                type="primary"
+                className="!rounded-lg !h-11 !px-5 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Check In
-              </Button>
+              </button>
             </Tooltip>
 
             {/* Start Break */}
@@ -689,6 +821,7 @@ export default function AttendanceKiosk() {
                     setPinModal({ open: true, mode: "breakStart" });
                     setTimeout(() => pinInputRef.current?.focus?.(), 0);
                   }}
+                  className="!rounded-lg !h-11 !px-5"
                 >
                   Start Break
                 </Button>
@@ -707,6 +840,7 @@ export default function AttendanceKiosk() {
                     setPinModal({ open: true, mode: "breakEnd" });
                     setTimeout(() => pinInputRef.current?.focus?.(), 0);
                   }}
+                  className="!rounded-lg !h-11 !px-5"
                 >
                   End Break
                 </Button>
@@ -715,7 +849,15 @@ export default function AttendanceKiosk() {
 
             {/* Check Out (works from break too; backend auto-ends break) */}
             {selCheckedIn && (
-              <Tooltip title={!selected ? "Select an employee" : selOnBreak ? "On a break — will auto end then check out" : ""}>
+              <Tooltip
+                title={
+                  !selected
+                    ? "Select an employee"
+                    : selOnBreak
+                    ? "On a break — will auto end then check out"
+                    : ""
+                }
+              >
                 <Button
                   size="large"
                   disabled={!selected || checkOutMut.isPending}
@@ -726,6 +868,7 @@ export default function AttendanceKiosk() {
                     setTimeout(() => pinInputRef.current?.focus?.(), 0);
                   }}
                   danger
+                  className="!rounded-lg !h-11 !px-5"
                 >
                   Check Out
                 </Button>
@@ -739,7 +882,7 @@ export default function AttendanceKiosk() {
       {fsSupported && needsGesture && !pinModal.open && (
         <button
           onClick={enterFullscreen}
-          className="fixed inset-0 flex items-center justify-center bg-black/60 text-white text-lg"
+          className="fixed inset-0 flex items-center justify-center bg-slate-950/70 text-white text-lg"
         >
           Tap to enter fullscreen
         </button>
@@ -749,7 +892,10 @@ export default function AttendanceKiosk() {
       <Modal
         title={modalTitles[pinModal.mode]}
         open={pinModal.open}
-        onCancel={() => { setPinModal({ open: false, mode: "in" }); setPin(""); }}
+        onCancel={() => {
+          setPinModal({ open: false, mode: "in" });
+          setPin("");
+        }}
         onOk={submitPin}
         okText={modalOkText[pinModal.mode]}
         maskClosable={false}
@@ -779,7 +925,9 @@ export default function AttendanceKiosk() {
           ref={pinInputRef}
           placeholder="4–6 digit PIN"
           value={pin}
-          onChange={(e) => setPin(e.target.value.replace(/\D+/g, "").slice(0, 6))}
+          onChange={(e) =>
+            setPin(e.target.value.replace(/\D+/g, "").slice(0, 6))
+          }
           onPressEnter={submitPin}
           size="large"
           type="password"
@@ -789,7 +937,9 @@ export default function AttendanceKiosk() {
 
         <div className="grid grid-cols-3 gap-2 mt-4">
           {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
-            <Button key={d} onClick={() => appendDigit(d)}>{d}</Button>
+            <Button key={d} onClick={() => appendDigit(d)}>
+              {d}
+            </Button>
           ))}
           <Button onClick={clearPin}>Clear</Button>
           <Button onClick={() => appendDigit("0")}>0</Button>

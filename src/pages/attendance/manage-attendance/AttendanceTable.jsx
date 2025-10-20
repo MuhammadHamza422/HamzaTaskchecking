@@ -39,6 +39,7 @@ const AttendanceTable = ({
   setPageSize,
   total,
   currentPageStart = 0,
+  companies = [],
 }) => {
   const [editOpen, setEditOpen] = React.useState(false);
   const [editing, setEditing] = React.useState(null);
@@ -153,20 +154,45 @@ const AttendanceTable = ({
       width: 250,
       fixed: "left",
       render: (_, r) => (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-          {/* <Tag style={{ flexShrink: 0 }}>
-            {(r.user?.firstName || "?")[0]}{(r.user?.lastName || "")[0] || ""}
-          </Tag> */}
-          <div style={{ 
-            fontWeight: 500, 
-            whiteSpace: "nowrap",
-            minWidth: 0
-          }}>
+        <div clasName="flex flex-col items-start gap-2 min-w-0">
+          <div className="font-medium whitespace-nowrap min-w-0">
             {r.user?.firstName} {r.user?.lastName}
           </div>
+          <p className="text-sm text-gray-500 whitespace-nowrap text-ellipsis">{r.user?.email}</p>
         </div>
       ),
       sorter: (a, b) => (a.user?.firstName || "").localeCompare(b.user?.firstName || ""),
+    },
+    {
+      title: "Company",
+      key: "company",
+      width: 240,
+      render: (_, r) => {
+        const companyName = (() => {
+          if (r.company && typeof r.company === 'object') return r.company.name || '—';
+          if (r.company && typeof r.company === 'string') {
+            const c = companies.find(x => x._id === r.company);
+            return c?.name || '—';
+          }
+          return '—';
+        })();
+        return (
+          <div style={{ fontSize: "12px", lineHeight: "1.4", whiteSpace: "nowrap" }}>
+            {companyName}
+          </div>
+        );
+      },
+      sorter: (a, b) => {
+        const getName = (row) => {
+          if (row.company && typeof row.company === 'object') return row.company.name || '';
+          if (row.company && typeof row.company === 'string') {
+            const c = companies.find(x => x._id === row.company);
+            return c?.name || '';
+          }
+          return '';
+        };
+        return getName(a).localeCompare(getName(b));
+      },
     },
     { 
       title: "Check In", 
@@ -328,7 +354,7 @@ const AttendanceTable = ({
           loading={loading}
           expandable={{ expandedRowRender }}
           pagination={false}
-          scroll={{ x: 1400 }}
+          scroll={{ x: 1600 }}
           style={{ 
             fontSize: "13px",
             fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"

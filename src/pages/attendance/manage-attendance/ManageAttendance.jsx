@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { listAttendance } from "../../../api/attendance";
+import { fetchCompanies } from "../../../api/company";
 import { fetchAllUsers } from "../../../api/auth";
 import { Space, message } from "antd";
 import dayjs from "dayjs";
@@ -47,13 +48,16 @@ export default function ManageAttendance({ canEdit = false }) {
   /* ---------- state ---------- */
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [companies, setCompanies] = useState([]);
+  const [loadingCompanies, setLoadingCompanies] = useState(false);
 
   // Filters
   const [selectedUsers, setSelectedUsers] = useState([]); // multi
   const [dateRange, setDateRange] = useState(quickRanges["Biweekly (15 days)"]);
   const [status, setStatus] = useState("all"); // all | in | break | out
-  const [source, setSource] = useState("all"); // all | kiosk | manual | admin
+  const [source, setSource] = useState("all"); // all | manual | kiosk
   const [searchNote, setSearchNote] = useState("");
+  const [company, setCompany] = useState("");
 
   // Data
   const [rows, setRows] = useState([]);
@@ -88,6 +92,18 @@ export default function ManageAttendance({ canEdit = false }) {
     })();
   }, []);
 
+  useEffect(() => {
+    (async () => {
+      setLoadingCompanies(true);
+      try {
+        const list = await fetchCompanies();
+        setCompanies(list || []);
+      } finally {
+        setLoadingCompanies(false);
+      }
+    })();
+  }, []);
+
   const isTodayView = useMemo(() => {
     const [from, to] = dateRange || [];
     if (!from || !to) return false;
@@ -101,6 +117,7 @@ export default function ManageAttendance({ canEdit = false }) {
     try {
       const data = await listAttendance({
         user: serverUser,
+        company: company || undefined,
         from: from ? from.format("YYYY-MM-DD") : "",
         to: to ? to.format("YYYY-MM-DD") : "",
         page,
@@ -129,7 +146,7 @@ export default function ManageAttendance({ canEdit = false }) {
   useEffect(() => {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedUsers.length, dateRange, page, pageSize, status, source, searchNote]);
+  }, [selectedUsers.length, dateRange, page, pageSize, status, source, searchNote, company]);
 
   useEffect(() => {
     if (!autoRefresh || !isTodayView) return;
@@ -146,7 +163,7 @@ export default function ManageAttendance({ canEdit = false }) {
   // Reset page when filters change
   useEffect(() => {
     setPage(1);
-  }, [status, source, searchNote]);
+  }, [status, source, searchNote, company]);
 
   const usersInScope = useMemo(() => {
     if (selectedUsers.length > 0) return users.filter((u) => selectedUsers.includes(u._id));
@@ -257,15 +274,19 @@ export default function ManageAttendance({ canEdit = false }) {
           setSource={setSource}
           searchNote={searchNote}
           setSearchNote={setSearchNote}
+          companies={companies}
+          loadingCompanies={loadingCompanies}
+          company={company}
+          setCompany={setCompany}
         />
 
         {/* Dashboard */}
-        <AttendanceDashboard
+        {/* <AttendanceDashboard
           metrics={metrics}
           isTodayView={isTodayView}
           usersInScope={usersInScope}
           filteredRows={filteredRows}
-        />
+        /> */}
 
         {/* Manual record (admin) */}
         <ManualRecordForm
@@ -288,6 +309,7 @@ export default function ManageAttendance({ canEdit = false }) {
            setPageSize={setPageSize}
            total={total}
            currentPageStart={(page - 1) * pageSize}
+           companies={companies}
          />
 
          {/* Custom Pagination */}

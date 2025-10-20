@@ -46,6 +46,7 @@ import SellersListPage from "./pages/sellers/SellersListPage";
 import SourcerDashboardPage from "./pages/sourcer/SourcerDashboardPage";
 import PurchaserDashboardPage from "./pages/purchaser/PurchaserDashboardPage";
 import PurchaserListingsPage from "./pages/purchaser/PurchaserListingPage";
+import AttendanceActivity from "./pages/attendance/Attendance-Activity";
 
 // 🔹 Role guard for specific routes
 const RequireRoles = ({ allow, children }) => {
@@ -139,6 +140,7 @@ function App() {
 
           {/* Attendance entry */}
           <Route path="/attendance" element={<AttendancePage />} />
+          <Route path="/attendance-activity" element={<AttendanceActivity />} />
           <Route path="timeoff" element={<TimeOffLayout />}>
             <Route
               path="me"
