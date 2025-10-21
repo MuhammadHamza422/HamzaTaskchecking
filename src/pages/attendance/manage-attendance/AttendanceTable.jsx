@@ -5,6 +5,7 @@ import { adminUpdateAttendance, adminDeleteAttendance } from "../../../api/atten
 import dayjs from "dayjs";
 import Swal from "sweetalert2";
 import { formatDateTimeInTimezone, formatTimeWithTimezone, getCompanyTimezone } from "../../../utils/timezone";
+import LiveTimeTracker from "../../../components/common/LiveTimeTracker";
 
 const fmtDT = (d, timezone = 'UTC') => {
   if (!d) return "—";
@@ -253,6 +254,25 @@ const AttendanceTable = ({
       ),
     },
     {
+      title: "Live Time",
+      key: "liveTime",
+      width: 140,
+      align: "center",
+      render: (_, record) => {
+        const timezone = getCompanyTimezone(record);
+        const isCurrentlyWorking = record.checkInAt && !record.checkOutAt;
+        
+        return (
+          <LiveTimeTracker 
+            record={record}
+            breaks={record.breaks || []}
+            timezone={timezone}
+            isLive={isCurrentlyWorking}
+          />
+        );
+      },
+    },
+    {
       title: "Breaks",
       key: "breaks",
       width: 120,
@@ -373,7 +393,7 @@ const AttendanceTable = ({
           loading={loading}
           expandable={{ expandedRowRender }}
           pagination={false}
-          scroll={{ x: 1800 }}
+          scroll={{ x: 1940 }}
           style={{ 
             fontSize: "13px",
             fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"

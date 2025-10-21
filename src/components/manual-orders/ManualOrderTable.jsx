@@ -157,7 +157,7 @@ export default function ManualOrderTable({
           onClick={() => onRowClick(record)}
         >
           <div className="font-medium text-gray-900">{text}</div>
-          <div className="text-xs text-gray-500">ID: {record.customerId}</div>
+          {/* <div className="text-xs text-gray-500">ID: {record.customerId}</div> */}
         </div>
       ),
     },
