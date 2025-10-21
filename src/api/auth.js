@@ -48,7 +48,7 @@ export const fetchRoles = async () => {
  */
 export const fetchEmployeesForKiosk = async ({
   page = 1,
-  limit = 50,
+  limit = 10000, // Increased to ensure we get all users
   search = "",
   companyId,
 } = {}) => {
