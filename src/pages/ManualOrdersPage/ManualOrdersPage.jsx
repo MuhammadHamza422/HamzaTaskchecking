@@ -178,7 +178,12 @@ const ManualOrdersPage = () => {
             sku: item.product?.sku || String(item.product?._id || ""),
             name: item.product?.pro_title || "Product",
             quantity: Number(item.quantity || 1),
-            unitPrice: Number(item.product?.sale_price || 0),
+            // Prefer the item's allocated unit price if present; fallback to product sale price
+            unitPrice: Number(
+              item?.price !== undefined && item?.price !== null
+                ? item.price
+                : item.product?.sale_price || 0
+            ),
             productId: Number(item.product?.uid) || undefined,
           });
         });

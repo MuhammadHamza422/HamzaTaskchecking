@@ -126,9 +126,9 @@ export default function ManualOrderDetailsDrawer({
                 <Descriptions.Item label="Order Number">
                   <Text strong>{orderDetails.data.orderNumber}</Text>
                 </Descriptions.Item>
-                <Descriptions.Item label="Customer ID">
+                {/* <Descriptions.Item label="Customer ID">
                   <Text>{orderDetails.data.customerId}</Text>
-                </Descriptions.Item>
+                </Descriptions.Item> */}
                 <Descriptions.Item label="Platform">
                   <Tag color="blue">{getPlatformName(orderDetails.data.plateform?._id)}</Tag>
                 </Descriptions.Item>
@@ -275,11 +275,11 @@ export default function ManualOrderDetailsDrawer({
                         <Text strong>{item.product?.pro_title || `Product ID: ${item.product?._id}`}</Text>
                         <div className="text-sm text-gray-600">SKU: {item.product?.sku}</div>
                         <div className="text-sm text-gray-600">Quantity: {item.quantity}</div>
-                        <div className="text-sm text-gray-600">Price: {formatCurrency(item.product?.sale_price)}</div>
+                        <div className="text-sm text-gray-600">Price: {formatCurrency(item?.price)}</div>
                       </div>
                       <div className="text-right">
                         <Text strong className="text-green-600">
-                          {formatCurrency((item.product?.sale_price || 0) * item.quantity)}
+                          {formatCurrency(Number(item?.price || 0) * Number(item?.quantity || 0))}
                         </Text>
                       </div>
                     </div>
