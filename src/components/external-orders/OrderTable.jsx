@@ -12,6 +12,7 @@ import {
 } from "antd";
 import { useMediaQuery } from "react-responsive";
 import { CloseCircleOutlined } from "@ant-design/icons";
+import { FaCheckCircle } from "react-icons/fa";
 
 export default function OrderTable({
   orders,
@@ -81,7 +82,7 @@ export default function OrderTable({
               return (
                 <div className="flex items-center justify-center">
                   {isDisabled ? (
-                    <CloseCircleOutlined className="text-red-400" />
+                    <FaCheckCircle className="text-green-500 size-4" />
                   ) : (
                     <Checkbox
                       checked={selectedOrders.includes(record?._id)}
@@ -374,7 +375,7 @@ export default function OrderTable({
           key: "orderId",
           render: (text) => {
             // Extract numeric ID from gid://shopify/Order/6163651690800 format
-            const numericId = text?.replace('gid://shopify/Order/', '') || text;
+            const numericId = text?.replace("gid://shopify/Order/", "") || text;
             return (
               <span className="font-semibold text-gray-900">{numericId}</span>
             );
@@ -683,8 +684,10 @@ export default function OrderTable({
               )}
               <div>
                 <div className="font-semibold text-lg text-gray-900">
-                  Order #{activeTab === "shopify" 
-                    ? order?.orderId?.replace('gid://shopify/Order/', '') || order?.orderId
+                  Order #
+                  {activeTab === "shopify"
+                    ? order?.orderId?.replace("gid://shopify/Order/", "") ||
+                      order?.orderId
                     : order?.orderId}
                 </div>
                 <div className="text-sm text-gray-500 font-mono">

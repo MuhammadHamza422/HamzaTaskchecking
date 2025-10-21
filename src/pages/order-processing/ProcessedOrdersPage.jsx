@@ -1194,7 +1194,7 @@ export default function ProcessedOrdersPage() {
               </p>
             </div>
             <div className="flex items-center gap-4">
-              <button
+              {/* <button
                 onClick={fetchLatestOrders}
                 disabled={isLoading || isRefreshing}
                 className="sm:w-auto w-full flex min-w-fit text-[14px] sm:text-[15px] items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200 shadow-sm"
@@ -1215,7 +1215,7 @@ export default function ProcessedOrdersPage() {
                   />
                 </svg>
                 {isLoading || isRefreshing ? "Refreshing..." : "Refresh Orders"}
-              </button>
+              </button> */}
               <button
                 onClick={
                   activeTab === "woocommerce"
@@ -1238,18 +1238,20 @@ export default function ProcessedOrdersPage() {
           </div>
         </div>
         {/* Filters */}
-        <OrderFilters
-          filters={filters}
-          onFiltersChange={handleFiltersChange}
-          onReset={handleFiltersReset}
+        <PlatformTabs
           activeTab={activeTab}
-        />
-
+          onTabChange={handleTabChange}
+        ></PlatformTabs>
         {/* Platform Tabs */}
-        <div>
-          <PlatformTabs activeTab={activeTab} onTabChange={handleTabChange}>
-            {renderTabContent()}
-          </PlatformTabs>
+        <div className="mt-5">
+          <OrderFilters
+            filters={filters}
+            onFiltersChange={handleFiltersChange}
+            onReset={handleFiltersReset}
+            activeTab={activeTab}
+          />
+          {/* Table */}
+          {renderTabContent()}
         </div>
 
         {/* Order Details Drawer */}

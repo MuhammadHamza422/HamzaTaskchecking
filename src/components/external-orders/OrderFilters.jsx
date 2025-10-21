@@ -25,7 +25,7 @@ const wcorderStatus = [
 // Shopify uses the same status values as WooCommerce
 const shopifyOrderStatus = [
   "pending",
-  "failed", 
+  "failed",
   "processing",
   "on-hold",
   "completed",
@@ -36,7 +36,7 @@ const shopifyOrderStatus = [
 // Walmart specific status values
 const walmartOrderStatus = [
   "Acknowledged",
-  "Shipped", 
+  "Shipped",
   "Pending",
   "Cancelled",
   "Delivered",
@@ -51,30 +51,35 @@ const getPlatformStatusConfig = (platform) => {
       return {
         label: "WC Status",
         options: wcorderStatus,
-        filterKey: "wc_status"
+        filterKey: "wc_status",
       };
     case "walmart":
       return {
-        label: "WM Status", 
+        label: "WM Status",
         options: walmartOrderStatus,
-        filterKey: "wm_status"
+        filterKey: "wm_status",
       };
     case "shopify":
       return {
         label: "SF Status",
         options: shopifyOrderStatus,
-        filterKey: "wc_status" // Shopify uses wc_status field
+        filterKey: "wc_status", // Shopify uses wc_status field
       };
     default:
       return {
         label: "Status",
         options: wcorderStatus,
-        filterKey: "wc_status"
+        filterKey: "wc_status",
       };
   }
 };
 
-export default function OrderFilters({ filters, onFiltersChange, onReset, activeTab = "woocommerce" }) {
+export default function OrderFilters({
+  filters,
+  onFiltersChange,
+  onReset,
+  activeTab = "woocommerce",
+}) {
   const [searchValue, setSearchValue] = useState(filters.search);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const isMobile = useMediaQuery({ maxWidth: 768 });
@@ -119,7 +124,7 @@ export default function OrderFilters({ filters, onFiltersChange, onReset, active
     let count = 0;
     if (filters.search) count++;
     if (filters.dateRange && filters.dateRange.length === 2) count++;
-    
+
     const config = getPlatformStatusConfig(activeTab);
     if (filters[config.filterKey]) count++;
     if (filters.status) count++;
@@ -282,7 +287,8 @@ export default function OrderFilters({ filters, onFiltersChange, onReset, active
                 )}
                 {filters[getPlatformStatusConfig(activeTab).filterKey] && (
                   <div className="bg-green-50 text-green-700 text-xs px-2 py-1 rounded-full flex items-center gap-1">
-                    {getPlatformStatusConfig(activeTab).label}: {filters[getPlatformStatusConfig(activeTab).filterKey]}
+                    {getPlatformStatusConfig(activeTab).label}:{" "}
+                    {filters[getPlatformStatusConfig(activeTab).filterKey]}
                     <CloseOutlined
                       className="cursor-pointer hover:text-green-900"
                       onClick={() => handlePlatformStatusChange(undefined)}
@@ -364,7 +370,7 @@ export default function OrderFilters({ filters, onFiltersChange, onReset, active
 
   // Desktop layout
   return (
-    <div className="mb-4 shadow-sm rounded-lg border border-[#f0f0f0] p-4 bg-white overflow-hidden">
+    <div className="mb-4 shadow-sm rounded-t-lg border border-[#f0f0f0] p-4 bg-white overflow-hidden">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Search by Order ID */}
         <div>

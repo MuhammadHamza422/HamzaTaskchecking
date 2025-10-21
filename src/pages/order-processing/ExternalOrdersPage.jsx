@@ -94,7 +94,8 @@ export default function ExternalOrdersPage() {
 
   // Fetch orders from API based on the active tab and filters
   const fetchOrders = async ({ queryKey }) => {
-    const [_, tab, page, limit, search, dateRange, wcStatus, wmStatus, status] = queryKey;
+    const [_, tab, page, limit, search, dateRange, wcStatus, wmStatus, status] =
+      queryKey;
     const config = getPlatformConfig(tab);
 
     if (tab === "woocommerce") {
@@ -304,11 +305,13 @@ export default function ExternalOrdersPage() {
   const fetchOrderDetails = async (orderId) => {
     if (!orderId) return null;
     const config = getPlatformConfig(activeTab);
-    
+
     // Handle different API parameter formats for different platforms
     if (activeTab === "shopify") {
       // Shopify uses query parameter: /api/v1/orders/shopify/order?orderId=gid://shopify/Order/6163651690800
-      const response = await apiClient.get(`${config.detailsApi}?orderId=${orderId}`);
+      const response = await apiClient.get(
+        `${config.detailsApi}?orderId=${orderId}`
+      );
       return response.data;
     } else {
       // WooCommerce and Walmart use path parameter: /api/v1/orders/wc/order/{orderId}
@@ -452,20 +455,20 @@ export default function ExternalOrdersPage() {
     let filteredOrders = [...ordersData.orders];
 
     // Filter by search (order ID)
-    if (filters.search) {
-      filteredOrders = filteredOrders.filter((order) => {
-        let orderIdToSearch = order.orderId?.toString() || "";
-        
-        // For Shopify, also search in the numeric part of the GID
-        if (activeTab === "shopify") {
-          const numericId = orderIdToSearch.replace('gid://shopify/Order/', '');
-          return orderIdToSearch.toLowerCase().includes(filters.search.toLowerCase()) ||
-                 numericId.toLowerCase().includes(filters.search.toLowerCase());
-        }
-        
-        return orderIdToSearch.toLowerCase().includes(filters.search.toLowerCase());
-      });
-    }
+    // if (filters.search) {
+    //   filteredOrders = filteredOrders.filter((order) => {
+    //     let orderIdToSearch = order.orderId?.toString() || "";
+
+    //     // For Shopify, also search in the numeric part of the GID
+    //     if (activeTab === "shopify") {
+    //       const numericId = orderIdToSearch.replace('gid://shopify/Order/', '');
+    //       return orderIdToSearch.toLowerCase().includes(filters.search.toLowerCase()) ||
+    //              numericId.toLowerCase().includes(filters.search.toLowerCase());
+    //     }
+
+    //     return orderIdToSearch.toLowerCase().includes(filters.search.toLowerCase());
+    //   });
+    // }
 
     // Filter by date range
     if (filters.dateRange && filters.dateRange.length === 2) {
@@ -585,7 +588,7 @@ export default function ExternalOrdersPage() {
                 </svg>
                 {isLoading || isRefreshing ? "Refreshing..." : "Refresh Orders"}
               </button>
-              <button
+              {/* <button
                 onClick={
                   activeTab === "woocommerce"
                     ? handleUpdateOrderStatus
@@ -602,23 +605,29 @@ export default function ExternalOrdersPage() {
                   <Loader2 className="w-4 h-4 animate-spin" />
                 )}
                 {updateOrderStatusLoading ? "Updating..." : "Update Status"}
-              </button>
+              </button> */}
             </div>
           </div>
         </div>
-        {/* Filters */}
-        <OrderFilters
-          filters={filters}
-          onFiltersChange={handleFiltersChange}
-          onReset={handleFiltersReset}
-          activeTab={activeTab}
-        />
 
         {/* Platform Tabs */}
         <div>
-          <PlatformTabs activeTab={activeTab} onTabChange={handleTabChange}>
-            {renderTabContent()}
-          </PlatformTabs>
+          <PlatformTabs
+            activeTab={activeTab}
+            onTabChange={handleTabChange}
+          ></PlatformTabs>
+        </div>
+
+        <div className=" mt-5">
+          {/* Filters */}
+          <OrderFilters
+            filters={filters}
+            onFiltersChange={handleFiltersChange}
+            onReset={handleFiltersReset}
+            activeTab={activeTab}
+          />
+          {/* Table */}
+          {renderTabContent()}
         </div>
 
         {/* Order Details Drawer */}

@@ -11,11 +11,12 @@ import {
   Badge,
 } from "antd";
 import { useMediaQuery } from "react-responsive";
-import { 
-  CloseCircleOutlined, 
+import {
+  CloseCircleOutlined,
   ExclamationCircleOutlined,
-  WarningOutlined
+  WarningOutlined,
 } from "@ant-design/icons";
+import { FaCheckCircle } from "react-icons/fa";
 
 export default function ShopifyOrderTable({
   orders,
@@ -35,6 +36,8 @@ export default function ShopifyOrderTable({
 }) {
   const isMobile = useMediaQuery({ maxWidth: 768 });
   const isTablet = useMediaQuery({ minWidth: 769, maxWidth: 1024 });
+
+  console.log("Orders:", orders);
 
   // Helper function to format date
   const formatDate = (createdAt) => {
@@ -101,6 +104,10 @@ export default function ShopifyOrderTable({
     switch (status?.toLowerCase()) {
       case "paid":
         return <div className="w-2 h-2 bg-green-500 rounded-full"></div>;
+      case "processed":
+        return <div className="w-2 h-2 bg-green-500 rounded-full"></div>;
+      case "unprocessed":
+        return <div className="w-2 h-2 bg-red-500 rounded-full"></div>;
       case "refunded":
         return <div className="w-2 h-2 bg-red-500 rounded-full"></div>;
       default:
@@ -125,7 +132,9 @@ export default function ShopifyOrderTable({
         return (
           <div className="flex items-center gap-1">
             <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-            <span className="text-sm text-green-700 font-medium">Fulfilled</span>
+            <span className="text-sm text-green-700 font-medium">
+              Fulfilled
+            </span>
           </div>
         );
       default:
@@ -149,21 +158,27 @@ export default function ShopifyOrderTable({
         return (
           <div className="flex items-center gap-1">
             <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-            <span className="text-sm text-yellow-700 font-medium">Awaiting Shipment</span>
+            <span className="text-sm text-yellow-700 font-medium">
+              Awaiting Shipment
+            </span>
           </div>
         );
       case "in_transit":
         return (
           <div className="flex items-center gap-1">
             <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-            <span className="text-sm text-blue-700 font-medium">In Transit</span>
+            <span className="text-sm text-blue-700 font-medium">
+              In Transit
+            </span>
           </div>
         );
       case "delivered":
         return (
           <div className="flex items-center gap-1">
             <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-            <span className="text-sm text-green-700 font-medium">Delivered</span>
+            <span className="text-sm text-green-700 font-medium">
+              Delivered
+            </span>
           </div>
         );
       default:
@@ -191,13 +206,18 @@ export default function ShopifyOrderTable({
       inventory: { color: "bg-orange-100 text-orange-800", text: "Inventory" },
       fraud: { color: "bg-red-100 text-red-800", text: "Fraud" },
       staff: { color: "bg-purple-100 text-purple-800", text: "Staff" },
-      cancel: { color: "bg-gray-100 text-gray-800", text: "Cancelled" }
+      cancel: { color: "bg-gray-100 text-gray-800", text: "Cancelled" },
     };
 
-    const config = reasonConfig[cancelReason] || { color: "bg-gray-100 text-gray-800", text: cancelReason };
-    
+    const config = reasonConfig[cancelReason] || {
+      color: "bg-gray-100 text-gray-800",
+      text: cancelReason,
+    };
+
     return (
-      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${config.color}`}>
+      <span
+        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${config.color}`}
+      >
         {config.text}
       </span>
     );
@@ -214,7 +234,7 @@ export default function ShopifyOrderTable({
         type: "fraud",
         icon: <ExclamationCircleOutlined className="text-red-500" />,
         tooltip: "This order has a high risk of fraud.",
-        reason: "Fraud"
+        reason: "Fraud",
       };
     }
 
@@ -222,13 +242,14 @@ export default function ShopifyOrderTable({
     if (shopifyDetails.cancelled_at) {
       const cancelReason = shopifyDetails.cancel_reason;
       // Apply strikethrough only for customer and staff cancellations
-      const shouldStrikeThrough = cancelReason && ["customer", "staff"].includes(cancelReason);
-      
+      const shouldStrikeThrough =
+        cancelReason && ["customer", "staff"].includes(cancelReason);
+
       return {
         type: shouldStrikeThrough ? "cancel" : "cancelled",
         icon: <WarningOutlined className="text-orange-500" />,
         tooltip: `Order cancelled: ${cancelReason || "Unknown reason"}`,
-        reason: cancelReason || "Cancel"
+        reason: cancelReason || "Cancel",
       };
     }
 
@@ -250,7 +271,7 @@ export default function ShopifyOrderTable({
     if (!tags || !Array.isArray(tags) || tags.length === 0) {
       return <span className="text-sm text-gray-400">—</span>;
     }
-    
+
     return (
       <div className="flex flex-wrap gap-1">
         {tags.slice(0, 2).map((tag, index) => (
@@ -287,7 +308,7 @@ export default function ShopifyOrderTable({
             return (
               <div className="flex items-center justify-center">
                 {isDisabled ? (
-                  <CloseCircleOutlined className="text-red-400" />
+                  <FaCheckCircle className="text-green-500 size-4" />
                 ) : (
                   <Checkbox
                     checked={selectedOrders.includes(record?._id)}
@@ -311,14 +332,14 @@ export default function ShopifyOrderTable({
     ...checkboxColumn,
     {
       title: "Order",
-      dataIndex: "orderId",
-      key: "orderId",
+      dataIndex: "order_key",
+      key: "order_key",
       width: 120,
-      render: (text, record) => {
-        const numericId = text?.replace('gid://shopify/Order/', '') || text;
+      render: (orderkey, record) => {
+        const numericId = orderkey;
         const warning = getOrderWarning(record);
         const cancelReason = record?.shopifyDetails?.cancel_reason;
-        
+
         return (
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
@@ -327,7 +348,9 @@ export default function ShopifyOrderTable({
                   {warning.icon}
                 </Tooltip>
               )}
-              <span className="font-semibold text-gray-900">{record?.shopifyDetails?.name || `RF${numericId}`}</span>
+              <span className="font-semibold text-gray-900">
+                {record?.shopifyDetails?.name || `${numericId}` || "RF"}
+              </span>
             </div>
             {getCancelReasonBadge(cancelReason)}
           </div>
@@ -348,8 +371,34 @@ export default function ShopifyOrderTable({
       key: "customerName",
       width: 120,
       render: (name) => (
-        <span className="text-sm text-gray-900">
-          {name || "Customer"}
+        <span className="text-sm text-gray-900">{name || "Customer"}</span>
+      ),
+    },
+    {
+      title: "Status",
+      dataIndex: "status",
+      key: "status",
+      width: 120,
+      render: (status) => (
+        <div className="flex items-center gap-2">
+          <span
+            className={`text-sm text-white px-2 py-[2px] rounded-full ${
+              status === "processed" ? "bg-green-700" : "bg-red-500"
+            } capitalize`}
+          >
+            {status || "Unknown"}
+          </span>
+        </div>
+      ),
+    },
+    {
+      title: "SF Status",
+      dataIndex: "sf_status",
+      key: "sf_status",
+      width: 120,
+      render: (sfstatus) => (
+        <span className="text-sm text-gray-600 capitalize">
+          {sfstatus || "Unknown"}
         </span>
       ),
     },
@@ -360,7 +409,9 @@ export default function ShopifyOrderTable({
       width: 120,
       render: (shopifyDetails) => (
         <span className="text-sm text-gray-600">
-          {shopifyDetails?.source_name === "web" ? "Online Store" : shopifyDetails?.source_name || "Online Store"}
+          {shopifyDetails?.source_name === "web"
+            ? "Online Store"
+            : shopifyDetails?.source_name || "Online Store"}
         </span>
       ),
     },
@@ -371,7 +422,10 @@ export default function ShopifyOrderTable({
       width: 100,
       render: (shopifyDetails) => (
         <span className="text-sm font-medium text-gray-900">
-          {formatCurrency(shopifyDetails?.total_price, shopifyDetails?.currency)}
+          {formatCurrency(
+            shopifyDetails?.total_price,
+            shopifyDetails?.currency
+          )}
         </span>
       ),
     },
@@ -383,7 +437,13 @@ export default function ShopifyOrderTable({
       render: (shopifyDetails) => (
         <div className="flex items-center gap-2">
           {getPaymentStatusDot(shopifyDetails?.financial_status)}
-          <span className={`text-sm ${shopifyDetails?.financial_status === "paid" ? "text-green-700" : "text-red-500"} capitalize`}>
+          <span
+            className={`text-sm ${
+              shopifyDetails?.financial_status === "paid"
+                ? "text-green-700"
+                : "text-red-500"
+            } capitalize`}
+          >
             {shopifyDetails?.financial_status || "Unknown"}
           </span>
         </div>
@@ -394,7 +454,8 @@ export default function ShopifyOrderTable({
       dataIndex: "shopifyDetails",
       key: "fulfillmentStatus",
       width: 140,
-      render: (shopifyDetails) => getFulfillmentStatus(shopifyDetails?.fulfillment_status),
+      render: (shopifyDetails) =>
+        getFulfillmentStatus(shopifyDetails?.fulfillment_status),
     },
     {
       title: "Items",
@@ -422,7 +483,8 @@ export default function ShopifyOrderTable({
       dataIndex: "shopifyDetails",
       key: "deliveryMethod",
       width: 140,
-      render: (shopifyDetails) => getDeliveryMethod(shopifyDetails?.shipping_lines?.[0]?.title),
+      render: (shopifyDetails) =>
+        getDeliveryMethod(shopifyDetails?.shipping_lines?.[0]?.title),
     },
     {
       title: "Tracking",
@@ -445,7 +507,15 @@ export default function ShopifyOrderTable({
       dataIndex: "shopifyDetails",
       key: "tags",
       width: 200,
-      render: (shopifyDetails) => getTags(shopifyDetails?.tags ? shopifyDetails.tags.split(',').map(tag => tag.trim()).filter(Boolean) : []),
+      render: (shopifyDetails) =>
+        getTags(
+          shopifyDetails?.tags
+            ? shopifyDetails.tags
+                .split(",")
+                .map((tag) => tag.trim())
+                .filter(Boolean)
+            : []
+        ),
     },
     {
       title: "Actions",
@@ -484,13 +554,16 @@ export default function ShopifyOrderTable({
 
   // Mobile card component
   const MobileOrderCard = ({ order }) => {
-    const numericId = order?.orderId?.replace('gid://shopify/Order/', '') || order?.orderId;
+    const numericId =
+      order?.orderId?.replace("gid://shopify/Order/", "") || order?.orderId;
     const warning = getOrderWarning(order);
-    
+
     return (
       <div
         className={`relative cursor-pointer hover:shadow-md transition-shadow rounded-lg text-sm text-black p-0 bg-white mb-4 border border-gray-200 ${
-          warning && warning.type === "cancel" ? "line-through text-gray-500" : ""
+          warning && warning.type === "cancel"
+            ? "line-through text-gray-500"
+            : ""
         }`}
         onClick={() => onRowClick(order)}
       >
@@ -532,9 +605,7 @@ export default function ShopifyOrderTable({
                 <div className="flex items-center gap-2 mt-1">
                   {getCancelReasonBadge(order?.shopifyDetails?.cancel_reason)}
                   {warning && (
-                    <div className="text-xs text-red-600">
-                      {warning.reason}
-                    </div>
+                    <div className="text-xs text-red-600">{warning.reason}</div>
                   )}
                 </div>
               </div>
@@ -563,7 +634,10 @@ export default function ShopifyOrderTable({
             <div>
               <span className="text-gray-500">Total:</span>
               <div className="font-semibold text-gray-900">
-                {formatCurrency(order?.shopifyDetails?.total_price, order?.shopifyDetails?.currency)}
+                {formatCurrency(
+                  order?.shopifyDetails?.total_price,
+                  order?.shopifyDetails?.currency
+                )}
               </div>
             </div>
             <div>
@@ -681,15 +755,15 @@ export default function ShopifyOrderTable({
           rowClassName={(record) => {
             const warning = getOrderWarning(record);
             const classes = [];
-            
+
             if (record?.shipStation_OrderId) {
               classes.push("opacity-60");
             }
-            
+
             if (warning && warning.type === "cancel") {
               classes.push("line-through text-gray-500");
             }
-            
+
             return classes.join(" ");
           }}
           onRow={(record) => ({

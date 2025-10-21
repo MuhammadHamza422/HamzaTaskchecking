@@ -50,19 +50,23 @@ const CustomerInfoStep = ({ form, onNext }) => {
       className="space-y-4"
     >
       <div className="text-center mb-4">
-        <h2 className="text-2xl font-bold text-gray-800 mb-2">Customer Information</h2>
-        <p className="text-gray-600">Enter the basic customer and order details</p>
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">
+          Customer Information
+        </h2>
+        <p className="text-gray-600">
+          Enter the basic customer and order details
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Form.Item
           name="customerId"
           label="Customer ID"
-          rules={[{ required: true, message: "Please enter customer ID" }]}
+          rules={[{ required: false, message: "Please enter customer ID" }]}
           className="mb-0"
         >
-          <Input 
-            placeholder="e.g., 12345" 
+          <Input
+            placeholder="e.g., 12345"
             size="large"
             className="rounded-lg"
           />
@@ -73,8 +77,8 @@ const CustomerInfoStep = ({ form, onNext }) => {
           label="Order Number"
           rules={[{ required: true, message: "Please enter order number" }]}
         >
-          <Input 
-            placeholder="e.g., ORD-98765" 
+          <Input
+            placeholder="e.g., ORD-98765"
             size="large"
             className="rounded-lg"
           />
@@ -102,10 +106,12 @@ const CustomerInfoStep = ({ form, onNext }) => {
         <Form.Item
           name="customerUsername"
           label="Customer Username"
-          rules={[{ required: true, message: "Please enter customer username" }]}
+          rules={[
+            { required: true, message: "Please enter customer username" },
+          ]}
         >
-          <Input 
-            placeholder="e.g., john_doe" 
+          <Input
+            placeholder="e.g., john_doe"
             size="large"
             className="rounded-lg"
           />
@@ -116,11 +122,11 @@ const CustomerInfoStep = ({ form, onNext }) => {
           label="Customer Email"
           rules={[
             { required: true, message: "Please enter customer email" },
-            { type: "email", message: "Please enter a valid email" }
+            { type: "email", message: "Please enter a valid email" },
           ]}
         >
-          <Input 
-            placeholder="e.g., john.doe@example.com" 
+          <Input
+            placeholder="e.g., john.doe@example.com"
             size="large"
             className="rounded-lg"
           />
@@ -129,8 +135,8 @@ const CustomerInfoStep = ({ form, onNext }) => {
           name="requestShippingService"
           label="Request Shipping Service"
         >
-          <Input 
-            placeholder="Enter Shipping Service" 
+          <Input
+            placeholder="Enter Shipping Service"
             size="large"
             className="rounded-lg"
           />
