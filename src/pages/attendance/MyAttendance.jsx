@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getMyAttendance } from "../../api/attendance";
 import { formatTimeWithTimezone } from "../../utils/timezone";
+import LiveTimeTracker from "../../components/common/LiveTimeTracker";
 
 import {
   Card,
@@ -250,6 +251,24 @@ export default function MyAttendance() {
       ),
     },
     {
+      title: "Live Time",
+      key: "liveTime",
+      width: 140,
+      align: "center",
+      render: (_, record) => {
+        const isCurrentlyWorking = record.checkInAt && !record.checkOutAt;
+        
+        return (
+          <LiveTimeTracker 
+            record={record}
+            breaks={record.breaks || []}
+            timezone={companyTz}
+            isLive={isCurrentlyWorking}
+          />
+        );
+      },
+    },
+    {
       title: "Breaks",
       key: "breaks",
       width: 160,
@@ -455,7 +474,7 @@ export default function MyAttendance() {
                 setPageSize(ps);
               },
             }}
-            scroll={{ x: 1000 }}
+            scroll={{ x: 1140 }}
           />
         </Card>
       </Space>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Input, Button, Table, Space, Form } from "antd";
 import {
   SearchOutlined,
@@ -12,15 +12,29 @@ import apiClient from "../../api/client";
 
 const { Search } = Input;
 
-const ProductsStep = ({ form, onNext, onBack, customerData }) => {
+const ProductsStep = ({
+  form,
+  onBack,
+  customerData,
+  initialSelectedProducts = [],
+  onProductsChange,
+  onSubmit,
+}) => {
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedProducts, setSelectedProducts] = useState([]);
-  const [orderTotal, setOrderTotal] = useState(0);
+  const [selectedProducts, setSelectedProducts] = useState(
+    initialSelectedProducts
+  );
+  const [orderTotal, setOrderTotal] = useState(
+    Number(customerData?.order_total || 0)
+  );
 
-  // Initialize order total when component mounts
   useEffect(() => {
-    updateOrderTotal(selectedProducts);
-  }, []);
+    setOrderTotal(Number(customerData?.order_total || 0));
+  }, [customerData?.order_total]);
+
+  useEffect(() => {
+    onProductsChange?.(selectedProducts);
+  }, [selectedProducts]);
 
   // Fetch products
   const fetchProducts = async ({ queryKey }) => {
@@ -48,7 +62,6 @@ const ProductsStep = ({ form, onNext, onBack, customerData }) => {
     if (!isAlreadySelected) {
       const newProduct = { ...product, quantity: 1 };
       setSelectedProducts([...selectedProducts, newProduct]);
-      updateOrderTotal([...selectedProducts, newProduct]);
     }
     setSearchQuery("");
   };
@@ -62,7 +75,6 @@ const ProductsStep = ({ form, onNext, onBack, customerData }) => {
         : product
     );
     setSelectedProducts(updatedProducts);
-    updateOrderTotal(updatedProducts);
   };
 
   // Handle product removal
@@ -71,31 +83,46 @@ const ProductsStep = ({ form, onNext, onBack, customerData }) => {
       (product) => product._id !== productId
     );
     setSelectedProducts(updatedProducts);
-    updateOrderTotal(updatedProducts);
   };
 
-  // Update order total
-  const updateOrderTotal = (products) => {
-    const total = products.reduce((sum, product) => {
-      return sum + (product.sale_price || 0) * product.quantity;
+  // Raw sum based on product sale_price and quantity
+  const rawProductsTotal = useMemo(() => {
+    return selectedProducts.reduce((sum, product) => {
+      return (
+        sum + Number(product.sale_price || 0) * Number(product.quantity || 0)
+      );
     }, 0);
-    setOrderTotal(total);
+  }, [selectedProducts]);
+
+  // Allocate price proportionally so total does not exceed order total
+  const computeAllocatedUnitPrice = (salePrice) => {
+    const price = Number(salePrice || 0);
+    const base = rawProductsTotal;
+    const cap = Number(orderTotal || 0);
+    if (base > 0 && cap > 0) {
+      return (cap / base) * price;
+    }
+    return price;
   };
 
-  // Handle next step
-  const handleNext = async () => {
-    if (selectedProducts.length === 0) {
-      return;
-    }
+  // Submit final payload
+  const handleSubmit = () => {
+    if (selectedProducts.length === 0) return;
 
-    const productsData = selectedProducts.map((product) => ({
-      product: product._id,
-      quantity: product.quantity,
-    }));
+    const items = selectedProducts.map((product) => {
+      const perUnit = computeAllocatedUnitPrice(product.sale_price || 0);
+      return {
+        product: product._id,
+        quantity: Number(product.quantity || 1),
+        price: perUnit.toFixed(2),
+      };
+    });
 
-    onNext({
-      items: productsData,
-      order_total: orderTotal,
+    onSubmit?.({
+      items,
+      order_total: Number(orderTotal) || 0,
+      shipping_amount: Number(customerData?.shipping_amount || 0) || 0,
+      tax_amount: Number(customerData?.tax_amount || 0) || 0,
     });
   };
 
@@ -143,13 +170,15 @@ const ProductsStep = ({ form, onNext, onBack, customerData }) => {
       ),
     },
     {
-      title: "Total",
-      key: "total",
-      render: (_, record) => (
-        <span className="font-semibold text-blue-600">
-          ${((record.sale_price || 0) * record.quantity).toFixed(2)}
-        </span>
-      ),
+      title: "Allocated Total",
+      key: "allocated_total",
+      render: (_, record) => {
+        const perUnit = computeAllocatedUnitPrice(record.sale_price || 0);
+        const total = perUnit * Number(record.quantity || 0);
+        return (
+          <span className="font-semibold text-blue-600">${total.toFixed(2)}</span>
+        );
+      },
     },
     {
       title: "Actions",
@@ -265,15 +294,15 @@ const ProductsStep = ({ form, onNext, onBack, customerData }) => {
         </div>
       )}
 
-      {/* Order Total */}
+      {/* Order Total (from first step) */}
       {selectedProducts.length > 0 && (
         <div className="bg-blue-50 p-4 rounded-lg">
           <div className="flex justify-between items-center">
             <span className="text-lg font-semibold text-gray-800">
-              Order Total:
+              Order Total (cap):
             </span>
             <span className="text-2xl font-bold text-blue-600">
-              ${orderTotal.toFixed(2)}
+              ${Number(orderTotal || 0).toFixed(2)}
             </span>
           </div>
         </div>
@@ -292,7 +321,7 @@ const ProductsStep = ({ form, onNext, onBack, customerData }) => {
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          onClick={handleNext}
+          onClick={handleSubmit}
           disabled={selectedProducts.length === 0}
           className={`px-8 py-3 font-semibold rounded-lg transition-colors duration-200 ${
             selectedProducts.length === 0
@@ -300,7 +329,7 @@ const ProductsStep = ({ form, onNext, onBack, customerData }) => {
               : "bg-blue-600 text-white hover:bg-blue-700 shadow-lg hover:shadow-xl"
           }`}
         >
-          Next: Shipping & Billing
+          Create Order
         </motion.button>
       </div>
     </motion.div>

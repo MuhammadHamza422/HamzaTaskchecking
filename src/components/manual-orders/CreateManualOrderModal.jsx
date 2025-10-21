@@ -1,15 +1,13 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Modal, Form, Steps } from "antd";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   UserOutlined,
   ShoppingCartOutlined,
-  EnvironmentOutlined,
 } from "@ant-design/icons";
 import Swal from "sweetalert2";
 import CustomerInfoStep from "./CustomerInfoStep";
 import ProductsStep from "./ProductsStep";
-import ShippingBillingStep from "./ShippingBillingStep";
 import { createManualOrder } from "../../api/manualOrders";
 
 const { Step } = Steps;
@@ -20,8 +18,22 @@ const CreateManualOrderModal = ({ visible, onCancel, onSuccess }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     customerData: {},
-    productsData: {},
+    productsData: {
+      selectedProducts: [],
+    },
   });
+
+  // Ensure fields are cleared when modal closes or after creation
+  useEffect(() => {
+    if (!visible) {
+      setCurrentStep(0);
+      setFormData({
+        customerData: {},
+        productsData: { selectedProducts: [] },
+      });
+      form.resetFields();
+    }
+  }, [visible]);
 
   const steps = [
     {
@@ -34,11 +46,6 @@ const CreateManualOrderModal = ({ visible, onCancel, onSuccess }) => {
       icon: <ShoppingCartOutlined />,
       content: "products",
     },
-    {
-      title: "Shipping & Billing",
-      icon: <EnvironmentOutlined />,
-      content: "shipping",
-    },
   ];
 
   // Handle step navigation
@@ -46,9 +53,6 @@ const CreateManualOrderModal = ({ visible, onCancel, onSuccess }) => {
     if (stepType === "customer") {
       setFormData((prev) => ({ ...prev, customerData: data }));
       setCurrentStep(1);
-    } else if (stepType === "products") {
-      setFormData((prev) => ({ ...prev, productsData: data }));
-      setCurrentStep(2);
     }
   };
 
@@ -112,7 +116,10 @@ const CreateManualOrderModal = ({ visible, onCancel, onSuccess }) => {
   // Handle modal close
   const handleModalClose = () => {
     setCurrentStep(0);
-    setFormData({ customerData: {}, productsData: {} });
+    setFormData({
+      customerData: {},
+      productsData: { selectedProducts: [] },
+    });
     form.resetFields();
     onCancel();
   };
@@ -131,19 +138,25 @@ const CreateManualOrderModal = ({ visible, onCancel, onSuccess }) => {
         return (
           <ProductsStep
             form={form}
-            onNext={(data) => handleNext(data, "products")}
             onBack={handleBack}
             customerData={formData.customerData}
-          />
-        );
-      case 2:
-        return (
-          <ShippingBillingStep
-            form={form}
-            onBack={handleBack}
-            onSubmit={handleSubmit}
-            customerData={formData.customerData}
-            productsData={formData.productsData}
+            initialSelectedProducts={formData.productsData?.selectedProducts || []}
+            onProductsChange={(products) =>
+              setFormData((prev) => ({
+                ...prev,
+                productsData: { selectedProducts: products },
+              }))
+            }
+            onSubmit={(data) => {
+              // Assemble final payload
+              const payload = {
+                ...formData.customerData,
+                ...data, // includes items and order_total
+                orderDate: new Date().toISOString(),
+                status: "processing",
+              };
+              handleSubmit(payload);
+            }}
           />
         );
       default:
@@ -206,7 +219,8 @@ const CreateManualOrderModal = ({ visible, onCancel, onSuccess }) => {
                 form={form}
                 layout="vertical"
                 className="space-y-6"
-                preserve={false}
+                preserve
+                initialValues={formData.customerData}
               >
                 {renderStepContent()}
               </Form>
