@@ -59,7 +59,7 @@ const CustomerInfoStep = ({ form, onNext }) => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Form.Item
+        {/* <Form.Item
           name="customerId"
           label="Customer ID"
           rules={[{ required: false, message: "Please enter customer ID" }]}
@@ -70,7 +70,7 @@ const CustomerInfoStep = ({ form, onNext }) => {
             size="large"
             className="rounded-lg"
           />
-        </Form.Item>
+        </Form.Item> */}
 
         <Form.Item
           name="orderNumber"

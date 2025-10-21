@@ -13,6 +13,7 @@ import { useMediaQuery } from "react-responsive";
 import { EyeOutlined, EditOutlined, CloseOutlined } from "@ant-design/icons";
 import { useQuery } from "@tanstack/react-query";
 import apiClient from "../../api/client";
+import { FaCheckCircle } from "react-icons/fa";
 
 export default function ManualOrderTable({
   orders,
@@ -84,7 +85,6 @@ export default function ManualOrderTable({
         return "bg-gray-100 text-gray-800";
     }
   };
-  
 
   // Fetch platforms from API
   const { data: platformsData } = useQuery({
@@ -117,18 +117,20 @@ export default function ManualOrderTable({
             ),
             key: "selection",
             width: 50,
-                        render: (_, record) => {
-              const isShipStationSent = record?.shipstation_status === true || record?.shipStation_OrderId;
+            render: (_, record) => {
+              const isShipStationSent =
+                record?.shipstation_status === true ||
+                record?.shipStation_OrderId;
               const isSelected = selectedOrders.includes(record._id);
-              
+
               if (isShipStationSent) {
                 return (
                   <Tooltip title="Already sent to ShipStation">
-                    <CloseOutlined className="text-red-500 text-sm" />
+                    <FaCheckCircle className="text-green-500 size-4" />
                   </Tooltip>
                 );
               }
-              
+
               return (
                 <input
                   type="checkbox"
@@ -160,18 +162,6 @@ export default function ManualOrderTable({
       ),
     },
     {
-      title: "Customer",
-      dataIndex: "customerUsername",
-      key: "customerUsername",
-      width: isMobile ? 120 : 150,
-      render: (text, record) => (
-        <div>
-          <div className="font-medium text-gray-900">{text}</div>
-          <div className="text-xs text-gray-500">{record.customerEmail}</div>
-        </div>
-      ),
-    },
-    {
       title: "Platform",
       dataIndex: "plateform",
       key: "plateform",
@@ -191,7 +181,8 @@ export default function ManualOrderTable({
       key: "status",
       width: isMobile ? 100 : 120,
       render: (status, record) => {
-        const isShipStation = record?.shipstation_status === true || record?.shipStation_OrderId;
+        const isShipStation =
+          record?.shipstation_status === true || record?.shipStation_OrderId;
         return (
           <div className="flex flex-col gap-1">
             <p
@@ -276,9 +267,11 @@ export default function ManualOrderTable({
             key: "selection",
             width: 50,
             render: (_, record) => {
-              const isShipStationSent = record?.shipstation_status === true || record?.shipStation_OrderId;
+              const isShipStationSent =
+                record?.shipstation_status === true ||
+                record?.shipStation_OrderId;
               const isSelected = selectedOrders.includes(record._id);
-              
+
               if (isShipStationSent) {
                 return (
                   <Tooltip title="Already sent to ShipStation">
@@ -286,7 +279,7 @@ export default function ManualOrderTable({
                   </Tooltip>
                 );
               }
-              
+
               return (
                 <input
                   type="checkbox"
@@ -319,7 +312,8 @@ export default function ManualOrderTable({
               <Tag color={getStatusColor(record.status)} className="text-xs">
                 {record.status}
               </Tag>
-              {(record?.shipstation_status === true || record?.shipStation_OrderId) && (
+              {(record?.shipstation_status === true ||
+                record?.shipStation_OrderId) && (
                 <Tag color="green" className="text-xs">
                   ShipStation
                 </Tag>
@@ -399,7 +393,8 @@ export default function ManualOrderTable({
           ),
         }}
         onRow={(record) => {
-          const isShipStationSent = record?.shipstation_status === true || record?.shipStation_OrderId;
+          const isShipStationSent =
+            record?.shipstation_status === true || record?.shipStation_OrderId;
           return {
             onClick: () => onRowClick(record), // Always allow opening details drawer
             className: `transition-colors duration-150 ${

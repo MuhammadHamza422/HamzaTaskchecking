@@ -4,7 +4,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { motion } from "framer-motion";
 import Swal from "sweetalert2";
 import useFullscreen from "../useFullscreen";
-import { MdFullscreen, MdFullscreenExit } from "react-icons/md";
+import { MdAdd, MdFullscreen, MdFullscreenExit } from "react-icons/md";
 
 const navLinks = [
   {
@@ -17,7 +17,11 @@ const navLinks = [
   { to: "/requests/my", label: "Assigned to Me", roles: ["purchaser"] },
   // Attendance navigation
   { to: "/attendance", label: "Attendance", roles: ["admin"] },
-  { to: "/attendance-activity", label: "Attendance Activity", roles: ["admin"] },
+  {
+    to: "/attendance-activity",
+    label: "Attendance Activity",
+    roles: ["admin"],
+  },
   {
     to: "/purchaser/dashboard",
     label: "Dashboard",
@@ -73,6 +77,25 @@ const navLinks = [
       { to: "orders/external/orders/manual", label: "Manual Orders" },
     ],
   },
+  // {
+  //   label: "Pending Orders",
+  //   to: "orders/external/orders/pending",
+  //   app: "orders",
+  //   roles: ["admin", "sourcer", "purchaser"],
+  //   default: true,
+  // },
+  // {
+  //   label: "Processed Orders",
+  //   to: "orders/external/orders/processed",
+  //   app: "orders",
+  //   roles: ["admin", "sourcer", "purchaser"],
+  // },
+  // {
+  //   label: "Manual Orders",
+  //   to: "orders/external/orders/manual",
+  //   app: "orders",
+  //   roles: ["admin", "sourcer", "purchaser"],
+  // },
   {
     to: "orders/platforms",
     label: "Platforms",
@@ -143,7 +166,7 @@ const MainLayout = () => {
     pathName.startsWith("/purchaser") || pathName.startsWith("/requests");
 
   /* ✅ Filter top-level links by role + app permission */
-  
+
   const filteredLinks = navLinks.filter(
     (link) =>
       // Basic role check
@@ -155,9 +178,15 @@ const MainLayout = () => {
           (pathName.startsWith("/product") &&
             ["Products", "Dashboard"].includes(link.label)) ||
           (pathName.startsWith("/orders") &&
-            ["Dashboard", "Orders", "Platforms", "Kits"].includes(
-              link.label
-            )) ||
+            [
+              "Dashboard",
+              "Orders",
+              "Platforms",
+              "Kits",
+              "Pending Orders",
+              "Processed Orders",
+              "Manual Orders",
+            ].includes(link.label)) ||
           (pathName.startsWith("/attendance") &&
             ["Attendance", "Attendance Activity"].includes(link.label)))) ||
       // Sourcing context
@@ -190,9 +219,9 @@ const MainLayout = () => {
           link.to.startsWith("/requests"))) ||
       // Show attendance links only on attendance pages
       (pathName.startsWith("/attendance") &&
-       link.roles?.includes(user.roles.role) && 
-       ["Attendance", "Attendance Activity"].includes(link.label) &&
-       user.roles.role === "admin")
+        link.roles?.includes(user.roles.role) &&
+        ["Attendance", "Attendance Activity"].includes(link.label) &&
+        user.roles.role === "admin")
   );
 
   const handleLogout = async () => {
@@ -433,23 +462,39 @@ const MainLayout = () => {
                               />
                             </svg>
                           </button>
-                          <div className="absolute left-0 mt-2 w-48 bg-white rounded-lg shadow-lg z-50 opacity-0 group-hover:opacity-100 group-hover:visible invisible transition-all duration-200">
-                            {children.map((child) => {
-                              const isActive = location.pathname === child.to;
-                              return (
-                                <div
-                                  key={child.to}
-                                  onClick={() => handleNavClick(child.to)}
-                                  className={`px-4 py-2 cursor-pointer rounded-md transition-colors duration-200 ${
-                                    isActive
-                                      ? "bg-blue-100 text-blue-800 font-semibold"
-                                      : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
-                                  }`}
-                                >
-                                  {child.label}
-                                </div>
-                              );
-                            })}
+                          <div className="absolute left-0 mt-3 w-56 bg-white rounded-xl shadow-xl z-50 opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 group-hover:visible invisible transition-all duration-300 ease-out border border-gray-100">
+                            <div className="py-2">
+                              {children.map((child) => {
+                                const isActive = location.pathname === child.to;
+                                return (
+                                  <div
+                                    key={child.to}
+                                    onClick={() => handleNavClick(child.to)}
+                                    className={`flex items-center gap-2 px-5 py-2.5 cursor-pointer rounded-lg mx-1 my-0.5 transition-all duration-200 ${
+                                      isActive
+                                        ? "bg-gradient-to-r from-blue-100 to-blue-50 text-blue-700 font-semibold shadow-sm"
+                                        : "text-gray-700 hover:bg-blue-50 hover:text-blue-600 hover:translate-x-1"
+                                    }`}
+                                  >
+                                    <span
+                                      className={`w-2 h-2 rounded-full ${
+                                        child?.label === "Pending Orders"
+                                          ? "bg-blue-500"
+                                          : child?.label === "Processed Orders"
+                                          ? "bg-green-500"
+                                          : ""
+                                      }    gap-1 group-hover:opacity-100 transition-opacity duration-200`}
+                                    >
+                                      {child?.label === "Manual Orders" && (
+                                        <MdAdd className="text-orange-500 size-6 -ml-2 -mt-2" />
+                                      )}
+                                    </span>
+
+                                    {child.label}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
                         </div>
                       );
