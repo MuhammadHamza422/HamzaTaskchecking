@@ -48,7 +48,7 @@ export const kioskEndBreak = ({ employeeId, pin }) =>
 //   return apiClient.get(`/api/v1/attendance?${p.toString()}`).then(r => r.data);
 // };
 
-export const listAttendance = async ({ user, company, page = 1, limit = 30, from, to, status, source } = {}) => {
+export const listAttendance = async ({ user, company, page = 1, limit = 30, from, to, status, source, searchNote } = {}) => {
   try {
     const params = new URLSearchParams();
     params.append('page', String(page));
@@ -60,6 +60,7 @@ export const listAttendance = async ({ user, company, page = 1, limit = 30, from
     if (to) params.append('to', String(to));
     if (status) params.append('status', String(status));
     if (source) params.append('source', String(source));
+    if (searchNote) params.append('searchNote', String(searchNote));
 
     const response = await apiClient.get(`/api/v1/attendance?${params.toString()}`);
 
@@ -126,6 +127,17 @@ export const getAttendanceActivity = async ({ page = 1, limit = 30, date, action
     if (error.response?.status === 403) {
       throw new Error('You do not have permission to view attendance activity data.');
     }
+    throw error;
+  }
+};
+
+// Get timezone information for companies
+export const getCompanyTimezones = async () => {
+  try {
+    const response = await apiClient.get('/api/v1/company/timezones');
+    return response.data;
+  } catch (error) {
+    console.error('Company timezones fetch error:', error);
     throw error;
   }
 };

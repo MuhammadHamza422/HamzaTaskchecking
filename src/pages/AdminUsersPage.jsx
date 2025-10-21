@@ -255,8 +255,8 @@ const AdminUsersPage = () => {
         hasChanged = value !== originalUser.warehouse;
         break;
       case "kioskPinHash":
-        hasChanged =
-          String(value || "") !== String(originalUser.kioskPinHash || "");
+        // PIN changes are always considered if a value is entered
+        hasChanged = value && String(value).trim() !== "";
         break;
       default:
         break;
@@ -283,6 +283,10 @@ const AdminUsersPage = () => {
         return;
       }
 
+      // Extract PIN value and remove it from user data
+      const kioskPinValue = values.kioskPinHash ? String(values.kioskPinHash).trim() : "";
+      const shouldUpdatePin = kioskPinValue !== "";
+
       let dataToSubmit = {};
 
       if (editingUser) {
@@ -294,7 +298,7 @@ const AdminUsersPage = () => {
           return;
         }
 
-        // Check which fields have changed
+        // Check which fields have changed (EXCLUDING kioskPinHash)
         if (values.first_name !== originalUser.first_name) {
           dataToSubmit.firstName = values.first_name;
         }
@@ -304,9 +308,6 @@ const AdminUsersPage = () => {
         if (values.email !== originalUser.email) {
           dataToSubmit.email = values.email;
         }
-        // if (values.role !== originalUser.role) {
-        //   dataToSubmit.role = values.role;
-        // }
         if (values.is_active !== originalUser.is_active) {
           dataToSubmit.isActive = values.is_active;
         }
@@ -319,33 +320,24 @@ const AdminUsersPage = () => {
         if (values.roles !== originalUser.roles) {
           dataToSubmit.roles = values.roles;
         }
-        if (
-          String(values.kioskPinHash || "") !==
-          String(originalUser.kioskPinHash || "")
-        ) {
-          dataToSubmit.kioskPinHash = values.kioskPinHash || ""; // Changed from kioskPin to kioskPinHash
-        }
         if (values.warehouse !== originalUser.warehouse) {
           dataToSubmit.warehouse = values.warehouse;
         }
       } else {
-        // For new users, include all required fields
+        // For new users, include all required fields (EXCLUDING kioskPinHash)
         dataToSubmit = {
           firstName: values.first_name,
           lastName: values.last_name,
           email: values.email,
-          // role: values.role,
           password: values.password,
           roles: values.roles,
-          // isActive: values.is_active,
-          kioskPinHash: values.kioskPinHash || "",
           warehouse: values.warehouse,
           ...(values.company ? { company: values.company } : {}),
         };
       }
 
-      // Make sure we have data to submit
-      if (Object.keys(dataToSubmit).length === 0) {
+      // Make sure we have data to submit (or PIN to set)
+      if (Object.keys(dataToSubmit).length === 0 && !shouldUpdatePin) {
         message.warning(
           "No changes detected. Please modify at least one field."
         );
@@ -353,27 +345,71 @@ const AdminUsersPage = () => {
         return;
       }
 
-      const apiCall = editingUser
-        ? apiClient.patch(`/api/v1/auth/update/${editingUser.id}`, dataToSubmit)
-        : apiClient.post("/api/v1/auth/register", dataToSubmit);
+      let userId = editingUser?.id;
 
-      const response = await apiCall;
+      // Step 1: Create/Update user (if there are changes)
+      if (Object.keys(dataToSubmit).length > 0) {
+        const apiCall = editingUser
+          ? apiClient.patch(`/api/v1/auth/update/${editingUser.id}`, dataToSubmit)
+          : apiClient.post("/api/v1/auth/register", dataToSubmit);
 
-      // Check for successful response
-      const isSuccess = response.status >= 200 && response.status < 300;
-      const hasSuccessFlag = response.data && response.data.success === true;
+        const response = await apiCall;
 
-      if (isSuccess && (hasSuccessFlag || response.data.message)) {
+        // Check for successful response
+        const isSuccess = response.status >= 200 && response.status < 300;
+        const hasSuccessFlag = response.data && response.data.success === true;
+
+        if (!isSuccess || !hasSuccessFlag) {
+          message.error(response.data?.message || "Failed to save user.");
+          setFormSubmitting(false);
+          return;
+        }
+
+        // For new users, extract the user ID from response
+        if (!editingUser) {
+          userId = response.data.user?._id || response.data.user?.id || response.data.userId;
+          if (!userId) {
+            message.error("User created but failed to get user ID for PIN setup.");
+            fetchUsers();
+            handleCloseModal();
+            setFormSubmitting(false);
+            return;
+          }
+        }
+      }
+
+      // Step 2: Set kiosk PIN if provided
+      if (shouldUpdatePin && userId) {
+        try {
+          const { setEmployeeKioskPin } = await import("../api/auth");
+          await setEmployeeKioskPin(userId, kioskPinValue);
+        } catch (pinError) {
+          console.error("Error setting kiosk PIN:", pinError);
+          message.warning(
+            `User ${editingUser ? "updated" : "created"} successfully, but failed to set kiosk PIN. ${pinError.response?.data?.message || ""}`
+          );
+          fetchUsers();
+          handleCloseModal();
+          setFormSubmitting(false);
+          return;
+        }
+      }
+
+      // Success message
+      if (Object.keys(dataToSubmit).length > 0 && shouldUpdatePin) {
+        message.success(
+          `User ${editingUser ? "updated" : "created"} successfully with kiosk PIN!`
+        );
+      } else if (Object.keys(dataToSubmit).length > 0) {
         message.success(
           `User ${editingUser ? "updated" : "created"} successfully!`
         );
-
-        handleCloseModal();
-
-        fetchUsers();
-      } else {
-        message.error(response.data?.message || "Failed to save user.");
+      } else if (shouldUpdatePin) {
+        message.success("Kiosk PIN updated successfully!");
       }
+
+      handleCloseModal();
+      fetchUsers();
     } catch (error) {
       console.error("Error saving user:", error);
       console.error("Error response:", error.response);

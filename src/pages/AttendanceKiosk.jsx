@@ -313,7 +313,7 @@ export default function AttendanceKiosk() {
   }, [now, tz]);
 
   // ---- Data (no explicit paging UI; load a larger chunk) ----
-  const pageSize = 500;
+  const pageSize = 5000;
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ["kiosk-employees", { limit: pageSize, search, companyId }],
     queryFn: () =>

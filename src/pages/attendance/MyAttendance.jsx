@@ -1,6 +1,7 @@
 // src/pages/attendance/MyAttendance.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getMyAttendance } from "../../api/attendance";
+import { formatTimeWithTimezone } from "../../utils/timezone";
 
 import {
   Card,
@@ -30,7 +31,7 @@ import dayjs from "dayjs";
 const { RangePicker } = DatePicker;
 
 /* ---------------- helpers ---------------- */
-const fmtDT = (d) => (d ? new Date(d).toLocaleString() : "—");
+const fmtDTFallback = (d) => (d ? new Date(d).toLocaleString() : "—");
 const fmtHM = (mins) => {
   const m = Math.max(0, Math.round(mins || 0));
   const h = Math.floor(m / 60);
@@ -63,6 +64,11 @@ export default function MyAttendance() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(30);
   const totalRef = useRef(0); // optional: store total if your API returns it
+
+  // Derive user's company and timezone from results (assuming same company for self records)
+  const company = useMemo(() => rows?.[0]?.company || null, [rows]);
+  const companyTz = company?.timezone || "UTC";
+  const fmtDT = (d) => formatTimeWithTimezone(d, companyTz);
 
   const fetchData = async () => {
     const [from, to] = dateRange || [];
@@ -146,6 +152,11 @@ export default function MyAttendance() {
   const exportCSV = () => {
     const rowsForCsv = filteredRows.map((r) => ({
       Day: r.day || "",
+      Company: r.company?.name || "",
+      CompanyCode: r.company?.code || "",
+      CompanyTimezone: r.company?.timezone || companyTz,
+      CheckInLocal: formatTimeWithTimezone(r.checkInAt, r.company?.timezone || companyTz) || "",
+      CheckOutLocal: formatTimeWithTimezone(r.checkOutAt, r.company?.timezone || companyTz) || "",
       CheckInAt: r.checkInAt || "",
       CheckOutAt: r.checkOutAt || "",
       Status:
@@ -184,6 +195,22 @@ export default function MyAttendance() {
   /* ---------- table ---------- */
   const columns = [
     {
+      title: "Company",
+      key: "company",
+      width: 240,
+      render: (_, r) => {
+        const c = r.company || {};
+        if (!c || (!c.name && !c.code)) return "—";
+        return (
+          <Space size={6}>
+            {/* <Tag color="geekblue">{c.code || "—"}</Tag> */}
+            <span>{c.name || "—"}</span>
+          </Space>
+        );
+      },
+      sorter: (a, b) => String(a.company?.name || "").localeCompare(String(b.company?.name || "")),
+    },
+    {
       title: "Day",
       dataIndex: "day",
       key: "day",
@@ -191,8 +218,8 @@ export default function MyAttendance() {
       render: (d) => <Tag>{d || "—"}</Tag>,
       sorter: (a, b) => String(a.day || "").localeCompare(String(b.day || "")),
     },
-    { title: "Check In", dataIndex: "checkInAt", key: "in", width: 170, render: fmtDT },
-    { title: "Check Out", dataIndex: "checkOutAt", key: "out", width: 170, render: fmtDT },
+    { title: "Check In", dataIndex: "checkInAt", key: "in", width: 200, render: fmtDT },
+    { title: "Check Out", dataIndex: "checkOutAt", key: "out", width: 200, render: fmtDT },
     {
       title: "Status",
       key: "status",
@@ -260,8 +287,8 @@ export default function MyAttendance() {
         size="small"
         pagination={false}
         columns={[
-          { title: "Start", dataIndex: "startAt", width: 200, render: fmtDT },
-          { title: "End", dataIndex: "endAt", width: 200, render: fmtDT },
+          { title: "Start", dataIndex: "startAt", width: 220, render: fmtDT },
+          { title: "End", dataIndex: "endAt", width: 220, render: fmtDT },
           {
             title: "Duration",
             key: "dur",
@@ -298,6 +325,14 @@ export default function MyAttendance() {
             <div style={{ color: "rgba(0,0,0,.45)", marginTop: 4 }}>
               Review your check-ins, breaks, and total hours with powerful filters.
             </div>
+            {company && (
+              <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <Tag color="geekblue">{company.code || "—"}</Tag>
+                <span style={{ fontWeight: 500 }}>{company.name}</span>
+                <Tag>{company.timezone || "UTC"}</Tag>
+                <span style={{ color: "rgba(0,0,0,.45)" }}>Local time: {fmtDTFallback(new Date().toISOString())} → {formatTimeWithTimezone(new Date().toISOString(), companyTz)}</span>
+              </div>
+            )}
           </Col>
           <Col>
             <Space wrap>

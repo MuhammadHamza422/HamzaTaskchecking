@@ -4,21 +4,16 @@ import { EditOutlined, DeleteOutlined, CloseOutlined, PlusOutlined } from "@ant-
 import { adminUpdateAttendance, adminDeleteAttendance } from "../../../api/attendance";
 import dayjs from "dayjs";
 import Swal from "sweetalert2";
+import { formatDateTimeInTimezone, formatTimeWithTimezone, getCompanyTimezone } from "../../../utils/timezone";
 
-const fmtDT = (d) => {
+const fmtDT = (d, timezone = 'UTC') => {
   if (!d) return "—";
-  const date = new Date(d);
-  const dateStr = date.toLocaleDateString('en-GB', { 
-    day: '2-digit', 
-    month: '2-digit', 
-    year: 'numeric' 
-  });
-  const timeStr = date.toLocaleTimeString('en-GB', { 
-    hour: '2-digit', 
-    minute: '2-digit',
-    hour12: false 
-  });
-  return `${dateStr} ${timeStr}`;
+  return formatDateTimeInTimezone(d, timezone);
+};
+
+const fmtDTWithTimezone = (d, timezone = 'UTC') => {
+  if (!d) return "—";
+  return formatTimeWithTimezone(d, timezone);
 };
 const diffMinutes = (a, b) => Math.max(0, Math.round((new Date(b) - new Date(a)) / 60000));
 const sumBreakMinutes = (breaks = []) =>
@@ -166,7 +161,7 @@ const AttendanceTable = ({
     {
       title: "Company",
       key: "company",
-      width: 240,
+      width: 280,
       render: (_, r) => {
         const companyName = (() => {
           if (r.company && typeof r.company === 'object') return r.company.name || '—';
@@ -176,9 +171,16 @@ const AttendanceTable = ({
           }
           return '—';
         })();
+        
+        const timezone = getCompanyTimezone(r);
+        const timezoneDisplay = timezone !== 'UTC' ? ` (${timezone})` : '';
+        
         return (
           <div style={{ fontSize: "12px", lineHeight: "1.4", whiteSpace: "nowrap" }}>
-            {companyName}
+            <div style={{ fontWeight: 500 }}>{companyName}</div>
+            <div style={{ color: "rgba(0,0,0,.45)", fontSize: "11px" }}>
+              {timezone}{timezoneDisplay}
+            </div>
           </div>
         );
       },
@@ -198,23 +200,29 @@ const AttendanceTable = ({
       title: "Check In", 
       dataIndex: "checkInAt", 
       key: "in", 
-      width: 180, 
-      render: (value) => (
-        <div style={{ fontSize: "12px", lineHeight: "1.4" }}>
-          {fmtDT(value)}
-        </div>
-      )
+      width: 200, 
+      render: (value, record) => {
+        const timezone = getCompanyTimezone(record);
+        return (
+          <div style={{ fontSize: "12px", lineHeight: "1.4" }}>
+            {fmtDTWithTimezone(value, timezone)}
+          </div>
+        );
+      }
     },
     { 
       title: "Check Out", 
       dataIndex: "checkOutAt", 
       key: "out", 
-      width: 180, 
-      render: (value) => (
-        <div style={{ fontSize: "12px", lineHeight: "1.4" }}>
-          {fmtDT(value)}
-        </div>
-      )
+      width: 200, 
+      render: (value, record) => {
+        const timezone = getCompanyTimezone(record);
+        return (
+          <div style={{ fontSize: "12px", lineHeight: "1.4" }}>
+            {fmtDTWithTimezone(value, timezone)}
+          </div>
+        );
+      }
     },
     {
       title: "Status",
@@ -322,13 +330,24 @@ const AttendanceTable = ({
   const expandedRowRender = (r) => {
     const breaks = r.breaks || [];
     if (!breaks.length) return <div style={{ paddingLeft: 8, color: "rgba(0,0,0,.45)" }}>No breaks</div>;
+    const timezone = getCompanyTimezone(r);
     return (
       <Table
         size="small"
         pagination={false}
         columns={[
-          { title: "Start", dataIndex: "startAt", render: (v) => fmtDT(v), width: 180 },
-          { title: "End", dataIndex: "endAt", render: (v) => fmtDT(v), width: 180 },
+          { 
+            title: "Start", 
+            dataIndex: "startAt", 
+            render: (v) => fmtDTWithTimezone(v, timezone), 
+            width: 200 
+          },
+          { 
+            title: "End", 
+            dataIndex: "endAt", 
+            render: (v) => fmtDTWithTimezone(v, timezone), 
+            width: 200 
+          },
           {
             title: "Duration (min)",
             key: "dur",
@@ -354,7 +373,7 @@ const AttendanceTable = ({
           loading={loading}
           expandable={{ expandedRowRender }}
           pagination={false}
-          scroll={{ x: 1600 }}
+          scroll={{ x: 1800 }}
           style={{ 
             fontSize: "13px",
             fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
