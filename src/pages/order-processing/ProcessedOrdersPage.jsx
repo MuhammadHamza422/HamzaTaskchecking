@@ -833,8 +833,8 @@ export default function ProcessedOrdersPage() {
     if (productTitles[2]) advancedOptions.customField3 = productTitles[2];
 
     return {
-      orderNumber: String(tableOrder?.orderId || sf?.id || ""),
-      orderKey: String(tableOrder?.order_key || sf?.name || sf?.id || ""),
+      orderNumber: String(tableOrder?.order_key || sf?.id || ""),
+      orderKey: String(tableOrder?.orderId || sf?.name || sf?.id || ""),
       orderDate: orderDate,
       orderStatus: "awaiting_shipment",
       customerId: undefined,
@@ -991,7 +991,7 @@ export default function ProcessedOrdersPage() {
         );
 
         const payload = { plateformId: String(platformId), orderData };
-        console.log("Posting ShipStation payload", payload);
+        // console.log("Posting ShipStation payload", payload);
 
         // POST to ShipStation API for this platform group
         await apiClient.post(
