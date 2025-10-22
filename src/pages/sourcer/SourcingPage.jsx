@@ -1,3 +1,4 @@
+
 // /src/pages/sourcer/SourcingOrdersPage.jsx
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
@@ -16,6 +17,7 @@ import {
 import { motion } from "framer-motion";
 import { useNavigate, useLocation } from "react-router-dom";
 import dayjs from "dayjs";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import apiClient from "../../api/client";
 import SourcingImportModal from "./SourcingImportModal";
@@ -25,6 +27,7 @@ import { statusPill } from "./utils/helpers";
 import { getSourcingColumns, makeItemsTable } from "./utils/sourcingColumns";
 import SleekPagination from "./components/Sleekpagination";
 import SourcingExportButton from "./components/SourcingExportButton";
+import { useCan } from "../../hooks/usePermissions";
 
 const { Option } = Select;
 const { RangePicker } = DatePicker;
@@ -54,50 +57,30 @@ const normalizeArray = (data) =>
       data?.data ||
       [];
 
-/* ---------- helpers ---------- */
-const lower = (v) =>
-  String(v ?? "")
-    .trim()
-    .toLowerCase();
+/* ---------- API functions (React Query) ---------- */
+const fetchMyOrders = async () => {
+  const { data } = await apiClient.get("/api/v1/sourcing/mine");
+  return normalizeArray(data);
+};
 
-const sourcerPermsFromRole = (roleObj) => {
-  const acc = (roleObj?.access || []).find((a) => lower(a?.app) === "sourcer");
-  const menu = Array.isArray(acc?.menu) ? acc.menu.map(lower) : [];
-  return {
-    createOrder: menu.includes("create order"),
-    myRequests: menu.includes("my requests"),
-    editMyRequests: menu.includes("edit my requests"),
-    cancelMyRequests: menu.includes("cancel my requests"),
-  };
+const deleteOrderRequest = async (orderId) => {
+  await apiClient.delete(`/api/v1/sourcing/${orderId}`);
+  return orderId;
 };
 
 export default function SourcingOrdersPage() {
-  const { user } = useAuth();
+  const { user } = useAuth(); // not strictly needed here, but kept if you expand later
+  const queryClient = useQueryClient();
 
   // Route helpers
   const navigate = useNavigate();
   const location = useLocation();
   const isOrdersRoute = location.pathname === "/sourcing/orders";
 
-  // ROLE NAME (used only to map to role object in /role/all)
-  const roleName = lower(user?.roles?.role || user?.role || "");
-
-  // Fine-grained permissions via /api/v1/role/all
-  const [rolesLoaded, setRolesLoaded] = useState(false);
-  const [canCreateOrder, setCanCreateOrder] = useState(false);
-  const [canViewMyRequests, setCanViewMyRequests] = useState(false);
-  const [canEditMyRequests, setCanEditMyRequests] = useState(false);
-  const [canCancelMyRequests, setCanCancelMyRequests] = useState(false);
-
-  // Optional: allow Import when user can create OR edit (tweak if you add a distinct permission later)
-  const canImport = canCreateOrder || canEditMyRequests;
-
-  // Data + UI
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Modal
   const [importOpen, setImportOpen] = useState(false);
 
-  // filters + pagination
+  // filters + pagination (client-side)
   const [filters, setFilters] = useState({
     product: "",
     sku: "",
@@ -108,102 +91,68 @@ export default function SourcingOrdersPage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
 
-  /* ---------- Fetch roles → set permissions (STRICT) ---------- */
-  useEffect(() => {
-    let cancelled = false;
+  /* ---------- Permissions via your shared hooks ---------- */
+  // useCan returns `null` while loading, then boolean
+  const canViewMyRequests = useCan("sourcer", "my requests");
+  const canCreateOrder = useCan("sourcer", "create order");
+  const canEditMyRequests = useCan("sourcer", "edit my requests");
+  const canCancelMyRequests = useCan("sourcer", "cancel my requests");
 
-    (async () => {
-      try {
-        const { data } = await apiClient.get("/api/v1/role/all");
-        const rolesArr = Array.isArray(data?.roles) ? data.roles : [];
-        const matched =
-          rolesArr.find((r) => lower(r?.role) === roleName) || null;
-
-        const { createOrder, myRequests, editMyRequests, cancelMyRequests } =
-          sourcerPermsFromRole(matched);
-
-        if (!cancelled) {
-          setCanCreateOrder(!!createOrder);
-          setCanViewMyRequests(!!myRequests);
-          setCanEditMyRequests(!!editMyRequests);
-          setCanCancelMyRequests(!!cancelMyRequests);
-          setRolesLoaded(true);
-        }
-      } catch (err) {
-        console.error(
-          "Failed to fetch roles (/api/v1/role/all):",
-          err?.response?.data || err?.message || err
-        );
-        if (!cancelled) {
-          // Secure defaults: everything off
-          setCanCreateOrder(false);
-          setCanViewMyRequests(false);
-          setCanEditMyRequests(false);
-          setCanCancelMyRequests(false);
-          setRolesLoaded(true);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [roleName]);
-
-  /* ---------- STRICT visibility rule ---------- */
-  // If "my requests" is OFF, no one sees data (admin/purchaser included).
+  // page is “ready” when we’ve evaluated perms at least for view
+  const rolesLoaded = canViewMyRequests !== null;
+  // STRICT visibility rule: if "my requests" is OFF, nobody sees data.
   const canSeeAnyList = canViewMyRequests === true;
+  const canImport = (canCreateOrder || canEditMyRequests) === true;
 
-  /* ---------- Endpoint (STRICT) ---------- */
-  // We will only ever hit the "/mine" endpoint when canSeeAnyList === true.
-  const endpoint = useMemo(() => {
-    if (!canSeeAnyList) return "";
-    return "/api/v1/sourcing/mine";
-  }, [canSeeAnyList]);
+  /* ---------- Orders via React Query ---------- */
+  const ordersQ = useQuery({
+    queryKey: ["sourcing", "mine"],
+    queryFn: fetchMyOrders,
+    enabled: rolesLoaded && canSeeAnyList,
+    staleTime: 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: "always",
+    keepPreviousData: true,
+  });
 
-  /* ---------- Load Orders (respects strict endpoint) ---------- */
-  const fetchOrders = useCallback(async () => {
-    if (!endpoint) {
-      setOrders([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      const { data } = await apiClient.get(endpoint);
-      setOrders(normalizeArray(data));
-    } catch (err) {
-      console.error(err);
-      message.error("Failed to load sourcing orders.");
-    } finally {
-      setLoading(false);
-    }
-  }, [endpoint]);
+  // Local alias (empty array if disabled/not loaded)
+  const orders = ordersQ.data || [];
 
-  useEffect(() => {
-    // Wait until roles are known to avoid flashing data
-    if (!rolesLoaded) return;
-    fetchOrders();
-  }, [rolesLoaded, fetchOrders]);
-
-  /* ---------- Delete Order ---------- */
-  const handleDeleteOrder = useCallback(
-    async (orderId) => {
-      if (!orderId) return;
-      try {
-        await apiClient.delete(`/api/v1/sourcing/${orderId}`);
-        message.success("Sourcing request deleted");
-        fetchOrders();
-      } catch (err) {
-        console.error(err);
-        message.error(
-          err?.response?.data?.message ||
-            err?.response?.data?.detail ||
-            "Delete failed"
-        );
-      }
+  /* ---------- Optimistic delete mutation ---------- */
+  const deleteM = useMutation({
+    mutationFn: deleteOrderRequest,
+    onMutate: async (orderId) => {
+      await queryClient.cancelQueries({ queryKey: ["sourcing", "mine"] });
+      const previous = queryClient.getQueryData(["sourcing", "mine"]);
+      queryClient.setQueryData(["sourcing", "mine"], (old) =>
+        Array.isArray(old) ? old.filter((o) => (o._id || o.id) !== orderId) : old
+      );
+      return { previous };
     },
-    [fetchOrders]
+    onError: (err, _vars, ctx) => {
+      if (ctx?.previous) {
+        queryClient.setQueryData(["sourcing", "mine"], ctx.previous);
+      }
+      message.error(
+        err?.response?.data?.message ||
+          err?.response?.data?.detail ||
+          "Delete failed"
+      );
+    },
+    onSuccess: () => {
+      message.success("Sourcing request deleted");
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["sourcing", "mine"] });
+    },
+  });
+
+  const handleDeleteOrder = useCallback(
+    (orderId) => {
+      if (!orderId) return;
+      deleteM.mutate(orderId);
+    },
+    [deleteM]
   );
 
   /* ---------- Client-side Filters ---------- */
@@ -273,31 +222,29 @@ export default function SourcingOrdersPage() {
     return filteredOrders.slice(start, end);
   }, [filteredOrders, page, limit]);
 
-  /* ---------- Columns (NO admin override) ---------- */
+  /* ---------- Columns ---------- */
   const columns = useMemo(
     () =>
       getSourcingColumns({
         statusPill,
-        canEdit: canEditMyRequests, // Edit button
-        canCancel: canCancelMyRequests, // Delete button
+        canEdit: canEditMyRequests === true,
+        canCancel: canCancelMyRequests === true,
         navigate,
         handleDeleteOrder,
       }),
     [canEditMyRequests, canCancelMyRequests, navigate, handleDeleteOrder]
   );
 
-  /* ---------- Loader: wait for roles OR data ---------- */
-  if (!rolesLoaded || (canSeeAnyList && loading)) {
+  /* ---------- Loader: wait for permissions OR data ---------- */
+  if (!rolesLoaded || (canSeeAnyList && ordersQ.isLoading)) {
     return (
-      <div
-        style={{ display: "flex", justifyContent: "center", paddingTop: 64 }}
-      >
+      <div style={{ display: "flex", justifyContent: "center", paddingTop: 64 }}>
         <Spin size="large" />
       </div>
     );
   }
 
-  /* ---------- If my requests is OFF: show banner (keep New Sourcing) ---------- */
+  /* ---------- If my requests is OFF: banner (keep New Sourcing) ---------- */
   if (!canSeeAnyList) {
     return (
       <Card style={gradientCardStyle} bodyStyle={{ padding: 24 }}>
@@ -305,48 +252,37 @@ export default function SourcingOrdersPage() {
           <h3 className="text-lg font-semibold mb-1">
             No permission to view “My Requests”
           </h3>
-          <p className="text-gray-600">
-            Access to <b>Sourcer → “my requests”</b> is required to view this
-            page.
-          </p>
-
-          {isOrdersRoute && canCreateOrder && (
-            <div className="mt-4">
-              <button
-                onClick={() => navigate("/sourcing/orders/new")}
-                className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
-              >
-                <Plus className="h-4 w-4" aria-hidden="true" />
-                New Sourcing
-              </button>
-            </div>
-          )}
         </div>
+
+        {isOrdersRoute && canCreateOrder === true && (
+          <div className="mt-4 text-center">
+            <button
+              onClick={() => navigate("/sourcing/orders/new")}
+              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
+            >
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              New Sourcing
+            </button>
+          </div>
+        )}
       </Card>
     );
   }
 
   /* ---------- Page title ---------- */
-  const pageTitle = "My Sourcing Orders"; // strict mode: always mine
+  const pageTitle = "Sourcing Listings"; // strict mode: always mine
 
   /* ---------- Render ---------- */
   return (
     <>
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
         <Card
-          title={
-            <span style={{ fontWeight: 700, letterSpacing: 0.2 }}>
-              {pageTitle}
-            </span>
-          }
+          title={<span style={{ fontWeight: 700, letterSpacing: 0.2 }}>{pageTitle}</span>}
           extra={
             <Space>
               <button
                 type="button"
-                onClick={fetchOrders}
+                onClick={() => ordersQ.refetch()}
                 className="inline-flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700
                            border border-gray-300 hover:border-gray-400 px-4 py-2 rounded-md
                            w-full md:w-auto shadow-sm focus:outline-none focus:ring-2 focus:ring-gray-200"
@@ -355,7 +291,7 @@ export default function SourcingOrdersPage() {
                 Refresh
               </button>
 
-              {/* ✅ Import CSV button restored */}
+              {/* Import CSV */}
               {canImport && (
                 <button
                   onClick={() => setImportOpen(true)}
@@ -379,7 +315,7 @@ export default function SourcingOrdersPage() {
                 "
               />
 
-              {isOrdersRoute && canCreateOrder && (
+              {isOrdersRoute && canCreateOrder === true && (
                 <button
                   onClick={() => navigate("/sourcing/orders/new")}
                   className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
@@ -497,22 +433,14 @@ export default function SourcingOrdersPage() {
               rowKey={(rec) => rec._id || rec.id}
               expandable={{
                 expandedRowRender: (rec) => makeItemsTable(rec),
-
-                indentSize: 0, // no indent
+                indentSize: 0,
               }}
               pagination={false}
               size="middle"
               bordered={false}
               sticky
               scroll={{ x: 1350, y: 520 }}
-              loading={loading}
-              // onRow={() => ({
-              //   style: { transition: "background 0.2s" },
-              //   onMouseEnter: (e) =>
-              //     (e.currentTarget.style.background = "#fafbff"),
-              //   onMouseLeave: (e) =>
-              //     (e.currentTarget.style.background = "unset"),
-              // })}
+              loading={ordersQ.isFetching}
               locale={{
                 emptyText: (
                   <Empty
@@ -522,11 +450,11 @@ export default function SourcingOrdersPage() {
                 ),
               }}
               className={`
-    [&_.ant-table-tbody>tr:nth-child(odd)>td]:bg-[#f8fbff]
-    [&_.ant-table-tbody>tr:nth-child(even)>td]:bg-white
-    [&_.ant-table-tbody>tr:hover>td]:!bg-[#f0f7ff]
-    transition-colors
-  `}
+                [&_.ant-table-tbody>tr:nth-child(odd)>td]:bg-[#f8fbff]
+                [&_.ant-table-tbody>tr:nth-child(even)>td]:bg-white
+                [&_.ant-table-tbody>tr:hover>td]:!bg-[#f0f7ff]
+                transition-colors
+              `}
             />
 
             <SleekPagination
@@ -540,15 +468,15 @@ export default function SourcingOrdersPage() {
         </Card>
       </motion.div>
 
-      {/* ✅ Import modal kept and wired */}
+      {/* Import modal */}
       <SourcingImportModal
         open={importOpen}
         onClose={() => setImportOpen(false)}
         orders={orders}
-        onImported={fetchOrders}
+        onImported={() => ordersQ.refetch()}
       />
 
-      {canCreateOrder && (
+      {canCreateOrder === true && (
         <div className="fixed bottom-6 right-6 z-50">
           <button
             type="button"
@@ -564,7 +492,6 @@ export default function SourcingOrdersPage() {
               focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70
             "
           >
-            {/* Icon: perfectly centered by default, slides left on hover */}
             <span
               className="
                 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2
@@ -576,7 +503,6 @@ export default function SourcingOrdersPage() {
               <Plus className="h-7 w-7 text-white" strokeWidth={3} />
             </span>
 
-            {/* Label appears smoothly */}
             <span
               className="
                 absolute top-1/2 -translate-y-1/2 left-14 right-3

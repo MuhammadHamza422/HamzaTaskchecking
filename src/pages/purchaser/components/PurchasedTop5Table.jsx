@@ -1,27 +1,45 @@
 
-
 // src/pages/sourcer/components/PurchasedTop5Table.jsx
 import React, { useMemo } from "react";
-import { Card, Table, Empty } from "antd";
-import { CopyOutlined } from "@ant-design/icons";
+import { Table, Empty, Button, Tooltip } from "antd";
+import { ReloadOutlined, InfoCircleOutlined, CopyOutlined } from "@ant-design/icons";
 import Swal from "sweetalert2";
 import {
   buildTop5PurchasedDetailedRows,
   ExpandedItemsTable,
-  // pull shared formatters/components from your utils
   money,
   StatusBadge,
 } from "../utils/PurchaseTableUtils.jsx";
 
-// ===== Helpers (local) =====
-const safeNum = (v) => (v == null || v === "" ? 0 : Number(v) || 0);
+/* -------------------------- small UI helpers -------------------------- */
+const tipCommon = {
+  getPopupContainer: () => document.body,
+  overlayStyle: { zIndex: 1090 },
+  placement: "top",
+};
+const TitleWithTip = ({ label, tip }) => (
+  <Tooltip title={tip} {...tipCommon}>
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        cursor: "help",
+      }}
+    >
+      {label}
+      <InfoCircleOutlined style={{ fontSize: 14, color: "#64748b" }} />
+    </span>
+  </Tooltip>
+);
 
+/* ------------------------------ helpers ------------------------------ */
+const safeNum = (v) => (v == null || v === "" ? 0 : Number(v) || 0);
 const ensureHttp = (v = "") => {
   const s = String(v || "").trim();
   if (!s) return "";
   return /^https?:\/\//i.test(s) ? s : `https://${s}`;
 };
-
 const mapTrackingBucket = (raw) => {
   const v = String(raw || "").trim().toLowerCase();
   if (v === "intransit" || v === "in transit") return "InTransit";
@@ -76,26 +94,30 @@ const toast = Swal.mixin({
   customClass: { popup: "rounded-lg" },
 });
 
-// Safely pick the best id from the row (supports _original wrapper)
+// pick best id from row (supports _original wrapper)
 const getDocId = (row = {}) => {
   const r = row?._original || row;
   return r?._id || r?.id || r?.sourcing_id || r?.sourcingId || null;
 };
 
+/* ===================================================================== */
+
 export default function PurchasedTop5Table({
   data = [],
   loading = false,
   title = "Latest 5 Purchased Orders",
-  requirePurchased = false, // set true to restrict strictly to purchased
-  onOpen, // OPTIONAL: (orderRow) => void — custom open handler
+  titleTip = "Most recent purchased sourcing requests by creation time.",
+  requirePurchased = false,          // restrict strictly to purchased if true
+  onOpen,                            // OPTIONAL: (orderRow) => void
+  onRefresh,                         // OPTIONAL: () => void (header refresh button)
 }) {
-  // Build rows via your existing util (keeps compatibility with other parts)
+  // Build rows via your existing util (ensures compatibility)
   const rows = useMemo(
     () => buildTop5PurchasedDetailedRows(data, { limit: 5, requirePurchased }),
     [data, requirePurchased]
   );
 
-  // ===== Columns: same set you shared, adapted to read from row._original || row =====
+  // ===== Columns (reads from row._original || row) =====
   const columns = useMemo(
     () => [
       {
@@ -155,11 +177,9 @@ export default function PurchasedTop5Table({
           const target = safeNum(r.target_total_cost);
           const actual = safeNum(r.total_actual_cost);
           if (!target) return "—";
-          const pct = (1 - actual / target) * 100; // 1 - a/c
+          const pct = (1 - actual / target) * 100;
           const color = pct >= 0 ? "#16a34a" : "#ef4444";
-          return (
-            <span style={{ color, fontWeight: 600 }}>{pct.toFixed(1)}%</span>
-          );
+          return <span style={{ color, fontWeight: 600 }}>{pct.toFixed(1)}%</span>;
         },
       },
       {
@@ -402,48 +422,76 @@ export default function PurchasedTop5Table({
     []
   );
 
+  const emptyNode = <Empty description="No purchased orders" />;
+
   return (
-    <Card
-      size="small"
-      bordered
-      title={title}
-      style={{ borderRadius: 12 }}
-      bodyStyle={{ padding: 12 }}
+    <div
+      className="
+        rounded-lg border border-slate-200 bg-white/90 backdrop-blur-sm shadow-sm
+        overflow-hidden
+      "
     >
-      <Table
-        size="small"
-        pagination={false}
-        loading={loading}
-        dataSource={rows}
-        columns={columns}
-        rowKey={(row) => getDocId(row) || row.key}
-        tableLayout="fixed"
-        scroll={{ x: "max-content" }}
-        onRow={(row) => {
-          const docId = getDocId(row);
-          const clickable = Boolean(docId || onOpen);
-          return {
-            onClick: () => {
-              if (onOpen) return onOpen(row._original || row);
-              if (docId) window.location.assign(`/requests/${String(docId)}`);
-            },
-            style: clickable ? { cursor: "pointer" } : undefined,
-          };
-        }}
-        expandable={{
-          expandedRowRender: (row) =>
-            (row?._original && Array.isArray(row._original.items) && row._original.items.length) ? (
-              <ExpandedItemsTable order={row._original} />
-            ) : (
-              <Empty description="No products on this request" />
-            ),
-          rowExpandable: (row) =>
-            Array.isArray(row?._original?.items) &&
-            row._original.items.length > 0,
-        }}
-        locale={{ emptyText: <Empty description="No purchased orders" /> }}
-      />
-    </Card>
+      {/* Compact gradient header (matches Purchaser UI) */}
+      <div
+        className="
+          flex items-center justify-between
+          px-3 py-1.5
+          border-b border-slate-200
+          bg-gradient-to-r from-sky-50 via-blue-50 to-indigo-50
+        "
+      >
+        <div className="text-slate-800 font-semibold text-xs tracking-wide flex items-center gap-2">
+          <TitleWithTip label={title} tip={titleTip} />
+        </div>
+
+
+      </div>
+
+      {/* Table */}
+      <div className="p-0">
+        <Table
+          size="small"
+          pagination={false}
+          loading={loading}
+          dataSource={rows}
+          columns={columns}
+          rowKey={(row) => getDocId(row) || row.key}
+          tableLayout="fixed"
+          scroll={{ x: "max-content" }}
+          locale={{ emptyText: emptyNode }}
+          className="
+            [&_.ant-table-tbody>tr.row-even>td]:bg-[#fafafa]
+            [&_.ant-table-tbody>tr.row-odd>td]:bg-white
+            [&_.ant-table-tbody>tr:hover>td]:!bg-[#f0f9ff]
+            transition-colors
+          "
+          onRow={(row) => {
+            const docId = getDocId(row);
+            const clickable = Boolean(docId || onOpen);
+            return {
+              onClick: () => {
+                if (onOpen) return onOpen(row._original || row);
+                if (docId) window.location.assign(`/requests/${String(docId)}`);
+              },
+              className: "row-clickable",
+              style: clickable ? { cursor: "pointer" } : undefined,
+            };
+          }}
+          expandable={{
+            expandedRowRender: (row) =>
+              row?._original &&
+              Array.isArray(row._original.items) &&
+              row._original.items.length ? (
+                <ExpandedItemsTable order={row._original} />
+              ) : (
+                <Empty description="No products on this request" />
+              ),
+            rowExpandable: (row) =>
+              Array.isArray(row?._original?.items) && row._original.items.length > 0,
+            indentSize: 0,
+          }}
+        />
+      </div>
+    </div>
   );
 }
-
