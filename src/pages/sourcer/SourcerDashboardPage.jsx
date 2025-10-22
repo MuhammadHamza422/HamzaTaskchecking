@@ -1,3 +1,4 @@
+
 // /src/pages/sourcer/SourcerDashboardPage.jsx
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
@@ -13,12 +14,10 @@ import {
   Tooltip,
   Spin,
   Skeleton,
-  Empty,
   Typography,
 } from "antd";
 import { motion } from "framer-motion";
 import { ReloadOutlined, FilterOutlined } from "@ant-design/icons";
-import { debounce } from "lodash";
 import dayjs from "dayjs";
 import isBetween from "dayjs/plugin/isBetween";
 dayjs.extend(isBetween);
@@ -33,6 +32,8 @@ import RecentlyCreatedFive from "./components/RecentlyCreatedFive";
 import { statusPill } from "./utils/helpers";
 import { makeItemsTable } from "./utils/sourcingColumns";
 import { Plus } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCan } from "../../hooks/usePermissions";
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -67,88 +68,75 @@ const calcTargetTotalFromItems = (items = []) =>
     0
   );
 
-const sameId = (a, b) => String(a || "").trim() === String(b || "").trim();
+/* ----------------------------- API helpers ---------------------------- */
+const normalizeList = (raw) =>
+  Array.isArray(raw)
+    ? raw
+    : raw?.orders || raw?.data || raw?.results || raw?.items || [];
 
-const orderBelongsToUser = (order, user) => {
-  if (!user) return false;
-  const userId = String(user._id || user.id || "");
-  const userEmail = (user.email || "").toLowerCase();
-
-  const candidates = [
-    order.sourcer,
-    order.sourcer_id,
-    order.sourcerId,
-    order.createdBy,
-    order.created_by,
-  ];
-  for (const c of candidates) {
-    if (!c) continue;
-    if (typeof c === "string" || typeof c === "number") {
-      if (userId && sameId(c, userId)) return true;
-    }
-    if (typeof c === "object") {
-      const cid = String(c._id || c.id || "");
-      const cemail = (c.email || "").toLowerCase();
-      if (userId && sameId(cid, userId)) return true;
-      if (userEmail && cemail && cemail === userEmail) return true;
-    }
-  }
-  const deepUser = order?.sourcer?.user || order?.createdBy?.user;
-  if (deepUser) {
-    const cid = String(deepUser._id || deepUser.id || "");
-    const cemail = (deepUser.email || "").toLowerCase();
-    if (userId && sameId(cid, userId)) return true;
-    if (userEmail && cemail && cemail === userEmail) return true;
-  }
-  const creatorEmail = (
-    order.created_by_email ||
-    order.sourcer_email ||
-    ""
-  ).toLowerCase();
-  if (creatorEmail && userEmail && creatorEmail === userEmail) return true;
-  return false;
+// mine
+const fetchMine = async () => {
+  const { data } = await apiClient.get("/api/v1/sourcing/mine");
+  return normalizeList(data);
 };
 
-/* --------------------------- perms helpers --------------------------- */
-const lower = (v) =>
-  String(v ?? "")
-    .trim()
-    .toLowerCase();
-const sourcerPermsFromRole = (roleObj) => {
-  const acc = (roleObj?.access || []).find((a) => lower(a?.app) === "sourcer");
-  const menu = Array.isArray(acc?.menu) ? acc.menu.map(lower) : [];
-  return {
-    createOrder: menu.includes("create order"),
-    myRequests: menu.includes("my requests"),
-    editMyRequests: menu.includes("edit my requests"),
-    cancelMyRequests: menu.includes("cancel my requests"),
-    // optional: importCsv: menu.includes("import csv"),
-  };
+// admin — for a specific sourcer_id
+const fetchForSourcer = async (sid) => {
+  const { data } = await apiClient.get("/api/v1/sourcing/all-sourcing", {
+    params: { sourcer_id: sid, page: 1, limit: 200 },
+  });
+  return Array.isArray(data) ? data : data?.results || data?.data || [];
+};
+
+// admin — build sourcer dropdown (unique sourcer_ids)
+const fetchSourcerOptions = async () => {
+  const { data } = await apiClient.get("/api/v1/sourcing/all-sourcing", {
+    params: { page: 1, limit: 200 },
+  });
+  const list = Array.isArray(data) ? data : data?.results || data?.data || [];
+  const map = new Map();
+  list.forEach((o) => {
+    const s = o?.sourcer_id;
+    if (!s) return;
+    const id = String(s?._id || s);
+    if (!id) return;
+    const name = [s?.firstName, s?.lastName].filter(Boolean).join(" ");
+    const label = name || s?.email || `Sourcer ${id.slice(-4)}`;
+    if (!map.has(id)) map.set(id, { value: id, label });
+  });
+  return Array.from(map.values()).sort((a, b) =>
+    (a.label || "").localeCompare(b.label || "")
+  );
+};
+
+const deleteOrderRequest = async (orderId) => {
+  await apiClient.delete(`/api/v1/sourcing/${orderId}`);
+  return orderId;
 };
 
 /* =============================== PAGE =============================== */
 export default function SourcerDashboardPage() {
-  const { user: authUser } = useAuth();
-  const [user, setUser] = useState(authUser || null);
+  const { user } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  // perms from /api/v1/role/all
-  const [rolesLoaded, setRolesLoaded] = useState(false);
-  const [canCreateOrder, setCanCreateOrder] = useState(false);
-  const [canViewMyRequests, setCanViewMyRequests] = useState(false);
-  const [canEditMyRequests, setCanEditMyRequests] = useState(false);
-  const [canCancelMyRequests, setCanCancelMyRequests] = useState(false);
+  // Permissions via shared hooks
+  const canViewMyRequests = useCan("sourcer", "my requests"); // null | boolean
+  const canCreateOrder = useCan("sourcer", "create order");
+  const canEditMyRequests = useCan("sourcer", "edit my requests");
+  const canCancelMyRequests = useCan("sourcer", "cancel my requests");
 
-  const roleName = lower(user?.roles?.role || user?.role || "");
+  // We only render once permission has resolved from null → boolean
+  const permsLoaded = canViewMyRequests !== null;
 
-  const [loading, setLoading] = useState(true);
-  const [tableLoading, setTableLoading] = useState(false);
-  const [statsLoading, setStatsLoading] = useState(false);
-  const [orders, setOrders] = useState([]);
+  // Admin check (by role name on user, still harmless to keep)
+  const roleName = String(user?.roles?.role || user?.role || "")
+    .trim()
+    .toLowerCase();
+  const isAdmin = roleName === "admin";
 
+  // Admin sourcer picker
   const [sourcerId, setSourcerId] = useState(null);
-  const [sourcerOptions, setSourcerOptions] = useState([]);
-  const [sourcerOptionsLoading, setSourcerOptionsLoading] = useState(false);
 
   // ✅ Default to the current month
   const [filters, setFilters] = useState({
@@ -159,237 +147,69 @@ export default function SourcerDashboardPage() {
     sourcingId: "",
   });
 
-  const [searchOptions, setSearchOptions] = useState([]);
-  const debouncedSearch = useMemo(
-    () =>
-      debounce(async (q) => {
-        const query = (q || "").trim();
-        if (query.length < 2) {
-          setSearchOptions([]);
-          return;
-        }
-        try {
-          const { data } = await apiClient.get(
-            "/api/v1/sourcing/products/search",
-            {
-              params: { search: query, limit: 20, page: 1 },
-            }
-          );
-          const list = Array.isArray(data?.products) ? data.products : [];
-          setSearchOptions(
-            list.map((p) => {
-              const id = p._id || p.id;
-              const sku = p.sku || "NO-SKU";
-              const name =
-                p.pro_title ||
-                p.product_name ||
-                p.title ||
-                p.name ||
-                "Untitled";
-              const price = p.sale_price ?? p.price ?? null;
-              return {
-                value: String(id),
-                label: `${sku} — ${name}${
-                  price != null ? ` ($${Number(price).toFixed(2)})` : ""
-                }`,
-                product: { id, sku, name, price, raw: p },
-              };
-            })
-          );
-        } catch (err) {
-          console.error(err);
-        }
-      }, 300),
-    []
-  );
+  /* -------------------------- Queries (React Query) -------------------------- */
 
-  /* --------------------------- user bootstrap --------------------------- */
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        if (!authUser) {
-          try {
-            const res = await apiClient.get("/api/v1/auth/me");
-            if (!cancelled) setUser(res.data?.user || res.data || null);
-          } catch {
-            const res2 = await apiClient.get("/api/v1/users/me");
-            if (!cancelled) setUser(res2.data?.user || res2.data || null);
-          }
-        }
-      } catch {
-        console.warn("Failed to fetch /me; continuing with limited user info.");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [authUser]);
+  // Admin-only sourcer options
+  const sourcerOptsQ = useQuery({
+    queryKey: ["sourcing", "sourcerOptions"],
+    queryFn: fetchSourcerOptions,
+    enabled: permsLoaded && canViewMyRequests === true && isAdmin,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
 
-  /* --------------------------- fetch role perms -------------------------- */
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data } = await apiClient.get("/api/v1/role/all");
-        const rolesArr = Array.isArray(data?.roles) ? data.roles : [];
-        const matched =
-          rolesArr.find((r) => lower(r?.role) === roleName) || null;
-        const { createOrder, myRequests, editMyRequests, cancelMyRequests } =
-          sourcerPermsFromRole(matched);
+  // Orders (mine OR chosen sourcer if admin + sourcerId selected)
+  const ordersQ = useQuery({
+    queryKey: ["sourcing", "dashboard", { scope: isAdmin && sourcerId ? "bySourcer" : "mine", sourcerId }],
+    queryFn: () =>
+      isAdmin && sourcerId ? fetchForSourcer(sourcerId) : fetchMine(),
+    enabled: permsLoaded && canViewMyRequests === true && (!!user || (isAdmin && !!sourcerId)),
+    staleTime: 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: "always",
+    keepPreviousData: true,
+  });
 
-        if (!cancelled) {
-          setCanCreateOrder(!!createOrder);
-          setCanViewMyRequests(!!myRequests);
-          setCanEditMyRequests(!!editMyRequests);
-          setCanCancelMyRequests(!!cancelMyRequests);
-          setRolesLoaded(true);
-        }
-      } catch (err) {
-        console.error(
-          "Failed to fetch roles (/api/v1/role/all):",
-          err?.response?.data || err?.message || err
-        );
-        if (!cancelled) {
-          setCanCreateOrder(false);
-          setCanViewMyRequests(false);
-          setCanEditMyRequests(false);
-          setCanCancelMyRequests(false);
-          setRolesLoaded(true);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [roleName]);
+  const orders = ordersQ.data || [];
+  const loading = !permsLoaded || ordersQ.isLoading;
 
-  /* ------------------------ admin sourcer options ----------------------- */
-  const loadSourcerOptions = useCallback(async () => {
-    if (!canViewMyRequests) return;
-    const isAdminByName = roleName === "admin";
-    if (!isAdminByName) return;
-
-    setSourcerOptionsLoading(true);
-    try {
-      const { data } = await apiClient.get("/api/v1/sourcing/all-sourcing", {
-        params: { page: 1, limit: 200 },
-      });
-      const list = Array.isArray(data)
-        ? data
-        : data?.results || data?.data || [];
-      const map = new Map();
-      list.forEach((o) => {
-        const s = o?.sourcer_id;
-        if (!s) return;
-        const id = String(s?._id || s);
-        if (!id) return;
-        const name = [s?.firstName, s?.lastName].filter(Boolean).join(" ");
-        const label = name || s?.email || `Sourcer ${id.slice(-4)}`;
-        if (!map.has(id)) map.set(id, { value: id, label });
-      });
-      setSourcerOptions(
-        Array.from(map.values()).sort((a, b) =>
-          (a.label || "").localeCompare(b.label || "")
-        )
+  /* -------------------------- Optimistic delete -------------------------- */
+  const deleteM = useMutation({
+    mutationFn: deleteOrderRequest,
+    onMutate: async (orderId) => {
+      await queryClient.cancelQueries({ queryKey: ["sourcing", "dashboard"] });
+      const key = ["sourcing", "dashboard", { scope: isAdmin && sourcerId ? "bySourcer" : "mine", sourcerId }];
+      const previous = queryClient.getQueryData(key);
+      queryClient.setQueryData(key, (old) =>
+        Array.isArray(old) ? old.filter((o) => (o._id || o.id) !== orderId) : old
       );
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setSourcerOptionsLoading(false);
-    }
-  }, [roleName, canViewMyRequests]);
-
-  useEffect(() => {
-    loadSourcerOptions();
-  }, [loadSourcerOptions]);
-
-  /* ---------------------------- data fetching --------------------------- */
-  const fetchMine = useCallback(async (u) => {
-    if (!u) return [];
-    try {
-      const r = await apiClient.get("/api/v1/sourcing/mine");
-      const raw = r?.data;
-      return Array.isArray(raw)
-        ? raw
-        : raw?.orders || raw?.data || raw?.results || [];
-    } catch {
-      try {
-        const r = await apiClient.get("/api/v1/sourcing/all-sourcing");
-        const raw = r?.data;
-        const all = Array.isArray(raw)
-          ? raw
-          : raw?.orders || raw?.data || raw?.results || raw?.items || [];
-        return all.filter((o) => orderBelongsToUser(o, u));
-      } catch {
-        const r = await apiClient.get("/api/v1/sourcing/pending");
-        const raw = r?.data;
-        const pending = Array.isArray(raw)
-          ? raw
-          : raw?.orders || raw?.data || raw?.results || [];
-        return pending.filter((o) => orderBelongsToUser(o, u));
+      return { previous, key };
+    },
+    onError: (err, _vars, ctx) => {
+      if (ctx?.previous && ctx?.key) {
+        queryClient.setQueryData(ctx.key, ctx.previous);
       }
-    }
-  }, []);
+      message.error(
+        err?.response?.data?.message ||
+          err?.response?.data?.detail ||
+          "Delete failed"
+      );
+    },
+    onSuccess: () => {
+      message.success("Sourcing request deleted");
+    },
+    onSettled: (_data, _err, _vars, ctx) => {
+      if (ctx?.key) queryClient.invalidateQueries({ queryKey: ctx.key });
+    },
+  });
 
-  const fetchForSourcer = useCallback(async (sid) => {
-    const { data } = await apiClient.get("/api/v1/sourcing/all-sourcing", {
-      params: { sourcer_id: sid, page: 1, limit: 200 },
-    });
-    return Array.isArray(data) ? data : data?.results || data?.data || [];
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!rolesLoaded) return;
-      setLoading(true);
-      try {
-        if (!canViewMyRequests) {
-          if (!cancelled) setOrders([]);
-        } else {
-          const u = authUser || user;
-          if (!u) {
-            setOrders([]);
-          } else {
-            const isAdminByName = roleName === "admin";
-            if (isAdminByName && sourcerId) {
-              const list = await fetchForSourcer(sourcerId);
-              if (!cancelled) setOrders(list);
-            } else {
-              const mine = await fetchMine(u);
-              if (!cancelled) setOrders(mine);
-            }
-          }
-        }
-      } catch (e) {
-        console.error(e);
-        message.error("Could not load dashboard data.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    authUser,
-    user,
-    rolesLoaded,
-    canViewMyRequests,
-    roleName,
-    sourcerId,
-    fetchMine,
-    fetchForSourcer,
-  ]);
-
-  useEffect(() => {
-    if (!loading) {
-      setTableLoading(true);
-      const timer = setTimeout(() => setTableLoading(false), 300);
-      return () => clearTimeout(timer);
-    }
-  }, [filters, loading]);
+  const handleDeleteOrder = useCallback(
+    (orderId) => {
+      if (!orderId) return;
+      deleteM.mutate(orderId);
+    },
+    [deleteM]
+  );
 
   /* ---------------------------- enrichment ----------------------------- */
   const enriched = useMemo(() => {
@@ -466,10 +286,6 @@ export default function SourcerDashboardPage() {
   }, [enriched, filters]);
 
   /* ------------------------------ metrics ------------------------------ */
-  const totalBaseline = useMemo(
-    () => filtered.reduce((s, r) => s + num(r.target_total), 0),
-    [filtered]
-  );
   const totalSavings = useMemo(
     () => filtered.reduce((s, r) => s + num(r.savings_dollar), 0),
     [filtered]
@@ -482,54 +298,10 @@ export default function SourcerDashboardPage() {
     () => filtered.filter((r) => String(r.status) === "Purchased").length,
     [filtered]
   );
-
   const savingsColor = totalSavings >= 0 ? "#16a34a" : "#ef4444";
 
-  const handleDeleteOrder = useCallback(
-    async (orderId) => {
-      if (!orderId) return;
-      try {
-        await apiClient.delete(`/api/v1/sourcing/${orderId}`);
-        message.success("Sourcing request deleted");
-        setTableLoading(true);
-        try {
-          if (!canViewMyRequests) {
-            setOrders([]);
-          } else {
-            const isAdminByName = roleName === "admin";
-            if (isAdminByName && sourcerId) {
-              const list = await fetchForSourcer(sourcerId);
-              setOrders(list);
-            } else {
-              const u = authUser || user;
-              if (u) setOrders(await fetchMine(u));
-            }
-          }
-        } finally {
-          setTableLoading(false);
-        }
-      } catch (err) {
-        console.error(err);
-        message.error(
-          err?.response?.data?.message ||
-            err?.response?.data?.detail ||
-            "Delete failed"
-        );
-      }
-    },
-    [
-      authUser,
-      user,
-      fetchMine,
-      fetchForSourcer,
-      roleName,
-      sourcerId,
-      canViewMyRequests,
-    ]
-  );
-
   /* ------------------------------ render ------------------------------- */
-  if (!rolesLoaded || loading) {
+  if (!permsLoaded || loading) {
     return (
       <div className="flex justify-center items-center h-screen">
         <Spin size="large" />
@@ -538,12 +310,12 @@ export default function SourcerDashboardPage() {
   }
 
   // STRICT: if My Requests is OFF, show banner (no data/stats)
-  if (!canViewMyRequests) {
+  if (canViewMyRequests !== true) {
     return (
       <div className="min-h-screen">
         <div className="flex items-center justify-between gap-3">
           <AppBreadcrumbs fromLocation />
-          {canCreateOrder && (
+          {canCreateOrder === true && (
             <button
               onClick={() => navigate("/sourcing/orders/new")}
               className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
@@ -574,7 +346,7 @@ export default function SourcerDashboardPage() {
       <div className="min-h-screen">
         <div className="flex items-center justify-between gap-3">
           <AppBreadcrumbs fromLocation />
-          {canCreateOrder && (
+          {canCreateOrder === true && (
             <button
               onClick={() => navigate("/sourcing/orders/new")}
               className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
@@ -593,9 +365,7 @@ export default function SourcerDashboardPage() {
               {
                 key: "count",
                 title:
-                  roleName === "admin" && sourcerId
-                    ? "Total Listings "
-                    : "Total Listings",
+                  isAdmin && sourcerId ? "Total Listings " : "Total Listings",
                 value: filtered.length,
               },
               {
@@ -604,7 +374,7 @@ export default function SourcerDashboardPage() {
                 value: totalSavings,
                 prefix: "$",
                 precision: 2,
-                valueStyle: { fontWeight: 700, color: savingsColor }, // <= color by sign
+                valueStyle: { fontWeight: 700, color: savingsColor },
               },
               {
                 key: "pending",
@@ -620,7 +390,7 @@ export default function SourcerDashboardPage() {
               <Col xs={24} sm={12} md={8} lg={6} key={stat.key}>
                 <motion.div {...cardHoverEffect}>
                   <Card style={statsCardStyle} bodyStyle={{ padding: 16 }}>
-                    {statsLoading ? (
+                    {ordersQ.isFetching ? (
                       <Skeleton
                         active
                         paragraph={{ rows: 2 }}
@@ -661,35 +431,17 @@ export default function SourcerDashboardPage() {
 
               <div className="flex flex-wrap items-center gap-2">
                 {/* Admin sourcer switcher (optional) */}
-                {roleName === "admin" && (
+                {isAdmin && (
                   <Tooltip title="Pick a sourcer (admins only)">
                     <Select
                       allowClear
                       showSearch
                       className="w-64"
                       placeholder="View sourcer…"
-                      options={sourcerOptions}
-                      loading={sourcerOptionsLoading}
+                      options={sourcerOptsQ.data || []}
+                      loading={sourcerOptsQ.isFetching}
                       value={sourcerId || undefined}
-                      onChange={async (val) => {
-                        setSourcerId(val || null);
-                        setTableLoading(true);
-                        setStatsLoading(true);
-                        try {
-                          if (val) {
-                            setOrders(await fetchForSourcer(val));
-                          } else {
-                            const u = authUser || user;
-                            if (u) setOrders(await fetchMine(u));
-                          }
-                        } catch (e) {
-                          console.error(e);
-                          message.error("Failed to load sourcer’s orders");
-                        } finally {
-                          setTableLoading(false);
-                          setStatsLoading(false);
-                        }
-                      }}
+                      onChange={(val) => setSourcerId(val || null)}
                       filterOption={(input, option) =>
                         (option?.label || "")
                           .toLowerCase()
@@ -699,7 +451,7 @@ export default function SourcerDashboardPage() {
                   </Tooltip>
                 )}
 
-                {roleName === "admin" && sourcerId && (
+                {isAdmin && sourcerId && (
                   <Button
                     type="primary"
                     onClick={() =>
@@ -720,7 +472,7 @@ export default function SourcerDashboardPage() {
                         dateRange: [
                           dayjs().startOf("month"),
                           dayjs().endOf("month"),
-                        ], // ✅ default current month
+                        ],
                         sourcingId: "",
                       })
                     }
@@ -738,25 +490,8 @@ export default function SourcerDashboardPage() {
                       height: "auto",
                       width: "auto",
                     }}
-                    onClick={async () => {
-                      setTableLoading(true);
-                      setStatsLoading(true);
-                      try {
-                        const isAdminByName = roleName === "admin";
-                        if (isAdminByName && sourcerId) {
-                          setOrders(await fetchForSourcer(sourcerId));
-                        } else {
-                          const u = user;
-                          setOrders(await fetchMine(u));
-                        }
-                      } catch (err) {
-                        console.error(err);
-                        message.error("Failed to refresh.");
-                      } finally {
-                        setTableLoading(false);
-                        setStatsLoading(false);
-                      }
-                    }}
+                    onClick={() => ordersQ.refetch()}
+                    loading={ordersQ.isFetching}
                   />
                 </Tooltip>
               </div>
@@ -839,15 +574,15 @@ export default function SourcerDashboardPage() {
           >
             <RecentlyCreatedFive
               orders={filtered}
-              loading={tableLoading}
+              loading={ordersQ.isFetching}
               title={
-                roleName === "admin" && sourcerId
+                isAdmin && sourcerId
                   ? "5 Most Recent Listings"
                   : "My 5 Most Recent Listings"
               }
-              canViewMyRequests={canViewMyRequests}
-              canEdit={canEditMyRequests}
-              canCancel={canCancelMyRequests}
+              canViewMyRequests={canViewMyRequests === true}
+              canEdit={canEditMyRequests === true}
+              canCancel={canCancelMyRequests === true}
               navigate={navigate}
               handleDeleteOrder={handleDeleteOrder}
               itemTable={makeItemsTable}
@@ -858,42 +593,42 @@ export default function SourcerDashboardPage() {
       </div>
 
       {/* Floating FAB – centered icon, expands on hover */}
-      {canCreateOrder && (
+      {canCreateOrder === true && (
         <div className="fixed bottom-6 right-6 z-50">
           <button
             type="button"
             onClick={() => navigate("/sourcing/orders/new")}
             aria-label="Create new sourcing order"
             className="
-        group relative
-        h-14 w-14 hover:w-44 focus-visible:w-44
-        rounded-full bg-blue-600 text-white
-        shadow-lg shadow-blue-600/30
-        ring-1 ring-white/40 backdrop-blur
-        transition-all duration-300 ease-out
-        focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70
-      "
+              group relative
+              h-14 w-14 hover:w-44 focus-visible:w-44
+              rounded-full bg-blue-600 text-white
+              shadow-lg shadow-blue-600/30
+              ring-1 ring-white/40 backdrop-blur
+              transition-all duration-300 ease-out
+              focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70
+            "
           >
-            {/* Icon: perfectly centered by default, slides left on hover */}
+            {/* Icon */}
             <span
               className="
-          absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2
-          grid h-10 w-10 place-items-center rounded-full
-          transition-all duration-300
-          group-hover:left-6 group-focus-visible:left-6
-        "
+                absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2
+                grid h-10 w-10 place-items-center rounded-full
+                transition-all duration-300
+                group-hover:left-6 group-focus-visible:left-6
+              "
             >
               <Plus className="h-7 w-7 text-white" strokeWidth={3} />
             </span>
 
-            {/* Label appears smoothly */}
+            {/* Label */}
             <span
               className="
-          absolute top-1/2 -translate-y-1/2 left-14 right-3
-          opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100
-          transition-opacity duration-200
-          font-medium tracking-tight whitespace-nowrap
-        "
+                absolute top-1/2 -translate-y-1/2 left-14 right-3
+                opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100
+                transition-opacity duration-200
+                font-medium tracking-tight whitespace-nowrap
+              "
             >
               New Sourcing
             </span>

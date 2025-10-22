@@ -1,3 +1,4 @@
+
 // /src/pages/purchaser/PurchaserDashboard.jsx
 import React, {
   useMemo,
@@ -13,9 +14,6 @@ import {
   Typography,
   Button,
   Statistic,
-  Divider,
-  Table,
-  Tag,
   Empty,
   Skeleton,
   Card,
@@ -27,6 +25,7 @@ import { ReloadOutlined } from "@ant-design/icons";
 import { motion } from "framer-motion";
 import dayjs from "dayjs";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 
 import PurchasedTop5Table from "./components/PurchasedTop5Table";
 import PurchaserFilters from "./components/PurchaserFilters";
@@ -38,68 +37,24 @@ import {
 
 import { useAuth } from "../../contexts/AuthContext";
 import apiClient from "../../api/client";
-import { PieChart, ShoppingBag, Store, Users } from "lucide-react";
 import AdminOpsOverview from "./components/AdminOpsOverview";
 import StatPanels from "./components/StatsPanel";
-
-// Colors match your KPI cards: from-white via-white to-slate-50 + ring-slate-200
-const slateTheme = {
-  panelBg: "bg-gradient-to-b from-white via-white to-slate-50/20",
-  panelRing: "ring-1 ring-slate-200",
-  textPrimary: "text-slate-800",
-  textAccent: "text-slate-600",
-  badge: "text-slate-700 bg-slate-50 ring-1 ring-inset ring-slate-200",
-  tableBlend: `
-    [&_.ant-table]:bg-transparent
-    [&_.ant-table-container]:bg-transparent
-    [&_.ant-table-thead>tr>th]:bg-transparent
-    [&_.ant-table-thead>tr>th]:text-slate-700
-    [&_.ant-table-tbody>tr>td]:bg-transparent
-    [&_.ant-table-tbody>tr:hover>td]:bg-slate-50
-    [&_.ant-table-cell]:border-slate-100
-  `,
-};
-
-function StatPanel({ icon: Icon, title, count, children, className }) {
-  return (
-    <div
-      className={[
-        "flex-1 rounded-lg p-3 sm:p-4 shadow-sm",
-        slateTheme.panelBg,
-        slateTheme.panelRing,
-        className || "",
-      ].join(" ")}
-    >
-      <div className="flex items-center justify-between mb-3">
-        <div className={`flex items-center gap-2 ${slateTheme.textPrimary}`}>
-          {Icon ? (
-            <Icon className={`h-4 w-4 ${slateTheme.textAccent}`} />
-          ) : null}
-          <span className="font-semibold">{title}</span>
-        </div>
-        <span
-          className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ${slateTheme.badge}`}
-        >
-          {count}
-        </span>
-      </div>
-
-      <div className={slateTheme.tableBlend}>{children}</div>
-    </div>
-  );
-}
+import { useCan, usePermissions } from "../../hooks/usePermissions";
 
 const { Title, Text } = Typography;
 
-const lower = (v) =>
-  String(v ?? "")
-    .trim()
-    .toLowerCase();
-function toDate(v) {
+/* ---------- tiny helpers ---------- */
+const lower = (v) => String(v ?? "").trim().toLowerCase();
+const pickRows = (body) =>
+  Array.isArray(body)
+    ? body
+    : body?.docs || body?.data || body?.results || body?.items || [];
+
+const toDate = (v) => {
   const d = v ? new Date(v) : null;
   return d && !isNaN(d.getTime()) ? d : null;
-}
-function formatDuration(ms) {
+};
+const formatDuration = (ms) => {
   if (!Number.isFinite(ms) || ms < 0) return "—";
   const s = Math.floor(ms / 1000);
   const d = Math.floor(s / 86400);
@@ -108,21 +63,6 @@ function formatDuration(ms) {
   if (d > 0) return `${d}d ${h}h ${m}m`;
   if (h > 0) return `${h}h ${m}m`;
   return `${m}m`;
-}
-const pickRows = (body) =>
-  Array.isArray(body)
-    ? body
-    : body?.docs || body?.data || body?.results || body?.items || [];
-
-/* -------------------- permissions from /api/v1/role/all -------------------- */
-const extractPurchaserPerms = (roleObj) => {
-  const access = Array.isArray(roleObj?.access) ? roleObj.access : [];
-  const purchaser = access.find((a) => lower(a?.app) === "purchaser");
-  const menu = Array.isArray(purchaser?.menu) ? purchaser.menu.map(lower) : [];
-  return {
-    canSeeAssignedMine: menu.includes("assigned to me"),
-    canSeeAllAssigned: menu.includes("all assigned"),
-  };
 };
 
 /* ------------------- purchaser search control for admins ------------------- */
@@ -155,10 +95,7 @@ function usePurchaserSearch() {
     } catch (e) {
       const status = e?.response?.status;
       if (status === 403) message.warning("Only admins can search purchasers.");
-      else
-        message.error(
-          e?.response?.data?.message || "Failed to search purchasers."
-        );
+      else message.error(e?.response?.data?.message || "Failed to search purchasers.");
       setOptions([]);
     } finally {
       setLoading(false);
@@ -179,13 +116,10 @@ function usePurchaserSearch() {
 export default function PurchaserDashboard() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const base = pathname.startsWith("/purchasing")
-    ? "/purchasing"
-    : "/purchaser";
+  const base = pathname.startsWith("/purchasing") ? "/purchasing" : "/purchaser";
 
   const { user: authUser } = useAuth();
   const roleName = lower(authUser?.roles?.role || authUser?.role || "");
-
   const isAdmin = useMemo(() => {
     const r = authUser?.roles;
     if (Array.isArray(r)) {
@@ -200,51 +134,19 @@ export default function PurchaserDashboard() {
     return String(r?.role || r || "").toLowerCase() === "admin";
   }, [authUser]);
 
-  /* -------------------- permissions gate -------------------- */
-  const [rolesLoaded, setRolesLoaded] = useState(false);
-  const [canSeeAssignedMine, setCanSeeAssignedMine] = useState(false);
-  const [canSeeAllAssigned, setCanSeeAllAssigned] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data } = await apiClient.get("/api/v1/role/all");
-        const rolesArr = Array.isArray(data?.roles) ? data.roles : [];
-        const matched =
-          rolesArr.find((r) => lower(r?.role) === roleName) || null;
-        const { canSeeAssignedMine, canSeeAllAssigned } = extractPurchaserPerms(
-          matched || {}
-        );
-        if (!cancelled) {
-          setCanSeeAssignedMine(!!canSeeAssignedMine);
-          setCanSeeAllAssigned(!!canSeeAllAssigned);
-          setRolesLoaded(true);
-        }
-      } catch (e) {
-        console.error("Failed to load roles:", e);
-        if (!cancelled) {
-          setCanSeeAssignedMine(false);
-          setCanSeeAllAssigned(false);
-          setRolesLoaded(true);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [roleName]);
+  /* ---------- permissions via hook (no manual /role/all) ---------- */
+  const { isLoading: permsLoading } = usePermissions();
+  const canSeeAssignedMine = useCan("purchaser", "assigned to me");
+  const canSeeAllAssigned = useCan("purchaser", "all assigned");
 
   /* -------------------------- filters & scope -------------------------- */
   const [statusFilter, setStatusFilter] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-
-  // 🔹 Default to current month
+  // default to current month
   const [dateRange, setDateRange] = useState(() => [
     dayjs().startOf("month"),
     dayjs().endOf("month"),
   ]);
-
   const [selectedPurchaser, setSelectedPurchaser] = useState(null);
 
   const {
@@ -254,31 +156,23 @@ export default function PurchaserDashboard() {
     fetchInitial: fetchInitialPurchasers,
   } = usePurchaserSearch();
 
-  /* ---------------------------- data state ---------------------------- */
-  const [requests, setRequests] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-
   /* ------------------------ server query params ------------------------ */
   const serverParams = useMemo(() => {
-    // Permission gates
-    if (isAdmin) {
-      if (!canSeeAllAssigned) return null; // admin but cannot see "all assigned"
-    } else {
-      if (!canSeeAssignedMine) return null; // non-admin but cannot see "assigned to me"
+    if (permsLoading || canSeeAssignedMine === null || canSeeAllAssigned === null) {
+      return null;
     }
 
     const params = {};
     if (isAdmin) {
-      if (selectedPurchaser?.value)
-        params.purchaser_id = selectedPurchaser.value;
+      if (!canSeeAllAssigned) return null;
+      if (selectedPurchaser?.value) params.purchaser_id = selectedPurchaser.value;
     } else {
+      if (!canSeeAssignedMine) return null;
       params.mine = true;
     }
 
     if (statusFilter) params.status = statusFilter;
 
-    // 🔹 Include current-month range by default (and whenever user changes it)
     if (dateRange?.length === 2 && dateRange[0] && dateRange[1]) {
       params.start_date = dayjs(dateRange[0]).startOf("day").toISOString();
       params.end_date = dayjs(dateRange[1]).endOf("day").toISOString();
@@ -287,62 +181,67 @@ export default function PurchaserDashboard() {
     if (searchTerm?.trim()) params.q = searchTerm.trim();
     return params;
   }, [
-    isAdmin,
-    canSeeAllAssigned,
+    permsLoading,
     canSeeAssignedMine,
+    canSeeAllAssigned,
+    isAdmin,
     selectedPurchaser,
     statusFilter,
     dateRange,
     searchTerm,
   ]);
 
-  const fetchData = useCallback(async () => {
-    if (!serverParams) {
-      setRequests([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
+  /* --------------------------- fetch with v5 --------------------------- */
+  const {
+    data: rowsData,
+    isLoading: listLoading,
+    isFetching: listFetching,
+    refetch,
+  } = useQuery({
+    queryKey: ["purchaserDashboard", serverParams],
+    queryFn: async () => {
       const LIMIT = 500; // plenty for dashboard metrics
       const { data } = await apiClient.get("/api/v1/sourcing/all-sourcing", {
         params: { ...serverParams, page: 1, limit: LIMIT, sort: "-createdAt" },
       });
-      const rows = pickRows(data);
-      setRequests(normalizeRequests(rows));
-    } catch (err) {
-      console.error(
-        "Failed to fetch dashboard data:",
-        err?.response?.data || err?.message
-      );
-      message.error(err?.response?.data?.message || "Failed to fetch data.");
-      setRequests([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [serverParams]);
+      // enrich: average response time needs assignedAt + purchaserActionTime fallback
+      const normalized = normalizeRequests(pickRows(data));
+      return normalized.map((r) => {
+        const rtMs = Number(r?.purchaserResponseTime);
+        if (!Number.isFinite(rtMs) || rtMs < 0) return r;
+        const assignedBase =
+          toDate(r?.assignedAt) ||
+          toDate(r?.assigned_at) ||
+          toDate(r?.createdAt) ||
+          toDate(r?.created_at) ||
+          new Date(Date.now() - rtMs);
+        const purchaserActionDate = new Date(assignedBase.getTime() + rtMs);
+        return {
+          ...r,
+          assignedAt: assignedBase.toISOString(),
+          purchaserActionTime: purchaserActionDate.toISOString(),
+        };
+      });
+    },
+    enabled: !!serverParams,
+    placeholderData: keepPreviousData,
+    refetchOnWindowFocus: true,
+  });
 
-  useEffect(() => {
-    if (!rolesLoaded) return;
-    fetchData();
-  }, [rolesLoaded, fetchData]);
+  const loading = permsLoading || listLoading;
+  const isRefreshing = listFetching && !listLoading;
+  const rows = rowsData || [];
 
   const onRefresh = useCallback(async () => {
-    try {
-      setIsRefreshing(true);
-      await fetchData();
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [fetchData]);
+    await refetch();
+  }, [refetch]);
 
   const clearAll = () => {
     setStatusFilter("");
     setSearchTerm("");
-    // 🔹 Reset back to "this month" when clearing filters
     setDateRange([dayjs().startOf("month"), dayjs().endOf("month")]);
     setSelectedPurchaser(null);
-    fetchData();
+    refetch();
   };
 
   /* ------------------------------ metrics ------------------------------ */
@@ -356,7 +255,6 @@ export default function PurchaserDashboard() {
     avgResponseMs,
     responseCount,
   } = useMemo(() => {
-    const rows = Array.isArray(requests) ? requests : [];
     const agg = {
       count: rows.length,
       byStatus: new Map(),
@@ -392,10 +290,7 @@ export default function PurchaserDashboard() {
     }
 
     const sortDesc = (arr) => arr.sort((a, b) => b[1] - a[1]);
-    const byMarketArr = sortDesc(Array.from(agg.byMarket.entries())).slice(
-      0,
-      6
-    );
+    const byMarketArr = sortDesc(Array.from(agg.byMarket.entries())).slice(0, 6);
     const bySellerArr = sortDesc(Array.from(agg.bySeller.entries()));
     const bySellerTop5 = bySellerArr.slice(0, 5);
 
@@ -411,10 +306,10 @@ export default function PurchaserDashboard() {
         : null,
       responseCount: agg.responseCount,
     };
-  }, [requests]);
+  }, [rows]);
 
-  /* ------------------------------ render ------------------------------ */
-  if (!rolesLoaded) {
+  /* ------------------------------ gating ------------------------------ */
+  if (permsLoading || canSeeAssignedMine === null || canSeeAllAssigned === null) {
     return (
       <div style={{ display: "grid", placeItems: "center", height: 240 }}>
         <Spin />
@@ -428,9 +323,7 @@ export default function PurchaserDashboard() {
         <Empty
           description={
             <div className="text-center">
-              <div className="font-semibold">
-                No permission to view “All Assigned”
-              </div>
+              <div className="font-semibold">No permission to view “All Assigned”</div>
               <div className="text-gray-500">
                 Ask an admin to enable Purchaser → “all assigned”.
               </div>
@@ -447,9 +340,7 @@ export default function PurchaserDashboard() {
         <Empty
           description={
             <div className="text-center">
-              <div className="font-semibold">
-                No permission to view “Assigned to Me”
-              </div>
+              <div className="font-semibold">No permission to view “Assigned to Me”</div>
               <div className="text-gray-500">
                 Ask an admin to enable Purchaser → “assigned to me”.
               </div>
@@ -478,17 +369,13 @@ export default function PurchaserDashboard() {
     />
   ) : null;
 
+  /* ------------------------------ render ------------------------------ */
   return (
     <motion.div
       initial={{ scale: 0.99, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       transition={{ duration: 0.25 }}
-      className="
-        rounded-xl p-4
-        bg-white
-        border border-slate-200
-        shadow-sm
-      "
+      className="rounded-xl p-4 bg-white border border-slate-200 shadow-sm"
     >
       {/* Header */}
       <Row justify="space-between" align="middle" style={{ marginBottom: 12 }}>
@@ -501,7 +388,7 @@ export default function PurchaserDashboard() {
               ? "Loading…"
               : `Showing ${count} records${
                   responseCount ? ` · ${responseCount} with response time` : ""
-                }`}
+                }${isRefreshing ? " · refreshing…" : ""}`}
           </Text>
 
           {showAdminScopeControl && selectedPurchaser ? (
@@ -523,11 +410,7 @@ export default function PurchaserDashboard() {
         <Col>
           <Space wrap>
             {AdminScopeControl}
-            <Button
-              icon={<ReloadOutlined />}
-              onClick={onRefresh}
-              disabled={loading || isRefreshing}
-            >
+            <Button icon={<ReloadOutlined />} onClick={onRefresh} disabled={loading}>
               Refresh
             </Button>
           </Space>
@@ -589,25 +472,19 @@ export default function PurchaserDashboard() {
                   "transition-all duration-150 hover:shadow-md hover:scale-[1.01]",
                 ].join(" ")}
               >
-                {/* top & bottom thin accents */}
+                {/* accents */}
                 <div className={`absolute inset-x-0 top-0 h-0.5 ${t.accent}`} />
-                <div
-                  className={`absolute inset-x-0 bottom-0 h-[0.5px] ${t.accent}`}
-                />
+                <div className={`absolute inset-x-0 bottom-0 h-[0.5px] ${t.accent}`} />
 
                 {loading ? (
                   <Skeleton active paragraph={false} />
                 ) : (
                   <Statistic
-                    title={
-                      <span className="text-sm font-medium text-slate-700">
-                        {kpi.title}
-                      </span>
-                    }
+                    title={<span className="text-sm font-medium text-slate-700">{kpi.title}</span>}
                     value={kpi.value}
                     valueStyle={{
                       fontWeight: 700,
-                      color: "#0f172a", // slate-900
+                      color: "#0f172a",
                       fontSize: "1.25rem",
                     }}
                   />
@@ -619,7 +496,6 @@ export default function PurchaserDashboard() {
       </Row>
 
       {/* Breakdowns */}
-
       <StatPanels
         loading={loading}
         byStatus={byStatus}
@@ -629,14 +505,12 @@ export default function PurchaserDashboard() {
         statusColor={statusColor}
       />
 
-      {isAdmin && (
-        <AdminOpsOverview isAdmin={isAdmin} data={requests} loading={loading} />
-      )}
+      {isAdmin && <AdminOpsOverview isAdmin={isAdmin} data={rows} loading={loading} />}
 
       {/* Latest Purchased (quick view only) */}
       <div className="mt-4 rounded-lg p-3 bg-gradient-to-b from-white via-white to-slate-50 ring-1 ring-slate-200">
         <PurchasedTop5Table
-          data={requests}
+          data={rows}
           loading={loading}
           title="Latest 5 Purchased Orders"
           currency="USD"

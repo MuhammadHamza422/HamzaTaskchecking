@@ -2,8 +2,6 @@
 
 import React, {
   useState,
-  useEffect,
-  useCallback,
   useMemo,
   useRef,
 } from "react";
@@ -33,31 +31,20 @@ import {
 } from "./utils/PurchaseTableUtils";
 import PurchaserFilters from "./components/PurchaserFilters";
 import { CopyOutlined, InfoCircleOutlined } from "@ant-design/icons";
-import Swal from "sweetalert2"; // <-- needed for toast
+import Swal from "sweetalert2"; // <-- toast
+import { useCan, usePermissions } from "../../hooks/usePermissions";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 const { useBreakpoint } = Grid;
 
 /* --------------------------- helpers --------------------------- */
-const lower = (v) =>
-  String(v ?? "")
-    .trim()
-    .toLowerCase();
+const lower = (v) => String(v ?? "").trim().toLowerCase();
 const pickRows = (body) =>
   Array.isArray(body)
     ? body
     : body?.docs || body?.data || body?.results || body?.items || [];
 
-/** Purchaser permissions from /api/v1/role/all */
-const extractPurchaserPerms = (roleObj) => {
-  const access = Array.isArray(roleObj?.access) ? roleObj.access : [];
-  const purchaser = access.find((a) => lower(a?.app) === "purchaser");
-  const menu = Array.isArray(purchaser?.menu) ? purchaser.menu.map(lower) : [];
-  return {
-    canSeeAssignedMine: menu.includes("assigned to me"),
-    canSeeAllAssigned: menu.includes("all assigned"),
-  };
-};
-
+// URL normalizer
 const ensureHttp = (v = "") => {
   const s = String(v || "").trim();
   if (!s) return "";
@@ -136,7 +123,6 @@ const mapTrackingBucket = (raw) => {
   if (v === "delivered") return "Delivered";
   return "Pending";
 };
-
 const TRACKING_ORDER = ["InTransit", "Delivered", "Pending"];
 const TRACKING_META = {
   InTransit: {
@@ -225,6 +211,7 @@ function usePurchaserSearch() {
 /* =================================================================== */
 
 export default function PurchaserListingsPage() {
+  const queryClient = useQueryClient();
   const { user: authUser } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -243,70 +230,24 @@ export default function PurchaserListingsPage() {
     return String(r?.role || r || "").toLowerCase() === "admin";
   }, [authUser]);
 
-  const roleName = useMemo(
-    () => lower(authUser?.roles?.role || authUser?.role || ""),
-    [authUser]
-  );
+  // --------- Permissions via hook (no manual /role/all calls) ----------
+  const { isLoading: permsLoading } = usePermissions();
+  const canSeeAssignedMine = useCan("purchaser", "assigned to me");
+  const canSeeAllAssigned = useCan("purchaser", "all assigned");
 
-  // Permission gating
-  const [rolesLoaded, setRolesLoaded] = useState(false);
-  const [canSeeAssignedMine, setCanSeeAssignedMine] = useState(false);
-  const [canSeeAllAssigned, setCanSeeAllAssigned] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data } = await apiClient.get("/api/v1/role/all");
-        const rolesArr = Array.isArray(data?.roles) ? data.roles : [];
-        const matched =
-          rolesArr.find((r) => lower(r?.role) === roleName) || null;
-        const perms = extractPurchaserPerms(matched || {});
-        if (!cancelled) {
-          setCanSeeAssignedMine(!!perms.canSeeAssignedMine);
-          setCanSeeAllAssigned(!!perms.canSeeAllAssigned);
-          setRolesLoaded(true);
-        }
-      } catch (e) {
-        console.error("Failed to load /api/v1/role/all", e);
-        if (!cancelled) {
-          setCanSeeAssignedMine(false);
-          setCanSeeAllAssigned(false);
-          setRolesLoaded(true);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [roleName]);
-
-  // Data
-  const [requests, setRequests] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-
+  // Paging & filters
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
-  const [total, setTotal] = useState(0);
 
-  // Status filter (business) synced with URL
   const initialStatusFromUrl = useMemo(
     () => searchParams.get("status") || "",
     [searchParams]
   );
   const [statusFilter, setStatusFilter] = useState(initialStatusFromUrl);
-
-  // Tracking (no “All” tab; empty = no filter)
   const [trackingFilter, setTrackingFilter] = useState(""); // '', 'InTransit', 'Delivered', 'Pending'
-
   const [searchTerm, setSearchTerm] = useState("");
   const [dateRange, setDateRange] = useState([]);
   const [selectedPurchaser, setSelectedPurchaser] = useState(null);
-
-  // Counts
-  const [statusCounts, setStatusCounts] = useState({});
-  const [trackingCounts, setTrackingCounts] = useState({});
 
   const {
     options: purchaserOptions,
@@ -319,7 +260,7 @@ export default function PurchaserListingsPage() {
   const navigate = useNavigate();
 
   // Keep business status in URL
-  useEffect(() => {
+  useMemo(() => {
     const current = searchParams.get("status") || "";
     if (statusFilter !== current) {
       const next = new URLSearchParams(searchParams);
@@ -329,14 +270,17 @@ export default function PurchaserListingsPage() {
     }
   }, [statusFilter, searchParams, setSearchParams]);
 
-  // Reset page on filter change
-  useEffect(
-    () => setPage(1),
-    [statusFilter, trackingFilter, searchTerm, dateRange, selectedPurchaser]
-  );
+  // Reset page when filters change
+  useMemo(() => {
+    setPage(1);
+  }, [statusFilter, trackingFilter, searchTerm, dateRange, selectedPurchaser]);
 
   // Base params (permission-gated)
   const baseParams = useMemo(() => {
+    // wait until permissions are known
+    if (permsLoading || canSeeAssignedMine === null || canSeeAllAssigned === null)
+      return null;
+
     const params = {};
     if (isAdmin) {
       if (!canSeeAllAssigned) return null;
@@ -353,9 +297,10 @@ export default function PurchaserListingsPage() {
     if (searchTerm?.trim()) params.q = searchTerm.trim();
     return params;
   }, [
-    isAdmin,
+    permsLoading,
     canSeeAllAssigned,
     canSeeAssignedMine,
+    isAdmin,
     selectedPurchaser,
     dateRange,
     searchTerm,
@@ -369,56 +314,50 @@ export default function PurchaserListingsPage() {
     return p;
   }, [baseParams, statusFilter]);
 
-  // Fetch paged list (then apply trackingFilter client-side)
-  const fetchListings = useCallback(async () => {
-    if (!serverParams) {
-      setRequests([]);
-      setTotal(0);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
+  /* ===================== React Query: Listings ===================== */
+  const {
+    data: listPayload,
+    isFetching: listFetching,
+    isLoading: listLoading,
+    isError: listError,
+    error: listErrObj,
+  } = useQuery({
+    queryKey: ["purchaser", "list", serverParams, page, limit],
+    enabled: !!serverParams,                     // don’t call API until params ready
+    queryFn: async () => {
       const { data } = await apiClient.get("/api/v1/sourcing/all-sourcing", {
         params: { ...serverParams, page, limit, sort: "-createdAt" },
       });
-      let rows = normalizeRequests(pickRows(data));
+      return data;
+    },
+    keepPreviousData: true,                      // smooth pagination
+    staleTime: 30_000,                           // 30s fresh window
+    onError: (err) => {
+      const msg = err?.response?.data?.message || "Failed to fetch data.";
+      message.error(msg);
+    },
+  });
 
-      if (trackingFilter) {
-        rows = rows.filter(
-          (r) => mapTrackingBucket(r.tracking_status) === trackingFilter
-        );
-      }
+  // Normalize rows + apply tracking filter client-side
+  const requests = useMemo(() => {
+    const rows = normalizeRequests(pickRows(listPayload || {}));
+    if (!trackingFilter) return rows;
+    return rows.filter((r) => mapTrackingBucket(r.tracking_status) === trackingFilter);
+  }, [listPayload, trackingFilter]);
 
-      setRequests(rows);
-      setTotal(
-        trackingFilter ? rows.length : Number(data?.total ?? rows.length ?? 0)
-      );
-    } catch (err) {
-      console.error(
-        "Failed to fetch data:",
-        err?.response?.data || err?.message
-      );
-      message.error(err?.response?.data?.message || "Failed to fetch data.");
-      setRequests([]);
-      setTotal(0);
-    } finally {
-      setLoading(false);
-    }
-  }, [serverParams, page, limit, trackingFilter]);
+  const total = useMemo(() => {
+    if (trackingFilter) return requests.length;
+    const raw = listPayload?.total;
+    return typeof raw === "number" ? raw : requests.length || 0;
+  }, [listPayload, requests.length, trackingFilter]);
 
-  useEffect(() => {
-    if (!rolesLoaded) return;
-    fetchListings();
-  }, [rolesLoaded, fetchListings]);
-
-  // Fetch counts for each business status (server-side)
-  const fetchStatusCounts = useCallback(async () => {
-    if (!baseParams) {
-      setStatusCounts({});
-      return;
-    }
-    try {
+  /* ========== React Query: Status counts (server-side) ========== */
+  const { data: statusCounts = {} } = useQuery({
+    queryKey: ["purchaser", "status-counts", baseParams],
+    enabled: !!baseParams,
+    staleTime: 30_000,
+    queryFn: async () => {
+      // call same endpoint for each status with limit=1 to read total
       const getCount = async (statusVal) => {
         const params = { ...baseParams, page: 1, limit: 1, sort: "-createdAt" };
         if (statusVal) params.status = statusVal;
@@ -428,27 +367,18 @@ export default function PurchaserListingsPage() {
         return Number(data?.total ?? 0);
       };
       const entries = await Promise.all(
-        STATUS_OPTIONS.map(async (opt) => [
-          opt.value,
-          await getCount(opt.value),
-        ])
+        STATUS_OPTIONS.map(async (opt) => [opt.value, await getCount(opt.value)])
       );
-      setStatusCounts(Object.fromEntries(entries));
-    } catch (e) {
-      console.warn(
-        "Failed to fetch status counts",
-        e?.response?.data || e?.message
-      );
-    }
-  }, [baseParams]);
+      return Object.fromEntries(entries);
+    },
+  });
 
-  // Compute counts for tracking buckets client-side
-  const fetchTrackingCounts = useCallback(async () => {
-    if (!baseParams) {
-      setTrackingCounts({});
-      return;
-    }
-    try {
+  /* ===== React Query: Tracking counts (client-side over a page) ===== */
+  const { data: trackingCounts = { InTransit: 0, Delivered: 0, Pending: 0 } } = useQuery({
+    queryKey: ["purchaser", "tracking-counts", baseParams],
+    enabled: !!baseParams,
+    staleTime: 30_000,
+    queryFn: async () => {
       const params = { ...baseParams, page: 1, limit: 500, sort: "-createdAt" };
       const { data } = await apiClient.get("/api/v1/sourcing/all-sourcing", {
         params,
@@ -459,62 +389,48 @@ export default function PurchaserListingsPage() {
         acc[bucket] = (acc[bucket] || 0) + 1;
         return acc;
       }, {});
-      setTrackingCounts({
+      return {
         InTransit: counts.InTransit || 0,
         Delivered: counts.Delivered || 0,
         Pending: counts.Pending || 0,
-      });
-    } catch (e) {
-      console.warn(
-        "Failed to compute tracking counts",
-        e?.response?.data || e?.message
-      );
-      setTrackingCounts({});
-    }
-  }, [baseParams]);
+      };
+    },
+  });
 
-  useEffect(() => {
-    if (!rolesLoaded) return;
-    fetchStatusCounts();
-    fetchTrackingCounts();
-  }, [rolesLoaded, fetchStatusCounts, fetchTrackingCounts]);
+  const loading = listLoading || listFetching;
 
-  const handleRefreshClick = useCallback(async () => {
-    try {
-      setIsRefreshing(true);
-      await Promise.all([
-        fetchListings(),
-        fetchStatusCounts(),
-        fetchTrackingCounts(),
-      ]);
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [fetchListings, fetchStatusCounts, fetchTrackingCounts]);
+  const handleRefreshClick = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["purchaser", "list"] }),
+      queryClient.invalidateQueries({ queryKey: ["purchaser", "status-counts"] }),
+      queryClient.invalidateQueries({ queryKey: ["purchaser", "tracking-counts"] }),
+    ]);
+  };
 
   /* --------------------------- columns --------------------------- */
   const TrackingBadge = ({ value }) => {
-    const styles = {
-      InTransit: {
-        bg: "bg-sky-50",
-        text: "text-sky-700",
-        ring: "ring-sky-200",
-      },
-      Delivered: {
-        bg: "bg-emerald-50",
-        text: "text-emerald-700",
-        ring: "ring-emerald-200",
-      },
-      Pending: {
-        bg: "bg-amber-50",
-        text: "text-amber-700",
-        ring: "ring-amber-200",
-      },
-    }[value] || {
-      bg: "bg-slate-50",
-      text: "text-slate-700",
-      ring: "ring-slate-200",
-    };
+    const styles =
+      {
+        InTransit: {
+          bg: "bg-sky-50",
+          text: "text-sky-700",
+          ring: "ring-sky-200",
+        },
+        Delivered: {
+          bg: "bg-emerald-50",
+          text: "text-emerald-700",
+          ring: "ring-emerald-200",
+        },
+        Pending: {
+          bg: "bg-amber-50",
+          text: "text-amber-700",
+          ring: "ring-amber-200",
+        },
+      }[value] || {
+        bg: "bg-slate-50",
+        text: "text-slate-700",
+        ring: "ring-slate-200",
+      };
 
     return (
       <span
@@ -587,10 +503,8 @@ export default function PurchaserListingsPage() {
       render: (_, rec) => {
         const target = safeNum(rec.target_total_cost);
         const actual = safeNum(rec.total_actual_cost);
-
-        if (!target) return "—"; // avoid divide-by-zero / undefined
-        const pct = (1 - actual / target) * 100; // 1 - a/c
-
+        if (!target) return "—";
+        const pct = (1 - actual / target) * 100;
         const color = pct >= 0 ? "#16a34a" : "#ef4444";
         return (
           <span style={{ color, fontWeight: 600 }}>{pct.toFixed(1)}%</span>
@@ -855,9 +769,10 @@ export default function PurchaserListingsPage() {
       style={active ? { backgroundColor: "#3B82F6" } : {}}
     >
       <span
-        className={["h-1.5 w-1.5 rounded-full", active ? "bg-white" : color].join(
-          " "
-        )}
+        className={[
+          "h-1.5 w-1.5 rounded-full",
+          active ? "bg-white" : color,
+        ].join(" ")}
       />
       <span className="font-medium">{text}</span>
       <span
@@ -892,43 +807,17 @@ export default function PurchaserListingsPage() {
     [statusCounts, activeStatusKey]
   );
 
-  /* --------------------- compact tracking pills (custom) --------------------- */
-  const TrackingPill = ({ id, label, count, active }) => {
-    const meta = TRACKING_META[id];
-    const isOn = active;
-    return (
-      <button
-        type="button"
-        onClick={() => setTrackingFilter(isOn ? "" : id)}
-        className={[
-          "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors",
-          isOn
-            ? "text-white border-transparent"
-            : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
-        ].join(" ")}
-        style={isOn ? { backgroundColor: "#3B82F6" } : {}}
-      >
-        <span className={`h-2 w-2 rounded-full ${isOn ? "bg-white" : meta.color}`} />
-        <span className="font-medium">{label}</span>
-        <span
-          className={`ml-0.5 rounded-full px-1.5 py-[1px] text-[10px] leading-none ${
-            isOn ? "bg-white/20 text-white" : "bg-slate-100 text-slate-700"
-          }`}
-        >
-          {count ?? 0}
-        </span>
-      </button>
-    );
-  };
-
   /* --------------------------- render --------------------------- */
-  if (!rolesLoaded) {
+
+  // Wait until permissions are resolved
+  if (permsLoading || canSeeAssignedMine === null || canSeeAllAssigned === null) {
     return (
       <div style={{ display: "grid", placeItems: "center", height: 200 }}>
         <Spin />
       </div>
     );
   }
+
   if (isAdmin && !canSeeAllAssigned) {
     return (
       <Card bodyStyle={{ padding: 16 }} style={{ borderRadius: 14 }}>
@@ -973,22 +862,34 @@ export default function PurchaserListingsPage() {
       transition={{ duration: 0.45, ease: "easeOut" }}
     >
       {/* Header + COMPACT Tabs */}
-      {/* LISTINGS FILTER BAR — compact, no extra gaps */}
       <div className="mb-2 rounded-lg border border-slate-200 bg-white/95 shadow-sm">
         <div
           className="
-    flex items-center justify-between
-    px-3 py-1.5
-    border-b border-slate-200
-    rounded-t-xl
-    bg-gradient-to-r from-sky-50 via-blue-50 to-indigo-50
-    dark:from-slate-800 dark:via-slate-800 dark:to-slate-900
-  "
+            flex items-center justify-between
+            px-3 py-1.5
+            border-b border-slate-200
+            rounded-t-xl
+            bg-gradient-to-r from-sky-50 via-blue-50 to-indigo-50
+            dark:from-slate-800 dark:via-slate-800 dark:to-slate-900
+          "
         >
           <div className="text-slate-800 dark:text-slate-100 font-semibold text-xs tracking-wide">
             Listings
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleRefreshClick}
+              className="
+                text-[11px] px-2.5 py-1 rounded-md
+                border border-slate-300
+                bg-white/60 hover:bg-white/80
+                backdrop-blur
+                dark:bg-slate-700/40 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700/60
+              "
+            >
+              Refresh
+            </button>
             {(trackingFilter || activeStatusKey !== "all") && (
               <button
                 type="button"
@@ -998,12 +899,12 @@ export default function PurchaserListingsPage() {
                   setStatusFilter(all ? all.value : "");
                 }}
                 className="
-          text-[11px] px-2.5 py-1 rounded-md
-          border border-slate-300
-          bg-white/60 hover:bg-white/80
-          backdrop-blur
-          dark:bg-slate-700/40 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700/60
-        "
+                  text-[11px] px-2.5 py-1 rounded-md
+                  border border-slate-300
+                  bg-white/60 hover:bg-white/80
+                  backdrop-blur
+                  dark:bg-slate-700/40 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700/60
+                "
               >
                 Reset
               </button>
@@ -1014,13 +915,13 @@ export default function PurchaserListingsPage() {
         {/* Filters */}
         <div
           className="
-    px-3 py-1
-    rounded-b-xl
-    border-t border-slate-200
-    bg-gradient-to-r from-sky-50 via-blue-50 to-indigo-50
-    dark:from-slate-800 dark:via-slate-800 dark:to-slate-900
-    backdrop-blur
-  "
+            px-3 py-1
+            rounded-b-xl
+            border-t border-slate-200
+            bg-gradient-to-r from-sky-50 via-blue-50 to-indigo-50
+            dark:from-slate-800 dark:via-slate-800 dark:to-slate-900
+            backdrop-blur
+          "
         >
           {/* Row 1: STATUS */}
           <div className="flex items-center gap-1.5">
@@ -1047,27 +948,27 @@ export default function PurchaserListingsPage() {
                 }}
                 moreIcon={null}
                 className="
-          [&_.ant-tabs-nav]:!mb-0
-          [&_.ant-tabs-nav]:!p-0
-          [&_.ant-tabs-nav::before]:hidden
-          [&_.ant-tabs-ink-bar]:hidden
-          [&_.ant-tabs-nav-more]:hidden
-          [&_.ant-tabs-tab]:!m-0
-          [&_.ant-tabs-tab+.ant-tabs-tab]:!ml-0
-          [&_.ant-tabs-tab-btn]:!px-2
-          [&_.ant-tabs-tab-btn]:!py-1
-          [&_.ant-tabs-tab-btn]:!rounded
-          [&_.ant-tabs-tab-btn]:!text-[12px]
-          [&_.ant-tabs-tab-btn]:!leading-none
-          hover:[&_.ant-tabs-tab-btn]:!bg-white/60
-          dark:hover:[&_.ant-tabs-tab-btn]:!bg-slate-700/50
-          [&_.ant-tabs-content-holder]:hidden
-        "
+                  [&_.ant-tabs-nav]:!mb-0
+                  [&_.ant-tabs-nav]:!p-0
+                  [&_.ant-tabs-nav::before]:hidden
+                  [&_.ant-tabs-ink-bar]:hidden
+                  [&_.ant-tabs-nav-more]:hidden
+                  [&_.ant-tabs-tab]:!m-0
+                  [&_.ant-tabs-tab+.ant-tabs-tab]:!ml-0
+                  [&_.ant-tabs-tab-btn]:!px-2
+                  [&_.ant-tabs-tab-btn]:!py-1
+                  [&_.ant-tabs-tab-btn]:!rounded
+                  [&_.ant-tabs-tab-btn]:!text-[12px]
+                  [&_.ant-tabs-tab-btn]:!leading-none
+                  hover:[&_.ant-tabs-tab-btn]:!bg-white/60
+                  dark:hover:[&_.ant-tabs-tab-btn]:!bg-slate-700/50
+                  [&_.ant-tabs-content-holder]:hidden
+                "
               />
               <style>{`
-        .ant-tabs-top > .ant-tabs-nav { margin-bottom: 0 !important; }
-        .ant-tabs .ant-tabs-tab + .ant-tabs-tab { margin-left: 0 !important; }
-      `}</style>
+                .ant-tabs-top > .ant-tabs-nav { margin-bottom: 0 !important; }
+                .ant-tabs .ant-tabs-tab + .ant-tabs-tab { margin-left: 0 !important; }
+              `}</style>
             </div>
           </div>
 
@@ -1093,12 +994,12 @@ export default function PurchaserListingsPage() {
                   type="button"
                   onClick={() => setTrackingFilter("")}
                   className="
-            text-[11px] px-2 py-1 rounded-full
-            border border-slate-200
-            text-slate-700
-            bg-white/70 hover:bg-white/90
-            dark:bg-slate-700/40 dark:text-slate-100 dark:border-slate-600 dark:hover:bg-slate-700/60
-          "
+                    text-[11px] px-2 py-1 rounded-full
+                    border border-slate-200
+                    text-slate-700
+                    bg-white/70 hover:bg-white/90
+                    dark:bg-slate-700/40 dark:text-slate-100 dark:border-slate-600 dark:hover:bg-slate-700/60
+                  "
                 >
                   Clear
                 </button>
@@ -1144,9 +1045,7 @@ export default function PurchaserListingsPage() {
           setDateRange([]);
           setSelectedPurchaser(null);
           setPage(1);
-          fetchListings();
-          fetchStatusCounts();
-          fetchTrackingCounts();
+          handleRefreshClick();
         }}
         showStatusNote="Status tabs & filter apply on Listings page"
         statusOptions={STATUS_OPTIONS.filter((s) => s.value)}
@@ -1156,9 +1055,7 @@ export default function PurchaserListingsPage() {
       <div className="rounded-lg border border-slate-200 bg-white/80 backdrop-blur-sm shadow-sm">
         <Table
           locale={{
-            emptyText: (
-              <Empty description="No listings found for your filters" />
-            ),
+            emptyText: <Empty description="No listings found for your filters" />,
           }}
           dataSource={requests}
           columns={columns}
@@ -1181,7 +1078,10 @@ export default function PurchaserListingsPage() {
           sticky
           expandable={{
             expandedRowRender: (record) => (
-              <ExpandedItemsTable order={record} onOpen={(to) => navigate(to)} />
+              <ExpandedItemsTable
+                order={record}
+                onOpen={(to) => navigate(to)}
+              />
             ),
             rowExpandable: (record) =>
               Array.isArray(record.items) && record.items.length > 0,
@@ -1205,5 +1105,35 @@ export default function PurchaserListingsPage() {
         .ant-table-tbody > tr.row-odd  > td { background: #ffffff; } 
       `}</style>
     </motion.div>
+  );
+}
+
+/* --------------------- small presentational component --------------------- */
+function TrackingPill({ id, label, count, active }) {
+  const meta = TRACKING_META[id];
+  const isOn = active;
+  return (
+    <button
+      type="button"
+      onClick={() => window?.dispatchEvent(new CustomEvent('toggleTracking', { detail: { id } }))}
+      // Note: The onClick behavior is handled inline in the page above (kept original there).
+      className={[
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors",
+        isOn
+          ? "text-white border-transparent"
+          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
+      ].join(" ")}
+      style={isOn ? { backgroundColor: "#3B82F6" } : {}}
+    >
+      <span className={`h-2 w-2 rounded-full ${isOn ? "bg-white" : meta.color}`} />
+      <span className="font-medium">{label}</span>
+      <span
+        className={`ml-0.5 rounded-full px-1.5 py-[1px] text-[10px] leading-none ${
+          isOn ? "bg-white/20 text-white" : "bg-slate-100 text-slate-700"
+        }`}
+      >
+        {count ?? 0}
+      </span>
+    </button>
   );
 }
