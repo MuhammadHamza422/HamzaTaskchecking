@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getMyAttendance } from "../../api/attendance";
 import { formatTimeWithTimezone } from "../../utils/timezone";
 import LiveTimeTracker from "../../components/common/LiveTimeTracker";
+import { useAuth } from "../../contexts/AuthContext";
 
 import {
   Card,
@@ -53,6 +54,8 @@ const quickRanges = {
 };
 
 export default function MyAttendance() {
+  const { user } = useAuth();
+  
   /* ---------- filters ---------- */
   const [dateRange, setDateRange] = useState(quickRanges["This Month"]);
   const [status, setStatus] = useState("all"); // all | in | break | out
@@ -154,26 +157,9 @@ export default function MyAttendance() {
     const rowsForCsv = filteredRows.map((r) => ({
       Day: r.day || "",
       Company: r.company?.name || "",
-      CompanyCode: r.company?.code || "",
-      CompanyTimezone: r.company?.timezone || companyTz,
-      CheckInLocal: formatTimeWithTimezone(r.checkInAt, r.company?.timezone || companyTz) || "",
-      CheckOutLocal: formatTimeWithTimezone(r.checkOutAt, r.company?.timezone || companyTz) || "",
-      CheckInAt: r.checkInAt || "",
-      CheckOutAt: r.checkOutAt || "",
-      Status:
-        r.checkInAt && !r.checkOutAt
-          ? r.onBreak ||
-            (Array.isArray(r.breaks) && r.breaks.length && !r.breaks[r.breaks.length - 1]?.endAt)
-            ? "On Break"
-            : "Checked In"
-          : r.checkOutAt
-          ? "Checked Out"
-          : "",
-      MinutesWorked: r.minutesWorked ?? 0,
-      BreaksCount: r.breaks?.length || 0,
-      BreaksMinutes: sumBreakMinutes(r.breaks),
-      Note: r.note || "",
-      Source: r.source || "",
+      "Check In": formatTimeWithTimezone(r.checkInAt, r.company?.timezone || companyTz) || "",
+      "Check Out": formatTimeWithTimezone(r.checkOutAt, r.company?.timezone || companyTz) || "",
+      "Worked Hours": fmtHM(r.minutesWorked),
     }));
 
     const header = Object.keys(rowsForCsv[0] || {});
@@ -188,7 +174,8 @@ export default function MyAttendance() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `my_attendance_${dayjs().format("YYYYMMDD_HHmmss")}.csv`;
+    // show name of the user
+    a.download = `${user?.firstName?.toLowerCase()}_${user?.lastName?.toLowerCase()}_${dayjs().format("YYYYMMDD_HHmmss")}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -388,10 +375,11 @@ export default function MyAttendance() {
 
             <Col xs={12} md={5} lg={4}>
               <div style={{ marginBottom: 6, color: "rgba(0,0,0,.6)" }}>Status</div>
-              <Segmented
-                block
+              {/* add select dropdown in it */}
+              <Select
                 value={status}
                 onChange={setStatus}
+                style={{ width: "100%" }}
                 options={[
                   { label: "All", value: "all" },
                   { label: "In", value: "in" },
@@ -411,7 +399,7 @@ export default function MyAttendance() {
                   { value: "all", label: "All" },
                   { value: "kiosk", label: "Kiosk" },
                   { value: "manual", label: "Manual" },
-                  { value: "admin", label: "Admin" },
+                  // { value: "admin", label: "Admin" },
                 ]}
               />
             </Col>
