@@ -371,14 +371,18 @@ export default function AttendanceKiosk() {
   }, [latest]);
   const selCheckInAtText = latest?.checkInAt
     ? new Date(latest.checkInAt).toLocaleTimeString([], {
+        timeZone: tz,
         hour: "2-digit",
         minute: "2-digit",
+        hour12: true,
       })
     : null;
   const selBreakStartAtText = lastOpenBreak?.startAt
     ? new Date(lastOpenBreak.startAt).toLocaleTimeString([], {
+        timeZone: tz,
         hour: "2-digit",
         minute: "2-digit",
+        hour12: true,
       })
     : null;
 

@@ -137,7 +137,7 @@ const AttendanceTable = ({
       key: "index",
       width: 70,
       align: "center",
-      fixed: "left",
+      fixed: { xs: false, sm: "left" },
       render: (_, __, index) => (
         <span style={{ fontWeight: 500, color: "rgba(0,0,0,.65)" }}>
           #{currentPageStart + index + 1}
@@ -148,7 +148,7 @@ const AttendanceTable = ({
       title: "Employee",
       key: "user",
       width: 250,
-      fixed: "left",
+      fixed: { xs: false, sm: "left" },
       render: (_, r) => (
         <div clasName="flex flex-col items-start gap-2 min-w-0">
           <div className="font-medium whitespace-nowrap min-w-0">
@@ -318,7 +318,7 @@ const AttendanceTable = ({
     {
       title: "Actions",
       key: "actions",
-      fixed: "right",
+      fixed: { xs: false, sm: "right" },
       width: 120,
       align: "center",
       render: (_, r) => (
