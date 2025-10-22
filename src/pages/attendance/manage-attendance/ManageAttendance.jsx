@@ -21,6 +21,14 @@ const sumBreakMinutes = (breaks = []) =>
     return acc + Math.max(0, Math.round((end - new Date(br.startAt)) / 60000));
   }, 0);
 
+// Format minutes to HH:MM (e.g., 5:06)
+const fmtHM = (mins) => {
+  const m = Math.max(0, Math.round(mins || 0));
+  const h = Math.floor(m / 60);
+  const mm = String(m % 60).padStart(2, "0");
+  return `${h}:${mm}`;
+};
+
 // Dynamic biweekly range based on current date
 const getBiweeklyRange = () => {
   const today = dayjs();
@@ -226,7 +234,7 @@ export default function ManageAttendance({ canEdit = false }) {
       Employee: `${r.user?.firstName || ""} ${r.user?.lastName || ""}`.trim(),
       "Check In": r.checkInAt ? new Date(r.checkInAt).toLocaleString() : "",
       "Check Out": r.checkOutAt ? new Date(r.checkOutAt).toLocaleString() : "",
-      "Worked Hours": r.minutesWorked ? (r.minutesWorked / 60).toFixed(2) : "0.00",
+      "Worked Hours": fmtHM(r.minutesWorked),
     }));
 
     if (rowsForCsv.length === 0) {
