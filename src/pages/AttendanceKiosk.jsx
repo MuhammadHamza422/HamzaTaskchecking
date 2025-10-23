@@ -11,6 +11,7 @@ import {
   listAttendance,
 } from "../api/attendance";
 import { useAuth } from "../contexts/AuthContext";
+import { formatAttendanceTime } from "../utils/timezone";
 
 /* =======================
    Analog Clock (SVG)
@@ -298,17 +299,18 @@ export default function AttendanceKiosk() {
   const tz = selectedCompany?.timezone || "UTC";
   const digital = useMemo(() => {
     try {
-      return new Intl.DateTimeFormat([], {
+      return new Intl.DateTimeFormat('en-US', {
         timeZone: tz,
         hour: "2-digit",
         minute: "2-digit",
         second: "2-digit",
+        hour12: true, // Use 12-hour format with AM/PM
         weekday: "short",
         day: "2-digit",
         month: "short",
       }).format(now);
     } catch {
-      return now.toLocaleTimeString();
+      return now.toLocaleTimeString('en-US', { hour12: true });
     }
   }, [now, tz]);
 
@@ -370,20 +372,10 @@ export default function AttendanceKiosk() {
     return lb && !lb.endAt ? lb : null;
   }, [latest]);
   const selCheckInAtText = latest?.checkInAt
-    ? new Date(latest.checkInAt).toLocaleTimeString([], {
-        timeZone: tz,
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-      })
+    ? formatAttendanceTime(latest.checkInAt, tz)
     : null;
   const selBreakStartAtText = lastOpenBreak?.startAt
-    ? new Date(lastOpenBreak.startAt).toLocaleTimeString([], {
-        timeZone: tz,
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-      })
+    ? formatAttendanceTime(lastOpenBreak.startAt, tz)
     : null;
 
   // ---- Mutations ----
@@ -665,7 +657,12 @@ export default function AttendanceKiosk() {
                     {selectedCompany?.name || "—"}
                   </div>
                   <div className="text-white/60 text-sm truncate">
-                    {selectedCompany?.timezone || "Timezone not set"}
+                    {selectedCompany?.timezone ? `Current time: ${new Intl.DateTimeFormat('en-US', {
+                      timeZone: selectedCompany.timezone,
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      hour12: true
+                    }).format(now)} (${selectedCompany.timezone})` : "Timezone not set"}
                   </div>
                 </div>
                 <Tag color="geekblue" className="shrink-0">
@@ -675,9 +672,24 @@ export default function AttendanceKiosk() {
 
               <div className="rounded-lg border border-white/10 bg-white/5 p-4 shadow-md shadow-black/20">
                 <div className="text-3xl sm:text-4xl font-semibold tabular-nums leading-none">
-                  {digital}
+                  {new Intl.DateTimeFormat('en-US', {
+                    timeZone: tz,
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                    hour12: true
+                  }).format(now)}
                 </div>
-                <div className="text-white/60 text-xs sm:text-sm mt-2">
+                <div className="text-white/60 text-xs sm:text-sm mt-1">
+                  {new Intl.DateTimeFormat('en-US', {
+                    timeZone: tz,
+                    weekday: "long",
+                    day: "2-digit",
+                    month: "long",
+                    year: "numeric"
+                  }).format(now)}
+                </div>
+                <div className="text-white/60 text-xs sm:text-sm mt-1">
                   Current company time
                 </div>
               </div>

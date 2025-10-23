@@ -4,7 +4,7 @@ import { EditOutlined, DeleteOutlined, CloseOutlined, PlusOutlined } from "@ant-
 import { adminUpdateAttendance, adminDeleteAttendance } from "../../../api/attendance";
 import dayjs from "dayjs";
 import Swal from "sweetalert2";
-import { formatDateTimeInTimezone, formatTimeWithTimezone, getCompanyTimezone } from "../../../utils/timezone";
+import { formatDateTimeInTimezone, formatTimeWithTimezone, formatAttendanceTime, getCompanyTimezone } from "../../../utils/timezone";
 import LiveTimeTracker from "../../../components/common/LiveTimeTracker";
 
 const fmtDT = (d, timezone = 'UTC') => {
@@ -201,12 +201,12 @@ const AttendanceTable = ({
       title: "Check In", 
       dataIndex: "checkInAt", 
       key: "in", 
-      width: 200, 
+      width: 220, 
       render: (value, record) => {
         const timezone = getCompanyTimezone(record);
         return (
           <div style={{ fontSize: "12px", lineHeight: "1.4" }}>
-            {fmtDTWithTimezone(value, timezone)}
+            {formatAttendanceTime(value, timezone)}
           </div>
         );
       }
@@ -215,12 +215,12 @@ const AttendanceTable = ({
       title: "Check Out", 
       dataIndex: "checkOutAt", 
       key: "out", 
-      width: 200, 
+      width: 220, 
       render: (value, record) => {
         const timezone = getCompanyTimezone(record);
         return (
           <div style={{ fontSize: "12px", lineHeight: "1.4" }}>
-            {fmtDTWithTimezone(value, timezone)}
+            {formatAttendanceTime(value, timezone)}
           </div>
         );
       }
@@ -359,14 +359,14 @@ const AttendanceTable = ({
           { 
             title: "Start", 
             dataIndex: "startAt", 
-            render: (v) => fmtDTWithTimezone(v, timezone), 
-            width: 200 
+            render: (v) => formatAttendanceTime(v, timezone), 
+            width: 220 
           },
           { 
             title: "End", 
             dataIndex: "endAt", 
-            render: (v) => fmtDTWithTimezone(v, timezone), 
-            width: 200 
+            render: (v) => formatAttendanceTime(v, timezone), 
+            width: 220 
           },
           {
             title: "Duration (min)",

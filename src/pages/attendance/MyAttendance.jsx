@@ -1,7 +1,7 @@
 // src/pages/attendance/MyAttendance.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getMyAttendance } from "../../api/attendance";
-import { formatTimeWithTimezone } from "../../utils/timezone";
+import { formatTimeWithTimezone, formatAttendanceTime } from "../../utils/timezone";
 import LiveTimeTracker from "../../components/common/LiveTimeTracker";
 import { useAuth } from "../../contexts/AuthContext";
 
@@ -72,7 +72,7 @@ export default function MyAttendance() {
   // Derive user's company and timezone from results (assuming same company for self records)
   const company = useMemo(() => rows?.[0]?.company || null, [rows]);
   const companyTz = company?.timezone || "UTC";
-  const fmtDT = (d) => formatTimeWithTimezone(d, companyTz);
+  const fmtDT = (d) => formatAttendanceTime(d, companyTz);
 
   const fetchData = async () => {
     const [from, to] = dateRange || [];
@@ -157,8 +157,8 @@ export default function MyAttendance() {
     const rowsForCsv = filteredRows.map((r) => ({
       Day: r.day || "",
       Company: r.company?.name || "",
-      "Check In": formatTimeWithTimezone(r.checkInAt, r.company?.timezone || companyTz) || "",
-      "Check Out": formatTimeWithTimezone(r.checkOutAt, r.company?.timezone || companyTz) || "",
+      "Check In": formatAttendanceTime(r.checkInAt, r.company?.timezone || companyTz) || "",
+      "Check Out": formatAttendanceTime(r.checkOutAt, r.company?.timezone || companyTz) || "",
       "Worked Hours": fmtHM(r.minutesWorked),
     }));
 
@@ -336,7 +336,7 @@ export default function MyAttendance() {
                 <Tag color="geekblue">{company.code || "—"}</Tag>
                 <span style={{ fontWeight: 500 }}>{company.name}</span>
                 <Tag>{company.timezone || "UTC"}</Tag>
-                <span style={{ color: "rgba(0,0,0,.45)" }}>Local time: {fmtDTFallback(new Date().toISOString())} → {formatTimeWithTimezone(new Date().toISOString(), companyTz)}</span>
+                <span style={{ color: "rgba(0,0,0,.45)" }}>Local time: {fmtDTFallback(new Date().toISOString())} → {formatAttendanceTime(new Date().toISOString(), companyTz)}</span>
               </div>
             )}
           </Col>
