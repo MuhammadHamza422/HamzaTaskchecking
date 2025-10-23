@@ -15,13 +15,13 @@ export const formatDateTimeInTimezone = (dateTime, timezone = 'UTC', options = {
   const defaultOptions = {
     dateStyle: 'short',
     timeStyle: 'short',
-    hour12: false,
+    hour12: true, // Changed to true for AM/PM format
     ...options
   };
 
   try {
     const date = new Date(dateTime);
-    return new Intl.DateTimeFormat('en-GB', {
+    return new Intl.DateTimeFormat('en-US', { // Changed to en-US for better AM/PM support
       timeZone: timezone,
       ...defaultOptions
     }).format(date);
@@ -29,15 +29,15 @@ export const formatDateTimeInTimezone = (dateTime, timezone = 'UTC', options = {
     console.error('Timezone formatting error:', error);
     // Fallback to original formatting
     const date = new Date(dateTime);
-    const dateStr = date.toLocaleDateString('en-GB', { 
+    const dateStr = date.toLocaleDateString('en-US', { 
       day: '2-digit', 
       month: '2-digit', 
       year: 'numeric' 
     });
-    const timeStr = date.toLocaleTimeString('en-GB', { 
+    const timeStr = date.toLocaleTimeString('en-US', { 
       hour: '2-digit', 
       minute: '2-digit',
-      hour12: false 
+      hour12: true 
     });
     return `${dateStr} ${timeStr}`;
   }
@@ -128,14 +128,14 @@ export const formatTimeWithTimezone = (dateTime, timezone = 'UTC') => {
   
   try {
     const date = new Date(dateTime);
-    const formatted = new Intl.DateTimeFormat('en-GB', {
+    const formatted = new Intl.DateTimeFormat('en-US', {
       timeZone: timezone,
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
-      hour12: false
+      hour12: true // Changed to true for AM/PM format
     }).format(date);
     
     // Get timezone abbreviation
@@ -148,6 +148,47 @@ export const formatTimeWithTimezone = (dateTime, timezone = 'UTC') => {
   } catch (error) {
     console.error('Timezone formatting error:', error);
     return formatDateTimeInTimezone(dateTime, timezone);
+  }
+};
+
+/**
+ * Format time for attendance display with AM/PM and timezone
+ * @param {string|Date} dateTime - The date/time to format
+ * @param {string} timezone - The target timezone
+ * @returns {string} Formatted time for attendance display
+ */
+export const formatAttendanceTime = (dateTime, timezone = 'UTC') => {
+  if (!dateTime) return "—";
+  
+  try {
+    const date = new Date(dateTime);
+    const formatted = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    }).format(date);
+    
+    // Get timezone abbreviation
+    const timeZoneName = new Intl.DateTimeFormat('en', {
+      timeZone: timezone,
+      timeZoneName: 'short'
+    }).formatToParts(date).find(part => part.type === 'timeZoneName')?.value || timezone;
+    
+    return `${formatted} (${timeZoneName})`;
+  } catch (error) {
+    console.error('Attendance time formatting error:', error);
+    // Fallback to simple format
+    const date = new Date(dateTime);
+    const timeStr = date.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: true 
+    });
+    return `${timeStr} (${timezone})`;
   }
 };
 
