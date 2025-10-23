@@ -517,15 +517,15 @@ export default function ProcessedOrdersPage() {
             );
             continue;
           }
-          console.log("Fetching kits for selected order", orderId);
-          const numericOrderId =
-            activeTab === "shopify"
-              ? String(orderId).replace("gid://shopify/Order/", "")
-              : orderId;
+
+          // const numericOrderId =
+          //   activeTab === "shopify"
+          //     ? String(orderId).replace("gid://shopify/Order/", "")
+          //     : orderId;
           const res = await apiClient.get(
-            `/api/v1/kit/order/kits/${encodeURIComponent(numericOrderId)}`
+            `/api/v1/kit/order/kits/${encodeURIComponent(orderId)}`
           );
-          console.log("Kits fetched for selected order", orderId, res?.data);
+          // console.log("Kits fetched for selected order", orderId, res?.data);
           setKitsByOrderId((prev) => ({ ...prev, [orderId]: res?.data }));
         } catch (e) {
           console.error("Error fetching kits for selected order", e);
@@ -595,6 +595,7 @@ export default function ProcessedOrdersPage() {
         productTitles.push(kit.product_title);
       }
       for (const sku of kit?.skus || []) {
+        console.log(sku);
         items.push({
           // lineItemKey: sku?._id || kit?.kit_id || kit?.productId,
           sku: sku?.pId?.sku,
@@ -777,6 +778,7 @@ export default function ProcessedOrdersPage() {
   }) => {
     const sf = details?.order || details || {};
     const kitsArray = Array.isArray(kits?.allKits) ? kits.allKits : [];
+    console.log("kitsArray", kitsArray);
 
     const items = [];
     const productTitles = [];
@@ -784,9 +786,10 @@ export default function ProcessedOrdersPage() {
       if (kit?.product_title) {
         productTitles.push(kit.product_title);
       }
+
       for (const sku of kit?.skus || []) {
         items.push({
-          sku: sku?.pId?.sku || String(sku?.pId?._id || ""),
+          sku: sku?.pId?.sku,
           name: sku?.pId?.pro_title || "Product",
           imageUrl: null,
           quantity: Number(sku?.quantity || 1),
@@ -930,15 +933,15 @@ export default function ProcessedOrdersPage() {
             if (kitsData) {
               console.log("Using cached kits for move", ord?.orderId, kitsData);
             } else {
-              console.log("Fetching kits for move", ord?.orderId);
               const numericOrderId =
                 activeTab === "shopify"
                   ? String(ord?.orderId).replace("gid://shopify/Order/", "")
                   : ord?.orderId;
+
+              console.log("Fetching kits for move", ord?.orderId);
               const kitsRes = await apiClient.get(
                 `/api/v1/kit/order/kits/${encodeURIComponent(numericOrderId)}`
               );
-              console.log("Kits Data", kitsRes?.data);
               kitsData = kitsRes?.data;
             }
             let detailsRes;
