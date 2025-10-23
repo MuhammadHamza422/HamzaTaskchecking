@@ -130,8 +130,33 @@ const ensureHttp = (v = "") => {
   if (!s) return "";
   return /^https?:\/\//i.test(s) ? s : `https://${s}`;
 };
-const isLikelyFqdn = (hostname = "") =>
-  /^[^.\/\s][^\s]*\.[^\s]+$/.test(hostname);
+// const isLikelyFqdn = (hostname = "") =>
+//   /^[^.\/\s][^\s]*\.[^\s]+$/.test(hostname);
+
+
+// AFTER — stricter hostname check
+const isLikelyFqdn = (hostname = "") => {
+  const h = String(hostname).trim().toLowerCase();
+  if (!/^[a-z0-9.-]+$/.test(h)) return false;    // allowed chars
+  if (h.endsWith(".")) return false;
+
+  const parts = h.split(".").filter(Boolean);
+  if (parts.length < 2) return false;
+
+  // If it starts with www., require at least 3 labels (www + domain + tld)
+  if (parts[0] === "www" && parts.length < 3) return false;
+
+  const tld = parts[parts.length - 1];
+  if (!/^[a-z]{2,24}$/.test(tld)) return false;  // TLD letters only, 2–24
+
+  // each label: 1–63 chars, no leading/trailing hyphen
+  const labelOk = (p) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(p);
+  if (!parts.every(labelOk)) return false;
+
+  return true;
+};
+
+
 const isObjectId = (v) => typeof v === "string" && /^[0-9a-fA-F]{24}$/.test(v);
 
 // format efficiency like "9%" (or "9.5%")
@@ -1926,7 +1951,7 @@ export default function RequestDetailPage() {
               </Form.Item>
             </Col>
 
-            <Col xs={24} md={12} lg={8}>
+            {/* <Col xs={24} md={12} lg={8}>
               <Form.Item
                 name="purchase_link"
                 label="Purchase Link"
@@ -1961,6 +1986,60 @@ export default function RequestDetailPage() {
                         return Promise.reject(
                           new Error(
                             "Enter a valid URL, e.g., https://example.com"
+                          )
+                        );
+                      }
+                    },
+                  }),
+                ]}
+                validateTrigger={["onBlur", "onChange"]}
+                hasFeedback
+              >
+                <Input
+                  placeholder='Required when "Purchased" or "Dropshipped"'
+                  size={controlSize}
+                />
+              </Form.Item>
+            </Col> */}
+
+            <Col xs={24} md={12} lg={8}>
+              <Form.Item
+                name="purchase_link"
+                label="Purchase Link"
+                dependencies={["status"]}
+                rules={[
+                  ({ getFieldValue }) => ({
+                    validator(_, value) {
+                      const st = getFieldValue("status");
+                      const required =
+                        STATUS_NEEDS_PURCHASE_DETAILS.includes(st);
+                      const raw = (value || "").trim();
+
+                      // Required for Purchased/Dropshipped
+                      if (required && !raw) {
+                        return Promise.reject(
+                          new Error(
+                            'Purchase Link is required when status is "Purchased" or "Dropshipped".'
+                          )
+                        );
+                      }
+
+                      // Optional for other statuses—but if provided, must be a valid URL
+                      if (!raw) return Promise.resolve();
+
+                      try {
+                        const u = new URL(ensureHttp(raw)); // you already have ensureHttp(...)
+                        const okProto =
+                          u.protocol === "http:" || u.protocol === "https:";
+                        const okHost = isLikelyFqdn(u.hostname); // you already have isLikelyFqdn(...)
+                        if (!okProto || !okHost) {
+                          throw new Error();
+                        }
+                        return Promise.resolve();
+                      } catch {
+                        return Promise.reject(
+                          new Error(
+                            "Enter a valid URL, e.g., https://example.com/item/123"
                           )
                         );
                       }
