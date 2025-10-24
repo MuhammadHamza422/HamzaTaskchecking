@@ -4,6 +4,7 @@ import { fetchCompanies } from "../../../api/company";
 import { fetchAllUsers } from "../../../api/auth";
 import { Space, message } from "antd";
 import dayjs from "dayjs";
+import { formatCSVTime, getCompanyTimezone } from "../../../utils/timezone";
 
 // Import components
 import AttendanceHeader from "./AttendanceHeader";
@@ -230,12 +231,16 @@ export default function ManageAttendance({ canEdit = false }) {
       return dateB - dateA;
     });
 
-    const rowsForCsv = sortedRows.map((r) => ({
-      Employee: `${r.user?.firstName || ""} ${r.user?.lastName || ""}`.trim(),
-      "Check In": r.checkInAt ? new Date(r.checkInAt).toLocaleString() : "",
-      "Check Out": r.checkOutAt ? new Date(r.checkOutAt).toLocaleString() : "",
-      "Worked Hours": fmtHM(r.minutesWorked),
-    }));
+    const rowsForCsv = sortedRows.map((r) => {
+      const recordTimezone = getCompanyTimezone(r);
+      
+      return {
+        Employee: `${r.user?.firstName || ""} ${r.user?.lastName || ""}`.trim(),
+        "Check In": formatCSVTime(r.checkInAt, recordTimezone) || "",
+        "Check Out": formatCSVTime(r.checkOutAt, recordTimezone) || "",
+        "Worked Hours": fmtHM(r.minutesWorked),
+      };
+    });
 
     if (rowsForCsv.length === 0) {
       message.warning("No data to export");
@@ -249,7 +254,10 @@ export default function ManageAttendance({ canEdit = false }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `attendance_page_${page}_${dayjs().format("YYYYMMDD_HHmmss")}.csv`;
+    // show name of the selected company and the selected date range
+    const companyName = company ? companies.find(c => c._id === company)?.name : "All Companies";
+    const dateRangeStr = dateRange ? `${dateRange[0].format("YYYY-MM-DD")} to ${dateRange[1].format("YYYY-MM-DD")}` : "All Dates";
+    a.download = `attendance_${companyName}_${dateRangeStr}_${dayjs().format("YYYYMMDD_HHmmss")}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };

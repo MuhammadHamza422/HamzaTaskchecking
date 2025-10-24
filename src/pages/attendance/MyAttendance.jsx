@@ -1,7 +1,7 @@
 // src/pages/attendance/MyAttendance.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getMyAttendance } from "../../api/attendance";
-import { formatTimeWithTimezone, formatAttendanceTime } from "../../utils/timezone";
+import { formatTimeWithTimezone, formatAttendanceTime, formatCSVTime } from "../../utils/timezone";
 import LiveTimeTracker from "../../components/common/LiveTimeTracker";
 import { useAuth } from "../../contexts/AuthContext";
 
@@ -154,13 +154,21 @@ export default function MyAttendance() {
   const hardRefresh = () => fetchData();
 
   const exportCSV = () => {
-    const rowsForCsv = filteredRows.map((r) => ({
-      Day: r.day || "",
-      Company: r.company?.name || "",
-      "Check In": formatAttendanceTime(r.checkInAt, r.company?.timezone || companyTz) || "",
-      "Check Out": formatAttendanceTime(r.checkOutAt, r.company?.timezone || companyTz) || "",
-      "Worked Hours": fmtHM(r.minutesWorked),
-    }));
+    const rowsForCsv = filteredRows.map((r) => {
+      const recordTimezone = r.company?.timezone || companyTz;
+      return {
+        Date: r.day || "",
+        Company: r.company?.name || "",
+        "Check In": formatCSVTime(r.checkInAt, recordTimezone) || "",
+        "Check Out": formatCSVTime(r.checkOutAt, recordTimezone) || "",
+        "Worked Hours": fmtHM(r.minutesWorked),
+        "Breaks Count": r.breaks?.length || 0,
+        "Work Minutes": r.minutesWorked ?? 0,
+        "Break Minutes": sumBreakMinutes(r.breaks),
+        Source: r.source || "",
+        Note: r.note || "",
+      };
+    });
 
     const header = Object.keys(rowsForCsv[0] || {});
     const escape = (v) =>
@@ -174,8 +182,11 @@ export default function MyAttendance() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    // show name of the user
-    a.download = `${user?.firstName?.toLowerCase()}_${user?.lastName?.toLowerCase()}_${dayjs().format("YYYYMMDD_HHmmss")}.csv`;
+    
+    // Get user name and date range for filename
+    const userName = `${user?.firstName || 'user'}_${user?.lastName || 'attendance'}`.toLowerCase();
+    const dateRangeStr = dateRange ? `${dateRange[0].format("YYYY-MM-DD")}_to_${dateRange[1].format("YYYY-MM-DD")}` : "all_dates";
+    a.download = `${userName}_${dateRangeStr}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
