@@ -323,24 +323,7 @@ export const calculateWorkedHoursForCSV = (record, company) => {
   
   // Get company rules
   const companyRules = company?.rules || {};
-  let isHourlyBasis = companyRules.hourlyBasis || false;
-  let shiftHours = companyRules.shiftHours || 8;
-  const workHours = companyRules.workHours || 8;
-  
-  // Override shiftHours for specific companies based on company code
-  const companyCode = company?.code || 'Unknown';
-  if (companyCode === 'COL') {
-    // Colombia: 9 hours total (8 work + 1 compulsory break)
-    shiftHours = 9;
-  } else if (companyCode === 'USWH') {
-    // US: 9 hours total (8 work + 1 break)
-    shiftHours = 9;
-  } else if (companyCode === 'JPOS') {
-    // Japan: Hourly basis - use actual work time, not fixed hours
-    // Force hourly basis for Japan even if backend data is wrong
-    isHourlyBasis = true;
-    shiftHours = 0; // Japan has no fixed shift
-  }
+  const isHourlyBasis = companyRules.hourlyBasis || false;
   
   // Debug logging
   console.log('CSV Calculation Debug:', {
@@ -348,38 +331,20 @@ export const calculateWorkedHoursForCSV = (record, company) => {
     companyId: company?._id || company?.id,
     totalMinutes,
     breakMinutes,
-    shiftHours,
-    workHours,
     isHourlyBasis,
     checkInAt: record.checkInAt,
     checkOutAt: record.checkOutAt,
-    originalShiftHours: companyRules.shiftHours,
-    overridden: shiftHours !== companyRules.shiftHours,
     companyRules: companyRules,
     company: company
   });
   
-  let totalHours, actualWorkHours;
+  // Calculate actual work time for all companies (excluding breaks)
+  const actualWorkMinutes = Math.max(0, totalMinutes - breakMinutes);
+  const actualWorkHours = actualWorkMinutes / 60;
   
-  if (isHourlyBasis) {
-    // Japan: Hourly basis - show actual work time (excluding breaks)
-    actualWorkHours = Math.max(0, (totalMinutes - breakMinutes) / 60);
-    totalHours = actualWorkHours;
-  } else {
-    // Colombia & US: Fixed shift - show total shift time (including breaks)
-    const expectedShiftMinutes = shiftHours * 60;
-    
-    if (totalMinutes >= expectedShiftMinutes) {
-      // Full shift completed - always show the expected shift hours
-      totalHours = shiftHours;
-      actualWorkHours = workHours; // Actual work excluding break
-    } else {
-      // Partial shift - always show expected shift hours for fixed shift companies
-      // This ensures Colombia and US always show 9 hours (including break)
-      totalHours = shiftHours;
-      actualWorkHours = Math.max(0, (totalMinutes - breakMinutes) / 60);
-    }
-  }
+  // For payroll calculation, always use actual work time (minutes worked excluding breaks)
+  // This applies to all companies: Colombia, US, and Japan
+  const totalHours = actualWorkHours;
   
   // Check if this was a force checkout
   const isForceCheckout = record.forceCheckout || false;
@@ -391,7 +356,13 @@ export const calculateWorkedHoursForCSV = (record, company) => {
     isForceCheckout
   };
   
-  console.log('CSV Calculation Result:', result);
+  console.log('CSV Calculation Result:', {
+    ...result,
+    actualWorkMinutes,
+    totalMinutes,
+    breakMinutes,
+    calculation: 'Actual work time (excluding breaks) for all companies'
+  });
   
   return result;
 };
