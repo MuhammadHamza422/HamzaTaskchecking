@@ -47,6 +47,7 @@ import SourcerDashboardPage from "./pages/sourcer/SourcerDashboardPage";
 import PurchaserDashboardPage from "./pages/purchaser/PurchaserDashboardPage";
 import PurchaserListingsPage from "./pages/purchaser/PurchaserListingPage";
 import AttendanceActivity from "./pages/attendance/Attendance-Activity";
+import PurchaserReturnedListingsPage from "./pages/purchaser/PurchaserReturnedListingsPage";
 
 // 🔹 Role guard for specific routes
 const RequireRoles = ({ allow, children }) => {
@@ -88,6 +89,8 @@ function App() {
             <Route path="pending" element={<PurchaserPendingPage />} />
             {/* <Route path="assigned" element={<PurchaserAssignedPage />} /> */}
             <Route path="listings" element={<PurchaserListingsPage />} />
+              <Route path="returned" element={<PurchaserReturnedListingsPage />} />
+
           </Route>
           
 

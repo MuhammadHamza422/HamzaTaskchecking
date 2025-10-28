@@ -111,7 +111,7 @@ export default function SourcingOrdersPage() {
     enabled: rolesLoaded && canSeeAnyList,
     staleTime: 60 * 1000,
     gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: "always",
+    // refetchOnWindowFocus: "always",
     keepPreviousData: true,
   });
 

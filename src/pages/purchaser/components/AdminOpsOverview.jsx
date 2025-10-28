@@ -95,7 +95,9 @@ const theme = {
   title: "text-sm font-semibold text-slate-800 tracking-tight",
   label: "text-[11px] font-medium text-slate-500",
   value: "text-base md:text-lg font-semibold text-slate-900 tabular-nums leading-tight",
-  cardBase: "relative overflow-hidden rounded-xl transition-all duration-150",
+  // ⬇️ add transform + transition base so all cards scale smoothly
+  cardBase:
+    "relative overflow-hidden rounded-xl transition-transform duration-200 ease-out transform-gpu will-change-transform hover:scale-[1.02]",
   chipWrap: "grid h-8 w-8 place-items-center rounded-md",
 };
 
@@ -131,6 +133,13 @@ const getPurchaser = (r) =>
   "—";
 const getSeller = (r) => safeStr(r?.sellerName) || r?.seller?.name || r?.seller_name || "—";
 const getMarketSlug = (r) => lower(r?.market?.slug || r?.market || r?.seller?.market?.slug || r?.seller?.market || "");
+// Friendly market display (for Top Sellers • By Market)
+const getMarket = (r) =>
+  safeStr(r?.market?.name) ||
+  safeStr(r?.market) ||
+  safeStr(r?.seller?.market?.name) ||
+  safeStr(r?.seller?.market) ||
+  "—";
 
 const getOrderValue = (r) =>
   num(r?.total_actual_cost || (num(r?.sellers_price) + num(r?.shipping_charges) + num(r?.taxes)) || 0);
@@ -260,7 +269,7 @@ const CardWrap = ({ variant = "sourcer", tone = "blue", children, className = ""
   const bg = TONE_BG[tone] || "bg-gradient-to-br from-slate-50 to-slate-100 ring-1 ring-slate-200 shadow-xs";
   const topbar = TONE_TOPBAR[tone] || "bg-slate-300/80";
   return (
-    <div className={["relative overflow-hidden rounded-xl", bg, className].join(" ")}>
+    <div className={["relative overflow-hidden rounded-xl transition-transform duration-200 ease-out transform-gpu will-change-transform hover:scale-[1.02]", bg, className].join(" ")}>
       <div className={`absolute inset-x-0 top-0 h-0.5 ${topbar}`} />
       {children}
     </div>
@@ -311,7 +320,7 @@ const KPI = ({
 
 const SimpleList = ({ items, valueTitle = "Total", headerTip, money = false, colorBySign = false, variant = "sourcer" }) => {
   return (
-    <CardWrap variant={variant}>
+    <CardWrap variant={variant} className="hover:shadow-md">
       <div className="px-3 py-2 flex items-center rounded-t-xl bg-gradient-to-b from-white via-white to-slate-50 text-slate-800 text-[11px] font-semibold">
         <div className="flex-1">Name</div>
         <div className="w-24 text-right inline-flex items-center justify-end">
@@ -383,7 +392,7 @@ export default function AdminOpsOverview({ isAdmin, data }) {
     topSellersBySavings,
     topSellersByOrderValue,
     topSellersByUnits,
-    topSellersByEfficiency,
+    topSellersByMarket, // ⬅️ new
   } = useMemo(() => {
     if (data && !Array.isArray(data) && typeof data === "object") {
       const x = (v) => (Array.isArray(v) ? v : []);
@@ -411,7 +420,8 @@ export default function AdminOpsOverview({ isAdmin, data }) {
         topSellersBySavings: x(data.topSellersBySavings),
         topSellersByOrderValue: x(data.topSellersByOrderValue),
         topSellersByUnits: x(data.topSellersByUnits),
-        topSellersByEfficiency: x(data.topSellersByEfficiency),
+        // If upstream provides it, map to our new field; else compute below
+        topSellersByMarket: x(data.topSellersByMarket),
       };
     }
 
@@ -448,21 +458,6 @@ export default function AdminOpsOverview({ isAdmin, data }) {
     const byOrderValue = (keyFn) => groupSum(rows, keyFn, getOrderValue).slice(0, 5);
     const byQty = (keyFn) => groupSum(rows, keyFn, getQty).slice(0, 5);
     const bySavings = (keyFn) => groupSum(rows, keyFn, getSavings).slice(0, 5);
-
-    const byEfficiency = (keyFn) => {
-      const mVal = new Map();
-      const mSav = new Map();
-      rows.forEach((r) => {
-        const k = keyFn(r) || "—";
-        mVal.set(k, (mVal.get(k) || 0) + getOrderValue(r));
-        mSav.set(k, (mSav.get(k) || 0) + getSavings(r));
-      });
-      const arr = Array.from(mVal.entries()).map(([k, val]) => ({
-        key: k,
-        total: val > 0 ? Number((mSav.get(k) || 0) / val).toFixed(2) : 0,
-      }));
-      return arr.sort((a, b) => b.total - a.total).slice(0, 5);
-    };
 
     const byRespTime = (keyFn) => {
       const mSum = new Map();
@@ -503,7 +498,8 @@ export default function AdminOpsOverview({ isAdmin, data }) {
       topSellersBySavings: bySavings(getSeller),
       topSellersByOrderValue: byOrderValue(getSeller),
       topSellersByUnits: byQty(getSeller),
-      topSellersByEfficiency: byEfficiency(getSeller),
+      // ⬇️ New: counts per market (top 5)
+      topSellersByMarket: byListings(getMarket),
     };
   }, [data, fetchedRows, totalAll]);
 
@@ -599,10 +595,11 @@ export default function AdminOpsOverview({ isAdmin, data }) {
           />
           <SimpleList items={topSellersByOrderValue} valueTitle="By Order Value" headerTip="Sum of Total Actual Cost per seller. Top 5." variant="sourcer" />
           <SimpleList items={topSellersByUnits} valueTitle="By Units" headerTip="Total units (Σ item.quantity_needed) per seller. Top 5." variant="sourcer" />
+          {/* ⬇️ Replaced 'By Efficiency' with 'By Market' */}
           <SimpleList
-            items={topSellersByEfficiency}
-            valueTitle="By Efficiency"
-            headerTip="(Savings ÷ Order Value) per seller, rounded to 2 decimals. Top 5."
+            items={topSellersByMarket}
+            valueTitle="By Market"
+            headerTip="Number of orders per market (derived from listing/seller market). Top 5."
             variant="sourcer"
           />
         </div>
