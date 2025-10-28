@@ -12,6 +12,15 @@ import {
 } from "../api/attendance";
 import { useAuth } from "../contexts/AuthContext";
 import { formatAttendanceTime } from "../utils/timezone";
+import { useCompanyAttendanceRules } from "../hooks/useCompanyAttendanceRules";
+import { 
+  showSuccessToast, 
+  showErrorToast, 
+  showWarningToast,
+  showInfoToast,
+  showLoading,
+  closeLoading
+} from "../utils/sweetAlert";
 
 /* =======================
    Analog Clock (SVG)
@@ -378,6 +387,143 @@ export default function AttendanceKiosk() {
     ? formatAttendanceTime(lastOpenBreak.startAt, tz)
     : null;
 
+  // Company-specific attendance rules
+  const companyRules = useCompanyAttendanceRules(companyId, latest);
+
+  // Validate break before starting
+  const handleStartBreak = async () => {
+    if (!selected?._id) return;
+    
+    try {
+      // Show loading
+      showLoading('Validating...', 'Checking break rules');
+      
+      // Validate with backend first
+      const validation = await companyRules.validateBreakWithBackend(selected._id);
+      
+      closeLoading();
+      
+      if (validation?.success && validation.canStartBreak) {
+        // Show info toast about break rules
+        const remainingBreakTime = companyRules.getRemainingBreakTime();
+        if (remainingBreakTime !== null) {
+          showInfoToast(`Break time remaining: ${remainingBreakTime} minutes`, "Break Info");
+        }
+        
+        setPin("");
+        setPinModal({ open: true, mode: "breakStart" });
+        setTimeout(() => pinInputRef.current?.focus?.(), 0);
+      } else {
+        if (validation?.message?.includes('Break time limit reached')) {
+          showWarningToast("Break time limit reached. Cannot start another break.", "Break Limit");
+        } else {
+          showErrorToast(validation?.message || "Cannot start break at this time");
+        }
+      }
+    } catch (error) {
+      closeLoading();
+      console.error('Break validation error:', error);
+      showWarningToast("Validation failed, proceeding with break");
+      
+      // Still allow break if validation fails
+      setPin("");
+      setPinModal({ open: true, mode: "breakStart" });
+      setTimeout(() => pinInputRef.current?.focus?.(), 0);
+    }
+  };
+
+  // Validate check-in before starting
+  const handleCheckIn = async () => {
+    if (!selected?._id) return;
+    
+    try {
+      // Show loading
+      showLoading('Validating...', 'Checking company rules');
+      
+      // Validate with backend first
+      const validation = await companyRules.validateAttendanceWithBackend('checkin', selected._id);
+      
+      closeLoading();
+      
+      if (validation?.success !== false) {
+        // Show info toast about company rules
+        if (companyRules.isFixedShift) {
+          showInfoToast(`Shift: ${companyRules.shiftHours}h work + ${companyRules.breakHours}h break`, "Company Rules");
+        }
+        
+        setPin("");
+        setPinModal({ open: true, mode: "in" });
+        setTimeout(() => pinInputRef.current?.focus?.(), 0);
+      } else {
+        showErrorToast(validation?.message || "Cannot check in at this time");
+      }
+    } catch (error) {
+      closeLoading();
+      console.error('Check-in validation error:', error);
+      showWarningToast("Validation failed, proceeding with check-in");
+      
+      // Still allow check-in if validation fails
+      setPin("");
+      setPinModal({ open: true, mode: "in" });
+      setTimeout(() => pinInputRef.current?.focus?.(), 0);
+    }
+  };
+
+  // Validate check-out before starting
+  const handleCheckOut = async () => {
+    if (!selected?._id) return;
+    
+    try {
+      // Show loading
+      showLoading('Validating...', 'Checking work progress');
+      
+      // Validate with backend first
+      const validation = await companyRules.validateAttendanceWithBackend('checkout', selected._id);
+      
+      closeLoading();
+      
+      if (validation?.success !== false) {
+        // Show work progress info for context (no force-checkout anymore)
+        const workProgress = companyRules.getWorkProgress();
+        if (workProgress.progress > 0) {
+          showInfoToast(`Work progress: ${Math.round(workProgress.progress)}% (${workProgress.remainingMinutes} min remaining)`, "Work Progress");
+        }
+        
+        setPin("");
+        setPinModal({ open: true, mode: "out" });
+        setTimeout(() => pinInputRef.current?.focus?.(), 0);
+      } else {
+        showErrorToast(validation?.message || "Cannot check out at this time");
+      }
+    } catch (error) {
+      closeLoading();
+      console.error('Check-out validation error:', error);
+      showWarningToast("Validation failed, proceeding with check-out");
+      
+      // Still allow check-out if validation fails
+      setPin("");
+      setPinModal({ open: true, mode: "out" });
+      setTimeout(() => pinInputRef.current?.focus?.(), 0);
+    }
+  };
+
+  // Handle end break
+  const handleEndBreak = async () => {
+    if (!selected?._id) return;
+    
+    try {
+      // Show info toast about ending break
+      showInfoToast("Ending break - enter your PIN to confirm", "End Break");
+      
+      setPin("");
+      setPinModal({ open: true, mode: "breakEnd" });
+      setTimeout(() => pinInputRef.current?.focus?.(), 0);
+    } catch (error) {
+      console.error('End break error:', error);
+      showErrorToast("Failed to end break");
+    }
+  };
+
   // ---- Mutations ----
   const invalidateAll = () => {
     qc.invalidateQueries({ queryKey: ["kiosk-employees"] });
@@ -389,7 +535,7 @@ export default function AttendanceKiosk() {
     mutationFn: ({ employeeId, note, pin }) =>
       kioskCheckIn({ employeeId, note, pin }),
     onSuccess: () => {
-      message.success("Checked in");
+      showSuccessToast("Successfully checked in", "Check In Complete");
       invalidateAll();
       setPin("");
       setPinModal({ open: false, mode: "in" });
@@ -399,12 +545,12 @@ export default function AttendanceKiosk() {
       const status = e?.response?.status;
       if (status === 400) {
         // Backend: open session from previous day — require checkout first
-        message.warning(msg);
+        showWarningToast(msg, "Previous Session Found");
         // Switch modal to checkout; preserve PIN so user can proceed
         setPinModal((prev) => ({ ...prev, mode: "out" }));
         return;
       }
-      message.error(msg);
+      showErrorToast(msg, "Check In Failed");
       setPin("");
     },
   });
@@ -412,13 +558,13 @@ export default function AttendanceKiosk() {
   const checkOutMut = useMutation({
     mutationFn: ({ employeeId, pin }) => kioskCheckOut({ employeeId, pin }),
     onSuccess: () => {
-      message.success("Checked out");
+      showSuccessToast("Successfully checked out", "Check Out Complete");
       invalidateAll();
       setPin("");
       setPinModal({ open: false, mode: "out" });
     },
     onError: (e) => {
-      message.error(e?.response?.data?.message || "Check-out failed");
+      showErrorToast(e?.response?.data?.message || "Check-out failed", "Check Out Failed");
       setPin("");
     },
   });
@@ -428,14 +574,14 @@ export default function AttendanceKiosk() {
     mutationFn: ({ employeeId, note, pin }) =>
       kioskStartBreak({ employeeId, note, pin }),
     onSuccess: () => {
-      message.success("Break started");
+      showSuccessToast("Break started successfully", "Break Started");
       invalidateAll();
       setPin("");
       setBreakNote("");
       setPinModal({ open: false, mode: "breakStart" });
     },
     onError: (e) => {
-      message.error(e?.response?.data?.message || "Failed to start break");
+      showErrorToast(e?.response?.data?.message || "Failed to start break", "Break Start Failed");
       setPin("");
     },
   });
@@ -443,13 +589,13 @@ export default function AttendanceKiosk() {
   const endBreakMut = useMutation({
     mutationFn: ({ employeeId, pin }) => kioskEndBreak({ employeeId, pin }),
     onSuccess: () => {
-      message.success("Break ended");
+      showSuccessToast("Break ended successfully", "Break Ended");
       invalidateAll();
       setPin("");
       setPinModal({ open: false, mode: "breakEnd" });
     },
     onError: (e) => {
-      message.error(e?.response?.data?.message || "Failed to end break");
+      showErrorToast(e?.response?.data?.message || "Failed to end break", "Break End Failed");
       setPin("");
     },
   });
@@ -524,6 +670,7 @@ export default function AttendanceKiosk() {
   return (
     <div
       ref={containerRef}
+      data-kiosk-container
       onClick={handleAnyClick}
       className="h-screen w-full bg-gradient-to-br from-slate-950 via-slate-900 to-slate-900 text-white flex flex-col"
       style={{ position: "relative" }}
@@ -739,8 +886,73 @@ export default function AttendanceKiosk() {
                         )}
                       </div>
                     </div>
+
+                    {/* Company-specific rules display */}
+                    {companyRules.isLoading && (
+                      <div className="mt-3 p-2 bg-gray-500/10 border border-gray-500/20 rounded">
+                        <div className="text-gray-300 text-xs">Loading company rules...</div>
+                      </div>
+                    )}
+                    
+                    {companyRules.error && (
+                      <div className="mt-3 p-2 bg-red-500/10 border border-red-500/20 rounded">
+                        <div className="text-red-300 text-xs">Failed to load company rules. Using default settings.</div>
+                      </div>
+                    )}
+                    
+                    {companyRules.isFixedShift && !companyRules.isLoading && (
+                      <div className="mt-3 p-2 bg-blue-500/10 border border-blue-500/20 rounded">
+                        <div className="text-blue-300 text-xs font-medium mb-1">
+                          {companyRules.uiMessages.shiftInfo}
+                        </div>
+                        <div className="text-blue-200/80 text-xs">
+                          {companyRules.uiMessages.breakInfo}
+                        </div>
+                        
+                        {/* Work progress bar */}
+                        {selCheckedIn && !selOnBreak && (
+                          <div className="mt-2">
+                            <div className="flex justify-between text-xs text-blue-200/80 mb-1">
+                              <span>Work Progress</span>
+                              <span>{Math.round(companyRules.getWorkProgress().progress)}%</span>
+                            </div>
+                            <div className="w-full bg-blue-900/30 rounded-full h-1.5">
+                              <div 
+                                className="bg-blue-400 h-1.5 rounded-full transition-all duration-300"
+                                style={{ width: `${Math.min(100, companyRules.getWorkProgress().progress)}%` }}
+                              />
+                            </div>
+                            <div className="text-xs text-blue-200/60 mt-1">
+                              {companyRules.getWorkProgress().remainingMinutes > 0 
+                                ? `${companyRules.getWorkProgress().remainingMinutes} minutes remaining`
+                                : 'Shift complete'
+                              }
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Warnings */}
+                    {companyRules.warnings.length > 0 && (
+                      <div className="mt-3 space-y-1">
+                        {companyRules.warnings.map((warning, index) => (
+                          <div 
+                            key={index}
+                            className={`text-xs p-2 rounded ${
+                              warning.type === 'error' 
+                                ? 'bg-red-500/10 border border-red-500/20 text-red-300'
+                                : 'bg-yellow-500/10 border border-yellow-500/20 text-yellow-300'
+                            }`}
+                          >
+                            {warning.message}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
                      {/* Optional break note input (only when starting a break) */}
-                     {selCheckedIn && !selOnBreak && (
+                     {selCheckedIn && !selOnBreak && companyRules.canStartBreak && (
                       <div className="sm:col-span-3 mt-2">
                         <div className="text-white/60 text-xs mb-1">
                           Break note (optional)
@@ -750,6 +962,13 @@ export default function AttendanceKiosk() {
                           onChange={(e) => setBreakNote(e.target.value)}
                           placeholder="e.g., Lunch, appointment, etc."
                         />
+                      </div>
+                    )}
+
+                    {/* Break time remaining */}
+                    {selCheckedIn && companyRules.getRemainingBreakTime() !== null && (
+                      <div className="mt-2 text-xs text-white/60">
+                        Break time remaining: {companyRules.getRemainingBreakTime()} minutes
                       </div>
                     )}
                   </div>
@@ -814,12 +1033,8 @@ export default function AttendanceKiosk() {
               <button
                 disabled={!selected || selCheckedIn || checkInMut.isPending}
                 loading={checkInMut.isPending}
-                onClick={() => {
-                  setPin("");
-                  setPinModal({ open: true, mode: "in" });
-                  setTimeout(() => pinInputRef.current?.focus?.(), 0);
-                }}
-                className="!rounded-lg !h-11 !px-5 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handleCheckIn}
+                className="!rounded-lg !h-11 !px-5 whitespace-nowrap bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Check In
               </button>
@@ -827,20 +1042,21 @@ export default function AttendanceKiosk() {
 
             {/* Start Break */}
             {selCheckedIn && !selOnBreak && (
-              <Tooltip title={!selected ? "Select an employee" : ""}>
-                <Button
-                  size="large"
-                  disabled={!selected || startBreakMut.isPending}
-                  loading={startBreakMut.isPending}
-                  onClick={() => {
-                    setPin("");
-                    setPinModal({ open: true, mode: "breakStart" });
-                    setTimeout(() => pinInputRef.current?.focus?.(), 0);
-                  }}
-                  className="!rounded-lg !h-11 !px-5"
+              <Tooltip title={
+                !selected 
+                  ? "Select an employee" 
+                  : !companyRules.canStartBreak 
+                    ? (companyRules.breakValidation?.reason || "Break time limit reached")
+                    : ""
+              }>
+                <button
+                  disabled={!selected || !companyRules.canStartBreak || startBreakMut.isPending || companyRules.isBreakValidationLoading}
+                  loading={startBreakMut.isPending || companyRules.isBreakValidationLoading}
+                  onClick={handleStartBreak}
+                  className="!rounded-lg !h-11 !px-5 w-full bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Start Break
-                </Button>
+                </button>
               </Tooltip>
             )}
 
@@ -851,11 +1067,7 @@ export default function AttendanceKiosk() {
                   size="large"
                   disabled={!selected || endBreakMut.isPending}
                   loading={endBreakMut.isPending}
-                  onClick={() => {
-                    setPin("");
-                    setPinModal({ open: true, mode: "breakEnd" });
-                    setTimeout(() => pinInputRef.current?.focus?.(), 0);
-                  }}
+                  onClick={handleEndBreak}
                   className="!rounded-lg !h-11 !px-5"
                 >
                   End Break
@@ -863,7 +1075,7 @@ export default function AttendanceKiosk() {
               </Tooltip>
             )}
 
-            {/* Check Out (works from break too; backend auto-ends break) */}
+            {/* Check Out (works for both regular and force checkout scenarios) */}
             {selCheckedIn && (
               <Tooltip
                 title={
@@ -871,18 +1083,14 @@ export default function AttendanceKiosk() {
                     ? "Select an employee"
                     : selOnBreak
                     ? "On a break — will auto end then check out"
-                    : ""
+            : ""
                 }
               >
                 <Button
                   size="large"
                   disabled={!selected || checkOutMut.isPending}
                   loading={checkOutMut.isPending}
-                  onClick={() => {
-                    setPin("");
-                    setPinModal({ open: true, mode: "out" });
-                    setTimeout(() => pinInputRef.current?.focus?.(), 0);
-                  }}
+                  onClick={handleCheckOut}
                   danger
                   className="!rounded-lg !h-11 !px-5"
                 >

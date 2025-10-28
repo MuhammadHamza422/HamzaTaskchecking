@@ -1,9 +1,17 @@
 // src/pages/attendance/MyAttendance.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getMyAttendance } from "../../api/attendance";
-import { formatTimeWithTimezone, formatAttendanceTime, formatCSVTime } from "../../utils/timezone";
+import { formatTimeWithTimezone, formatAttendanceTime, formatCSVTime, formatCSVTimeOnly } from "../../utils/timezone";
 import LiveTimeTracker from "../../components/common/LiveTimeTracker";
 import { useAuth } from "../../contexts/AuthContext";
+import { splitAttendanceByDays, normalizeDateFormat, sortRecordsForCSV, calculateWorkedHoursForCSV } from "../../utils/attendanceHelpers";
+import { useCompanyAttendanceRules } from "../../hooks/useCompanyAttendanceRules";
+import { 
+  showSuccessToast, 
+  showErrorToast, 
+  showWarningToast,
+  showInfoToast
+} from "../../utils/sweetAlert";
 
 import {
   Card,
@@ -72,6 +80,7 @@ export default function MyAttendance() {
   // Derive user's company and timezone from results (assuming same company for self records)
   const company = useMemo(() => rows?.[0]?.company || null, [rows]);
   const companyTz = company?.timezone || "UTC";
+  const companyId = company?._id || company?.id;
   const fmtDT = (d) => formatAttendanceTime(d, companyTz);
 
   const fetchData = async () => {
@@ -88,7 +97,7 @@ export default function MyAttendance() {
       setRows(res?.items || []);
       totalRef.current = res?.total ?? (res?.items?.length || 0);
     } catch (e) {
-      message.error(e?.response?.data?.message || "Failed to load attendance");
+      showErrorToast(e?.response?.data?.message || "Failed to load attendance", "Data Load Failed");
     } finally {
       setLoading(false);
     }
@@ -119,6 +128,14 @@ export default function MyAttendance() {
       return true;
     });
   }, [rows, status, source, noteQuery]);
+
+  // Get current attendance record for company rules
+  const currentRecord = useMemo(() => {
+    return filteredRows.find(r => r.checkInAt && !r.checkOutAt) || null;
+  }, [filteredRows]);
+
+  // Company-specific attendance rules
+  const companyRules = useCompanyAttendanceRules(companyId, currentRecord);
 
   const metrics = useMemo(() => {
     const total = filteredRows.length;
@@ -154,25 +171,54 @@ export default function MyAttendance() {
   const hardRefresh = () => fetchData();
 
   const exportCSV = () => {
-    const rowsForCsv = filteredRows.map((r) => {
+    // Split multi-day records into separate days
+    const splitRecords = [];
+    filteredRows.forEach(record => {
+      const recordTimezone = record.company?.timezone || companyTz;
+      const dayRecords = splitAttendanceByDays(record, recordTimezone);
+      splitRecords.push(...dayRecords);
+    });
+
+    // Sort records for CSV: name (ascending) then date (sequential)
+    const sortedRecords = sortRecordsForCSV(splitRecords);
+
+    const rowsForCsv = sortedRecords.map((r) => {
       const recordTimezone = r.company?.timezone || companyTz;
+      
+      // For split records, show times appropriately
+      let checkIn = "";
+      let checkOut = "";
+      
+      if (r.splitDay) {
+        // Split day record - use display times
+        checkIn = r.displayCheckIn || "-";
+        checkOut = r.displayCheckOut || "-";
+      } else {
+        // Normal record - use time-only format
+        checkIn = formatCSVTimeOnly(r.checkInAt, recordTimezone) || "-";
+        checkOut = formatCSVTimeOnly(r.checkOutAt, recordTimezone) || "-";
+      }
+      
+      // Calculate worked hours based on company rules
+      const workedHours = calculateWorkedHoursForCSV(r, r.company);
+      
       return {
-        Date: r.day || "",
-        Company: r.company?.name || "",
-        "Check In": formatCSVTime(r.checkInAt, recordTimezone) || "",
-        "Check Out": formatCSVTime(r.checkOutAt, recordTimezone) || "",
-        "Worked Hours": fmtHM(r.minutesWorked),
-        "Breaks Count": r.breaks?.length || 0,
-        "Work Minutes": r.minutesWorked ?? 0,
-        "Break Minutes": sumBreakMinutes(r.breaks),
-        Source: r.source || "",
-        Note: r.note || "",
+        Employee: `${r.user?.firstName || ""} ${r.user?.lastName || ""}`.trim(),
+        Date: r.splitDay ? r.day : normalizeDateFormat(r.day || r.checkInAt),
+        "Check In": checkIn,
+        "Check Out": checkOut,
+        "Total Hours": `${Math.floor(workedHours.totalHours)}:${String(Math.round((workedHours.totalHours % 1) * 60)).padStart(2, '0')}`,
       };
     });
 
     const header = Object.keys(rowsForCsv[0] || {});
     const escape = (v) =>
       `"${String(v ?? "").replaceAll('"', '""').replace(/\n/g, " ").trim()}"`;
+    if (rowsForCsv.length === 0) {
+      showWarningToast("No data to export", "Export Failed");
+      return;
+    }
+
     const csv = [
       header.join(","),
       ...rowsForCsv.map((r) => header.map((h) => escape(r[h])).join(",")),
@@ -189,6 +235,8 @@ export default function MyAttendance() {
     a.download = `${userName}_${dateRangeStr}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+    
+    showSuccessToast(`CSV exported successfully with ${rowsForCsv.length} records`, "Export Complete");
   };
 
   /* ---------- table ---------- */
@@ -348,6 +396,91 @@ export default function MyAttendance() {
                 <span style={{ fontWeight: 500 }}>{company.name}</span>
                 <Tag>{company.timezone || "UTC"}</Tag>
                 <span style={{ color: "rgba(0,0,0,.45)" }}>Local time: {fmtDTFallback(new Date().toISOString())} → {formatAttendanceTime(new Date().toISOString(), companyTz)}</span>
+              </div>
+            )}
+
+            {/* Company-specific rules display */}
+            {companyRules.isLoading && (
+              <div style={{ marginTop: 12, padding: 12, backgroundColor: "#f9fafb", border: "1px solid #d1d5db", borderRadius: 8 }}>
+                <div style={{ color: "#6b7280", fontSize: 14 }}>Loading company rules...</div>
+              </div>
+            )}
+            
+            {companyRules.error && (
+              <div style={{ marginTop: 12, padding: 12, backgroundColor: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8 }}>
+                <div style={{ color: "#dc2626", fontSize: 14 }}>Failed to load company rules. Using default settings.</div>
+              </div>
+            )}
+            
+            {companyRules.isFixedShift && !companyRules.isLoading && (
+              <div style={{ marginTop: 12, padding: 12, backgroundColor: "#f0f4ff", border: "1px solid #dbeafe", borderRadius: 8 }}>
+                <div style={{ color: "#1e40af", fontSize: 14, fontWeight: 500, marginBottom: 4 }}>
+                  {companyRules.uiMessages.shiftInfo}
+                </div>
+                <div style={{ color: "#3730a3", fontSize: 13 }}>
+                  {companyRules.uiMessages.breakInfo}
+                </div>
+                
+                {/* Work progress for current session */}
+                {currentRecord && (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#3730a3", marginBottom: 4 }}>
+                      <span>Current Session Progress</span>
+                      <span>{Math.round(companyRules.getWorkProgress().progress)}%</span>
+                    </div>
+                    <div style={{ width: "100%", backgroundColor: "#e0e7ff", borderRadius: 4, height: 6 }}>
+                      <div 
+                        style={{ 
+                          backgroundColor: "#3b82f6", 
+                          height: 6, 
+                          borderRadius: 4,
+                          width: `${Math.min(100, companyRules.getWorkProgress().progress)}%`,
+                          transition: "width 0.3s ease"
+                        }}
+                      />
+                    </div>
+                    <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4 }}>
+                      {(() => {
+                        const workProgress = companyRules.getWorkProgress();
+                        const isOnBreak = currentRecord.onBreak || 
+                          (Array.isArray(currentRecord.breaks) && currentRecord.breaks.length && !currentRecord.breaks[currentRecord.breaks.length - 1]?.endAt);
+                        
+                        if (isOnBreak) {
+                          const remainingBreakTime = companyRules.getRemainingBreakTime();
+                          return remainingBreakTime !== null 
+                            ? `On break - ${remainingBreakTime} minutes remaining`
+                            : 'On break';
+                        }
+                        
+                        return workProgress.remainingMinutes > 0 
+                          ? `${workProgress.remainingMinutes} minutes remaining`
+                          : 'Session complete';
+                      })()}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Warnings */}
+            {companyRules.warnings.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                {companyRules.warnings.map((warning, index) => (
+                  <div 
+                    key={index}
+                    style={{
+                      padding: 8,
+                      borderRadius: 6,
+                      marginBottom: 4,
+                      fontSize: 13,
+                      backgroundColor: warning.type === 'error' ? '#fef2f2' : '#fffbeb',
+                      border: `1px solid ${warning.type === 'error' ? '#fecaca' : '#fed7aa'}`,
+                      color: warning.type === 'error' ? '#dc2626' : '#d97706'
+                    }}
+                  >
+                    {warning.message}
+                  </div>
+                ))}
               </div>
             )}
           </Col>

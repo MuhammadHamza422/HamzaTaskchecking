@@ -349,7 +349,7 @@ const AttendanceTable = ({
 
   const expandedRowRender = (r) => {
     const breaks = r.breaks || [];
-    if (!breaks.length) return <div style={{ paddingLeft: 8, color: "rgba(0,0,0,.45)" }}>No breaks</div>;
+    if (!breaks.length) return <div style={{ color: "rgba(0,0,0,.45)" }}>No breaks</div>;
     const timezone = getCompanyTimezone(r);
     return (
       <Table

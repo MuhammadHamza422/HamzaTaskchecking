@@ -230,6 +230,38 @@ export const formatCSVTime = (dateTime, timezone = 'UTC') => {
 };
 
 /**
+ * Format time-only for CSV export (HH:MM AM/PM format)
+ * @param {string|Date} dateTime - The date/time to format
+ * @param {string} timezone - The target timezone
+ * @returns {string} Formatted time-only for CSV export
+ */
+export const formatCSVTimeOnly = (dateTime, timezone = 'UTC') => {
+  if (!dateTime) return "";
+  
+  try {
+    const date = new Date(dateTime);
+    const formatted = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    }).format(date);
+    
+    return formatted;
+  } catch (error) {
+    console.error('CSV time-only formatting error:', error);
+    // Fallback to simple format
+    const date = new Date(dateTime);
+    return date.toLocaleTimeString('en-US', { 
+      timeZone: timezone,
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: true 
+    });
+  }
+};
+
+/**
  * Get company timezone from attendance record
  * @param {object} record - Attendance record
  * @returns {string} Company timezone or 'UTC' as fallback

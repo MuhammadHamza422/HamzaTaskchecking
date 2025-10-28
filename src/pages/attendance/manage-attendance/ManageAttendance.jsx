@@ -4,7 +4,8 @@ import { fetchCompanies } from "../../../api/company";
 import { fetchAllUsers } from "../../../api/auth";
 import { Space, message } from "antd";
 import dayjs from "dayjs";
-import { formatCSVTime, getCompanyTimezone } from "../../../utils/timezone";
+import { formatCSVTime, formatCSVTimeOnly, getCompanyTimezone } from "../../../utils/timezone";
+import { splitAttendanceByDays, normalizeDateFormat, sortRecordsForCSV, calculateWorkedHoursForCSV } from "../../../utils/attendanceHelpers";
 
 // Import components
 import AttendanceHeader from "./AttendanceHeader";
@@ -215,30 +216,43 @@ export default function ManageAttendance({ canEdit = false }) {
 
   /* ---------- export CSV ---------- */
   const exportCSV = () => {
-    // For server-side pagination, we export only the current page data
-    // Sort data alphabetically by employee name, then by check-in date (descending within each employee)
-    const sortedRows = [...(filteredRows || [])].sort((a, b) => {
-      const nameA = `${a.user?.firstName || ""} ${a.user?.lastName || ""}`.trim();
-      const nameB = `${b.user?.firstName || ""} ${b.user?.lastName || ""}`.trim();
-      
-      // First sort by employee name (ascending)
-      const nameComparison = nameA.localeCompare(nameB);
-      if (nameComparison !== 0) return nameComparison;
-      
-      // Then sort by check-in date (descending within each employee)
-      const dateA = new Date(a.checkInAt || 0);
-      const dateB = new Date(b.checkInAt || 0);
-      return dateB - dateA;
+    // Split multi-day records into separate days
+    const splitRecords = [];
+    (filteredRows || []).forEach(record => {
+      const recordTimezone = getCompanyTimezone(record);
+      const dayRecords = splitAttendanceByDays(record, recordTimezone);
+      splitRecords.push(...dayRecords);
     });
+
+    // Sort data alphabetically by employee name, then by date (sequential)
+    const sortedRows = sortRecordsForCSV(splitRecords);
 
     const rowsForCsv = sortedRows.map((r) => {
       const recordTimezone = getCompanyTimezone(r);
       
+      // For split records, show times appropriately
+      let checkIn = "";
+      let checkOut = "";
+      
+      if (r.splitDay) {
+        // Split day record - use display times
+        checkIn = r.displayCheckIn || "-";
+        checkOut = r.displayCheckOut || "-";
+      } else {
+        // Normal record - use time-only format
+        checkIn = formatCSVTimeOnly(r.checkInAt, recordTimezone) || "-";
+        checkOut = formatCSVTimeOnly(r.checkOutAt, recordTimezone) || "-";
+      }
+      
+      // Calculate worked hours based on company rules
+      const workedHours = calculateWorkedHoursForCSV(r, r.company);
+      
       return {
         Employee: `${r.user?.firstName || ""} ${r.user?.lastName || ""}`.trim(),
-        "Check In": formatCSVTime(r.checkInAt, recordTimezone) || "",
-        "Check Out": formatCSVTime(r.checkOutAt, recordTimezone) || "",
-        "Worked Hours": fmtHM(r.minutesWorked),
+        Date: r.splitDay ? r.day : normalizeDateFormat(r.day || r.checkInAt),
+        "Check In": checkIn,
+        "Check Out": checkOut,
+        "Total Hours": `${Math.floor(workedHours.totalHours)}:${String(Math.round((workedHours.totalHours % 1) * 60)).padStart(2, '0')}`,
       };
     });
 
