@@ -4,6 +4,7 @@ import { formatTimeWithTimezone, getCompanyTimezone } from '../../utils/timezone
 
 /**
  * Live time tracker component that shows real-time work duration
+ * Pauses work timer during breaks and shows break duration instead
  * @param {Object} record - Attendance record
  * @param {Array} breaks - Array of breaks for the record
  * @param {string} timezone - Company timezone
@@ -12,6 +13,8 @@ import { formatTimeWithTimezone, getCompanyTimezone } from '../../utils/timezone
 const LiveTimeTracker = ({ record, breaks = [], timezone = 'UTC', isLive = true }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [liveDuration, setLiveDuration] = useState(0);
+  const [isOnBreak, setIsOnBreak] = useState(false);
+  const [breakStartTime, setBreakStartTime] = useState(null);
 
   // Update current time every second when live
   useEffect(() => {
@@ -24,6 +27,25 @@ const LiveTimeTracker = ({ record, breaks = [], timezone = 'UTC', isLive = true 
     return () => clearInterval(interval);
   }, [isLive]);
 
+  // Check if currently on break
+  useEffect(() => {
+    if (!record?.checkInAt || record?.checkOutAt) {
+      setIsOnBreak(false);
+      setBreakStartTime(null);
+      return;
+    }
+
+    // Check if there's an active break (last break has no endAt)
+    const activeBreak = breaks.length > 0 && !breaks[breaks.length - 1]?.endAt;
+    setIsOnBreak(activeBreak);
+    
+    if (activeBreak && breaks[breaks.length - 1]?.startAt) {
+      setBreakStartTime(new Date(breaks[breaks.length - 1].startAt));
+    } else {
+      setBreakStartTime(null);
+    }
+  }, [record, breaks]);
+
   // Calculate live duration
   useEffect(() => {
     if (!record?.checkInAt) {
@@ -35,22 +57,28 @@ const LiveTimeTracker = ({ record, breaks = [], timezone = 'UTC', isLive = true 
       const checkInTime = new Date(record.checkInAt);
       const endTime = record.checkOutAt ? new Date(record.checkOutAt) : currentTime;
       
-      // Calculate total work time
-      let totalWorkMinutes = Math.max(0, Math.round((endTime - checkInTime) / 60000));
-      
-      // Subtract break time
-      const breakMinutes = breaks.reduce((acc, br) => {
-        if (!br.startAt) return acc;
-        const breakStart = new Date(br.startAt);
-        const breakEnd = br.endAt ? new Date(br.endAt) : currentTime;
-        return acc + Math.max(0, Math.round((breakEnd - breakStart) / 60000));
-      }, 0);
-      
-      return Math.max(0, totalWorkMinutes - breakMinutes);
+      if (isOnBreak && breakStartTime) {
+        // When on break, show break duration
+        return Math.max(0, Math.round((currentTime - breakStartTime) / 60000));
+      } else {
+        // When working, show work time (pauses during breaks)
+        let totalWorkMinutes = Math.max(0, Math.round((endTime - checkInTime) / 60000));
+        
+        // Subtract completed break time (exclude current break if on break)
+        const completedBreaks = breaks.filter(br => br.endAt);
+        const breakMinutes = completedBreaks.reduce((acc, br) => {
+          if (!br.startAt || !br.endAt) return acc;
+          const breakStart = new Date(br.startAt);
+          const breakEnd = new Date(br.endAt);
+          return acc + Math.max(0, Math.round((breakEnd - breakStart) / 60000));
+        }, 0);
+        
+        return Math.max(0, totalWorkMinutes - breakMinutes);
+      }
     };
 
     setLiveDuration(calculateLiveDuration());
-  }, [record, breaks, currentTime]);
+  }, [record, breaks, currentTime, isOnBreak, breakStartTime]);
 
   const formatDuration = (minutes) => {
     const hours = Math.floor(minutes / 60);
@@ -64,7 +92,6 @@ const LiveTimeTracker = ({ record, breaks = [], timezone = 'UTC', isLive = true 
   };
 
   const isCurrentlyWorking = record?.checkInAt && !record?.checkOutAt;
-  const isOnBreak = record?.onBreak || (breaks.length > 0 && !breaks[breaks.length - 1]?.endAt);
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

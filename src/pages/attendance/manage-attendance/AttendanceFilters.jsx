@@ -1,5 +1,5 @@
 import React from "react";
-import { Card, Row, Col, Select, DatePicker, Segmented, Input } from "antd";
+import { Card, Row, Col, Select, DatePicker, Segmented, Input, Tag, Tooltip } from "antd";
 import dayjs from "dayjs";
 
 const { RangePicker } = DatePicker;
@@ -48,6 +48,11 @@ const AttendanceFilters = ({
   company,
   setCompany,
 }) => {
+  // map selected ids -> full user objects for display under the select
+  const selectedUserObjects = (users || []).filter((u) =>
+    (selectedUsers || []).includes(u._id)
+  );
+
   return (
     <Card size="small">
       <Row gutter={[12, 12]} align="middle" className="mb-4">
@@ -55,6 +60,7 @@ const AttendanceFilters = ({
           <div style={{ marginBottom: 6, color: "rgba(0,0,0,.6)" }}>
             Employees
           </div>
+
           <Select
             mode="multiple"
             allowClear
@@ -65,20 +71,50 @@ const AttendanceFilters = ({
             showSearch
             optionFilterProp="label"
             style={{ width: "100%" }}
-            maxTagCount="responsive"
-            maxTagTextLength={20}
+            // hide tags inside the Select input
+            tagRender={() => null}
             filterOption={(input, option) => {
               const searchText = input.toLowerCase();
               const label = option.label.toLowerCase();
               return label.includes(searchText);
             }}
-            options={users.map((u) => ({
+            options={(users || []).map((u) => ({
               value: u._id,
-              label: `${u.firstName} ${u.lastName} ${
-                u.email ? `(${u.email})` : ""
-              }`,
+              label: `${u.firstName} ${u.lastName} ${u.email ? `(${u.email})` : ""}`,
             }))}
           />
+
+          {/* Selected items shown below the Select as full, closable tags */}
+          <div style={{ marginTop: 8 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {selectedUserObjects.map((u) => {
+                const fullLabel = u.email
+                  ? `${u.firstName} ${u.lastName} (${u.email})`
+                  : `${u.firstName} ${u.lastName}`;
+                return (
+                  <Tag
+                    key={u._id}
+                    closable
+                    onClose={(e) => {
+                      // prevent default focus change behavior
+                      e.preventDefault();
+                      setSelectedUsers((prev = []) =>
+                        prev.filter((id) => id !== u._id)
+                      );
+                    }}
+                    style={{ whiteSpace: "nowrap", maxWidth: "100%" }}
+                  >
+                    <Tooltip title={fullLabel}>
+                      <span style={{ userSelect: "none" }}>
+                        {u.firstName} {u.lastName}
+                        {u.email ? ` (${u.email})` : ""}
+                      </span>
+                    </Tooltip>
+                  </Tag>
+                );
+              })}
+            </div>
+          </div>
         </Col>
 
         <Col xs={12} sm={6} md={6}>

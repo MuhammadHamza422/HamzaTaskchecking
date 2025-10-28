@@ -15,6 +15,7 @@ import dayjs from "dayjs";
 import Swal from "sweetalert2";
 import { fetchAllUsers } from "../../api/auth";
 import { getAttendanceActivity } from "../../api/attendance";
+import { formatAttendanceTime } from "../../utils/timezone";
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -123,10 +124,10 @@ const AttendanceActivity = () => {
         title: "Time",
         dataIndex: "createdAt",
         key: "createdAt",
-        width: 210,
+        width: 250,
         render: (val) => (
           <span className="text-gray-700">
-            {dayjs(val).format("YYYY-MM-DD hh:mm:ss A")}
+            {formatAttendanceTime(val, 'UTC')}
           </span>
         ),
       },

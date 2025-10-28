@@ -4,6 +4,8 @@ import { fetchCompanies } from "../../../api/company";
 import { fetchAllUsers } from "../../../api/auth";
 import { Space, message } from "antd";
 import dayjs from "dayjs";
+import { formatCSVTime, formatCSVTimeOnly, getCompanyTimezone } from "../../../utils/timezone";
+import { splitAttendanceByDays, normalizeDateFormat, sortRecordsForCSV, calculateWorkedHoursForCSV } from "../../../utils/attendanceHelpers";
 
 // Import components
 import AttendanceHeader from "./AttendanceHeader";
@@ -214,28 +216,45 @@ export default function ManageAttendance({ canEdit = false }) {
 
   /* ---------- export CSV ---------- */
   const exportCSV = () => {
-    // For server-side pagination, we export only the current page data
-    // Sort data alphabetically by employee name, then by check-in date (descending within each employee)
-    const sortedRows = [...(filteredRows || [])].sort((a, b) => {
-      const nameA = `${a.user?.firstName || ""} ${a.user?.lastName || ""}`.trim();
-      const nameB = `${b.user?.firstName || ""} ${b.user?.lastName || ""}`.trim();
-      
-      // First sort by employee name (ascending)
-      const nameComparison = nameA.localeCompare(nameB);
-      if (nameComparison !== 0) return nameComparison;
-      
-      // Then sort by check-in date (descending within each employee)
-      const dateA = new Date(a.checkInAt || 0);
-      const dateB = new Date(b.checkInAt || 0);
-      return dateB - dateA;
+    // Split multi-day records into separate days
+    const splitRecords = [];
+    (filteredRows || []).forEach(record => {
+      const recordTimezone = getCompanyTimezone(record);
+      const dayRecords = splitAttendanceByDays(record, recordTimezone);
+      splitRecords.push(...dayRecords);
     });
 
-    const rowsForCsv = sortedRows.map((r) => ({
-      Employee: `${r.user?.firstName || ""} ${r.user?.lastName || ""}`.trim(),
-      "Check In": r.checkInAt ? new Date(r.checkInAt).toLocaleString() : "",
-      "Check Out": r.checkOutAt ? new Date(r.checkOutAt).toLocaleString() : "",
-      "Worked Hours": fmtHM(r.minutesWorked),
-    }));
+    // Sort data alphabetically by employee name, then by date (sequential)
+    const sortedRows = sortRecordsForCSV(splitRecords);
+
+    const rowsForCsv = sortedRows.map((r) => {
+      const recordTimezone = getCompanyTimezone(r);
+      
+      // For split records, show times appropriately
+      let checkIn = "";
+      let checkOut = "";
+      
+      if (r.splitDay) {
+        // Split day record - use display times
+        checkIn = r.displayCheckIn || "-";
+        checkOut = r.displayCheckOut || "-";
+      } else {
+        // Normal record - use time-only format
+        checkIn = formatCSVTimeOnly(r.checkInAt, recordTimezone) || "-";
+        checkOut = formatCSVTimeOnly(r.checkOutAt, recordTimezone) || "-";
+      }
+      
+      // Calculate worked hours based on company rules
+      const workedHours = calculateWorkedHoursForCSV(r, r.company);
+      
+      return {
+        Employee: `${r.user?.firstName || ""} ${r.user?.lastName || ""}`.trim(),
+        Date: r.splitDay ? r.day : normalizeDateFormat(r.day || r.checkInAt),
+        "Check In": checkIn,
+        "Check Out": checkOut,
+        "Total Hours": `${Math.floor(workedHours.totalHours)}:${String(Math.round((workedHours.totalHours % 1) * 60)).padStart(2, '0')}`,
+      };
+    });
 
     if (rowsForCsv.length === 0) {
       message.warning("No data to export");
@@ -249,7 +268,10 @@ export default function ManageAttendance({ canEdit = false }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `attendance_page_${page}_${dayjs().format("YYYYMMDD_HHmmss")}.csv`;
+    // show name of the selected company and the selected date range
+    const companyName = company ? companies.find(c => c._id === company)?.name : "All Companies";
+    const dateRangeStr = dateRange ? `${dateRange[0].format("YYYY-MM-DD")} to ${dateRange[1].format("YYYY-MM-DD")}` : "All Dates";
+    a.download = `attendance_${companyName}_${dateRangeStr}_${dayjs().format("YYYYMMDD_HHmmss")}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
