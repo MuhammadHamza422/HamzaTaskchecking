@@ -1,10 +1,7 @@
 
 
-import React, {
-  useState,
-  useMemo,
-  useRef,
-} from "react";
+// /src/pages/purchaser/PurchaserListingsPage.jsx
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   Table,
   message,
@@ -31,13 +28,15 @@ import {
 } from "./utils/PurchaseTableUtils";
 import PurchaserFilters from "./components/PurchaserFilters";
 import { CopyOutlined, InfoCircleOutlined } from "@ant-design/icons";
-import Swal from "sweetalert2"; // <-- toast
+import Swal from "sweetalert2";
 import { useCan, usePermissions } from "../../hooks/usePermissions";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 const { useBreakpoint } = Grid;
 
 /* --------------------------- helpers --------------------------- */
+const DEFAULT_STATUS = "Assigned";
+
 const lower = (v) => String(v ?? "").trim().toLowerCase();
 const pickRows = (body) =>
   Array.isArray(body)
@@ -61,7 +60,7 @@ const toast = Swal.mixin({
   customClass: { popup: "rounded-lg" },
 });
 
-/* ---------- Tooltip helpers (compact & consistent) ---------- */
+/* ---------- Tooltip helpers ---------- */
 const tipCommon = {
   getPopupContainer: () => document.body,
   overlayStyle: { zIndex: 1090 },
@@ -85,8 +84,8 @@ const TitleWithTip = ({ label, tip }) => (
 const colTitle = (label, tip) => <TitleWithTip label={label} tip={tip} />;
 
 /* ---------------------- STATUS (business) ---------------------- */
+// ❗️Removed "All". Default is "Assigned".
 const STATUS_META = {
-  "": { label: "All", color: "bg-slate-400" },
   Assigned: { label: "Assigned", color: "bg-amber-500" },
   Offer: { label: "Offer", color: "bg-blue-500" },
   Purchased: { label: "Purchased", color: "bg-green-600" },
@@ -97,8 +96,8 @@ const STATUS_META = {
   Dropshipped: { label: "Dropshipped", color: "bg-cyan-500" },
   Returned: { label: "Returned", color: "bg-orange-600" },
 };
+
 const STATUS_ORDER = [
-  "",
   "Assigned",
   "Offer",
   "Purchased",
@@ -109,8 +108,9 @@ const STATUS_ORDER = [
   "Dropshipped",
   "Returned",
 ];
+
 const STATUS_OPTIONS = STATUS_ORDER.map((value) => ({
-  key: value || "ALL",
+  key: value,
   value,
   label: STATUS_META[value].label,
   color: STATUS_META[value].color,
@@ -230,7 +230,7 @@ export default function PurchaserListingsPage() {
     return String(r?.role || r || "").toLowerCase() === "admin";
   }, [authUser]);
 
-  // --------- Permissions via hook (no manual /role/all calls) ----------
+  // Permissions via hook
   const { isLoading: permsLoading } = usePermissions();
   const canSeeAssignedMine = useCan("purchaser", "assigned to me");
   const canSeeAllAssigned = useCan("purchaser", "all assigned");
@@ -239,8 +239,9 @@ export default function PurchaserListingsPage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
 
+  // ❗️Default to "Assigned" if URL is missing/empty
   const initialStatusFromUrl = useMemo(
-    () => searchParams.get("status") || "",
+    () => searchParams.get("status") || DEFAULT_STATUS,
     [searchParams]
   );
   const [statusFilter, setStatusFilter] = useState(initialStatusFromUrl);
@@ -259,25 +260,24 @@ export default function PurchaserListingsPage() {
   const screens = useBreakpoint();
   const navigate = useNavigate();
 
-  // Keep business status in URL
-  useMemo(() => {
+  // Keep status in URL; we always set it (since there's no "All")
+  useEffect(() => {
     const current = searchParams.get("status") || "";
     if (statusFilter !== current) {
       const next = new URLSearchParams(searchParams);
-      if (statusFilter) next.set("status", statusFilter);
-      else next.delete("status");
+      next.set("status", statusFilter || DEFAULT_STATUS);
       setSearchParams(next, { replace: true });
     }
-  }, [statusFilter, searchParams, setSearchParams]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter]);
 
   // Reset page when filters change
-  useMemo(() => {
+  useEffect(() => {
     setPage(1);
   }, [statusFilter, trackingFilter, searchTerm, dateRange, selectedPurchaser]);
 
   // Base params (permission-gated)
   const baseParams = useMemo(() => {
-    // wait until permissions are known
     if (permsLoading || canSeeAssignedMine === null || canSeeAllAssigned === null)
       return null;
 
@@ -310,7 +310,7 @@ export default function PurchaserListingsPage() {
   const serverParams = useMemo(() => {
     if (!baseParams) return null;
     const p = { ...baseParams };
-    if (statusFilter) p.status = statusFilter;
+    p.status = statusFilter || DEFAULT_STATUS; // always send a status
     return p;
   }, [baseParams, statusFilter]);
 
@@ -319,19 +319,17 @@ export default function PurchaserListingsPage() {
     data: listPayload,
     isFetching: listFetching,
     isLoading: listLoading,
-    isError: listError,
-    error: listErrObj,
   } = useQuery({
     queryKey: ["purchaser", "list", serverParams, page, limit],
-    enabled: !!serverParams,                     // don’t call API until params ready
+    enabled: !!serverParams,
     queryFn: async () => {
       const { data } = await apiClient.get("/api/v1/sourcing/all-sourcing", {
         params: { ...serverParams, page, limit, sort: "-createdAt" },
       });
       return data;
     },
-    keepPreviousData: true,                      // smooth pagination
-    staleTime: 30_000,                           // 30s fresh window
+    keepPreviousData: true,
+    staleTime: 30_000,
     onError: (err) => {
       const msg = err?.response?.data?.message || "Failed to fetch data.";
       message.error(msg);
@@ -342,7 +340,9 @@ export default function PurchaserListingsPage() {
   const requests = useMemo(() => {
     const rows = normalizeRequests(pickRows(listPayload || {}));
     if (!trackingFilter) return rows;
-    return rows.filter((r) => mapTrackingBucket(r.tracking_status) === trackingFilter);
+    return rows.filter(
+      (r) => mapTrackingBucket(r.tracking_status) === trackingFilter
+    );
   }, [listPayload, trackingFilter]);
 
   const total = useMemo(() => {
@@ -357,10 +357,9 @@ export default function PurchaserListingsPage() {
     enabled: !!baseParams,
     staleTime: 30_000,
     queryFn: async () => {
-      // call same endpoint for each status with limit=1 to read total
       const getCount = async (statusVal) => {
         const params = { ...baseParams, page: 1, limit: 1, sort: "-createdAt" };
-        if (statusVal) params.status = statusVal;
+        params.status = statusVal;
         const { data } = await apiClient.get("/api/v1/sourcing/all-sourcing", {
           params,
         });
@@ -374,7 +373,9 @@ export default function PurchaserListingsPage() {
   });
 
   /* ===== React Query: Tracking counts (client-side over a page) ===== */
-  const { data: trackingCounts = { InTransit: 0, Delivered: 0, Pending: 0 } } = useQuery({
+  const {
+    data: trackingCounts = { InTransit: 0, Delivered: 0, Pending: 0 },
+  } = useQuery({
     queryKey: ["purchaser", "tracking-counts", baseParams],
     enabled: !!baseParams,
     staleTime: 30_000,
@@ -451,7 +452,7 @@ export default function PurchaserListingsPage() {
     {
       title: colTitle("ID", "Sourcing request ID (table shows last 6 digits)."),
       dataIndex: "sourcing_id",
-      width: 60,
+      width: 80,
       onCell: () => ({
         style: {
           maxWidth: 60,
@@ -646,11 +647,11 @@ export default function PurchaserListingsPage() {
         "Order-level shipping charges included in Total Actual Cost."
       ),
       dataIndex: "shipping_charges",
-      width: 130,
+      width: 150,
       align: "center",
       onCell: () => ({
         style: {
-          maxWidth: 130,
+          maxWidth: 150,
           whiteSpace: "nowrap",
           overflow: "hidden",
           textOverflow: "ellipsis",
@@ -662,7 +663,7 @@ export default function PurchaserListingsPage() {
       title: colTitle("Tax", "Order-level taxes included in Total Actual Cost."),
       dataIndex: "taxes",
       width: 120,
-      align: "right",
+      align: "center",
       render: (p, rec) => money(p ?? rec?.tax ?? 0),
     },
     {
@@ -672,7 +673,7 @@ export default function PurchaserListingsPage() {
       ),
       dataIndex: "target_total_cost",
       width: 150,
-      align: "right",
+      align: "center",
       render: (p) => money(p),
     },
 
@@ -683,7 +684,7 @@ export default function PurchaserListingsPage() {
       ),
       dataIndex: "total_actual_cost",
       width: 150,
-      align: "right",
+      align: "center",
       render: (p) => money(p),
     },
     // ===== Copy listing link action (fixed right) =====
@@ -699,7 +700,7 @@ export default function PurchaserListingsPage() {
         const disabled = !url;
 
         const handleCopy = async (e) => {
-          e.stopPropagation(); // don't trigger row navigation
+          e.stopPropagation();
           if (!url) {
             await toast.fire({
               icon: "warning",
@@ -769,10 +770,7 @@ export default function PurchaserListingsPage() {
       style={active ? { backgroundColor: "#3B82F6" } : {}}
     >
       <span
-        className={[
-          "h-1.5 w-1.5 rounded-full",
-          active ? "bg-white" : color,
-        ].join(" ")}
+        className={["h-1.5 w-1.5 rounded-full", active ? "bg-white" : color].join(" ")}
       />
       <span className="font-medium">{text}</span>
       <span
@@ -786,10 +784,8 @@ export default function PurchaserListingsPage() {
     </div>
   );
 
-  const activeStatusKey = useMemo(() => {
-    const found = STATUS_OPTIONS.find((s) => s.value === statusFilter);
-    return found?.key || "ALL";
-  }, [statusFilter]);
+  // ❗️Active key is just the current value, defaulting to "Assigned"
+  const activeStatusKey = statusFilter || DEFAULT_STATUS;
 
   const statusTabItems = useMemo(
     () =>
@@ -890,13 +886,12 @@ export default function PurchaserListingsPage() {
             >
               Refresh
             </button>
-            {(trackingFilter || activeStatusKey !== "all") && (
+            {(trackingFilter || statusFilter !== DEFAULT_STATUS) && (
               <button
                 type="button"
                 onClick={() => {
                   setTrackingFilter("");
-                  const all = STATUS_OPTIONS.find((s) => s.key === "all");
-                  setStatusFilter(all ? all.value : "");
+                  setStatusFilter(DEFAULT_STATUS); // ❗️reset to Assigned
                 }}
                 className="
                   text-[11px] px-2.5 py-1 rounded-md
@@ -923,7 +918,7 @@ export default function PurchaserListingsPage() {
             backdrop-blur
           "
         >
-          {/* Row 1: STATUS */}
+          {/* Row 1: STATUS (no "All") */}
           <div className="flex items-center gap-1.5">
             <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-200">
               Status
@@ -934,8 +929,8 @@ export default function PurchaserListingsPage() {
                 items={statusTabItems}
                 activeKey={activeStatusKey}
                 onChange={(key) => {
-                  const found = STATUS_OPTIONS.find((s) => s.key === key);
-                  setStatusFilter(found ? found.value : "");
+                  // key is already the status value
+                  setStatusFilter(key || DEFAULT_STATUS);
                 }}
                 destroyInactiveTabPane={false}
                 animated
@@ -986,6 +981,9 @@ export default function PurchaserListingsPage() {
                   label={TRACKING_META[id].label}
                   count={trackingCounts[id] ?? 0}
                   active={trackingFilter === id}
+                  onToggle={(clicked) => {
+                    setTrackingFilter((prev) => (prev === clicked ? "" : clicked));
+                  }}
                 />
               ))}
 
@@ -1009,7 +1007,7 @@ export default function PurchaserListingsPage() {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Filters (search/date/admin) */}
       <PurchaserFilters
         screens={screens}
         statusFilter={statusFilter}
@@ -1039,7 +1037,7 @@ export default function PurchaserListingsPage() {
           ) : null
         }
         onClear={() => {
-          setStatusFilter("");
+          setStatusFilter(DEFAULT_STATUS); // ❗️keep default
           setTrackingFilter("");
           setSearchTerm("");
           setDateRange([]);
@@ -1048,7 +1046,8 @@ export default function PurchaserListingsPage() {
           handleRefreshClick();
         }}
         showStatusNote="Status tabs & filter apply on Listings page"
-        statusOptions={STATUS_OPTIONS.filter((s) => s.value)}
+        // If your PurchaserFilters supports passing options, these exclude "All"
+        statusOptions={STATUS_OPTIONS}
       />
 
       {/* Table */}
@@ -1078,10 +1077,7 @@ export default function PurchaserListingsPage() {
           sticky
           expandable={{
             expandedRowRender: (record) => (
-              <ExpandedItemsTable
-                order={record}
-                onOpen={(to) => navigate(to)}
-              />
+              <ExpandedItemsTable order={record} />
             ),
             rowExpandable: (record) =>
               Array.isArray(record.items) && record.items.length > 0,
@@ -1109,14 +1105,14 @@ export default function PurchaserListingsPage() {
 }
 
 /* --------------------- small presentational component --------------------- */
-function TrackingPill({ id, label, count, active }) {
+function TrackingPill({ id, label, count, active, onToggle }) {
   const meta = TRACKING_META[id];
   const isOn = active;
+
   return (
     <button
       type="button"
-      onClick={() => window?.dispatchEvent(new CustomEvent('toggleTracking', { detail: { id } }))}
-      // Note: The onClick behavior is handled inline in the page above (kept original there).
+      onClick={() => onToggle?.(id)}
       className={[
         "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors",
         isOn
