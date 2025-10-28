@@ -6,6 +6,7 @@ export const fetchUserActivity = async ({
   app,
   date,
   user,
+  warehouse,
 }) => {
   const params = new URLSearchParams({
     page: String(page),
@@ -21,6 +22,9 @@ export const fetchUserActivity = async ({
   if (app) {
     params.append("app", app);
   }
+  if (warehouse) {
+    params.append("warehouse", warehouse);
+  }
 
   const { data } = await apiClient.get(
     `/api/v1/auth/activity?${params.toString()}`
@@ -32,7 +36,7 @@ export const fetchAllUsers = async () => {
   const params = new URLSearchParams({
     page: "1",
     limit: "10000",
-    });
+  });
   const { data } = await apiClient.get(`/api/v1/auth/all?${params.toString()}`);
   return Array.isArray(data?.users) ? data.users : [];
 };

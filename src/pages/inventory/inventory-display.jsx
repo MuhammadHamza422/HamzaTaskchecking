@@ -17,6 +17,8 @@ import { useAuth } from "../../contexts/AuthContext";
 import { Modal } from "antd";
 import useFullscreen from "../../components/useFullscreen";
 import { useSelector } from "react-redux";
+import axios from "axios";
+import apiClient from "../../api/client";
 
 const productTypes = [
   { label: "Consoles", code: "CON" },
@@ -66,6 +68,43 @@ export default function InventoryDisplay({
   const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
   // console.log("Location Id", locationid);
   const zoneId = useSelector((s) => s.app.selectedZoneId);
+  const [zones, setZones] = useState([]);
+  const [searchZone, setSearchZone] = useState("");
+  const [showZoneDropdown, setShowZoneDropdown] = useState(false);
+  const [locations, setLocations] = useState([]);
+  const [selectedZone, setSelectedZone] = useState("");
+
+  console.log("Zone Id", selectedZone);
+
+  // Fetch zones
+  const FetchZones = async () => {
+    try {
+      const { data } = await apiClient.get("/api/v1/warehouse/zone/all");
+      setZones(data.zones);
+    } catch (error) {
+      console.error("Error fetching zones:", error);
+    }
+  };
+
+  useEffect(() => {
+    FetchZones();
+  }, [isMoveOpen]);
+
+  // Fetch locations
+  // const FetchLocations = async () => {
+  //   try {
+  //     const { data } = await apiClient.get(
+  //       `/api/v1/location/all?zone=${zoneId}`
+  //     );
+  //     setLocations(data.locations);
+  //   } catch (error) {
+  //     console.error("Error fetching locations:", error);
+  //   }
+  // };
+
+  // useEffect(() => {
+  //   FetchLocations();
+  // }, [zoneId]);
 
   // Handle click outside to close dropdown
   useEffect(() => {
@@ -440,12 +479,13 @@ export default function InventoryDisplay({
 
   // Query for locations in move modal
   const { data: locationsData } = useQuery({
-    queryKey: ["locations", moveLocationSearch],
+    queryKey: ["locations", moveLocationSearch, selectedZone],
     queryFn: async () => {
       const res = await getLocations({
         page: 1,
         limit: 100,
         search: moveLocationSearch,
+        zoneId: selectedZone,
       });
 
       // Transform the locations to include both _id and id for compatibility
@@ -647,12 +687,17 @@ export default function InventoryDisplay({
 
   // Move inventory item mutation
   const moveItem = useMutation({
-    mutationFn: async ({ inventoryId, movedLocationId }) => {
+    mutationFn: async ({ inventoryId, movedLocationId, zoneId }) => {
       console.log("Move item mutation started", {
         inventoryId,
         movedLocationId,
+        zoneId,
       });
-      const result = await moveInventoryItem(inventoryId, movedLocationId);
+      const result = await moveInventoryItem(
+        inventoryId,
+        movedLocationId,
+        zoneId
+      );
       console.log("Move item mutation completed", result);
       return result;
     },
@@ -672,6 +717,8 @@ export default function InventoryDisplay({
         if (Array.isArray(res?.inventry)) {
           setItems(res.inventry);
         }
+
+        setSelectedZone("");
 
         // Close modal and reset state
         setIsMoveOpen(false);
@@ -2092,6 +2139,70 @@ export default function InventoryDisplay({
               </p>
             </div>
 
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Select Zone
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search Zone..."
+                  value={searchZone}
+                  onChange={(e) => {
+                    setSearchZone(e.target.value);
+                    setShowZoneDropdown(true);
+                  }}
+                  onFocus={() => setShowZoneDropdown(true)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-colors"
+                />
+
+                {showZoneDropdown && zones.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {zones
+                      .filter((zone) => {
+                        // Exclude already selected zone
+                        if (zone._id === selectedZone) return false;
+
+                        // Filter by search input
+                        if (!searchZone) return true;
+                        return zone.name
+                          .toLowerCase()
+                          .includes(searchZone.toLowerCase());
+                      })
+                      .map((zon) => (
+                        <div
+                          key={zon._id}
+                          onClick={() => {
+                            setSelectedZone(zon._id);
+                            setSearchZone(zon.name);
+                            setShowZoneDropdown(false); // close dropdown after selection
+                          }}
+                          className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm border-b last:border-b-0"
+                        >
+                          <div className="font-medium">{zon.name}</div>
+                          <div className="text-xs text-gray-500 capitalize">
+                            {zon.type}
+                          </div>
+                        </div>
+                      ))}
+
+                    {/* Handle no results */}
+                    {zones.filter(
+                      (zone) =>
+                        zone.name
+                          .toLowerCase()
+                          .includes(searchZone.toLowerCase()) &&
+                        zone._id !== selectedZone
+                    ).length === 0 && (
+                      <div className="px-3 py-2 text-gray-500 text-sm text-center">
+                        No zones found
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Location Selection */}
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700">
@@ -2217,6 +2328,7 @@ export default function InventoryDisplay({
                   moveItem.mutate({
                     inventoryId,
                     movedLocationId: selectedMoveLocation.id,
+                    zoneId: selectedZone,
                   });
                 }}
                 disabled={moveItem.isLoading || !selectedMoveLocation}

@@ -230,18 +230,16 @@ export async function createInventory(body) {
 
 // PATCH /api/v1/inventry/move/:id
 // Body: { movedLocationId }
-export async function moveInventoryItem(inventoryId, movedLocationId) {
-  console.log("Move API call:", {
-    inventoryId,
-    movedLocationId,
-    endpoint: `/api/v1/inventry/move/${inventoryId}`,
-    payload: { movedLocationId },
-  });
-
+export async function moveInventoryItem(
+  inventoryId,
+  movedLocationId,
+  selectedZone
+) {
   const { data } = await apiClient.patch(
     `/api/v1/inventry/move/${inventoryId}`,
     {
       movedLocationId,
+      zoneId: selectedZone,
     }
   );
 

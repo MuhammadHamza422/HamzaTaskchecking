@@ -15,6 +15,8 @@ import {
 import dayjs from "dayjs";
 import Swal from "sweetalert2";
 import { fetchAllUsers, fetchUserActivity } from "../../api/auth";
+import apiClient from "../../api/client";
+import { useEffect } from "react";
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -22,8 +24,12 @@ const { Option } = Select;
 const ActivityLogs = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(30);
+  const [warehouses, setWarehouses] = useState([]);
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [selectedWarehouse, setSelectedWarehouse] = useState(null);
+
+  console.log("Warehouses:", selectedWarehouse);
 
   const { data: usersData } = useQuery({
     queryKey: ["users-all"],
@@ -34,6 +40,20 @@ const ActivityLogs = () => {
     refetchOnMount: true,
   });
 
+  // Fetch warehouses
+  const fetchWarehouses = async () => {
+    try {
+      const { data } = await apiClient.get("/api/v1/warehouse/all");
+      setWarehouses(data.warehouses);
+    } catch (error) {
+      console.error("Error fetching warehouses:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchWarehouses();
+  }, []);
+
   const { data, isLoading, error } = useQuery({
     queryKey: [
       "user-activity",
@@ -42,6 +62,7 @@ const ActivityLogs = () => {
 
       selectedDate?.format?.("YYYY-MM-DD") || null,
       selectedUser,
+      selectedWarehouse,
     ],
     queryFn: async ({ queryKey }) => {
       const [, page, limit, dateStr, userId] = queryKey;
@@ -51,6 +72,7 @@ const ActivityLogs = () => {
         app: "inventory",
         date: dateStr || undefined,
         user: userId || undefined,
+        warehouse: selectedWarehouse || undefined,
       });
     },
     keepPreviousData: true,
@@ -78,6 +100,13 @@ const ActivityLogs = () => {
       label: [u.firstName, u.lastName].filter(Boolean).join(" ") || u.email,
     }));
   }, [usersData]);
+
+  const warehousesOptions = useMemo(() => {
+    return (warehouses || []).map((w) => ({
+      value: w._id,
+      label: w.name,
+    }));
+  }, [warehouses]);
 
   const colors = {
     add: "green",
@@ -131,6 +160,17 @@ const ActivityLogs = () => {
         ),
       },
       {
+        title: "Warehouse",
+        dataIndex: "warehouse",
+        key: "warehouse",
+        width: 160,
+        render: (text) => (
+          <p className="flex items-center gap-2 capitalize">
+            {text?.name || "__"}
+          </p>
+        ),
+      },
+      {
         title: "Performed By",
         key: "user",
         width: 220,
@@ -157,6 +197,11 @@ const ActivityLogs = () => {
 
   const onUserChange = (val) => {
     setSelectedUser(val || null);
+    setCurrentPage(1);
+  };
+
+  const onWarehouseChange = (val) => {
+    setSelectedWarehouse(val || null);
     setCurrentPage(1);
   };
 
@@ -190,6 +235,16 @@ const ActivityLogs = () => {
             User Activity
           </Title>
           <div className="flex flex-wrap gap-3 items-center">
+            <Select
+              placeholder="Filter by Warehouse"
+              allowClear
+              value={selectedWarehouse || undefined}
+              onChange={onWarehouseChange}
+              className="min-w-[220px]"
+              showSearch
+              optionFilterProp="label"
+              options={warehousesOptions}
+            />
             <Select
               placeholder="Filter by user"
               allowClear
