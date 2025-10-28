@@ -1,19 +1,20 @@
 import React from "react";
-import { Card, Table, Space, Tag, Button, Tooltip, Modal, Form, DatePicker, Input, message } from "antd";
-import { EditOutlined, DeleteOutlined, CloseOutlined, PlusOutlined } from "@ant-design/icons";
+import { Card, Table, Space, Tag, Button, Tooltip, Modal, Form, DatePicker, Input, message, InputNumber, Select } from "antd";
+import { EditOutlined, DeleteOutlined, CloseOutlined, PlusOutlined, DollarOutlined, CalculatorOutlined } from "@ant-design/icons";
 import { adminUpdateAttendance, adminDeleteAttendance } from "../../../api/attendance";
+import { updateEmployeePayroll, bulkUpdateEmployeePayroll, recalculateAttendancePayroll } from "../../../api/payroll";
 import dayjs from "dayjs";
 import Swal from "sweetalert2";
 import { formatDateTimeInTimezone, formatTimeWithTimezone, formatAttendanceTime, getCompanyTimezone } from "../../../utils/timezone";
 import LiveTimeTracker from "../../../components/common/LiveTimeTracker";
 
 const fmtDT = (d, timezone = 'UTC') => {
-  if (!d) return "—";
+  if (!d) return "-";
   return formatDateTimeInTimezone(d, timezone);
 };
 
 const fmtDTWithTimezone = (d, timezone = 'UTC') => {
-  if (!d) return "—";
+  if (!d) return "-";
   return formatTimeWithTimezone(d, timezone);
 };
 const diffMinutes = (a, b) => Math.max(0, Math.round((new Date(b) - new Date(a)) / 60000));
@@ -41,6 +42,16 @@ const AttendanceTable = ({
   const [editing, setEditing] = React.useState(null);
   const [form] = Form.useForm();
   const [breaksData, setBreaksData] = React.useState([]);
+  
+  // Payroll states
+  const [payrollModalOpen, setPayrollModalOpen] = React.useState(false);
+  const [bulkPayrollModalOpen, setBulkPayrollModalOpen] = React.useState(false);
+  const [selectedRows, setSelectedRows] = React.useState([]);
+  const [editingPayroll, setEditingPayroll] = React.useState(null);
+  const [payrollForm] = Form.useForm();
+  const [bulkPayrollForm] = Form.useForm();
+  const [payrollLoading, setPayrollLoading] = React.useState(false);
+  const [bulkPayrollLoading, setBulkPayrollLoading] = React.useState(false);
 
   const handleDelete = async (id) => {
     if (!canEdit) return;
@@ -131,6 +142,113 @@ const AttendanceTable = ({
     }
   };
 
+  // Payroll functions
+  const handlePayrollEdit = (record) => {
+    setEditingPayroll(record);
+    payrollForm.setFieldsValue({
+      hourlyRate: record.payroll?.hourlyRate || record.user?.hourlyRate || 0,
+      currency: record.payroll?.currency || record.user?.currency || 'USD',
+    });
+    setPayrollModalOpen(true);
+  };
+
+  const savePayrollEdit = async () => {
+    try {
+      setPayrollLoading(true);
+      const values = await payrollForm.validateFields();
+      await updateEmployeePayroll(editingPayroll.user._id, {
+        hourlyRate: values.hourlyRate,
+        currency: values.currency,
+        payrollEnabled: true,
+      });
+      
+      // Recalculate payroll for this attendance record
+      await recalculateAttendancePayroll(editingPayroll._id);
+      
+      message.success("Payroll updated successfully");
+      setPayrollModalOpen(false);
+      setEditingPayroll(null);
+      fetchData();
+    } catch (error) {
+      message.error(error?.response?.data?.message || "Failed to update payroll");
+    } finally {
+      setPayrollLoading(false);
+    }
+  };
+
+  const handleBulkPayrollUpdate = async () => {
+    try {
+      setBulkPayrollLoading(true);
+      const values = await bulkPayrollForm.validateFields();
+      const employeeIds = selectedRows.map(row => row.user._id);
+      
+      await bulkUpdateEmployeePayroll({
+        employeeIds,
+        hourlyRate: values.hourlyRate,
+        currency: values.currency,
+        effectiveFrom: values.effectiveFrom ? values.effectiveFrom.toISOString() : new Date().toISOString(),
+      });
+      
+      // Recalculate payroll for all selected attendance records
+      const attendanceIds = selectedRows.map(row => row._id);
+      for (const attendanceId of attendanceIds) {
+        try {
+          await recalculateAttendancePayroll(attendanceId);
+        } catch (error) {
+          console.warn(`Failed to recalculate payroll for attendance ${attendanceId}:`, error);
+        }
+      }
+      
+      message.success(`Payroll updated for ${employeeIds.length} employees`);
+      setSelectedRows([]);
+      setBulkPayrollModalOpen(false);
+      bulkPayrollForm.resetFields();
+      fetchData();
+    } catch (error) {
+      message.error(error?.response?.data?.message || "Failed to update payroll");
+    } finally {
+      setBulkPayrollLoading(false);
+    }
+  };
+
+  const formatCurrency = (amount, currency = 'USD') => {
+    if (amount === null || amount === undefined) return '-';
+    
+    // For Colombian Peso, use custom formatting to show $ symbol
+    if (currency === 'COP') {
+      return `$${amount.toFixed(2)}`;
+    }
+    
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  };
+
+  const formatHours = (hours) => {
+    if (hours === null || hours === undefined) return '-';
+    const h = Math.floor(hours);
+    const m = Math.round((hours - h) * 60);
+    return `${h}:${m.toString().padStart(2, '0')}`;
+  };
+
+  // Calculate actual work time for payroll (excluding breaks)
+  const calculateActualWorkTime = (record) => {
+    if (!record.checkInAt) return 0;
+    
+    const checkInTime = new Date(record.checkInAt);
+    const checkOutTime = record.checkOutAt ? new Date(record.checkOutAt) : new Date();
+    const totalMinutes = Math.floor((checkOutTime - checkInTime) / (1000 * 60));
+    
+    // Calculate break time
+    const breakMinutes = sumBreakMinutes(record.breaks || []);
+    
+    // Return actual work time in hours (excluding breaks)
+    return Math.max(0, (totalMinutes - breakMinutes) / 60);
+  };
+
   const columns = [
     {
       title: "#",
@@ -165,12 +283,12 @@ const AttendanceTable = ({
       width: 280,
       render: (_, r) => {
         const companyName = (() => {
-          if (r.company && typeof r.company === 'object') return r.company.name || '—';
+          if (r.company && typeof r.company === 'object') return r.company.name || '-';
           if (r.company && typeof r.company === 'string') {
             const c = companies.find(x => x._id === r.company);
-            return c?.name || '—';
+            return c?.name || '-';
           }
-          return '—';
+          return '-';
         })();
         
         const timezone = getCompanyTimezone(r);
@@ -238,7 +356,7 @@ const AttendanceTable = ({
           return <Tag color="green" style={{ fontSize: "11px" }}>Checked In</Tag>;
         }
         if (r.checkOutAt) return <Tag style={{ fontSize: "11px" }}>Checked Out</Tag>;
-        return <Tag style={{ fontSize: "11px" }}>—</Tag>;
+        return <Tag style={{ fontSize: "11px" }}>-</Tag>;
       },
     },
     {
@@ -299,7 +417,7 @@ const AttendanceTable = ({
           color={s === "kiosk" ? "blue" : s === "manual" ? "purple" : "default"}
           style={{ fontSize: "11px" }}
         >
-          {s || "—"}
+          {s || "-"}
         </Tag>
       ),
     },
@@ -311,9 +429,107 @@ const AttendanceTable = ({
       ellipsis: true, 
       render: (n) => (
         <span style={{ fontSize: "12px", color: "rgba(0,0,0,.65)" }}>
-          {n || "—"}
+          {n || "-"}
         </span>
       )
+    },
+    {
+      title: "Total Hours",
+      key: "totalHours",
+      width: 120,
+      align: "center",
+      render: (_, record) => {
+        // Always calculate actual work time for all companies (ignore backend fixed shift data)
+        const totalHours = calculateActualWorkTime(record);
+        return (
+          <span style={{ fontWeight: 500, color: "rgba(0,0,0,.85)" }}>
+            {formatHours(totalHours)}
+          </span>
+        );
+      },
+      sorter: (a, b) => {
+        const aHours = calculateActualWorkTime(a);
+        const bHours = calculateActualWorkTime(b);
+        return aHours - bHours;
+      },
+    },
+    {
+      title: "Hourly Rate",
+      key: "hourlyRate",
+      width: 120,
+      align: "center",
+      render: (_, record) => {
+        const hourlyRate = record.payroll?.hourlyRate || record.user?.hourlyRate;
+        const currency = record.payroll?.currency || record.user?.currency || 'USD';
+        return (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+            <span style={{ fontWeight: 500, color: "rgba(0,0,0,.85)" }}>
+              {hourlyRate ? formatCurrency(hourlyRate, currency) : "-"}
+            </span>
+            {canEdit && (
+              <Tooltip title="Edit hourly rate">
+                <Button
+                  size="small"
+                  icon={<EditOutlined />}
+                  onClick={() => handlePayrollEdit(record)}
+                  style={{ minWidth: "20px", height: "20px", padding: 0 }}
+                />
+              </Tooltip>
+            )}
+          </div>
+        );
+      },
+      sorter: (a, b) => (a.payroll?.hourlyRate || 0) - (b.payroll?.hourlyRate || 0),
+    },
+    {
+      title: "Total Pay",
+      key: "totalPay",
+      width: 120,
+      align: "center",
+      render: (_, record) => {
+        const hourlyRate = record.payroll?.hourlyRate || record.user?.hourlyRate;
+        const currency = record.payroll?.currency || record.user?.currency || 'USD';
+        
+        // Always calculate total pay based on actual work time (ignore backend fixed shift data)
+        let totalPay = null;
+        if (hourlyRate) {
+          const actualWorkHours = calculateActualWorkTime(record);
+          totalPay = hourlyRate * actualWorkHours;
+        }
+        
+        return (
+          <span style={{ 
+            fontWeight: 600, 
+            color: totalPay ? "#52c41a" : "rgba(0,0,0,.45)",
+            fontSize: "13px"
+          }}>
+            {formatCurrency(totalPay, currency)}
+          </span>
+        );
+      },
+      sorter: (a, b) => {
+        const aRate = a.payroll?.hourlyRate || a.user?.hourlyRate || 0;
+        const bRate = b.payroll?.hourlyRate || b.user?.hourlyRate || 0;
+        const aHours = calculateActualWorkTime(a);
+        const bHours = calculateActualWorkTime(b);
+        const aPay = aRate * aHours;
+        const bPay = bRate * bHours;
+        return aPay - bPay;
+      },
+    },
+    {
+      title: "Currency",
+      key: "currency",
+      width: 80,
+      align: "center",
+      render: (_, record) => {
+        const currency = record.payroll?.currency || record.user?.currency || 'USD';
+        return (
+          <Tag color="blue" style={{ fontSize: "11px" }}>
+            {currency}
+          </Tag>
+        );
+      },
     },
     {
       title: "Actions",
@@ -382,8 +598,51 @@ const AttendanceTable = ({
     );
   };
 
+  const rowSelection = canEdit ? {
+    selectedRowKeys: selectedRows.map(row => row._id),
+    onChange: (selectedRowKeys, selectedRows) => {
+      setSelectedRows(selectedRows);
+    },
+    getCheckboxProps: (record) => ({
+      name: record._id,
+    }),
+    onSelect: (record, selected, selectedRows, nativeEvent) => {
+      // Prevent modal from opening when clicking checkbox
+      if (nativeEvent) {
+        nativeEvent.stopPropagation();
+      }
+    },
+    onSelectAll: (selected, selectedRows, changeRows) => {
+      // Prevent modal from opening when clicking select all checkbox
+    },
+  } : null;
+
   return (
     <>
+      <div style={{ marginBottom: 16 }}>
+        {canEdit && selectedRows.length > 0 && (
+          <Space>
+            <Button
+              type="primary"
+              icon={<DollarOutlined />}
+              onClick={() => {
+                bulkPayrollForm.setFieldsValue({
+                  hourlyRate: 0,
+                  currency: 'USD',
+                  effectiveFrom: dayjs(),
+                });
+                setBulkPayrollModalOpen(true);
+              }}
+            >
+              Set Hourly Rate ({selectedRows.length} selected)
+            </Button>
+            <Button onClick={() => setSelectedRows([])}>
+              Clear Selection
+            </Button>
+          </Space>
+        )}
+      </div>
+      
       <div>
         <Table
           size="middle"
@@ -393,7 +652,8 @@ const AttendanceTable = ({
           loading={loading}
           expandable={{ expandedRowRender }}
           pagination={false}
-          scroll={{ x: 1940 }}
+          scroll={{ x: 2400 }}
+          rowSelection={rowSelection}
           style={{ 
             fontSize: "13px",
             fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
@@ -524,6 +784,129 @@ const AttendanceTable = ({
           >
             Add Break
           </Button>
+        </Form>
+      </Modal>
+
+      {/* Payroll Edit Modal */}
+      <Modal
+        open={payrollModalOpen}
+        title="Edit Payroll"
+        onCancel={() => {
+          setPayrollModalOpen(false);
+          setEditingPayroll(null);
+          payrollForm.resetFields();
+        }}
+        onOk={savePayrollEdit}
+        okText="Save Changes"
+        okButtonProps={{ 
+          type: "primary",
+          loading: payrollLoading,
+          disabled: payrollLoading
+        }}
+        cancelButtonProps={{
+          disabled: payrollLoading
+        }}
+        destroyOnClose
+      >
+        <Form form={payrollForm} layout="vertical">
+          <Form.Item 
+            label="Employee" 
+            name="employee"
+            initialValue={editingPayroll ? `${editingPayroll.user?.firstName} ${editingPayroll.user?.lastName}` : ''}
+          >
+            <Input disabled />
+          </Form.Item>
+          <Form.Item 
+            label="Hourly Rate" 
+            name="hourlyRate"
+            rules={[{ required: true, message: 'Please enter hourly rate' }]}
+          >
+            <InputNumber
+              min={0}
+              step={0.01}
+              precision={2}
+              style={{ width: '100%' }}
+              placeholder="Enter hourly rate"
+            />
+          </Form.Item>
+          <Form.Item 
+            label="Currency" 
+            name="currency"
+            rules={[{ required: true, message: 'Please select currency' }]}
+          >
+            <Select placeholder="Select currency">
+              <Select.Option value="USD">USD (US - America/New_York)</Select.Option>
+              <Select.Option value="COP">COP (Colombia - America/Bogota)</Select.Option>
+              <Select.Option value="JPY">JPY (Japan - Asia/Tokyo)</Select.Option>
+            </Select>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Bulk Payroll Update Modal */}
+      <Modal
+        open={bulkPayrollModalOpen}
+        title={`Set Hourly Rate for ${selectedRows.length} Employees`}
+        onCancel={() => {
+          setBulkPayrollModalOpen(false);
+          bulkPayrollForm.resetFields();
+        }}
+        onOk={handleBulkPayrollUpdate}
+        okText="Update All"
+        okButtonProps={{ 
+          type: "primary",
+          loading: bulkPayrollLoading,
+          disabled: bulkPayrollLoading
+        }}
+        cancelButtonProps={{
+          disabled: bulkPayrollLoading
+        }}
+        destroyOnClose
+      >
+        <Form form={bulkPayrollForm} layout="vertical">
+          <Form.Item 
+            label="Hourly Rate" 
+            name="hourlyRate"
+            rules={[{ required: true, message: 'Please enter hourly rate' }]}
+          >
+            <InputNumber
+              min={0}
+              step={0.01}
+              precision={2}
+              style={{ width: '100%' }}
+              placeholder="Enter hourly rate"
+            />
+          </Form.Item>
+          <Form.Item 
+            label="Currency" 
+            name="currency"
+            rules={[{ required: true, message: 'Please select currency' }]}
+          >
+            <Select placeholder="Select currency">
+              <Select.Option value="USD">USD (US - America/New_York)</Select.Option>
+              <Select.Option value="COP">COP (Colombia - America/Bogota)</Select.Option>
+              <Select.Option value="JPY">JPY (Japan - Asia/Tokyo)</Select.Option>
+            </Select>
+          </Form.Item>
+          <Form.Item 
+            label="Effective From" 
+            name="effectiveFrom"
+          >
+            <DatePicker 
+              style={{ width: '100%' }} 
+              defaultValue={dayjs()}
+            />
+          </Form.Item>
+          <div style={{ marginTop: 16, padding: 12, backgroundColor: '#f5f5f5', borderRadius: 4 }}>
+            <strong>Selected Employees:</strong>
+            <ul style={{ marginTop: 8, marginBottom: 0 }}>
+              {selectedRows.map((row, index) => (
+                <li key={index} style={{ fontSize: '12px' }}>
+                  {row.user?.firstName} {row.user?.lastName}
+                </li>
+              ))}
+            </ul>
+          </div>
         </Form>
       </Modal>
     </>

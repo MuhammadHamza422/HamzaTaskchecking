@@ -199,15 +199,62 @@ export default function MyAttendance() {
         checkOut = formatCSVTimeOnly(r.checkOutAt, recordTimezone) || "-";
       }
       
-      // Calculate worked hours based on company rules
-      const workedHours = calculateWorkedHoursForCSV(r, r.company);
+      // Calculate actual work time for all companies (same as UI table)
+      const checkInTime = new Date(r.checkInAt);
+      const checkOutTime = r.checkOutAt ? new Date(r.checkOutAt) : new Date();
+      const totalMinutes = Math.floor((checkOutTime - checkInTime) / (1000 * 60));
       
+      // Calculate break time
+      const breakMinutes = (r.breaks || []).reduce((acc, br) => {
+        if (!br.startAt) return acc;
+        const end = br.endAt ? new Date(br.endAt) : new Date();
+        return acc + Math.max(0, Math.round((end - new Date(br.startAt)) / 60000));
+      }, 0);
+      
+      // Calculate actual work time (excluding breaks) - same logic as UI table
+      const actualWorkMinutes = Math.max(0, totalMinutes - breakMinutes);
+      const actualWorkHours = actualWorkMinutes / 60;
+      
+      const workedHours = {
+        totalHours: actualWorkHours,
+        workHours: actualWorkHours,
+        breakHours: breakMinutes / 60,
+        isForceCheckout: false
+      };
+      
+      // Format currency
+      const formatCurrency = (amount, currency = 'USD') => {
+        if (amount === null || amount === undefined) return '-';
+        
+        // For Colombian Peso, use custom formatting to show $ symbol
+        if (currency === 'COP') {
+          return `$${amount.toFixed(2)}`;
+        }
+        
+        return new Intl.NumberFormat('en-US', {
+          style: 'currency',
+          currency: currency,
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }).format(amount);
+      };
+
       return {
         Employee: `${r.user?.firstName || ""} ${r.user?.lastName || ""}`.trim(),
         Date: r.splitDay ? r.day : normalizeDateFormat(r.day || r.checkInAt),
         "Check In": checkIn,
         "Check Out": checkOut,
         "Total Hours": `${Math.floor(workedHours.totalHours)}:${String(Math.round((workedHours.totalHours % 1) * 60)).padStart(2, '0')}`,
+        "Hourly Rate": formatCurrency(r.payroll?.hourlyRate || r.user?.hourlyRate, r.payroll?.currency || r.user?.currency || 'USD'),
+        "Total Pay": (() => {
+          const hourlyRate = r.payroll?.hourlyRate || r.user?.hourlyRate;
+          if (hourlyRate) {
+            const totalPay = hourlyRate * workedHours.totalHours;
+            return formatCurrency(totalPay, r.payroll?.currency || r.user?.currency || 'USD');
+          }
+          return '-';
+        })(),
+        "Currency": r.payroll?.currency || r.user?.currency || 'USD',
       };
     });
 
