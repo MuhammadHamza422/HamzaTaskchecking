@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { Table, Space, Typography, Tooltip, Button, Popconfirm } from "antd";
 import { InfoCircleOutlined } from "@ant-design/icons";
-import { Pencil, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react"; // ⬅️ removed Pencil
 import dayjs from "dayjs";
 import apiClient from "../../../api/client";
 
@@ -157,7 +157,7 @@ const colTitle = (label, tip) => <TitleWithTip label={label} tip={tip} />;
 /* ---------- exported columns factory ---------- */
 export function getSourcingColumns({
   statusPill, // kept for compatibility
-  canEdit = false,
+  canEdit = false, // not used anymore (rows are clickable)
   canCancel = false,
   navigate,
   handleDeleteOrder,
@@ -165,7 +165,30 @@ export function getSourcingColumns({
 }) {
   const mkEditUrl = buildEditUrl || ((id) => `/sourcing/edit/${id}`);
 
-  const cols = [
+  // Utility to make table cells clickable for row navigation
+  const attachRowNav = (col) => ({
+    ...col,
+    onCell: (rec, idx) => {
+      // preserve any existing onCell props/styles from the column
+      const prev = typeof col.onCell === "function" ? col.onCell(rec, idx) : col.onCell || {};
+      return {
+        ...prev,
+        onClick: (e) => {
+          // If a child sets data-stop-rownav or calls stopPropagation (e.g., delete), don't navigate
+          if (e.defaultPrevented || e.target.closest("[data-stop-rownav]")) return;
+          const id = rec?._id || rec?.id;
+          if (id) navigate(mkEditUrl(id));
+        },
+        style: {
+          ...(prev?.style || {}),
+          cursor: "pointer",
+        },
+      };
+    },
+  });
+
+  // Base columns (no Actions yet)
+  const base = [
     {
       title: colTitle("ID", "Internal sourcing ID (shown as #xxxx)."),
       dataIndex: "sourcing_id",
@@ -188,7 +211,10 @@ export function getSourcingColumns({
       width: 170,
       onCell: () => ({ style: { whiteSpace: "normal", wordBreak: "break-word", overflowWrap: "anywhere" } }),
       render: (val, rec) => {
-        const fallback = [rec?.sourcer_id?.firstName, rec?.sourcer_id?.lastName].filter(Boolean).join(" ") || rec?.sourcer_id?.email || "—";
+        const fallback =
+          [rec?.sourcer_id?.firstName, rec?.sourcer_id?.lastName].filter(Boolean).join(" ") ||
+          rec?.sourcer_id?.email ||
+          "—";
         return <div style={{ fontWeight: 600 }}>{val || fallback}</div>;
       },
     },
@@ -229,9 +255,10 @@ export function getSourcingColumns({
           savings = rec.items.reduce((acc, it) => {
             const qty = safeNum(it?.quantity_needed || 0);
             const tpu = safeNum(it?.target_cost_per_unit);
-            const apu = (it?.actual_cost_per_unit ?? it?.sellers_price_per_unit) != null
-              ? safeNum(it?.actual_cost_per_unit ?? it?.sellers_price_per_unit)
-              : 0;
+            const apu =
+              (it?.actual_cost_per_unit ?? it?.sellers_price_per_unit) != null
+                ? safeNum(it?.actual_cost_per_unit ?? it?.sellers_price_per_unit)
+                : 0;
             return acc + round2((tpu - apu) * qty);
           }, 0);
         } else {
@@ -321,58 +348,49 @@ export function getSourcingColumns({
       align: "center",
       render: (dt, rec) => fmtDateTime(dt || rec.created_at || rec.created_on),
     },
-    {
-      title: "Actions",
-      key: "actions",
-      fixed: "right",
-      width: 110,
-      render: (_, rec) => {
-        const id = rec._id || rec.id;
-        const parts = [];
-
-        if (canEdit && id) {
-          parts.push(
-            <Tooltip key="edit" title="Edit" getPopupContainer={() => document.body} overlayStyle={{ zIndex: 1090 }}>
-              <Button
-                data-testid="edit-btn"
-                type="text"
-                icon={<Pencil size={16} />}
-                aria-label="Edit"
-                onClick={(e) => { e.stopPropagation(); navigate(mkEditUrl(id)); }}
-                className="!inline-flex !items-center !justify-center !w-8 !h-8 !p-0 !bg-white !border !border-slate-200 !rounded-md hover:!bg-slate-50 hover:!border-slate-300"
-              />
-            </Tooltip>
-          );
-        }
-
-        if (canCancel && id) {
-          parts.push(
-            <Popconfirm
-              key="delete"
-              title="Delete this sourcing request?"
-              description="This action cannot be undone."
-              okText="Delete"
-              okButtonProps={{ danger: true }}
-              onConfirm={() => handleDeleteOrder(id)}
-              getPopupContainer={() => document.body}
-            >
-              <Button
-                data-testid="delete-btn"
-                type="text"
-                icon={<Trash2 size={16} />}
-                aria-label="Delete"
-                onClick={(e) => e.stopPropagation()}
-                className="!inline-flex !items-center !justify-center !w-8 !h-8 !p-0 !bg-white !border !border-red-500 !text-red-600 !rounded-md hover:!bg-rose-50 hover:!border-red-600 hover:!text-red-700"
-              />
-            </Popconfirm>
-          );
-        }
-
-        if (!parts.length) return <span className="text-slate-400">—</span>;
-        return <Space size={4}>{parts}</Space>;
-      },
-    },
   ];
+
+  // Actions column (Edit removed; Delete remains)
+  const actionsCol = {
+    title: "Actions",
+    key: "actions",
+    fixed: "right",
+    width: 90,
+    render: (_, rec) => {
+      const id = rec._id || rec.id;
+      const parts = [];
+
+      if (canCancel && id) {
+        parts.push(
+          <Popconfirm
+            key="delete"
+            title="Delete this sourcing request?"
+            description="This action cannot be undone."
+            okText="Delete"
+            okButtonProps={{ danger: true }}
+            onConfirm={() => handleDeleteOrder(id)}
+            getPopupContainer={() => document.body}
+          >
+            <Button
+              data-testid="delete-btn"
+              data-stop-rownav // prevent row navigation on click
+              type="text"
+              icon={<Trash2 size={16} />}
+              aria-label="Delete"
+              onClick={(e) => e.stopPropagation()}
+              className="!inline-flex !items-center !justify-center !w-8 !h-8 !p-0 !bg-white !border !border-red-500 !text-red-600 !rounded-md hover:!bg-rose-50 hover:!border-red-600 hover:!text-red-700"
+            />
+          </Popconfirm>
+        );
+      }
+
+      if (!parts.length) return <span className="text-slate-400">—</span>;
+      return <Space size={4}>{parts}</Space>;
+    },
+  };
+
+  // Make all non-actions columns clickable for row navigation
+  const cols = base.map(attachRowNav).concat(actionsCol);
 
   return cols;
 }
