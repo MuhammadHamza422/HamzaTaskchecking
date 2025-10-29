@@ -41,6 +41,12 @@ const navLinks = [
     roles: ["admin", "purchaser"],
   },
   {
+    to: "/purchaser/returned",
+    label: "Returned",
+    app: "purchasing",
+    roles: ["admin", "purchaser"],
+  },
+  {
     label: "Users",
     isDropdown: true,
     app: "users",
@@ -203,6 +209,7 @@ const MainLayout = () => {
           "All Assigned",
           "All Listings",
           "My Listings",
+          "Returned",   
         ].includes(link.label) &&
         (link.app === "purchasing" || link.to.startsWith("/purchaser"))) ||
       // Purchasing context

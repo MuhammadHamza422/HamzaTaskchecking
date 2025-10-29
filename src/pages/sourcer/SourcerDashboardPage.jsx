@@ -1,4 +1,3 @@
-
 // /src/pages/sourcer/SourcerDashboardPage.jsx
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
@@ -149,24 +148,38 @@ export default function SourcerDashboardPage() {
 
   /* -------------------------- Queries (React Query) -------------------------- */
 
-  // Admin-only sourcer options
+  // Admin-only sourcer options (do not refetch on focus/reconnect/mount)
   const sourcerOptsQ = useQuery({
     queryKey: ["sourcing", "sourcerOptions"],
     queryFn: fetchSourcerOptions,
     enabled: permsLoaded && canViewMyRequests === true && isAdmin,
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+    keepPreviousData: true,
   });
 
   // Orders (mine OR chosen sourcer if admin + sourcerId selected)
+  // Make the key a simple, stable string to avoid any hash edge cases.
+  const ordersScope = isAdmin && sourcerId ? `bySourcer:${sourcerId}` : "mine";
   const ordersQ = useQuery({
-    queryKey: ["sourcing", "dashboard", { scope: isAdmin && sourcerId ? "bySourcer" : "mine", sourcerId }],
+    queryKey: ["sourcing", "dashboard", ordersScope],
     queryFn: () =>
-      isAdmin && sourcerId ? fetchForSourcer(sourcerId) : fetchMine(),
-    enabled: permsLoaded && canViewMyRequests === true && (!!user || (isAdmin && !!sourcerId)),
-    staleTime: 60 * 1000,
+      ordersScope.startsWith("bySourcer:")
+        ? fetchForSourcer(sourcerId)
+        : fetchMine(),
+    enabled:
+      permsLoaded &&
+      canViewMyRequests === true &&
+      (!!user || (isAdmin && !!sourcerId)),
+    // Keep data fresh for 5 minutes, and **don't** refetch on focus/reconnect/mount.
+    staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: "always",
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
     keepPreviousData: true,
   });
 
@@ -178,10 +191,12 @@ export default function SourcerDashboardPage() {
     mutationFn: deleteOrderRequest,
     onMutate: async (orderId) => {
       await queryClient.cancelQueries({ queryKey: ["sourcing", "dashboard"] });
-      const key = ["sourcing", "dashboard", { scope: isAdmin && sourcerId ? "bySourcer" : "mine", sourcerId }];
+      const key = ["sourcing", "dashboard", ordersScope];
       const previous = queryClient.getQueryData(key);
       queryClient.setQueryData(key, (old) =>
-        Array.isArray(old) ? old.filter((o) => (o._id || o.id) !== orderId) : old
+        Array.isArray(old)
+          ? old.filter((o) => (o._id || o.id) !== orderId)
+          : old
       );
       return { previous, key };
     },
@@ -368,14 +383,7 @@ export default function SourcerDashboardPage() {
                   isAdmin && sourcerId ? "Total Listings " : "Total Listings",
                 value: filtered.length,
               },
-              {
-                key: "savings",
-                title: "Total Savings Generated",
-                value: totalSavings,
-                prefix: "$",
-                precision: 2,
-                valueStyle: { fontWeight: 700, color: savingsColor },
-              },
+
               {
                 key: "pending",
                 title: "Listings Pending",
@@ -386,11 +394,20 @@ export default function SourcerDashboardPage() {
                 title: "Listings Purchased",
                 value: requestsPurchased,
               },
+              {
+                key: "savings",
+                title: "Total Savings Generated",
+                value: totalSavings,
+                prefix: "$",
+                precision: 2,
+                valueStyle: { fontWeight: 700, color: savingsColor },
+              },
             ].map((stat) => (
               <Col xs={24} sm={12} md={8} lg={6} key={stat.key}>
                 <motion.div {...cardHoverEffect}>
                   <Card style={statsCardStyle} bodyStyle={{ padding: 16 }}>
-                    {ordersQ.isFetching ? (
+                    {/* ⬇️ Only show skeleton on first load, not during background fetches */}
+                    {ordersQ.isLoading ? (
                       <Skeleton
                         active
                         paragraph={{ rows: 2 }}
@@ -574,7 +591,8 @@ export default function SourcerDashboardPage() {
           >
             <RecentlyCreatedFive
               orders={filtered}
-              loading={ordersQ.isFetching}
+              // ⬇️ Only show table spinner on first load
+              loading={ordersQ.isLoading}
               title={
                 isAdmin && sourcerId
                   ? "5 Most Recent Listings"

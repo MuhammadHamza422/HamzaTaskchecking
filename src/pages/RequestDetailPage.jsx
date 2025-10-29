@@ -133,11 +133,10 @@ const ensureHttp = (v = "") => {
 // const isLikelyFqdn = (hostname = "") =>
 //   /^[^.\/\s][^\s]*\.[^\s]+$/.test(hostname);
 
-
 // AFTER — stricter hostname check
 const isLikelyFqdn = (hostname = "") => {
   const h = String(hostname).trim().toLowerCase();
-  if (!/^[a-z0-9.-]+$/.test(h)) return false;    // allowed chars
+  if (!/^[a-z0-9.-]+$/.test(h)) return false; // allowed chars
   if (h.endsWith(".")) return false;
 
   const parts = h.split(".").filter(Boolean);
@@ -147,7 +146,7 @@ const isLikelyFqdn = (hostname = "") => {
   if (parts[0] === "www" && parts.length < 3) return false;
 
   const tld = parts[parts.length - 1];
-  if (!/^[a-z]{2,24}$/.test(tld)) return false;  // TLD letters only, 2–24
+  if (!/^[a-z]{2,24}$/.test(tld)) return false; // TLD letters only, 2–24
 
   // each label: 1–63 chars, no leading/trailing hyphen
   const labelOk = (p) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(p);
@@ -155,7 +154,6 @@ const isLikelyFqdn = (hostname = "") => {
 
   return true;
 };
-
 
 const isObjectId = (v) => typeof v === "string" && /^[0-9a-fA-F]{24}$/.test(v);
 
@@ -1951,57 +1949,6 @@ export default function RequestDetailPage() {
               </Form.Item>
             </Col>
 
-            {/* <Col xs={24} md={12} lg={8}>
-              <Form.Item
-                name="purchase_link"
-                label="Purchase Link"
-                dependencies={["status"]}
-                rules={[
-                  ({ getFieldValue }) => ({
-                    validator(_, value) {
-                      const st = getFieldValue("status");
-                      const required =
-                        STATUS_NEEDS_PURCHASE_DETAILS.includes(st);
-                      const raw = (value || "").trim();
-                      if (!required && !raw) return Promise.resolve();
-                      if (required && !raw)
-                        return Promise.reject(
-                          new Error(
-                            'Purchase Link is required when status is "Purchased" or "Dropshipped".'
-                          )
-                        );
-                      try {
-                        const u = new URL(ensureHttp(raw));
-                        const ok =
-                          (u.protocol === "http:" || u.protocol === "https:") &&
-                          isLikelyFqdn(u.hostname);
-                        return ok
-                          ? Promise.resolve()
-                          : Promise.reject(
-                              new Error(
-                                "Enter a full domain, e.g., https://example.com"
-                              )
-                            );
-                      } catch {
-                        return Promise.reject(
-                          new Error(
-                            "Enter a valid URL, e.g., https://example.com"
-                          )
-                        );
-                      }
-                    },
-                  }),
-                ]}
-                validateTrigger={["onBlur", "onChange"]}
-                hasFeedback
-              >
-                <Input
-                  placeholder='Required when "Purchased" or "Dropshipped"'
-                  size={controlSize}
-                />
-              </Form.Item>
-            </Col> */}
-
             <Col xs={24} md={12} lg={8}>
               <Form.Item
                 name="purchase_link"
@@ -2132,6 +2079,23 @@ export default function RequestDetailPage() {
 
             <Col xs={24} md={12} lg={8}>
               <Form.Item
+                name="tracking_id"
+                label="Tracking ID"
+                tooltip={{
+                  title: "Carrier’s tracking number (optional).",
+                  ...tipCommon,
+                }}
+              >
+                <Input
+                  size={controlSize}
+                  placeholder="e.g. 1Z999AA10123456784"
+                  allowClear
+                />
+              </Form.Item>
+            </Col>
+
+            <Col xs={24} md={12} lg={8}>
+              <Form.Item
                 name="tracking_link"
                 label="Tracking Link"
                 dependencies={["tracking_status"]}
@@ -2205,14 +2169,17 @@ export default function RequestDetailPage() {
             </Col>
           </Row>
 
-          <Button
-            type="primary"
-            htmlType="submit"
-            style={{ marginTop: 12 }}
-            size={controlSize}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              marginTop: 12,
+            }}
           >
-            Save All Changes
-          </Button>
+            <Button type="primary" htmlType="submit" size={controlSize}>
+              Save All Changes
+            </Button>
+          </div>
         </Card>
       </Form>
       {/* ======= FORM END ======= */}
