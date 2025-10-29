@@ -17,6 +17,7 @@ import {
   WarningOutlined,
 } from "@ant-design/icons";
 import { FaCheckCircle } from "react-icons/fa";
+import AddLabelModal from "./AddLabel";
 
 export default function ShopifyOrderTable({
   orders,
@@ -521,10 +522,11 @@ export default function ShopifyOrderTable({
       title: "Actions",
       dataIndex: "actions",
       key: "actions",
-      width: 100,
+      width: 150,
       fixed: "right",
       render: (_, record) => (
         <div className="flex items-center gap-1">
+          <AddLabelModal orderId={record?.order_key} />
           <Button
             type="link"
             size="small"
