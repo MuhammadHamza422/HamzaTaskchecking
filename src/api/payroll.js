@@ -53,7 +53,7 @@ export const bulkUpdateEmployeePayroll = async (bulkData) => {
  */
 export const recalculateAttendancePayroll = async (attendanceId) => {
   try {
-    const response = await client.post(`/api/v1/payroll/attendance/${attendanceId}/payroll/recalculate`);
+    const response = await client.post(`/api/v1/attendance/${attendanceId}/recalculate`);
     return response.data;
   } catch (error) {
     console.error('Error recalculating attendance payroll:', error);
@@ -68,7 +68,7 @@ export const recalculateAttendancePayroll = async (attendanceId) => {
  */
 export const recalculatePayrollRange = async (rangeData) => {
   try {
-    const response = await client.post('/api/v1/payroll/attendance/payroll/recalculate', rangeData);
+    const response = await client.post('/api/v1/attendance/recalculate', rangeData);
     return response.data;
   } catch (error) {
     console.error('Error recalculating payroll range:', error);
@@ -83,7 +83,7 @@ export const recalculatePayrollRange = async (rangeData) => {
  */
 export const getPayrollSummary = async (params) => {
   try {
-    const response = await client.get('/api/v1/payroll/summary', { params });
+    const response = await client.get('/api/v1/attendance/payroll/summary', { params });
     return response.data;
   } catch (error) {
     console.error('Error fetching payroll summary:', error);
@@ -98,7 +98,7 @@ export const getPayrollSummary = async (params) => {
  */
 export const exportPayrollData = async (params) => {
   try {
-    const response = await client.get('/api/v1/payroll/export', { params });
+    const response = await client.get('/api/v1/attendance/payroll/export', { params });
     return response.data;
   } catch (error) {
     console.error('Error exporting payroll data:', error);

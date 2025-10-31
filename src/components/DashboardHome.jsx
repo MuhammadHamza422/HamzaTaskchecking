@@ -6,7 +6,8 @@ import {
   ShoppingCart,
   CalendarDays,
   CalendarArrowDown,
-  CalendarArrowUp
+  CalendarArrowUp,
+  UserCheck,
 } from "lucide-react";
 import { LuWarehouse } from "react-icons/lu";
 
@@ -97,7 +98,7 @@ export default function DashboardCards() {
       bgColor: "bg-sky-50",
       border: "border-sky-500",
     },
-        {
+    {
       title: "Purchaser",
       icon: CalendarArrowUp,
       color: "text-green-500",
@@ -106,6 +107,16 @@ export default function DashboardCards() {
       link: "/purchaser/dashboard", // 🔹 single entry point
       bgColor: "bg-green-50",
       border: "border-green-500",
+    },
+    {
+      title: "Employees",
+      icon: UserCheck,
+      color: "text-purple-500",
+      accessKey: "employees",
+      hoverColor: "group-hover:text-purple-600",
+      link: "/employees",
+      bgColor: "bg-purple-50",
+      border: "border-purple-500",
     },
     // {
     //   title: "Products",

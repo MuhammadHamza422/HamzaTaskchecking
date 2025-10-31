@@ -48,13 +48,32 @@ import PurchaserDashboardPage from "./pages/purchaser/PurchaserDashboardPage";
 import PurchaserListingsPage from "./pages/purchaser/PurchaserListingPage";
 import AttendanceActivity from "./pages/attendance/Attendance-Activity";
 import PurchaserReturnedListingsPage from "./pages/purchaser/PurchaserReturnedListingsPage";
+import EmployeesPage from "./pages/employees/EmployeesPage";
 
 // 🔹 Role guard for specific routes
 const RequireRoles = ({ allow, children }) => {
   const { token, user } = useAuth();
   if (!token) return <Navigate to="/login" replace />;
-  if (allow && (!user || !allow.includes(user.role)))
-    return <Navigate to="/" replace />;
+  
+  if (allow && user) {
+    // Get user role - support both user.roles.role and user.role
+    const userRole = user.roles?.role || user.role;
+    
+    // Admin has access to everything
+    if (userRole?.toLowerCase() === 'admin') {
+      return children;
+    }
+    
+    // Check if user role (case-insensitive) is in allowed roles
+    const hasAccess = allow.some(role => 
+      role.toLowerCase() === userRole?.toLowerCase()
+    );
+    
+    if (!hasAccess) {
+      return <Navigate to="/" replace />;
+    }
+  }
+  
   return children;
 };
 
@@ -144,6 +163,16 @@ function App() {
           {/* Attendance entry */}
           <Route path="/attendance" element={<AttendancePage />} />
           <Route path="/attendance-activity" element={<AttendanceActivity />} />
+
+          {/* Employees entry */}
+          <Route 
+            path="/employees" 
+            element={
+              <RequireRoles allow={["HR", "admin"]}>
+                <EmployeesPage />
+              </RequireRoles>
+            } 
+          />
           <Route path="timeoff" element={<TimeOffLayout />}>
             <Route
               path="me"

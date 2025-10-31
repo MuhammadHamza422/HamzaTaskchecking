@@ -244,29 +244,100 @@ export default function ManageAttendance({ canEdit = false }) {
         checkOut = formatCSVTimeOnly(r.checkOutAt, recordTimezone) || "-";
       }
       
-      // Calculate actual work time for all companies (same as UI table)
-      const checkInTime = new Date(r.checkInAt);
-      const checkOutTime = r.checkOutAt ? new Date(r.checkOutAt) : new Date();
-      const totalMinutes = Math.floor((checkOutTime - checkInTime) / (1000 * 60));
+      // For CSV, handle live shifts vs completed shifts differently
+      const isLiveShift = r.checkInAt && !r.checkOutAt;
+      const companyCode = r.company?.code || r.user?.company?.code;
       
-      // Calculate break time
-      const breakMinutes = (r.breaks || []).reduce((acc, br) => {
-        if (!br.startAt) return acc;
-        const end = br.endAt ? new Date(br.endAt) : new Date();
-        return acc + Math.max(0, Math.round((end - new Date(br.startAt)) / 60000));
-      }, 0);
+      let displayHours, payHours, totalPay;
       
-      // Calculate actual work time (excluding breaks) - same logic as UI table
-      const actualWorkMinutes = Math.max(0, totalMinutes - breakMinutes);
-      const actualWorkHours = actualWorkMinutes / 60;
+      if (isLiveShift) {
+        // For live shifts, calculate current actual work time
+        const checkInTime = new Date(r.checkInAt);
+        const checkOutTime = new Date(); // Current time
+        const totalMinutes = Math.floor((checkOutTime - checkInTime) / (1000 * 60));
+        
+        // Calculate break time
+        const breakMinutes = (r.breaks || []).reduce((acc, br) => {
+          if (!br.startAt) return acc;
+          const end = br.endAt ? new Date(br.endAt) : new Date();
+          return acc + Math.max(0, Math.round((end - new Date(br.startAt)) / 60000));
+        }, 0);
+        
+        // Calculate actual work time (excluding breaks)
+        const actualWorkMinutes = Math.max(0, totalMinutes - breakMinutes);
+        const actualWorkHours = actualWorkMinutes / 60;
+        
+        // For US/Colombia, cap display hours at 9, pay hours at 8
+        if (companyCode === 'USWH' || companyCode === 'COL') {
+          displayHours = Math.min(actualWorkHours, 9);
+          payHours = Math.min(actualWorkHours, 8);
+        } else {
+          // Japan: use actual hours
+          displayHours = actualWorkHours;
+          payHours = actualWorkHours;
+        }
+        
+        // Calculate total pay for live shift
+        // Note: getHourlyRate helper is defined later in the function
+        const hourlyRateForCalc = r.payroll?.hourlyRate || r.user?.hourlyRate;
+        totalPay = hourlyRateForCalc ? hourlyRateForCalc * payHours : 0;
+      } else {
+        // For completed shifts, use backend-calculated values
+        displayHours = r.totalHoursForPayroll || 0;
+        payHours = r.payroll?.totalHours || 0;
+        totalPay = r.payroll?.totalPay || 0;
+      }
       
       const workedHours = {
-        totalHours: actualWorkHours,
-        workHours: actualWorkHours,
-        breakHours: breakMinutes / 60,
+        totalHours: displayHours,
+        workHours: payHours,
+        breakHours: 0, // Not used in CSV
         isForceCheckout: false
       };
       
+      // Get currency based on company code/name (company-specific)
+      const getCompanyCurrency = (record) => {
+        const companyCode = record.company?.code;
+        const companyName = record.company?.name || '';
+        
+        // Company-specific currency mapping
+        if (companyCode === 'JPOS' || companyName.toLowerCase().includes('japan')) {
+          return 'JPY';
+        }
+        if (companyCode === 'COL' || companyName.toLowerCase().includes('colombia') || companyName.toLowerCase().includes('bogota')) {
+          return 'COP';
+        }
+        if (companyCode === 'USWH' || companyName.toLowerCase().includes('us') || companyName.toLowerCase().includes('america')) {
+          return 'USD';
+        }
+        return 'USD';
+      };
+
+      // Get currency with proper fallback chain
+      const getCurrency = (record) => {
+        // Prioritize payroll snapshot currency (set at check-in)
+        if (record.payroll?.currency) {
+          return record.payroll.currency;
+        }
+        // Fallback to company-based currency
+        const companyCurrency = getCompanyCurrency(record);
+        if (companyCurrency) {
+          return companyCurrency;
+        }
+        // Last resort: user/employee currency
+        return record.user?.currency || record.employee?.payroll?.currency || 'USD';
+      };
+
+      // Get hourly rate with proper fallback chain
+      const getHourlyRate = (record) => {
+        // Prioritize payroll snapshot (set at check-in)
+        if (typeof record.payroll?.hourlyRate === 'number') {
+          return record.payroll.hourlyRate;
+        }
+        // Fallback to user/employee rate
+        return record.user?.hourlyRate || record.employee?.payroll?.hourlyRate || null;
+      };
+
       // Format currency
       const formatCurrency = (amount, currency = 'USD') => {
         if (amount === null || amount === undefined) return '-';
@@ -274,6 +345,11 @@ export default function ManageAttendance({ canEdit = false }) {
         // For Colombian Peso, use custom formatting to show $ symbol
         if (currency === 'COP') {
           return `$${amount.toFixed(2)}`;
+        }
+        
+        // For Japanese Yen, use custom formatting (no decimal places)
+        if (currency === 'JPY') {
+          return `¥${Math.round(amount).toLocaleString()}`;
         }
         
         return new Intl.NumberFormat('en-US', {
@@ -284,22 +360,24 @@ export default function ManageAttendance({ canEdit = false }) {
         }).format(amount);
       };
 
+      const currency = getCurrency(r);
+      const hourlyRate = getHourlyRate(r);
+
       return {
         Employee: `${r.user?.firstName || ""} ${r.user?.lastName || ""}`.trim(),
         Date: r.splitDay ? r.day : normalizeDateFormat(r.day || r.checkInAt),
         "Check In": checkIn,
         "Check Out": checkOut,
         "Total Hours": `${Math.floor(workedHours.totalHours)}:${String(Math.round((workedHours.totalHours % 1) * 60)).padStart(2, '0')}`,
-        "Hourly Rate": formatCurrency(r.payroll?.hourlyRate || r.user?.hourlyRate, r.payroll?.currency || r.user?.currency || 'USD'),
+        "Hourly Rate": formatCurrency(hourlyRate, currency),
         "Total Pay": (() => {
-          const hourlyRate = r.payroll?.hourlyRate || r.user?.hourlyRate;
-          if (hourlyRate) {
-            const totalPay = hourlyRate * workedHours.totalHours;
-            return formatCurrency(totalPay, r.payroll?.currency || r.user?.currency || 'USD');
+          // Use calculated totalPay (already computed above for both live and completed shifts)
+          if (totalPay > 0) {
+            return formatCurrency(totalPay, currency);
           }
           return '-';
         })(),
-        "Currency": r.payroll?.currency || r.user?.currency || 'USD',
+        "Currency": currency,
       };
     });
 

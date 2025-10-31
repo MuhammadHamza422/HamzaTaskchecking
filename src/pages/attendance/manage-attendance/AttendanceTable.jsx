@@ -146,8 +146,8 @@ const AttendanceTable = ({
   const handlePayrollEdit = (record) => {
     setEditingPayroll(record);
     payrollForm.setFieldsValue({
-      hourlyRate: record.payroll?.hourlyRate || record.user?.hourlyRate || 0,
-      currency: record.payroll?.currency || record.user?.currency || 'USD',
+      hourlyRate: getHourlyRate(record) || 0,
+      currency: getCurrency(record),
     });
     setPayrollModalOpen(true);
   };
@@ -219,12 +219,62 @@ const AttendanceTable = ({
       return `$${amount.toFixed(2)}`;
     }
     
+    // For Japanese Yen, use custom formatting (no decimal places)
+    if (currency === 'JPY') {
+      return `¥${Math.round(amount).toLocaleString()}`;
+    }
+    
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: currency,
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(amount);
+  };
+
+  // Get currency based on company code/name (company-specific)
+  const getCompanyCurrency = (record) => {
+    const companyCode = record.company?.code;
+    const companyName = record.company?.name || '';
+    
+    // Company-specific currency mapping
+    if (companyCode === 'JPOS' || companyName.toLowerCase().includes('japan')) {
+      return 'JPY';
+    }
+    if (companyCode === 'COL' || companyName.toLowerCase().includes('colombia') || companyName.toLowerCase().includes('bogota')) {
+      return 'COP';
+    }
+    if (companyCode === 'USWH' || companyName.toLowerCase().includes('us') || companyName.toLowerCase().includes('america')) {
+      return 'USD';
+    }
+    
+    // Default to USD if can't determine
+    return 'USD';
+  };
+
+  // Get hourly rate with proper fallback chain
+  const getHourlyRate = (record) => {
+    // Prioritize payroll snapshot (set at check-in)
+    if (typeof record.payroll?.hourlyRate === 'number') {
+      return record.payroll.hourlyRate;
+    }
+    // Fallback to user/employee rate
+    return record.user?.hourlyRate || record.employee?.payroll?.hourlyRate || null;
+  };
+
+  // Get currency with proper fallback chain
+  const getCurrency = (record) => {
+    // Prioritize payroll snapshot currency (set at check-in)
+    if (record.payroll?.currency) {
+      return record.payroll.currency;
+    }
+    // Fallback to company-based currency
+    const companyCurrency = getCompanyCurrency(record);
+    if (companyCurrency) {
+      return companyCurrency;
+    }
+    // Last resort: user/employee currency
+    return record.user?.currency || record.employee?.payroll?.currency || 'USD';
   };
 
   const formatHours = (hours) => {
@@ -439,8 +489,27 @@ const AttendanceTable = ({
       width: 120,
       align: "center",
       render: (_, record) => {
-        // Always calculate actual work time for all companies (ignore backend fixed shift data)
-        const totalHours = calculateActualWorkTime(record);
+        // For live shifts (checked in but not out), show actual current time
+        // For completed shifts, use backend-calculated display hours
+        const isLiveShift = record.checkInAt && !record.checkOutAt;
+        
+        let totalHours;
+        if (isLiveShift) {
+          // For live shifts, calculate current actual work time
+          totalHours = calculateActualWorkTime(record);
+          
+          // For US/Colombia, cap at 9 hours maximum
+          const companyCode = record.company?.code || record.user?.company?.code;
+          if ((companyCode === 'USWH' || companyCode === 'COL') && totalHours > 9) {
+            totalHours = 9;
+          }
+        } else {
+          // For completed shifts, use backend-calculated display hours
+          totalHours = typeof record.totalHoursForPayroll === 'number'
+            ? record.totalHoursForPayroll
+            : calculateActualWorkTime(record);
+        }
+        
         return (
           <span style={{ fontWeight: 500, color: "rgba(0,0,0,.85)" }}>
             {formatHours(totalHours)}
@@ -448,8 +517,14 @@ const AttendanceTable = ({
         );
       },
       sorter: (a, b) => {
-        const aHours = calculateActualWorkTime(a);
-        const bHours = calculateActualWorkTime(b);
+        const aIsLive = a.checkInAt && !a.checkOutAt;
+        const bIsLive = b.checkInAt && !b.checkOutAt;
+        
+        const aHours = aIsLive ? calculateActualWorkTime(a) : 
+          (typeof a.totalHoursForPayroll === 'number' ? a.totalHoursForPayroll : calculateActualWorkTime(a));
+        const bHours = bIsLive ? calculateActualWorkTime(b) : 
+          (typeof b.totalHoursForPayroll === 'number' ? b.totalHoursForPayroll : calculateActualWorkTime(b));
+        
         return aHours - bHours;
       },
     },
@@ -459,8 +534,8 @@ const AttendanceTable = ({
       width: 120,
       align: "center",
       render: (_, record) => {
-        const hourlyRate = record.payroll?.hourlyRate || record.user?.hourlyRate;
-        const currency = record.payroll?.currency || record.user?.currency || 'USD';
+        const hourlyRate = getHourlyRate(record);
+        const currency = getCurrency(record);
         return (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
             <span style={{ fontWeight: 500, color: "rgba(0,0,0,.85)" }}>
@@ -479,7 +554,7 @@ const AttendanceTable = ({
           </div>
         );
       },
-      sorter: (a, b) => (a.payroll?.hourlyRate || 0) - (b.payroll?.hourlyRate || 0),
+      sorter: (a, b) => (getHourlyRate(a) || 0) - (getHourlyRate(b) || 0),
     },
     {
       title: "Total Pay",
@@ -487,16 +562,33 @@ const AttendanceTable = ({
       width: 120,
       align: "center",
       render: (_, record) => {
-        const hourlyRate = record.payroll?.hourlyRate || record.user?.hourlyRate;
-        const currency = record.payroll?.currency || record.user?.currency || 'USD';
-        
-        // Always calculate total pay based on actual work time (ignore backend fixed shift data)
-        let totalPay = null;
-        if (hourlyRate) {
-          const actualWorkHours = calculateActualWorkTime(record);
-          totalPay = hourlyRate * actualWorkHours;
+        const hourlyRate = getHourlyRate(record);
+        const currency = getCurrency(record);
+        const isLiveShift = record.checkInAt && !record.checkOutAt;
+
+        let totalPay;
+        if (isLiveShift) {
+          // For live shifts, calculate pay based on current actual work time
+          let currentWorkHours = calculateActualWorkTime(record);
+          
+          // For US/Colombia, cap pay hours at 8 (work hours, excluding break)
+          const companyCode = record.company?.code || record.user?.company?.code;
+          if (companyCode === 'USWH' || companyCode === 'COL') {
+            currentWorkHours = Math.min(currentWorkHours, 8);
+          }
+          
+          totalPay = hourlyRate ? hourlyRate * currentWorkHours : null;
+        } else {
+          // For completed shifts, prefer backend-calculated totalPay
+          totalPay = record.payroll?.totalPay;
+          if ((totalPay === null || totalPay === undefined) && hourlyRate) {
+            const payHours = typeof record.payroll?.totalHours === 'number'
+              ? record.payroll.totalHours
+              : calculateActualWorkTime(record);
+            totalPay = hourlyRate * payHours;
+          }
         }
-        
+
         return (
           <span style={{ 
             fontWeight: 600, 
@@ -508,12 +600,39 @@ const AttendanceTable = ({
         );
       },
       sorter: (a, b) => {
-        const aRate = a.payroll?.hourlyRate || a.user?.hourlyRate || 0;
-        const bRate = b.payroll?.hourlyRate || b.user?.hourlyRate || 0;
-        const aHours = calculateActualWorkTime(a);
-        const bHours = calculateActualWorkTime(b);
-        const aPay = aRate * aHours;
-        const bPay = bRate * bHours;
+        const aRate = getHourlyRate(a) || 0;
+        const bRate = getHourlyRate(b) || 0;
+        const aIsLive = a.checkInAt && !a.checkOutAt;
+        const bIsLive = b.checkInAt && !b.checkOutAt;
+        
+        let aPay, bPay;
+        
+        if (aIsLive) {
+          let aHours = calculateActualWorkTime(a);
+          const aCompanyCode = a.company?.code || a.user?.company?.code;
+          if (aCompanyCode === 'USWH' || aCompanyCode === 'COL') {
+            aHours = Math.min(aHours, 8);
+          }
+          aPay = aRate * aHours;
+        } else {
+          aPay = typeof a.payroll?.totalPay === 'number'
+            ? a.payroll.totalPay
+            : aRate * (typeof a.payroll?.totalHours === 'number' ? a.payroll.totalHours : calculateActualWorkTime(a));
+        }
+        
+        if (bIsLive) {
+          let bHours = calculateActualWorkTime(b);
+          const bCompanyCode = b.company?.code || b.user?.company?.code;
+          if (bCompanyCode === 'USWH' || bCompanyCode === 'COL') {
+            bHours = Math.min(bHours, 8);
+          }
+          bPay = bRate * bHours;
+        } else {
+          bPay = typeof b.payroll?.totalPay === 'number'
+            ? b.payroll.totalPay
+            : bRate * (typeof b.payroll?.totalHours === 'number' ? b.payroll.totalHours : calculateActualWorkTime(b));
+        }
+        
         return aPay - bPay;
       },
     },
@@ -523,7 +642,7 @@ const AttendanceTable = ({
       width: 80,
       align: "center",
       render: (_, record) => {
-        const currency = record.payroll?.currency || record.user?.currency || 'USD';
+        const currency = getCurrency(record);
         return (
           <Tag color="blue" style={{ fontSize: "11px" }}>
             {currency}
@@ -534,7 +653,7 @@ const AttendanceTable = ({
     {
       title: "Actions",
       key: "actions",
-      fixed: { xs: false, sm: "right" },
+      fixed: "right",
       width: 120,
       align: "center",
       render: (_, r) => (

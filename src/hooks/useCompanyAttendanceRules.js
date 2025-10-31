@@ -28,13 +28,78 @@ export const useCompanyAttendanceRules = (companyId, currentRecord) => {
   // Fallback to default rules if API fails
   const companyRules = useMemo(() => {
     if (companyRulesData?.success && companyRulesData?.data) {
-      return companyRulesData.data;
+      const api = companyRulesData.data;
+      // If backend already provides normalized rules, use them directly
+      if (api.rules && typeof api.rules === 'object') {
+        return {
+          name: api.name || api.companyName || 'Company',
+          code: api.code || api.companyCode,
+          timezone: api.timezone,
+          rules: {
+            ...api.rules,
+          },
+        };
+      }
+
+      const src = api._doc || api.attendanceRules || api;
+      const isFixed = src.isFixedShift === true || (typeof src.shiftHours === 'number' && src.shiftHours > 0);
+      const shiftType = isFixed ? 'fixed' : 'hourly';
+      const workHours = src.workHours ?? (src.displayVsPay?.maxPayHours ?? null);
+      const breakHours = src.breakHours ?? (src.displayVsPay && workHours != null && src.displayVsPay.displayHours != null
+        ? Math.max(0, src.displayVsPay.displayHours - workHours)
+        : null);
+      const maxBreakTime = (src.breakPolicy && typeof src.breakPolicy.maxBreakMinutes === 'number')
+        ? src.breakPolicy.maxBreakMinutes
+        : null;
+
+      const normalized = {
+        name: api.companyName || api.name || 'Company',
+        code: api.companyCode || api.code || undefined,
+        timezone: api.timezone || undefined,
+        rules: {
+          shiftType,
+          shiftHours: typeof src.shiftHours === 'number' ? src.shiftHours : (shiftType === 'fixed' && workHours != null && breakHours != null ? (workHours + breakHours) : null),
+          breakHours,
+          workHours,
+          breakRequired: !!src.breakRequired,
+          forceCheckout: !!src.isFixedShift && !!src.forceCheckout,
+          multipleBreaks: src.breakPolicy?.allowMultipleBreaks ?? true,
+          hourlyBasis: shiftType === 'hourly',
+          maxBreakTime: maxBreakTime,
+          warnings: {
+            breakLimit: 'You have used your maximum break time. No more breaks allowed.',
+            breakNotTaken: 'Break is required. You must take a break during your shift.',
+            shiftComplete: 'Your shift is complete.'
+          }
+        }
+      };
+      return normalized;
     }
     return getDefaultCompanyRules(companyId);
   }, [companyRulesData, companyId]);
   
-  // Get UI messages
-  const uiMessages = useMemo(() => getCompanyUIMessages(companyId), [companyId]);
+  // Get UI messages based on normalized rules (dynamic)
+  const uiMessages = useMemo(() => {
+    const r = companyRules?.rules || {};
+    const name = companyRules?.name || 'Company';
+    const messages = { shiftInfo: '', breakInfo: '', warnings: [] };
+    if (r.shiftType === 'fixed') {
+      const shiftHoursText = r.shiftHours != null ? r.shiftHours : (r.workHours && r.breakHours ? (r.workHours + r.breakHours) : null);
+      messages.shiftInfo = `${name}: ${shiftHoursText ?? ''}-hour shift (${r.workHours ?? 0}h work + ${r.breakHours ?? 0}h break)`;
+      if (r.breakRequired) {
+        messages.breakInfo = 'Break is compulsory - you must take a break during your shift';
+      } else if (r.multipleBreaks) {
+        const max = r.maxBreakTime != null ? r.maxBreakTime : 0;
+        messages.breakInfo = max > 0
+          ? `You can take multiple breaks, but total break time cannot exceed ${max} minutes`
+          : 'You can take multiple breaks';
+      }
+    } else if (r.hourlyBasis) {
+      messages.shiftInfo = `${name}: Hourly basis - salary calculated on hours worked`;
+      messages.breakInfo = 'You can take breaks as needed';
+    }
+    return messages;
+  }, [companyRules]);
 
   // Force checkout removed by backend. Keep a stable shape for UI but always false.
   const forceCheckoutInfo = useMemo(() => ({ shouldForce: false }), []);
@@ -47,7 +112,8 @@ export const useCompanyAttendanceRules = (companyId, currentRecord) => {
 
   // Check if break is required but not taken
   const breakRequiredCheck = useMemo(() => {
-    if (!companyRules.rules.breakRequired || !currentRecord || !currentRecord.checkInAt || currentRecord.checkOutAt) {
+    const rules = companyRules?.rules || {};
+    if (!rules.breakRequired || !currentRecord || !currentRecord.checkInAt || currentRecord.checkOutAt) {
       return { isRequired: false };
     }
 
@@ -136,12 +202,13 @@ export const useCompanyAttendanceRules = (companyId, currentRecord) => {
 
   // Get remaining break time
   const getRemainingBreakTime = () => {
-    if (!companyRules.rules.maxBreakTime) {
+    const rules = companyRules?.rules || {};
+    if (!(typeof rules.maxBreakTime === 'number') || rules.maxBreakTime <= 0) {
       return null; // No limit
     }
     
     const totalBreakMinutes = calculateTotalBreakTime(currentRecord?.breaks || []);
-    const remaining = companyRules.rules.maxBreakTime - totalBreakMinutes;
+    const remaining = rules.maxBreakTime - totalBreakMinutes;
     return Math.max(0, remaining);
   };
 
@@ -157,7 +224,8 @@ export const useCompanyAttendanceRules = (companyId, currentRecord) => {
     const breakMinutes = calculateTotalBreakTime(currentRecord.breaks || []);
     const actualWorkMinutes = Math.max(0, totalMinutes - breakMinutes); // Ensure non-negative
     
-    const totalWorkMinutes = companyRules.rules.workHours ? companyRules.rules.workHours * 60 : null;
+    const rules = companyRules?.rules || {};
+    const totalWorkMinutes = rules.workHours ? rules.workHours * 60 : null;
     
     if (!totalWorkMinutes) {
       return { progress: 0, workedMinutes: actualWorkMinutes, totalMinutes: null };
@@ -198,8 +266,8 @@ export const useCompanyAttendanceRules = (companyId, currentRecord) => {
     canEndBreak,
     getRemainingBreakTime,
     getWorkProgress,
-    isHourlyBasis: companyRules.rules?.hourlyBasis || false,
-    isFixedShift: companyRules.rules?.shiftType === 'fixed',
+    isHourlyBasis: (companyRules?.rules && companyRules.rules.hourlyBasis) || false,
+    isFixedShift: (companyRules?.rules && companyRules.rules.shiftType === 'fixed') || false,
     isLoading: rulesLoading,
     error: rulesError,
     // Backend validation functions

@@ -63,15 +63,24 @@ export const fetchEmployeesForKiosk = async ({
   if (search.trim()) params.append("search", search.trim());
   if (companyId) params.append("companyId", String(companyId));
   const { data } = await apiClient.get(
-    `/api/v1/auth/employees?${params.toString()}`
+    `/api/v1/auth/kiosk/employees?${params.toString()}`
   );
-  return data;
+  return data.data; // Return the nested data object
 };
 
 /** Admin: set/reset a user's kiosk PIN (4–6 digits) */
 export const setEmployeeKioskPin = async (userId, pin) => {
   const { data } = await apiClient.patch(`/api/v1/auth/${userId}/kiosk-pin`, {
     pin,
+  });
+  return data;
+};
+
+/** Admin: link a user to an employee (bidirectional) */
+export const linkUserToEmployee = async ({ userId, employeeId }) => {
+  const { data } = await apiClient.post(`/api/v1/auth/kiosk/link-employee`, {
+    userId,
+    employeeId,
   });
   return data;
 };
