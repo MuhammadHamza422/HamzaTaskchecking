@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Input, Button, Spin, message, Modal, Tooltip, Tag } from "antd";
 import { fetchEmployeesForKiosk } from "../api/auth";
+import { setEmployeeKioskPin } from "../api/auth";
 import { fetchCompanies } from "../api/company";
 import {
   kioskCheckIn,
@@ -234,6 +235,10 @@ export default function AttendanceKiosk() {
   const [pin, setPin] = useState("");
   const [breakNote, setBreakNote] = useState(""); // optional note for Start Break
   const pinInputRef = useRef(null);
+  // PIN setup flow (when user has no kiosk PIN)
+  const [pinSetupOpen, setPinSetupOpen] = useState(false);
+  const [pinSetup, setPinSetup] = useState("");
+  const [pendingActionAfterPin, setPendingActionAfterPin] = useState(null); // 'in' | 'out' | 'breakStart' | 'breakEnd'
 
   // ---- Fullscreen ----
   const containerRef = useRef(null);
@@ -388,18 +393,19 @@ export default function AttendanceKiosk() {
     : null;
 
   // Company-specific attendance rules
-  const companyRules = useCompanyAttendanceRules(companyId, latest);
+  const rulesCompanyId = selected?.company?._id || companyId;
+  const companyRules = useCompanyAttendanceRules(rulesCompanyId, latest);
 
   // Validate break before starting
   const handleStartBreak = async () => {
-    if (!selected?._id) return;
+    if (!selected?.employeeId) return;
     
     try {
       // Show loading
       showLoading('Validating...', 'Checking break rules');
       
       // Validate with backend first
-      const validation = await companyRules.validateBreakWithBackend(selected._id);
+      const validation = await companyRules.validateBreakWithBackend(selected.employeeId);
       
       closeLoading();
       
@@ -434,14 +440,14 @@ export default function AttendanceKiosk() {
 
   // Validate check-in before starting
   const handleCheckIn = async () => {
-    if (!selected?._id) return;
+    if (!selected?.employeeId) return;
     
     try {
       // Show loading
       showLoading('Validating...', 'Checking company rules');
       
       // Validate with backend first
-      const validation = await companyRules.validateAttendanceWithBackend('checkin', selected._id);
+      const validation = await companyRules.validateAttendanceWithBackend('checkin', selected.employeeId);
       
       closeLoading();
       
@@ -471,14 +477,14 @@ export default function AttendanceKiosk() {
 
   // Validate check-out before starting
   const handleCheckOut = async () => {
-    if (!selected?._id) return;
+    if (!selected?.employeeId) return;
     
     try {
       // Show loading
       showLoading('Validating...', 'Checking work progress');
       
       // Validate with backend first
-      const validation = await companyRules.validateAttendanceWithBackend('checkout', selected._id);
+      const validation = await companyRules.validateAttendanceWithBackend('checkout', selected.employeeId);
       
       closeLoading();
       
@@ -531,6 +537,41 @@ export default function AttendanceKiosk() {
       qc.invalidateQueries({ queryKey: ["kiosk-user-status", selected._id] });
   };
 
+  const handleNoPinError = (mode) => {
+    setPendingActionAfterPin(mode);
+    setPinSetup("");
+    setPinSetupOpen(true);
+  };
+
+  const savePinSetup = async () => {
+    if (!selected?._id) return;
+    if (!/^\d{4,6}$/.test(pinSetup)) {
+      message.error("PIN must be 4–6 digits");
+      return;
+    }
+    try {
+      await setEmployeeKioskPin(selected._id, String(pinSetup));
+      showSuccessToast("PIN set successfully", "Kiosk PIN");
+      setPinSetupOpen(false);
+      // Retry the pending action with the provided PIN
+      const userId = selected._id;
+      const p = String(pinSetup);
+      if (!userId) return;
+      if (pendingActionAfterPin === "in") {
+        checkInMut.mutate({ employeeId: userId, note: "", pin: p });
+      } else if (pendingActionAfterPin === "out") {
+        checkOutMut.mutate({ employeeId: userId, pin: p });
+      } else if (pendingActionAfterPin === "breakStart") {
+        startBreakMut.mutate({ employeeId: userId, note: breakNote || "", pin: p });
+      } else if (pendingActionAfterPin === "breakEnd") {
+        endBreakMut.mutate({ employeeId: userId, pin: p });
+      }
+      setPendingActionAfterPin(null);
+    } catch (e) {
+      showErrorToast(e?.response?.data?.message || "Failed to set PIN", "Kiosk PIN");
+    }
+  };
+
   const checkInMut = useMutation({
     mutationFn: ({ employeeId, note, pin }) =>
       kioskCheckIn({ employeeId, note, pin }),
@@ -550,6 +591,10 @@ export default function AttendanceKiosk() {
         setPinModal((prev) => ({ ...prev, mode: "out" }));
         return;
       }
+      if (msg?.toLowerCase?.().includes("no pin set")) {
+        handleNoPinError("in");
+        return;
+      }
       showErrorToast(msg, "Check In Failed");
       setPin("");
     },
@@ -564,7 +609,12 @@ export default function AttendanceKiosk() {
       setPinModal({ open: false, mode: "out" });
     },
     onError: (e) => {
-      showErrorToast(e?.response?.data?.message || "Check-out failed", "Check Out Failed");
+      const msg = e?.response?.data?.message || "Check-out failed";
+      if (msg?.toLowerCase?.().includes("no pin set")) {
+        handleNoPinError("out");
+        return;
+      }
+      showErrorToast(msg, "Check Out Failed");
       setPin("");
     },
   });
@@ -581,7 +631,12 @@ export default function AttendanceKiosk() {
       setPinModal({ open: false, mode: "breakStart" });
     },
     onError: (e) => {
-      showErrorToast(e?.response?.data?.message || "Failed to start break", "Break Start Failed");
+      const msg = e?.response?.data?.message || "Failed to start break";
+      if (msg?.toLowerCase?.().includes("no pin set")) {
+        handleNoPinError("breakStart");
+        return;
+      }
+      showErrorToast(msg, "Break Start Failed");
       setPin("");
     },
   });
@@ -595,7 +650,12 @@ export default function AttendanceKiosk() {
       setPinModal({ open: false, mode: "breakEnd" });
     },
     onError: (e) => {
-      showErrorToast(e?.response?.data?.message || "Failed to end break", "Break End Failed");
+      const msg = e?.response?.data?.message || "Failed to end break";
+      if (msg?.toLowerCase?.().includes("no pin set")) {
+        handleNoPinError("breakEnd");
+        return;
+      }
+      showErrorToast(msg, "Break End Failed");
       setPin("");
     },
   });
@@ -609,8 +669,11 @@ export default function AttendanceKiosk() {
       message.error("PIN must be 4–6 digits");
       return;
     }
+    // Actions use userId; validations already used employeeId
     const employeeId = selected._id;
     const p = String(pin);
+
+    if (!employeeId) return;
 
     if (pinModal.mode === "in") {
       checkInMut.mutate({ employeeId, note: "", pin: p });
@@ -1169,6 +1232,30 @@ export default function AttendanceKiosk() {
           <Button onClick={() => appendDigit("0")}>0</Button>
           <Button onClick={backspace}>⌫</Button>
         </div>
+      </Modal>
+
+      {/* PIN Setup Modal (when no PIN set) */}
+      <Modal
+        title="Set Kiosk PIN"
+        open={pinSetupOpen}
+        onCancel={() => setPinSetupOpen(false)}
+        onOk={savePinSetup}
+        okText="Save PIN"
+        maskClosable={false}
+        keyboard={false}
+        destroyOnClose
+        getContainer={() => containerRef.current || document.body}
+      >
+        <div className="text-white/80 mb-2">Set a 4–6 digit PIN for {selected?.firstName} {selected?.lastName}</div>
+        <Input
+          placeholder="4–6 digit PIN"
+          value={pinSetup}
+          onChange={(e) => setPinSetup(e.target.value.replace(/\D+/g, "").slice(0, 6))}
+          size="large"
+          type="password"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+        />
       </Modal>
     </div>
   );

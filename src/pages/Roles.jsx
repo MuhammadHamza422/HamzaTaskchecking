@@ -58,6 +58,11 @@ const rolesOptions = [
     menu: ["users", "user activity", "role management"],
   },
   {
+    app: "employees",
+    label: "Employee Management",
+    menu: ["employees", "employee activity", "employee role management"],
+  },
+  {
     app: "attendance",
     label: "Attendance",
     menu: ["attendance", "Kiosk"],
