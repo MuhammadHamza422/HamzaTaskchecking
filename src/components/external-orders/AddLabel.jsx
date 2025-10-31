@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Modal, Button, Input, Select, Form, message } from "antd";
-import { PlusOutlined } from "@ant-design/icons";
+import { CheckOutlined, PlusOutlined } from "@ant-design/icons";
 import apiClient from "../../api/client";
 import Swal from "sweetalert2";
 
@@ -12,7 +12,11 @@ const PLATFORMS = [
   { id: "woocommerce", label: "WooCommerce" },
 ];
 
-export default function AddLabelModal({ orderId }) {
+export default function AddLabelModal({
+  order,
+  activeTab,
+  fetchProcessedOrders,
+}) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [carriersLoading, setCarriersLoading] = useState(false);
@@ -38,6 +42,22 @@ export default function AddLabelModal({ orderId }) {
 
   useEffect(() => {
     if (open) {
+      setFormData({
+        platform: activeTab ?? "shopify",
+        carrierCode: order?.carrierCode || "",
+        packageCode: order?.packageCode || "",
+        weight: {
+          value: order?.weight?.value || 0,
+          units: order?.weight?.units || "pounds",
+        },
+
+        dimensions: {
+          length: order?.dimensions?.length || 0,
+          width: order?.dimensions?.width || 0,
+          height: order?.dimensions?.height || 0,
+          units: order?.dimensions?.units || "inches",
+        },
+      });
       fetchCarriers();
     }
   }, [open]);
@@ -101,7 +121,7 @@ export default function AddLabelModal({ orderId }) {
 
     try {
       const { data } = await apiClient.patch(
-        `/api/v1/orders/shipstation/label/${orderId}`,
+        `/api/v1/orders/shipstation/label/${order.order_key}`,
         {
           platform: formData.platform,
           carrierCode: formData.carrierCode,
@@ -136,6 +156,7 @@ export default function AddLabelModal({ orderId }) {
             popup: "rounded-lg",
           },
         });
+        fetchProcessedOrders();
         setOpen(false);
         setTimeout(() => {
           setOpen(false);
@@ -171,12 +192,22 @@ export default function AddLabelModal({ orderId }) {
     <>
       <Button
         type="link"
-        icon={<PlusOutlined />}
+        icon={
+          order.carrierCode ? (
+            <CheckOutlined className="text-green-600" />
+          ) : (
+            <PlusOutlined className="text-blue-600" />
+          )
+        }
         onClick={() => setOpen(true)}
         size="small"
-        className="text-blue-600 hover:text-blue-800 p-1"
+        className={`p-1 ${
+          order.carrierCode
+            ? "text-green-600 hover:text-green-800"
+            : "text-blue-600 hover:text-blue-800"
+        }`}
       >
-        Add Label
+        {order.carrierCode ? "Labeled" : "Add Label"}
       </Button>
 
       <Modal
@@ -217,7 +248,7 @@ export default function AddLabelModal({ orderId }) {
             />
           </Form.Item>
 
-          <Form.Item label="Carrier" required>
+          <Form.Item label="Carrier" required className=" py-3">
             <Select
               placeholder="Select a carrier"
               loading={carriersLoading}

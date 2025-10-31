@@ -777,8 +777,8 @@ export default function ProcessedOrdersPage() {
     tagId,
   }) => {
     const sf = details?.order || details || {};
+    console.log("sf", sf);
     const kitsArray = Array.isArray(kits?.allKits) ? kits.allKits : [];
-    console.log("kitsArray", kitsArray);
 
     const items = [];
     const productTitles = [];
@@ -882,6 +882,38 @@ export default function ProcessedOrdersPage() {
       gift: false,
       paymentMethod: (sf?.paymentGatewayNames || []).join(", ") || undefined,
       advancedOptions,
+      packageCode: sf?.dbInfo?.packageCode,
+      weight: {
+        value:
+          typeof sf?.dbInfo?.weight?.value === "number" &&
+          sf?.dbInfo?.weight?.value > 0
+            ? sf.dbInfo.weight.value
+            : 1, // default to 1 if missing or 0
+        units: ["pounds", "ounces", "grams"].includes(sf?.dbInfo?.weight?.units)
+          ? sf.dbInfo.weight.units
+          : "ounces", // default to valid unit
+      },
+
+      dimensions: {
+        length:
+          typeof sf?.dbInfo?.dimensions?.length === "number" &&
+          sf?.dbInfo?.dimensions?.length > 0
+            ? sf.dbInfo.dimensions.length
+            : 10,
+        width:
+          typeof sf?.dbInfo?.dimensions?.width === "number" &&
+          sf?.dbInfo?.dimensions?.width > 0
+            ? sf.dbInfo.dimensions.width
+            : 10,
+        height:
+          typeof sf?.dbInfo?.dimensions?.height === "number" &&
+          sf?.dbInfo?.dimensions?.height > 0
+            ? sf.dbInfo.dimensions.height
+            : 5,
+        units: ["inches", "centimeters"].includes(sf?.dbInfo?.dimensions?.units)
+          ? sf.dbInfo.dimensions.units
+          : "inches",
+      },
     };
   };
 
@@ -1148,6 +1180,7 @@ export default function ProcessedOrdersPage() {
             onOrderSelect={handleOrderSelect}
             selectAll={selectAll}
             onSelectAll={handleSelectAll}
+            fetchProcessedOrders={refetch}
           />
         ) : (
           <OrderTable
@@ -1166,6 +1199,7 @@ export default function ProcessedOrdersPage() {
             onOrderSelect={handleOrderSelect}
             selectAll={selectAll}
             onSelectAll={handleSelectAll}
+            fetchProcessedOrders={refetch}
           />
         )}
       </div>

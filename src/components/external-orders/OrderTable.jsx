@@ -13,6 +13,7 @@ import {
 import { useMediaQuery } from "react-responsive";
 import { CloseCircleOutlined } from "@ant-design/icons";
 import { FaCheckCircle } from "react-icons/fa";
+import AddLabelModal from "./AddLabel";
 
 export default function OrderTable({
   orders,
@@ -122,6 +123,7 @@ export default function OrderTable({
         key: "actions",
         render: (_, record) => (
           <div className="flex items-center gap-2">
+            <AddLabelModal order={record} activeTab={activeTab} />
             <Button
               type="link"
               onClick={(e) => {
@@ -730,6 +732,7 @@ export default function OrderTable({
             </div>
           </div>
           <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+            <AddLabelModal order={order} activeTab={activeTab} />
             <Button
               size="small"
               type="link"

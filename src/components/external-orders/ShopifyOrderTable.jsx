@@ -34,6 +34,8 @@ export default function ShopifyOrderTable({
   onOrderSelect = null,
   selectAll = false,
   onSelectAll = null,
+  activeTab,
+  fetchProcessedOrders,
 }) {
   const isMobile = useMediaQuery({ maxWidth: 768 });
   const isTablet = useMediaQuery({ minWidth: 769, maxWidth: 1024 });
@@ -526,7 +528,11 @@ export default function ShopifyOrderTable({
       fixed: "right",
       render: (_, record) => (
         <div className="flex items-center gap-1">
-          <AddLabelModal orderId={record?.order_key} />
+          <AddLabelModal
+            order={record}
+            activeTab={activeTab}
+            fetchProcessedOrders={fetchProcessedOrders}
+          />
           <Button
             type="link"
             size="small"
@@ -663,6 +669,11 @@ export default function ShopifyOrderTable({
           {/* Footer */}
           <div className="flex justify-between items-center pt-2 border-t border-gray-100">
             <div className="flex gap-2">
+              <AddLabelModal
+                order={order}
+                activeTab={activeTab}
+                fetchProcessedOrders={fetchProcessedOrders}
+              />
               <Button
                 size="small"
                 type="link"

@@ -77,6 +77,7 @@ export default function ExternalOrdersPage() {
   const [editingOrder, setEditingOrder] = useState(null);
   const [updateOrderStatusLoading, setUpdateOrderStatusLoading] =
     useState(false);
+  const [isOpen, setIsOpen] = useState(false);
 
   // Filter state
   const [filters, setFilters] = useState({
@@ -523,6 +524,8 @@ export default function ExternalOrdersPage() {
             onRowClick={handleDrawerOpen}
             showPagination={true}
             onEditClick={handleEditClick}
+            activeTab={activeTab}
+            fetchProcessedOrders={fetchOrders}
           />
         ) : (
           <OrderTable
@@ -536,6 +539,7 @@ export default function ExternalOrdersPage() {
             showPagination={true}
             onEditClick={handleEditClick}
             activeTab={activeTab}
+            fetchProcessedOrders={fetchOrders}
           />
         )}
       </div>

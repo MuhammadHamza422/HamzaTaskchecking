@@ -17,12 +17,16 @@ export default function ShopifyDetails({
   const [localMergedIds, setLocalMergedIds] = useState([]);
   const [mergedProducts, setMergedProducts] = useState([]);
 
+  console.log("order", order);
+
   // Load merged products for this order
   const loadMergedProducts = async () => {
     if (!selectedOrder?.orderId) return;
     try {
       const mergedRes = await apiClient.get(
-        `/api/v1/products/mapped/product/${encodeURIComponent(selectedOrder.orderId)}`
+        `/api/v1/products/mapped/product/${encodeURIComponent(
+          selectedOrder.orderId
+        )}`
       );
       setMergedProducts(
         Array.isArray(mergedRes.data?.product) ? mergedRes.data.product : []
@@ -73,28 +77,30 @@ export default function ShopifyDetails({
     // Check for fraud
     if (shopifyDetails.cancel_reason === "fraud") {
       return {
-        message: "⚠️ This order has a high risk of fraud and should be reviewed carefully.",
+        message:
+          "⚠️ This order has a high risk of fraud and should be reviewed carefully.",
         bgColor: "bg-red-50 border-red-200",
         textColor: "text-red-800",
-        icon: "🚨"
+        icon: "🚨",
       };
     }
 
     // Check for cancelled orders
     if (shopifyDetails.cancelled_at) {
       const cancelReason = shopifyDetails.cancel_reason;
-      const reasonText = {
-        customer: "Customer requested cancellation",
-        staff: "Cancelled by staff",
-        inventory: "Cancelled due to inventory issues",
-        fraud: "Cancelled due to fraud detection"
-      }[cancelReason] || `Cancelled: ${cancelReason || "Unknown reason"}`;
+      const reasonText =
+        {
+          customer: "Customer requested cancellation",
+          staff: "Cancelled by staff",
+          inventory: "Cancelled due to inventory issues",
+          fraud: "Cancelled due to fraud detection",
+        }[cancelReason] || `Cancelled: ${cancelReason || "Unknown reason"}`;
 
       return {
         message: `❌ Order cancelled: ${reasonText}`,
         bgColor: "bg-orange-50 border-orange-200",
         textColor: "text-orange-800",
-        icon: "⚠️"
+        icon: "⚠️",
       };
     }
 
@@ -130,9 +136,10 @@ export default function ShopifyDetails({
     setIsMerging(true);
     try {
       // Build items to merge from selected nodes
-      const itemsToMerge = order?.lineItems?.edges
-        ?.filter((edge) => selectedItems.includes(edge.node.id))
-        ?.map((edge) => edge.node) || [];
+      const itemsToMerge =
+        order?.lineItems?.edges
+          ?.filter((edge) => selectedItems.includes(edge.node.id))
+          ?.map((edge) => edge.node) || [];
 
       if (!itemsToMerge || itemsToMerge.length < 2) {
         message.error("Invalid items selected for merging");
@@ -173,7 +180,11 @@ export default function ShopifyDetails({
         const typePatterns = [
           { pattern: /console|system/i, code: "CON" },
           { pattern: /game/i, code: "GAM" },
-          { pattern: /accessory|controller|adapter|cable|memory\s*card|hdmi|av\s*to\s*hdmi/i, code: "ACC" },
+          {
+            pattern:
+              /accessory|controller|adapter|cable|memory\s*card|hdmi|av\s*to\s*hdmi/i,
+            code: "ACC",
+          },
         ];
         const conditionPatterns = [
           { pattern: /new/i, code: "N" },
@@ -277,8 +288,8 @@ export default function ShopifyDetails({
       let skuString =
         itemsToMerge
           .map((it) => it?.sku)
-        .filter(Boolean)
-        .join("_") || productIdsList.join("_");
+          .filter(Boolean)
+          .join("_") || productIdsList.join("_");
 
       // Fallback SKU synthesis if still empty (should not happen)
       if (!skuString || skuString.trim().length === 0) {
@@ -290,7 +301,11 @@ export default function ShopifyDetails({
           attrs.colorCode,
           attrs.conditionCode,
         ]
-          .map((s) => String(s || "STD").toUpperCase().replace(/[^A-Z0-9]+/g, ""))
+          .map((s) =>
+            String(s || "STD")
+              .toUpperCase()
+              .replace(/[^A-Z0-9]+/g, "")
+          )
           .filter(Boolean)
           .join("-");
         skuString = safe || productIdsList.join("_");
@@ -298,7 +313,9 @@ export default function ShopifyDetails({
 
       const sumAmount = (arr) =>
         arr.reduce((sum, it) => {
-          const unit = parseFloat(it?.originalUnitPriceSet?.shopMoney?.amount || 0);
+          const unit = parseFloat(
+            it?.originalUnitPriceSet?.shopMoney?.amount || 0
+          );
           const qty = Number(it?.quantity || 1);
           return sum + unit * qty;
         }, 0);
@@ -306,7 +323,10 @@ export default function ShopifyDetails({
       // Ensure minimally required fields are populated
       const safeType = attrs.typeCode || "CON";
       const safeBrand = attrs.brandCode || "SNY"; // default to SNY when PlayStation-like
-      const safeModel = attrs.modelCode && attrs.modelCode !== "DEFAULT" ? attrs.modelCode : "STD";
+      const safeModel =
+        attrs.modelCode && attrs.modelCode !== "DEFAULT"
+          ? attrs.modelCode
+          : "STD";
       const safeStorage = attrs.storageCode || "STD";
       const safeColor = attrs.colorCode || "STD";
       const safeCond = attrs.conditionCode || "U";
@@ -325,7 +345,8 @@ export default function ShopifyDetails({
         price: sumAmount(itemsToMerge).toFixed(2),
         sale_price: sumAmount(itemsToMerge).toFixed(2),
         order_Id: selectedOrder?.orderId,
-        plateformId: selectedOrder?.plateform_id || selectedOrder?.platform_id || "N/A",
+        plateformId:
+          selectedOrder?.plateform_id || selectedOrder?.platform_id || "N/A",
         productIds: productIdsList,
       };
 
@@ -347,7 +368,8 @@ export default function ShopifyDetails({
         if (
           combinedData[k] === undefined ||
           combinedData[k] === null ||
-          (typeof combinedData[k] === "string" && combinedData[k].toString().trim() === "") ||
+          (typeof combinedData[k] === "string" &&
+            combinedData[k].toString().trim() === "") ||
           (Array.isArray(combinedData[k]) && combinedData[k].length === 0)
         ) {
           throw new Error(`Missing required field: ${k}`);
@@ -391,9 +413,7 @@ export default function ShopifyDetails({
       }
     } catch (error) {
       console.error("Error merging items:", error);
-      message.error(
-        error.response?.data?.message || "Failed to merge items"
-      );
+      message.error(error.response?.data?.message || "Failed to merge items");
     } finally {
       setIsMerging(false);
     }
@@ -402,20 +422,22 @@ export default function ShopifyDetails({
   // Calculate selected items total
   const selectedItemsTotal = useMemo(() => {
     if (!order?.lineItems?.edges) return 0;
-    
+
     return order.lineItems.edges
       .filter((edge) => selectedItems.includes(edge.node.id))
       .reduce((total, edge) => {
-        const price = parseFloat(edge.node.originalUnitPriceSet?.shopMoney?.amount || "0");
+        const price = parseFloat(
+          edge.node.originalUnitPriceSet?.shopMoney?.amount || "0"
+        );
         const quantity = edge.node.quantity || 1;
-        return total + (price * quantity);
+        return total + price * quantity;
       }, 0);
   }, [selectedItems, order?.lineItems?.edges]);
 
   // Get line items (excluding merged ones)
   const visibleLineItems = useMemo(() => {
     if (!order?.lineItems?.edges) return [];
-    
+
     return order.lineItems.edges
       .map((edge) => edge.node)
       .filter((item) => !hiddenLineItemIds.has(item.id));
@@ -448,7 +470,7 @@ export default function ShopifyDetails({
             <div className="flex">
               <dt className="w-20 font-semibold text-gray-800">Order ID:</dt>
               <dd className="text-gray-700">
-                {order?.id?.replace('gid://shopify/Order/', '') || order?.id}
+                {order?.id?.replace("gid://shopify/Order/", "") || order?.id}
               </dd>
             </div>
             <div className="flex">
@@ -486,9 +508,7 @@ export default function ShopifyDetails({
             </div>
             <div className="flex">
               <dt className="w-20 font-semibold text-gray-800">Date:</dt>
-              <dd className="text-gray-700">
-                {formatDate(order?.createdAt)}
-              </dd>
+              <dd className="text-gray-700">{formatDate(order?.createdAt)}</dd>
             </div>
           </dl>
         </div>
@@ -510,7 +530,9 @@ export default function ShopifyDetails({
             </div>
             <div className="flex">
               <dt className="w-28 font-semibold text-gray-800">Confirm #:</dt>
-              <dd className="text-gray-700">{order?.confirmationNumber || "—"}</dd>
+              <dd className="text-gray-700">
+                {order?.confirmationNumber || "—"}
+              </dd>
             </div>
             <div className="flex">
               <dt className="w-28 font-semibold text-gray-800">Locale:</dt>
@@ -523,7 +545,8 @@ export default function ShopifyDetails({
               <dd className="text-gray-700">
                 {formatCurrency(
                   order?.subtotalPriceSet?.shopMoney?.amount,
-                  order?.subtotalPriceSet?.shopMoney?.currencyCode || order?.totalPriceSet?.shopMoney?.currencyCode
+                  order?.subtotalPriceSet?.shopMoney?.currencyCode ||
+                    order?.totalPriceSet?.shopMoney?.currencyCode
                 )}
               </dd>
             </div>
@@ -532,7 +555,8 @@ export default function ShopifyDetails({
               <dd className="text-gray-700">
                 {formatCurrency(
                   order?.totalDiscountsSet?.shopMoney?.amount,
-                  order?.totalDiscountsSet?.shopMoney?.currencyCode || order?.totalPriceSet?.shopMoney?.currencyCode
+                  order?.totalDiscountsSet?.shopMoney?.currencyCode ||
+                    order?.totalPriceSet?.shopMoney?.currencyCode
                 )}
               </dd>
             </div>
@@ -541,7 +565,8 @@ export default function ShopifyDetails({
               <dd className="text-gray-700">
                 {formatCurrency(
                   order?.totalTaxSet?.shopMoney?.amount,
-                  order?.totalTaxSet?.shopMoney?.currencyCode || order?.totalPriceSet?.shopMoney?.currencyCode
+                  order?.totalTaxSet?.shopMoney?.currencyCode ||
+                    order?.totalPriceSet?.shopMoney?.currencyCode
                 )}
               </dd>
             </div>
@@ -591,7 +616,8 @@ export default function ShopifyDetails({
         <div className="text-gray-700 space-y-2">
           <div>
             <span className="font-semibold">Name:</span>{" "}
-            {order?.shippingAddress?.firstName} {order?.shippingAddress?.lastName}
+            {order?.shippingAddress?.firstName}{" "}
+            {order?.shippingAddress?.lastName}
           </div>
           <div>
             <span className="font-semibold">Address:</span>{" "}
@@ -614,6 +640,48 @@ export default function ShopifyDetails({
           )}
         </div>
       </Card>
+      {/* Label Info */}
+      <Card
+        size="small"
+        title="Label Info"
+        className="border border-green-200 rounded-lg shadow-sm"
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-gray-700">
+          <dl className="space-y-2">
+            <div className="flex">
+              <dt className="w-28 font-semibold text-gray-800">
+                Carrier Code:
+              </dt>
+              <dd className="text-gray-700">
+                {order?.dbInfo?.carrierCode || "—"}
+              </dd>
+            </div>
+            <div className="flex">
+              <dt className="w-28 font-semibold text-gray-800">
+                Package Code:
+              </dt>
+              <dd className="text-gray-700">
+                {order?.dbInfo?.packageCode || "—"}
+              </dd>
+            </div>
+            <div className="flex">
+              <dt className="w-28 font-semibold text-gray-800">Weight:</dt>
+              <dd className="text-gray-700 capitalize">
+                {order?.dbInfo?.weight?.value}, {order?.dbInfo?.weight?.units}
+              </dd>
+            </div>
+            <div className="flex">
+              <dt className="w-28 font-semibold text-gray-800">Dimensions:</dt>
+              <dd className="text-gray-700 capitalize">
+                Length: {order?.dbInfo?.dimensions?.length} <br />
+                Width: {order?.dbInfo?.dimensions?.width} <br />
+                Height: {order?.dbInfo.dimensions?.height} <br />
+                Units: {order?.dbInfo?.dimensions?.units}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </Card>
 
       {/* Order Items */}
       <Card size="small" title="Order Items" className="border-orange-200">
@@ -625,7 +693,9 @@ export default function ShopifyDetails({
             </div>
             <div className="space-y-2">
               {mergedProducts.map((mp) => {
-                const actionId = String(mp?.productIds?.[0] || mp?.shopify_id || "");
+                const actionId = String(
+                  mp?.productIds?.[0] || mp?.shopify_id || ""
+                );
                 const hasMappedProducts =
                   !!actionId &&
                   ((Array.isArray(selectedOrder?.kit_products) &&
@@ -641,7 +711,9 @@ export default function ShopifyDetails({
                       <div className="font-bold text-purple-900">
                         {mp?.pro_title}
                       </div>
-                      <div className="text-xs text-gray-700">SKU: {mp?.sku}</div>
+                      <div className="text-xs text-gray-700">
+                        SKU: {mp?.sku}
+                      </div>
                     </div>
                     <div className="space-y-1">
                       <div className="text-right ml-2">
@@ -692,7 +764,11 @@ export default function ShopifyDetails({
                   {selectedItems.length} item(s) selected
                 </span>
                 <span className="text-sm text-blue-600">
-                  Total: {formatCurrency(selectedItemsTotal, order?.totalPriceSet?.shopMoney?.currencyCode)}
+                  Total:{" "}
+                  {formatCurrency(
+                    selectedItemsTotal,
+                    order?.totalPriceSet?.shopMoney?.currencyCode || "USD"
+                  )}
                 </span>
               </div>
               <Button
@@ -732,7 +808,9 @@ export default function ShopifyDetails({
                   <div className="flex items-start gap-3 flex-1">
                     <Checkbox
                       checked={isSelected}
-                      onChange={(e) => handleItemSelect(item.id, e.target.checked)}
+                      onChange={(e) =>
+                        handleItemSelect(item.id, e.target.checked)
+                      }
                       className="mt-1"
                     />
                     <div className="flex-1">
@@ -744,7 +822,8 @@ export default function ShopifyDetails({
                         {item.sku && <div>SKU: {item.sku}</div>}
                         {item.vendor && <div>Vendor: {item.vendor}</div>}
                         <div>
-                          Price: {formatCurrency(
+                          Price:{" "}
+                          {formatCurrency(
                             item.originalUnitPriceSet?.shopMoney?.amount,
                             item.originalUnitPriceSet?.shopMoney?.currencyCode
                           )}
@@ -756,7 +835,9 @@ export default function ShopifyDetails({
                     <div className="text-right">
                       <div className="font-semibold text-gray-900">
                         {formatCurrency(
-                          (parseFloat(item.originalUnitPriceSet?.shopMoney?.amount || "0") * item.quantity),
+                          parseFloat(
+                            item.originalUnitPriceSet?.shopMoney?.amount || "0"
+                          ) * item.quantity,
                           item.originalUnitPriceSet?.shopMoney?.currencyCode
                         )}
                       </div>
@@ -767,7 +848,7 @@ export default function ShopifyDetails({
                           Mapped
                         </p>
                       )}
-                      {(hasMappedProducts || hasLocalMappedProducts) ? (
+                      {hasMappedProducts || hasLocalMappedProducts ? (
                         <button
                           className="text-sm text-blue-600 p-1.5 rounded-md bg-blue-100 hover:bg-blue-200 transition-colors"
                           onClick={() => onEditProduct(item.id)}
