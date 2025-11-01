@@ -64,6 +64,11 @@ const AdminUsersPage = () => {
   const [rolesOptions, setRolesOptions] = useState([]);
   const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
   const [warehouses, setWarehouses] = useState([]);
+  // Filters
+  const [filterCompany, setFilterCompany] = useState(undefined);
+  const [filterRole, setFilterRole] = useState(undefined);
+  const [filterStatus, setFilterStatus] = useState(undefined);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const loadRoles = useCallback(async () => {
     setLoading(true);
@@ -83,8 +88,17 @@ const AdminUsersPage = () => {
 
   const fetchUsers = useCallback(() => {
     setLoading(true);
+    const params = {
+      page,
+      limit,
+    };
+    if (filterCompany) params.company = filterCompany;
+    if (filterRole) params.role = filterRole;
+    if (filterStatus) params.status = filterStatus;
+    if (searchTerm && searchTerm.trim()) params.search = searchTerm.trim();
+
     apiClient
-      .get("/api/v1/auth/all", { params: { page, limit } })
+      .get("/api/v1/auth/all", { params })
       .then((response) => {
         // Transform the API response to match the expected format
         const list = Array.isArray(response?.data?.users)
@@ -113,7 +127,7 @@ const AdminUsersPage = () => {
         message.error("Failed to fetch users.");
       })
       .finally(() => setLoading(false));
-  }, [page, limit]);
+  }, [page, limit, filterCompany, filterRole, filterStatus, searchTerm]);
 
   const fetchCompanies = useCallback(() => {
     if (!isAdmin) return;
@@ -643,15 +657,92 @@ const AdminUsersPage = () => {
       transition={{ duration: 0.3 }}
     >
       <Card className="bg-gradient-to-r from-blue-50 to-purple-50 mb-2 p-2 sm:mb-4 sm:p-4 rounded-lg shadow-lg">
-        <div className="flex sm:flex-row flex-col gap-3 sm:justify-between sm:items-center">
-          <Title level={3} style={{ margin: 0 }}>
-            Manage Users
-          </Title>
-          <motion.div whileHover={{ scale: 1.05 }}>
-            <Button type="primary" onClick={() => handleOpenModal()}>
-              Add New User
+        <div className="flex flex-col gap-3">
+          <div className="flex sm:flex-row flex-col gap-3 sm:justify-between sm:items-center">
+            <Title level={3} style={{ margin: 0 }}>
+              Manage Users
+            </Title>
+            <motion.div whileHover={{ scale: 1.05 }}>
+              <Button type="primary" onClick={() => handleOpenModal()}>
+                Add New User
+              </Button>
+            </motion.div>
+          </div>
+
+          {/* Filters */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <Input.Search
+              allowClear
+              placeholder="Search name or email (e.g., asad retroventures)"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onSearch={() => {
+                setPage(1);
+                fetchUsers();
+              }}
+            />
+            <Select
+              allowClear
+              placeholder="Filter by company"
+              value={filterCompany}
+              showSearch
+              optionFilterProp="children"
+              onChange={(v) => {
+                setFilterCompany(v);
+                setPage(1);
+              }}
+            >
+              {companies.map((c) => (
+                <Option key={c._id} value={String(c._id)}>
+                  {c.name}
+                </Option>
+              ))}
+            </Select>
+            <Select
+              allowClear
+              placeholder="Filter by role"
+              value={filterRole}
+              showSearch
+              optionFilterProp="children"
+              onChange={(v) => {
+                setFilterRole(v);
+                setPage(1);
+              }}
+            >
+              {rolesOptions.map((r) => (
+                <Option key={r._id} value={String(r._id)}>
+                  {r.role}
+                </Option>
+              ))}
+            </Select>
+            <Select
+              allowClear
+              placeholder="Status"
+              value={filterStatus}
+              onChange={(v) => {
+                setFilterStatus(v);
+                setPage(1);
+              }}
+            >
+              <Option value="active">Active</Option>
+              <Option value="inactive">Inactive</Option>
+            </Select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => {
+                setFilterCompany(undefined);
+                setFilterRole(undefined);
+                setFilterStatus(undefined);
+                setSearchTerm("");
+                setPage(1);
+                fetchUsers();
+              }}
+            >
+              Clear Filters
             </Button>
-          </motion.div>
+          </div>
         </div>
       </Card>
 
