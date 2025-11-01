@@ -53,6 +53,7 @@ const PayslipGenerator = () => {
   const [payslipModalVisible, setPayslipModalVisible] = useState(false);
   const [generationForm] = Form.useForm();
   const payslipRef = React.useRef(null);
+  const [hasUnderHoursOnly, setHasUnderHoursOnly] = useState(false);
 
   const formatCurrency = (amount, currency = "USD") => {
     if (amount === null || amount === undefined) return "-";
@@ -254,6 +255,12 @@ const PayslipGenerator = () => {
       ? []
       : payslipsData?.data || (Array.isArray(payslipsData) ? payslipsData : []);
 
+  const filteredPayslips = hasUnderHoursOnly
+    ? payslips.filter(
+        (p) => Number(p?.deductions?.underHours || 0) > 0
+      )
+    : payslips;
+
   // Fetch payslip summary
   const { data: summaryData, error: summaryError } = useQuery({
     queryKey: ["payslip-summary"],
@@ -374,7 +381,7 @@ const PayslipGenerator = () => {
         <div>
           <div className="font-medium">{record.employee?.fullName}</div>
           <div className="text-sm text-gray-500">
-            {record.employee?.employeeCode}
+            {record.employee?.email && <span className="text-xs text-gray-500">({record.employee.email})</span>}
           </div>
         </div>
       ),
@@ -384,13 +391,25 @@ const PayslipGenerator = () => {
       key: "payPeriod",
       render: (_, record) => (
         <div>
-          <div className="font-medium">
+          <p className="font-medium whitespace-nowrap">
             {dayjs(record.payPeriod?.startDate).format("MMM DD")} -{" "}
             {dayjs(record.payPeriod?.endDate).format("MMM DD, YYYY")}
-          </div>
-          <div className="text-sm text-gray-500">
+          </p>
+          <p className="text-sm text-gray-500 whitespace-nowrap">
             {record.payPeriod?.month}/{record.payPeriod?.year}
-          </div>
+          </p>
+        </div>
+      ),
+    },
+    {
+      title: "Hours Worked",
+      key: "hoursWorked",
+      align: "right",
+      render: (_, record) => (
+        <div className="font-medium">
+          {record?.earnings?.workingHours != null
+            ? Number(record.earnings.workingHours).toFixed(1)
+            : "-"}
         </div>
       ),
     },
@@ -407,6 +426,18 @@ const PayslipGenerator = () => {
       },
     },
     {
+      title: "Under-hours",
+      key: "underHours",
+      align: "right",
+      render: (_, record) => {
+        const value = Number(record?.deductions?.underHours || 0);
+        if (!value) return <span className="text-gray-400">-</span>;
+        const currency =
+          record.employee?.payroll?.currency || record.currency || "USD";
+        return <div className="font-medium text-amber-600">{formatCurrency(value, currency)}</div>;
+      },
+    },
+    {
       title: "Net Pay",
       key: "netPay",
       align: "right",
@@ -419,6 +450,14 @@ const PayslipGenerator = () => {
           </div>
         );
       },
+    },
+    {
+      title: "Currency",
+      key: "currency",
+      align: "center",
+      render: (_, record) => (
+        <Tag color="blue">{record.employee?.payroll?.currency || record.currency || "USD"}</Tag>
+      ),
     },
     {
       title: "Status",
@@ -440,13 +479,13 @@ const PayslipGenerator = () => {
       key: "actions",
       render: (_, record) => (
         <Space>
-          <Button
+          {/* <Button
             size="small"
             icon={<EyeOutlined />}
             onClick={() => handleViewPayslip(record)}
           >
             View
-          </Button>
+          </Button> */}
           <Button
             size="small"
             icon={<DownloadOutlined />}
@@ -533,6 +572,7 @@ const PayslipGenerator = () => {
                   {employees.map((emp) => (
                     <Option key={emp._id} value={emp._id}>
                       {emp.fullName} ({emp.employeeCode})
+                      {emp?.email && <span className="text-xs text-gray-500">({emp.email})</span>}
                     </Option>
                   ))}
                 </Select>
@@ -623,7 +663,23 @@ const PayslipGenerator = () => {
       </Card>
 
       {/* Payslips Table */}
-      <Card title="Generated Payslips">
+      <Card
+        title="Generated Payslips"
+        extra={
+          <Space>
+            <span className="text-sm text-gray-600">Filter:</span>
+            <Select
+              size="small"
+              value={hasUnderHoursOnly ? "under" : "all"}
+              onChange={(v) => setHasUnderHoursOnly(v === "under")}
+              style={{ width: 160 }}
+            >
+              <Option value="all">All Payslips</Option>
+              <Option value="under">Has Under-hours</Option>
+            </Select>
+          </Space>
+        }
+      >
         {payslipsError && (
           <Alert
             message="Failed to Load Payslips"
@@ -647,14 +703,14 @@ const PayslipGenerator = () => {
         )}
         <Table
           columns={payslipColumns}
-          dataSource={payslips}
+          dataSource={filteredPayslips}
           loading={payslipsLoading}
           rowKey="_id"
           pagination={{
             pageSize: 10,
             showSizeChanger: true,
             showQuickJumper: true,
-            total: payslipsData?.pagination?.total || payslips.length,
+            total: payslipsData?.pagination?.total || filteredPayslips.length,
           }}
         />
       </Card>
@@ -851,14 +907,87 @@ const PayslipGenerator = () => {
                 </div>
               </div>
 
+              {/* Deductions */}
+              <div className="mb-6">
+                <div className="text-lg font-bold text-gray-900 mb-3 pb-2 border-b border-gray-200">
+                  Deductions
+                </div>
+                <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
+                  <tbody>
+                    {/* <tr>
+                      <td className="py-2 px-3 text-gray-700">Income Tax</td>
+                      <td className="py-2 px-3 text-right text-gray-900">
+                        {formatCurrency(selectedPayslip?.deductions?.incomeTax || 0, selectedPayslip?.employee?.payroll?.currency || selectedPayslip?.currency)}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 px-3 text-gray-700">Social Security</td>
+                      <td className="py-2 px-3 text-right text-gray-900">
+                        {formatCurrency(selectedPayslip?.deductions?.socialSecurity || 0, selectedPayslip?.employee?.payroll?.currency || selectedPayslip?.currency)}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 px-3 text-gray-700">Health Insurance</td>
+                      <td className="py-2 px-3 text-right text-gray-900">
+                        {formatCurrency(selectedPayslip?.deductions?.healthInsurance || 0, selectedPayslip?.employee?.payroll?.currency || selectedPayslip?.currency)}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 px-3 text-gray-700">Provident Fund</td>
+                      <td className="py-2 px-3 text-right text-gray-900">
+                        {formatCurrency(selectedPayslip?.deductions?.providentFund || 0, selectedPayslip?.employee?.payroll?.currency || selectedPayslip?.currency)}
+                      </td>
+                    </tr> */}
+                    {/* <tr>
+                      <td className="py-2 px-3 text-gray-700">Loans</td>
+                      <td className="py-2 px-3 text-right text-gray-900">
+                        {formatCurrency(selectedPayslip?.deductions?.loans || 0, selectedPayslip?.employee?.payroll?.currency || selectedPayslip?.currency)}
+                      </td>
+                    </tr> */}
+                    <tr>
+                      <td className="py-2 px-3 text-gray-900 font-semibold">Under-hours</td>
+                      <td className="py-2 px-3 text-right text-amber-700 font-semibold">
+                        {formatCurrency(selectedPayslip?.deductions?.underHours || 0, selectedPayslip?.employee?.payroll?.currency || selectedPayslip?.currency)}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 px-3 text-gray-700">Other</td>
+                      <td className="py-2 px-3 text-right text-gray-900">
+                        {formatCurrency(selectedPayslip?.deductions?.other || 0, selectedPayslip?.employee?.payroll?.currency || selectedPayslip?.currency)}
+                      </td>
+                    </tr>
+                    <tr className="border-t border-gray-300">
+                      <td className="py-3 px-3 text-gray-900 font-semibold">Total Deductions</td>
+                      <td className="py-3 px-3 text-right text-gray-900 font-semibold">
+                        {formatCurrency(selectedPayslip?.deductions?.totalDeductions || 0, selectedPayslip?.employee?.payroll?.currency || selectedPayslip?.currency)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                {selectedPayslip?.calculationMetadata?.underHours && (
+                  <div className="mt-3 p-3 border border-amber-300/60 bg-amber-50 rounded text-sm text-amber-900">
+                    <div className="font-semibold mb-1">Under-hours Breakdown</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
+                      <div>Expected Hours: <span className="font-medium">{selectedPayslip.calculationMetadata.underHours.expectedDisplayHours}</span></div>
+                      <div>Worked (Display): <span className="font-medium">{selectedPayslip.calculationMetadata.underHours.actualDisplayHours}</span></div>
+                      <div>Shortfall: <span className="font-medium">{selectedPayslip.calculationMetadata.underHours.shortfall}</span></div>
+                      <div>Shift Hours: <span className="font-medium">{selectedPayslip.calculationMetadata.underHours.shiftHours}</span></div>
+                      <div>Expected Days: <span className="font-medium">{selectedPayslip.calculationMetadata.underHours.expectedDays}</span></div>
+                      <div>Under-hours Deduction: <span className="font-medium">{formatCurrency(selectedPayslip.calculationMetadata.underHours.underHoursDeduction || 0, selectedPayslip?.employee?.payroll?.currency || selectedPayslip?.currency)}</span></div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Final Summary */}
-              <div className="mb-6 border-t border-gray-400 pt-4">
+              <div className="mb-6">
                 <table
                   className="w-full text-sm"
                   style={{ borderCollapse: "collapse" }}
                 >
                   <tbody>
-                    <tr>
+                    {/* <tr>
                       <td
                         className="py-3 px-3 text-gray-900 font-semibold"
                         style={{ width: "70%" }}
@@ -875,8 +1004,8 @@ const PayslipGenerator = () => {
                             selectedPayslip?.currency
                         )}
                       </td>
-                    </tr>
-                    <tr>
+                    </tr> */}
+                    {/* <tr>
                       <td className="py-2 px-3 text-gray-700">
                         Total Deductions
                       </td>
@@ -887,7 +1016,7 @@ const PayslipGenerator = () => {
                             selectedPayslip?.currency
                         )}
                       </td>
-                    </tr>
+                    </tr> */}
                     <tr className="border-t border-gray-400">
                       <td className="py-4 px-3 text-xl font-bold text-gray-900">
                         Net Salary

@@ -78,16 +78,16 @@ export default function DashboardCards() {
       bgColor: "bg-teal-50",
       border: "border-teal-500",
     },
-    {
-      title: "Time Off",
-      icon: CalendarDays,
-      color: "text-red-500",
-      accessKey: "timeoff",
-      hoverColor: "group-hover:text-red-600",
-      link: "/timeoff", // 🔹 single entry point
-      bgColor: "bg-red-50",
-      border: "border-red-500",
-    },
+    // {
+    //   title: "Time Off",
+    //   icon: CalendarDays,
+    //   color: "text-red-500",
+    //   accessKey: "timeoff",
+    //   hoverColor: "group-hover:text-red-600",
+    //   link: "/timeoff", // 🔹 single entry point
+    //   bgColor: "bg-red-50",
+    //   border: "border-red-500",
+    // },
     {
       title: "Sourcer",
       icon: CalendarArrowDown,

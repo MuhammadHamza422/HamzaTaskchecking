@@ -65,7 +65,7 @@ export default function MyAttendance() {
   const { user } = useAuth();
   
   /* ---------- filters ---------- */
-  const [dateRange, setDateRange] = useState(quickRanges["This Month"]);
+  const [dateRange, setDateRange] = useState(null);
   const [status, setStatus] = useState("all"); // all | in | break | out
   const [source, setSource] = useState("all"); // all | kiosk | manual | admin
   const [noteQuery, setNoteQuery] = useState("");
@@ -627,7 +627,7 @@ export default function MyAttendance() {
             <Col xs={24} md={10} lg={8}>
               <div style={{ marginBottom: 6, color: "rgba(0,0,0,.6)" }}>Date Range</div>
               <RangePicker
-                allowClear={false}
+                allowClear
                 value={dateRange}
                 onChange={(v) => {
                   setDateRange(v);

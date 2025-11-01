@@ -973,7 +973,7 @@ export default function AttendanceKiosk() {
                         </div>
                         
                         {/* Work progress bar */}
-                        {selCheckedIn && !selOnBreak && (
+                     {selCheckedIn && !selOnBreak && (
                           <div className="mt-2">
                             <div className="flex justify-between text-xs text-blue-200/80 mb-1">
                               <span>Work Progress</span>
@@ -1146,7 +1146,7 @@ export default function AttendanceKiosk() {
                     ? "Select an employee"
                     : selOnBreak
                     ? "On a break — will auto end then check out"
-            : ""
+                    : ""
                 }
               >
                 <Button

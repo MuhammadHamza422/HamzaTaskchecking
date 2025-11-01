@@ -63,7 +63,7 @@ export default function ManageAttendance({ canEdit = false }) {
 
   // Filters
   const [selectedUsers, setSelectedUsers] = useState([]); // multi
-  const [dateRange, setDateRange] = useState(quickRanges["Biweekly (15 days)"]);
+  const [dateRange, setDateRange] = useState(null);
   const [status, setStatus] = useState("all"); // all | in | break | out
   const [source, setSource] = useState("all"); // all | manual | kiosk
   const [searchNote, setSearchNote] = useState("");

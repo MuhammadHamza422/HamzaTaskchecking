@@ -142,7 +142,7 @@ const AttendanceFilters = ({
             Date Range
           </div>
           <RangePicker
-            allowClear={false}
+            allowClear
             value={dateRange}
             onChange={(v) => setDateRange(v)}
             presets={[
