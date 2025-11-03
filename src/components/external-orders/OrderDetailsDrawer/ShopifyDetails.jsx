@@ -17,7 +17,6 @@ export default function ShopifyDetails({
   const [localMergedIds, setLocalMergedIds] = useState([]);
   const [mergedProducts, setMergedProducts] = useState([]);
 
-  console.log("order", order);
 
   // Load merged products for this order
   const loadMergedProducts = async () => {
@@ -575,7 +574,7 @@ export default function ShopifyDetails({
       </Card>
 
       {/* Billing Address */}
-      <Card
+      {/* <Card
         size="small"
         title="Billing Address"
         className="border border-blue-200 rounded-lg shadow-sm"
@@ -605,10 +604,10 @@ export default function ShopifyDetails({
             </div>
           )}
         </div>
-      </Card>
+      </Card> */}
 
       {/* Shipping Address */}
-      <Card
+      {/* <Card
         size="small"
         title="Shipping Address"
         className="border border-purple-200 rounded-lg shadow-sm"
@@ -639,9 +638,9 @@ export default function ShopifyDetails({
             </div>
           )}
         </div>
-      </Card>
+      </Card> */}
       {/* Label Info */}
-      <Card
+      {/* <Card
         size="small"
         title="Label Info"
         className="border border-green-200 rounded-lg shadow-sm"
@@ -681,7 +680,7 @@ export default function ShopifyDetails({
             </div>
           </dl>
         </div>
-      </Card>
+      </Card> */}
 
       {/* Order Items */}
       <Card size="small" title="Order Items" className="border-orange-200">

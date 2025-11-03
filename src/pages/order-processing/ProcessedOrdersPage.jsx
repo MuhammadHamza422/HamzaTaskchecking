@@ -882,7 +882,8 @@ export default function ProcessedOrdersPage() {
       gift: false,
       paymentMethod: (sf?.paymentGatewayNames || []).join(", ") || undefined,
       advancedOptions,
-      packageCode: sf?.dbInfo?.packageCode,
+      warehouseId: sf?.dbInfo?.warehouseId,
+      packageCode: "package" || sf?.dbInfo?.packageCode,
       weight: {
         value:
           typeof sf?.dbInfo?.weight?.value === "number" &&

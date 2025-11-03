@@ -97,49 +97,69 @@ export default function OrderDetailsDrawer({
 
   return (
     <>
-    <div ref={fullscreenRef}>
-      <Drawer
-        getContainer={getContainer}
-        key={String(isFullscreen)}
-        width={700}
-        open={open}
-        onClose={onClose}
-        title={
-          <div>
-            <Title level={4} className="mb-0">
-              Order Details
-            </Title>
-            {/* in shopify orderId will be show like this 6163651690800, so we need to remove the gid://shopify/Order/ */}
-            {activeTab === "shopify" && selectedOrder?.orderId?.includes('gid://shopify/Order/') ? (
-              <Text className="text-gray-500">
-                {selectedOrder?.orderId?.replace('gid://shopify/Order/', '')} - {tabConfig?.label}
-              </Text>
-            ) : (
-              <Text className="text-gray-500">
-                {selectedOrder?.orderId} - {tabConfig?.label}
-              </Text>
-            )}
-          </div>
-        }
-        footer={
-          <Space className="w-full justify-end">
-            <Button onClick={onClose}>Close</Button>
-          </Space>
-        }
-      >
-        {orderDetails?.order ? (
-          <div className="space-y-6">
-            {/* Platform-specific content */}
-            {activeTab === "woocommerce" && (
-              selectedOrder?.status === "processed" ? (
-                <ProcessedWooCommerceDetails
-                  order={orderDetails?.order}
+      <div ref={fullscreenRef}>
+        <Drawer
+          getContainer={getContainer}
+          key={String(isFullscreen)}
+          width={700}
+          open={open}
+          onClose={onClose}
+          title={
+            <div>
+              <Title level={4} className="mb-0">
+                Order Details
+              </Title>
+              {/* in shopify orderId will be show like this 6163651690800, so we need to remove the gid://shopify/Order/ */}
+              {activeTab === "shopify" &&
+              selectedOrder?.orderId?.includes("gid://shopify/Order/") ? (
+                <Text className="text-gray-500">
+                  {orderDetails.order?.name} - {tabConfig?.label}
+                </Text>
+              ) : (
+                <Text className="text-gray-500">
+                  {selectedOrder?.orderId} - {tabConfig?.label}
+                </Text>
+              )}
+            </div>
+          }
+          footer={
+            <Space className="w-full justify-end">
+              <Button onClick={onClose}>Close</Button>
+            </Space>
+          }
+        >
+          {orderDetails?.order ? (
+            <div className="space-y-6">
+              {/* Platform-specific content */}
+              {activeTab === "woocommerce" &&
+                (selectedOrder?.status === "processed" ? (
+                  <ProcessedWooCommerceDetails
+                    order={orderDetails?.order}
+                    selectedOrder={selectedOrder}
+                    onAddProduct={handleAddProduct}
+                    onEditProduct={handleEditProduct}
+                  />
+                ) : (
+                  <WooCommerceDetails
+                    order={orderDetails?.order}
+                    selectedOrder={selectedOrder}
+                    onAddProduct={handleAddProduct}
+                    onEditProduct={handleEditProduct}
+                    refetchOrderDetails={refetchOrderDetails}
+                    onProductMappingSuccess={onProductMappingSuccess}
+                    localKitProducts={localKitProducts}
+                  />
+                ))}
+              {activeTab === "walmart" && (
+                <WalmartDetails
+                  order={orderDetails?.order?.order}
                   selectedOrder={selectedOrder}
                   onAddProduct={handleAddProduct}
                   onEditProduct={handleEditProduct}
                 />
-              ) : (
-                <WooCommerceDetails
+              )}
+              {activeTab === "shopify" && (
+                <ShopifyDetails
                   order={orderDetails?.order}
                   selectedOrder={selectedOrder}
                   onAddProduct={handleAddProduct}
@@ -148,34 +168,14 @@ export default function OrderDetailsDrawer({
                   onProductMappingSuccess={onProductMappingSuccess}
                   localKitProducts={localKitProducts}
                 />
-              )
-            )}
-            {activeTab === "walmart" && (
-              <WalmartDetails
-                order={orderDetails?.order?.order}
-                selectedOrder={selectedOrder}
-                onAddProduct={handleAddProduct}
-                onEditProduct={handleEditProduct}
-              />
-            )}
-            {activeTab === "shopify" && (
-              <ShopifyDetails
-                order={orderDetails?.order}
-                selectedOrder={selectedOrder}
-                onAddProduct={handleAddProduct}
-                onEditProduct={handleEditProduct}
-                refetchOrderDetails={refetchOrderDetails}
-                onProductMappingSuccess={onProductMappingSuccess}
-                localKitProducts={localKitProducts}
-              />
-            )}
-          </div>
-        ) : (
-          <div className="text-center text-gray-500">
-            No order details available
-          </div>
-        )}
-      </Drawer>
+              )}
+            </div>
+          ) : (
+            <div className="text-center text-gray-500">
+              No order details available
+            </div>
+          )}
+        </Drawer>
       </div>
       {/* Add Product Modal */}
       <AddProductModal

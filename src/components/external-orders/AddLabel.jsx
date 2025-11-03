@@ -1,8 +1,22 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Modal, Button, Input, Select, Form, message } from "antd";
-import { CheckOutlined, PlusOutlined } from "@ant-design/icons";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import {
+  Modal,
+  Button,
+  Input,
+  Select,
+  Form,
+  message,
+  Spin,
+  Divider,
+} from "antd";
+import {
+  CheckOutlined,
+  PlusOutlined,
+  InboxOutlined,
+  EnvironmentOutlined,
+} from "@ant-design/icons";
 import apiClient from "../../api/client";
 import Swal from "sweetalert2";
 
@@ -12,6 +26,26 @@ const PLATFORMS = [
   { id: "woocommerce", label: "WooCommerce" },
 ];
 
+const WEIGHT_UNITS = [
+  { label: "Pounds", value: "pounds" },
+  { label: "Ounces", value: "ounces" },
+  { label: "Grams", value: "grams" },
+];
+
+const DIMENSION_UNITS = [
+  { label: "Inches", value: "inch" },
+  { label: "Centimeters", value: "centimeter" },
+  { label: "Meters", value: "meter" },
+];
+
+// Cache for API data with timestamp
+const cache = {
+  warehouses: { data: null, timestamp: 0 },
+  packages: { data: null, timestamp: 0 },
+};
+
+const CACHE_DURATION = 5 * 60 * 1000;
+
 export default function AddLabelModal({
   order,
   activeTab,
@@ -19,128 +53,212 @@ export default function AddLabelModal({
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [carriersLoading, setCarriersLoading] = useState(false);
-  const [packagesLoading, setPackagesLoading] = useState(false);
-  const [carriers, setCarriers] = useState([]);
+  const [initialLoading, setInitialLoading] = useState(false);
+  const [warehouses, setWarehouses] = useState([]);
   const [packages, setPackages] = useState([]);
   const [form] = Form.useForm();
-  const [formData, setFormData] = useState({
-    platform: "shopify",
-    carrierCode: "",
-    packageCode: "",
-    weight: {
-      value: 0,
-      units: "pounds",
-    },
-    dimensions: {
-      length: 0,
-      width: 0,
-      height: 0,
-      units: "inches",
-    },
-  });
 
-  useEffect(() => {
-    if (open) {
-      setFormData({
-        platform: activeTab ?? "shopify",
-        carrierCode: order?.carrierCode || "",
-        packageCode: order?.packageCode || "",
-        weight: {
-          value: order?.weight?.value || 0,
-          units: order?.weight?.units || "pounds",
-        },
+  // Initial form data
+  const initialFormData = useMemo(
+    () => ({
+      platform: activeTab ?? "shopify",
+      warehouseId: "",
+      packageCode: "",
+      weight: { value: 0, units: "pounds" },
+      dimensions: { length: 0, width: 0, height: 0, units: "inch" },
+    }),
+    [activeTab]
+  );
 
-        dimensions: {
-          length: order?.dimensions?.length || 0,
-          width: order?.dimensions?.width || 0,
-          height: order?.dimensions?.height || 0,
-          units: order?.dimensions?.units || "inches",
-        },
-      });
-      fetchCarriers();
+  // Fetch warehouses with caching
+  const fetchWarehouses = useCallback(async () => {
+    const now = Date.now();
+
+    // Return cached data if still valid
+    if (
+      cache.warehouses.data &&
+      now - cache.warehouses.timestamp < CACHE_DURATION
+    ) {
+      setWarehouses(cache.warehouses.data);
+      return;
     }
-  }, [open]);
 
-  const fetchCarriers = async () => {
-    setCarriersLoading(true);
     try {
-      const response = await fetch(
-        "http://localhost:9901/api/v1/shipstation/carriers"
-      );
-      const data = await response.json();
+      const { data } = await apiClient.get("/api/v1/shipstation/warehouses");
 
-      if (data.success && data.carriers) {
-        setCarriers(data.carriers);
-        console.log("[v0] Carriers fetched:", data.carriers);
+      if (data.warehouses) {
+        cache.warehouses = { data: data.warehouses, timestamp: now };
+        setWarehouses(data.warehouses);
       } else {
-        message.error("Failed to fetch carriers");
+        message.error("Failed to fetch warehouses");
       }
     } catch (err) {
-      console.error("[v0] Error fetching carriers:", err);
-      message.error("Error fetching carriers");
-    } finally {
-      setCarriersLoading(false);
+      console.error("Error fetching warehouses:", err);
+      message.error("Error fetching warehouses");
     }
-  };
+  }, []);
 
-  useEffect(() => {
-    if (formData.carrierCode) {
-      fetchPackages(formData.carrierCode);
-    } else {
-      setPackages([]);
+  // Fetch packages with caching
+  const fetchCustomPackages = useCallback(async () => {
+    const now = Date.now();
+
+    // Return cached data if still valid
+    if (
+      cache.packages.data &&
+      now - cache.packages.timestamp < CACHE_DURATION
+    ) {
+      setPackages(cache.packages.data);
+      return;
     }
-  }, [formData.carrierCode]);
 
-  const fetchPackages = async (carrierCode) => {
-    setPackagesLoading(true);
     try {
-      const response = await fetch(
-        `http://localhost:9901/api/v1/shipstation/packages?carrierCode=${carrierCode}`
+      const { data } = await apiClient.get(
+        "/api/v1/shipstation/packages/custom"
       );
-      const data = await response.json();
 
-      if (data.success && data.packages) {
+      if (data?.packages) {
+        cache.packages = { data: data.packages, timestamp: now };
         setPackages(data.packages);
-        console.log("[v0] Packages fetched for carrier:", data.packages);
       } else {
         message.error("Failed to fetch packages");
       }
     } catch (err) {
-      console.error("[v0] Error fetching packages:", err);
+      console.error("Error fetching packages:", err);
       message.error("Error fetching packages");
-    } finally {
-      setPackagesLoading(false);
     }
-  };
+  }, []);
 
-  // Submit label
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // Load initial data only once when modal opens
+  const loadInitialData = useCallback(async () => {
+    setInitialLoading(true);
+    try {
+      await Promise.all([fetchWarehouses(), fetchCustomPackages()]);
+    } finally {
+      setInitialLoading(false);
+    }
+  }, [fetchWarehouses, fetchCustomPackages]);
+
+  // Handle modal open
+  const handleOpen = useCallback(() => {
+    setOpen(true);
+
+    // Set form values from order data
+    const formValues = {
+      platform: activeTab ?? "shopify",
+      warehouseId: order?.warehouseId || "",
+      packageCode: order?.packageCode || "",
+      weight: {
+        value: order?.weight?.value || 0,
+        units: order?.weight?.units || "pounds",
+      },
+      dimensions: {
+        length: order?.dimensions?.length || 0,
+        width: order?.dimensions?.width || 0,
+        height: order?.dimensions?.height || 0,
+        units: order?.dimensions?.units || "inch",
+      },
+    };
+
+    form.setFieldsValue(formValues);
+  }, [order, activeTab, form]);
+
+  // Load data when modal opens
+  useEffect(() => {
+    if (open) {
+      loadInitialData();
+    }
+  }, [open, loadInitialData]);
+
+  // Handle package selection and auto-fill dimensions
+  const handlePackageChange = useCallback(
+    (packageCode) => {
+      const selectedPackage = packages.find(
+        (pkg) => pkg.package_id === packageCode
+      );
+
+      if (selectedPackage) {
+        const newValues = {
+          packageCode: selectedPackage.package_id,
+          dimensions: {
+            length: selectedPackage.dimensions?.length || 0,
+            width: selectedPackage.dimensions?.width || 0,
+            height: selectedPackage.dimensions?.height || 0,
+            units: selectedPackage.dimensions?.unit || "inch",
+          },
+        };
+
+        form.setFieldsValue(newValues);
+      }
+    },
+    [packages, form]
+  );
+
+  // Form validation
+  const validateForm = useCallback(() => {
+    const values = form.getFieldsValue();
+
+    if (!values.warehouseId) {
+      message.error("Please select a warehouse location");
+      return false;
+    }
+
+    if (!values.packageCode) {
+      message.error("Please select a package");
+      return false;
+    }
+
+    if (!values.weight?.value || values.weight.value <= 0) {
+      message.error("Please enter a valid weight");
+      return false;
+    }
+
+    const { length, width, height } = values.dimensions || {};
+    if (
+      !length ||
+      !width ||
+      !height ||
+      length <= 0 ||
+      width <= 0 ||
+      height <= 0
+    ) {
+      message.error("Please enter valid dimensions");
+      return false;
+    }
+
+    return true;
+  }, [form]);
+
+  // Submit handler with validation
+  const handleSubmit = useCallback(async () => {
+    if (!validateForm()) return;
+
     setLoading(true);
 
     try {
+      const values = form.getFieldsValue();
+
       const { data } = await apiClient.patch(
         `/api/v1/orders/shipstation/label/${order.order_key}`,
         {
-          platform: formData.platform,
-          carrierCode: formData.carrierCode,
-          packageCode: formData.packageCode,
+          platform: values.platform,
+          warehouseId: values.warehouseId,
+          packageCode: values.packageCode,
           weight: {
-            value: formData.weight.value,
-            units: formData.weight.units,
+            value: Number(values.weight.value),
+            units: values.weight.units,
           },
           dimensions: {
-            length: formData.dimensions.length,
-            width: formData.dimensions.width,
-            height: formData.dimensions.height,
-            units: formData.dimensions.units,
+            length: Number(values.dimensions.length),
+            width: Number(values.dimensions.width),
+            height: Number(values.dimensions.height),
+            units: values.dimensions.units,
           },
         }
       );
 
       if (data) {
         message.success("Label added successfully!");
+
         Swal.fire({
           icon: "success",
           title: "Label Added",
@@ -152,73 +270,96 @@ export default function AddLabelModal({
           timerProgressBar: true,
           background: "#10b981",
           color: "#fff",
-          customClass: {
-            popup: "rounded-lg",
-          },
+          customClass: { popup: "rounded-lg" },
         });
+
         fetchProcessedOrders();
-        setOpen(false);
-        setTimeout(() => {
-          setOpen(false);
-          form.resetFields();
-          setFormData({
-            platform: "shopify",
-            carrierCode: "",
-            packageCode: "",
-            weight: {
-              value: 0,
-              units: "pounds",
-            },
-            dimensions: {
-              length: 0,
-              width: 0,
-              height: 0,
-              units: "inches",
-            },
-          });
-        }, 500);
+        handleClose();
       }
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "An error occurred";
       message.error(errorMessage);
-      console.error("[v0] Error adding label:", errorMessage);
+      console.error("Error adding label:", errorMessage);
     } finally {
       setLoading(false);
     }
-  };
+  }, [validateForm, form, order, fetchProcessedOrders]);
+
+  // Close handler with cleanup
+  const handleClose = useCallback(() => {
+    setOpen(false);
+    form.resetFields();
+  }, [form]);
+
+  // Memoized warehouse options
+  const warehouseOptions = useMemo(
+    () =>
+      warehouses.map((w) => ({
+        label: (
+          <div className="flex items-center gap-2">
+            <EnvironmentOutlined className="text-blue-500" />
+            <span>{w.warehouseName}</span>
+          </div>
+        ),
+        value: w.warehouseId,
+      })),
+    [warehouses]
+  );
+
+  // Memoized package options
+  const packageOptions = useMemo(
+    () =>
+      packages.map((pkg) => ({
+        label: (
+          <div className="flex items-center gap-2">
+            <InboxOutlined className="text-green-500" />
+            <span>{pkg.name}</span>
+            <span className="text-gray-400 text-xs">({pkg.package_code})</span>
+          </div>
+        ),
+        value: pkg.package_id,
+      })),
+    [packages]
+  );
 
   return (
     <>
       <Button
         type="link"
         icon={
-          order.carrierCode ? (
+          order.packageCode ? (
             <CheckOutlined className="text-green-600" />
           ) : (
             <PlusOutlined className="text-blue-600" />
           )
         }
-        onClick={() => setOpen(true)}
+        onClick={handleOpen}
         size="small"
-        className={`p-1 ${
-          order.carrierCode
-            ? "text-green-600 hover:text-green-800"
-            : "text-blue-600 hover:text-blue-800"
+        className={`font-medium transition-all ${
+          order.packageCode
+            ? "text-green-600 hover:text-green-700"
+            : "text-blue-600 hover:text-blue-700"
         }`}
       >
-        {order.carrierCode ? "Labeled" : "Add Label"}
+        {order.packageCode ? "Labeled" : "Add Label"}
       </Button>
 
       <Modal
-        title="Add New Label"
+        title={
+          <div className="flex items-center gap-2 text-lg font-semibold">
+            <InboxOutlined className="text-blue-500" />
+            <span>Add Shipping Label</span>
+          </div>
+        }
         open={open}
-        onCancel={() => setOpen(false)}
+        onCancel={handleClose}
         footer={[
           <Button
             key="cancel"
-            onClick={() => setOpen(false)}
+            onClick={handleClose}
             disabled={loading}
+            size="large"
           >
             Cancel
           </Button>,
@@ -227,176 +368,173 @@ export default function AddLabelModal({
             type="primary"
             loading={loading}
             onClick={handleSubmit}
+            size="large"
+            className="bg-blue-600 hover:bg-blue-700"
           >
             Add Label
           </Button>,
         ]}
-        width={600}
+        width={700}
+        destroyOnClose
       >
-        <Form layout="vertical" form={form} className="mt-6">
-          {/* Platform */}
-          <Form.Item label="Platform" required>
-            <Select
-              value={formData.platform}
-              onChange={(value) =>
-                setFormData({ ...formData, platform: value })
-              }
-              options={PLATFORMS.map((plat) => ({
-                label: plat.label,
-                value: plat.id,
-              }))}
-            />
-          </Form.Item>
+        <Divider className="mt-2 mb-6" />
 
-          <Form.Item label="Carrier" required className=" py-3">
-            <Select
-              placeholder="Select a carrier"
-              loading={carriersLoading}
-              value={formData.carrierCode || undefined}
-              onChange={(value) =>
-                setFormData({
-                  ...formData,
-                  carrierCode: value,
-                  packageCode: "",
-                })
-              }
-              options={carriers.map((carrier) => ({
-                label: `${carrier.name} (${carrier.nickname || carrier.code})`,
-                value: carrier.code,
-              }))}
-            />
-          </Form.Item>
-
-          <Form.Item label="Package Code" required>
-            <Select
-              placeholder="Select a package code"
-              loading={packagesLoading}
-              disabled={!formData.carrierCode}
-              value={formData.packageCode || undefined}
-              onChange={(value) =>
-                setFormData({ ...formData, packageCode: value })
-              }
-              options={packages.map((pkg) => ({
-                label: pkg.name,
-                value: pkg.code,
-              }))}
-            />
-          </Form.Item>
-
-          <div className="mb-6 mt-2">
-            <h4 className="font-semibold py-3">Weight</h4>
-            <div className="grid grid-cols-2 gap-4">
-              <Form.Item label="Value" required>
-                <Input
-                  type="number"
-                  placeholder="0"
-                  value={formData.weight.value}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      weight: {
-                        ...formData.weight,
-                        value: Number.parseFloat(e.target.value) || 0,
-                      },
-                    })
-                  }
-                />
-              </Form.Item>
-              <Form.Item label="Units" required>
-                <Select
-                  value={formData.weight.units}
-                  onChange={(value) =>
-                    setFormData({
-                      ...formData,
-                      weight: {
-                        ...formData.weight,
-                        units: value,
-                      },
-                    })
-                  }
-                  options={[
-                    { label: "Pounds", value: "pounds" },
-                    { label: "Ounces", value: "ounces" },
-                    { label: "Grams", value: "grams" },
-                  ]}
-                />
-              </Form.Item>
-            </div>
+        {initialLoading ? (
+          <div className="flex justify-center items-center py-20">
+            <Spin size="large" tip="Loading data..." />
           </div>
-
-          <div className="mb-6">
-            <h4 className="font-semibold mb-4">Dimensions</h4>
-            <div className="grid grid-cols-3 gap-3 mb-4">
-              <Form.Item label="Length" required>
-                <Input
-                  type="number"
-                  placeholder="0"
-                  value={formData.dimensions.length}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      dimensions: {
-                        ...formData.dimensions,
-                        length: Number.parseFloat(e.target.value) || 0,
-                      },
-                    })
-                  }
-                />
-              </Form.Item>
-              <Form.Item label="Width" required>
-                <Input
-                  type="number"
-                  placeholder="0"
-                  value={formData.dimensions.width}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      dimensions: {
-                        ...formData.dimensions,
-                        width: Number.parseFloat(e.target.value) || 0,
-                      },
-                    })
-                  }
-                />
-              </Form.Item>
-              <Form.Item label="Height" required>
-                <Input
-                  type="number"
-                  placeholder="0"
-                  value={formData.dimensions.height}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      dimensions: {
-                        ...formData.dimensions,
-                        height: Number.parseFloat(e.target.value) || 0,
-                      },
-                    })
-                  }
-                />
-              </Form.Item>
-            </div>
-            <Form.Item label="Units" required>
+        ) : (
+          <Form layout="vertical" form={form} className="space-y-1">
+            {/* Platform */}
+            <Form.Item
+              label={<span className="font-semibold">Platform</span>}
+              name="platform"
+              rules={[{ required: true, message: "Platform is required" }]}
+            >
               <Select
-                value={formData.dimensions.units}
-                onChange={(value) =>
-                  setFormData({
-                    ...formData,
-                    dimensions: {
-                      ...formData.dimensions,
-                      units: value,
-                    },
-                  })
-                }
-                options={[
-                  { label: "Inches", value: "inches" },
-                  { label: "Centimeters", value: "centimeters" },
-                  { label: "Meters", value: "meters" },
-                ]}
+                size="large"
+                disabled
+                options={PLATFORMS}
+                placeholder="Select platform"
               />
             </Form.Item>
-          </div>
-        </Form>
+
+            {/* Warehouse Location */}
+            <Form.Item
+              label={<span className="font-semibold">From Location</span>}
+              name="warehouseId"
+              rules={[{ required: true, message: "Please select a warehouse" }]}
+            >
+              <Select
+                size="large"
+                placeholder="Select warehouse location"
+                options={warehouseOptions}
+                showSearch
+                optionFilterProp="children"
+                filterOption={(input, option) =>
+                  option.label.props.children[1].props.children
+                    .toLowerCase()
+                    .includes(input.toLowerCase())
+                }
+              />
+            </Form.Item>
+
+            {/* Package Selection */}
+            <Form.Item
+              label={<span className="font-semibold">Package</span>}
+              name="packageCode"
+              rules={[{ required: true, message: "Please select a package" }]}
+            >
+              <Select
+                size="large"
+                placeholder="Select a package"
+                options={packageOptions}
+                onChange={handlePackageChange}
+                showSearch
+                optionFilterProp="children"
+                filterOption={(input, option) =>
+                  option.label.props.children[1].props.children
+                    .toLowerCase()
+                    .includes(input.toLowerCase())
+                }
+              />
+            </Form.Item>
+
+            <Divider className="my-6">Package Details</Divider>
+
+            {/* Weight Section */}
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h4 className="font-semibold mb-4 text-gray-700">Weight</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <Form.Item
+                  label="Value"
+                  name={["weight", "value"]}
+                  rules={[
+                    { required: true, message: "Required" },
+                    { type: "number", min: 0.01, message: "Must be > 0" },
+                  ]}
+                >
+                  <Input
+                    size="large"
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    min={0}
+                  />
+                </Form.Item>
+                <Form.Item
+                  label="Units"
+                  name={["weight", "units"]}
+                  rules={[{ required: true, message: "Required" }]}
+                >
+                  <Select size="large" options={WEIGHT_UNITS} />
+                </Form.Item>
+              </div>
+            </div>
+
+            {/* Dimensions Section */}
+            <div className="bg-gray-50 p-4 rounded-lg mt-4">
+              <h4 className="font-semibold mb-4 text-gray-700">Dimensions</h4>
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                <Form.Item
+                  label="Length"
+                  name={["dimensions", "length"]}
+                  rules={[
+                    { required: true, message: "Required" },
+                    { type: "number", min: 0.01, message: "Must be > 0" },
+                  ]}
+                >
+                  <Input
+                    size="large"
+                    type="number"
+                    step="0.01"
+                    placeholder="0"
+                    min={0}
+                  />
+                </Form.Item>
+                <Form.Item
+                  label="Width"
+                  name={["dimensions", "width"]}
+                  rules={[
+                    { required: true, message: "Required" },
+                    { type: "number", min: 0.01, message: "Must be > 0" },
+                  ]}
+                >
+                  <Input
+                    size="large"
+                    type="number"
+                    step="0.01"
+                    placeholder="0"
+                    min={0}
+                  />
+                </Form.Item>
+                <Form.Item
+                  label="Height"
+                  name={["dimensions", "height"]}
+                  rules={[
+                    { required: true, message: "Required" },
+                    { type: "number", min: 0.01, message: "Must be > 0" },
+                  ]}
+                >
+                  <Input
+                    size="large"
+                    type="number"
+                    step="0.01"
+                    placeholder="0"
+                    min={0}
+                  />
+                </Form.Item>
+              </div>
+              <Form.Item
+                label="Units"
+                name={["dimensions", "units"]}
+                rules={[{ required: true, message: "Required" }]}
+              >
+                <Select size="large" options={DIMENSION_UNITS} />
+              </Form.Item>
+            </div>
+          </Form>
+        )}
       </Modal>
     </>
   );
