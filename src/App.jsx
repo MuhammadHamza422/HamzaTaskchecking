@@ -49,6 +49,10 @@ import PurchaserListingsPage from "./pages/purchaser/PurchaserListingPage";
 import AttendanceActivity from "./pages/attendance/Attendance-Activity";
 import PurchaserReturnedListingsPage from "./pages/purchaser/PurchaserReturnedListingsPage";
 import EmployeesPage from "./pages/employees/EmployeesPage";
+import ProcurementDashboardPage from "./pages/procurement/ProcurementDashboardPage";
+import PurchaseOrdersListPage from "./pages/procurement/PurchaseOrdersListPage";
+import PurchaseOrderDetailPage from "./pages/procurement/PurchaseOrderDetailPage";
+import CreatePurchaseOrderPage from "./pages/procurement/CreatePurchaseOrderPage";
 
 // 🔹 Role guard for specific routes
 const RequireRoles = ({ allow, children }) => {
@@ -223,6 +227,40 @@ function App() {
             <Route path="scan" element={<ScanProduct />} />
             <Route path="activity-logs" element={<ActivityLogs />} />
           </Route>
+
+          {/* Procurement Routes */}
+          <Route
+            path="procurement"
+            element={
+              <RequireRoles allow={["admin", "procurement", "manager"]}>
+                <ProcurementDashboardPage />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="procurement/orders"
+            element={
+              <RequireRoles allow={["admin", "procurement", "manager"]}>
+                <PurchaseOrdersListPage />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="procurement/orders/new"
+            element={
+              <RequireRoles allow={["admin", "procurement", "manager"]}>
+                <CreatePurchaseOrderPage />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="procurement/orders/:poId"
+            element={
+              <RequireRoles allow={["admin", "procurement", "manager"]}>
+                <PurchaseOrderDetailPage />
+              </RequireRoles>
+            }
+          />
         </Route>
         {/* Catch all route - redirect to dashboard if logged in, login if not */}
         <Route path="*" element={<CatchAllRoute />} />

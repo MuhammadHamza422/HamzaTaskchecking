@@ -129,12 +129,34 @@ const navLinks = [
     app: "sourcing",
     roles: ["admin", "sourcer", "purchaser"],
   },
+  {
+    to: "/procurement",
+    label: "Dashboard",
+    app: "procurement",
+    menuItem: "dashboard",
+    roles: ["admin", "procurement", "manager"],
+  },
+  {
+    to: "/procurement/orders",
+    label: "Purchase Orders",
+    app: "procurement",
+    menuItem: "view orders",
+    roles: ["admin", "procurement", "manager"],
+  },
 ];
 
 /* ✅ Check if user has access to app */
 const hasAppAccess = (user, app) => {
   if (!app) return true;
   return user?.roles?.access?.some((a) => a.app === app);
+};
+
+/* ✅ Check if user has specific menu access */
+const hasMenuAccess = (user, app, menuItem) => {
+  if (!app || !menuItem) return true;
+  const appAccess = user?.roles?.access?.find((a) => a.app === app);
+  if (!appAccess) return false;
+  return appAccess.menu.includes(menuItem.toLowerCase());
 };
 
 /* ✅ Filter children menus by DB menus */
@@ -228,7 +250,13 @@ const MainLayout = () => {
       (pathName.startsWith("/attendance") &&
         link.roles?.includes(user.roles.role) &&
         ["Attendance", "Attendance Activity"].includes(link.label) &&
-        user.roles.role === "admin")
+        user.roles.role === "admin") ||
+      // Procurement context
+      (pathName.startsWith("/procurement") &&
+        link.app === "procurement" &&
+        link.roles?.includes(user.roles.role) &&
+        hasAppAccess(user, link.app) &&
+        hasMenuAccess(user, link.app, link.menuItem))
   );
 
   const handleLogout = async () => {
@@ -349,7 +377,11 @@ const MainLayout = () => {
                         </div>
                       );
                     } else {
-                      const isActive = location.pathname === link.to;
+                      const isActive =
+                        location.pathname === link.to ||
+                        (location.pathname.startsWith(`${link.to}/`) &&
+                          !(link.to === "/procurement" &&
+                            location.pathname.startsWith("/procurement/orders")));
                       return (
                         <motion.div
                           key={link.to}
@@ -506,7 +538,11 @@ const MainLayout = () => {
                         </div>
                       );
                     } else {
-                      const isActive = location.pathname === link.to;
+                      const isActive =
+                        location.pathname === link.to ||
+                        (location.pathname.startsWith(`${link.to}/`) &&
+                          !(link.to === "/procurement" &&
+                            location.pathname.startsWith("/procurement/orders")));
                       return (
                         <motion.div
                           key={link.to}

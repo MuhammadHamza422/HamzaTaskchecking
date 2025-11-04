@@ -8,6 +8,7 @@ import {
   CalendarArrowDown,
   CalendarArrowUp,
   UserCheck,
+  FileText,
 } from "lucide-react";
 import { LuWarehouse } from "react-icons/lu";
 
@@ -117,6 +118,16 @@ export default function DashboardCards() {
       link: "/employees",
       bgColor: "bg-purple-50",
       border: "border-purple-500",
+    },
+    {
+      title: "Procurement",
+      icon: FileText,
+      color: "text-orange-500",
+      accessKey: "procurement",
+      hoverColor: "group-hover:text-orange-600",
+      link: "/procurement/orders",
+      bgColor: "bg-orange-50",
+      border: "border-orange-500",
     },
     // {
     //   title: "Products",
