@@ -15,6 +15,22 @@ import useFullscreen from "../../useFullscreen";
 const { Search } = Input;
 const { Option } = Select;
 
+function useDebounce(value, delay) {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
+
 export default function AddProductModal({
   visible,
   onCancel,
@@ -32,7 +48,16 @@ export default function AddProductModal({
   const [platformsLoading, setPlatformsLoading] = useState(false);
   const [mergedProducts, setMergedProducts] = useState([]);
   const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
-  console.log("mergedProducts:", mergedProducts);
+  const [productType, setProductType] = useState("");
+
+  const debouncedSearchTerm = useDebounce(searchQuery, 500);
+
+  const productTypes = [
+    { label: "Consoles", code: "CON" },
+    { label: "Handhelds", code: "HAN" },
+    { label: "Accessories", code: "ACC" },
+    { label: "Games", code: "GAM" },
+  ];
 
   // Fetch platforms for the modal
   const fetchPlatforms = async () => {
@@ -98,7 +123,9 @@ export default function AddProductModal({
     try {
       if (!selectedOrder?.orderId) return;
       const res = await apiClient.get(
-        `/api/v1/products/mapped/product/${encodeURIComponent(selectedOrder.orderId)}`
+        `/api/v1/products/mapped/product/${encodeURIComponent(
+          selectedOrder.orderId
+        )}`
       );
       setMergedProducts(
         Array.isArray(res.data?.product) ? res.data.product : []
@@ -111,14 +138,16 @@ export default function AddProductModal({
 
   // Fetch products for the modal
   const fetchProducts = async ({ queryKey }) => {
-    const [_, search] = queryKey;
-    const params = new URLSearchParams();
+    const [_, search, productType] = queryKey;
 
-    if (search) {
-      params.append("search", search);
-    }
-
-    const response = await apiClient.get(`/api/v1/products?${params}`);
+    const response = await apiClient.get(
+      `/api/v1/products?type=${productType}`,
+      {
+        params: {
+          search,
+        },
+      }
+    );
     return response.data;
   };
 
@@ -157,9 +186,12 @@ export default function AddProductModal({
   };
 
   const { data: productsData, isLoading: productsLoading } = useQuery({
-    queryKey: ["products", searchQuery],
+    queryKey: ["products", debouncedSearchTerm, productType],
     queryFn: fetchProducts,
-    enabled: visible && searchQuery.length > 0,
+    enabled:
+      visible &&
+      ((debouncedSearchTerm && debouncedSearchTerm.length > 0) ||
+        !!productType),
   });
 
   // Handle product selection
@@ -267,7 +299,11 @@ export default function AddProductModal({
       }
 
       // If not found or zero, try merged products price
-      if (!lineItemTotal && Array.isArray(mergedProducts) && mergedProducts.length > 0) {
+      if (
+        !lineItemTotal &&
+        Array.isArray(mergedProducts) &&
+        mergedProducts.length > 0
+      ) {
         const idStr = String(selectedLineItemId || "");
         const foundMerged = mergedProducts.find((mp) =>
           (mp?.productIds || []).map(String).includes(idStr)
@@ -296,8 +332,9 @@ export default function AddProductModal({
       if (activeTab === "woocommerce") {
         const order = orderDetails?.order;
         const lineItem = order?.line_items?.find(
-          (item) => String(item?.id) === String(selectedLineItemId) ||
-                    String(item?.product_id) === String(selectedLineItemId)
+          (item) =>
+            String(item?.id) === String(selectedLineItemId) ||
+            String(item?.product_id) === String(selectedLineItemId)
         );
         const qty = Number(lineItem?.quantity || 1);
         return Number.isFinite(qty) && qty > 0 ? qty : 1;
@@ -306,7 +343,9 @@ export default function AddProductModal({
       if (activeTab === "walmart") {
         const order = orderDetails?.order?.order;
         const lineItem = order?.orderLines?.orderLine?.find(
-          (line) => String(line?.lineNumber || line?.orderLineId) === String(selectedLineItemId)
+          (line) =>
+            String(line?.lineNumber || line?.orderLineId) ===
+            String(selectedLineItemId)
         );
         const qty = Number(lineItem?.orderLineQuantity?.amount || 1);
         return Number.isFinite(qty) && qty > 0 ? qty : 1;
@@ -439,13 +478,20 @@ export default function AddProductModal({
           "1";
       } else if (activeTab === "shopify") {
         // Compute number of effective line items (accounting for merged products)
-        let nodes = [...((orderDetails?.order?.lineItems?.edges || []).map((e) => e.node))];
+        let nodes = [
+          ...(orderDetails?.order?.lineItems?.edges || []).map((e) => e.node),
+        ];
         (mergedProducts || []).forEach((mp) => {
           const mpIds = (mp?.productIds || []).map(String);
-          const allMatch = mpIds.every((pid) => nodes.some((li) => String(li.id) === pid));
+          const allMatch = mpIds.every((pid) =>
+            nodes.some((li) => String(li.id) === pid)
+          );
           if (allMatch) {
             nodes = nodes.filter((li) => !mpIds.includes(String(li.id)));
-            nodes.push({ id: `merged-${mpIds.join("-")}`, name: mp.pro_title || "Merged Product" });
+            nodes.push({
+              id: `merged-${mpIds.join("-")}`,
+              name: mp.pro_title || "Merged Product",
+            });
           }
         });
         orderQty = String(nodes.length || 1);
@@ -462,7 +508,7 @@ export default function AddProductModal({
         product_title: uniqueProductTitle,
         skus: selectedProducts.map((product) => ({
           pId: product._id,
-          quantity: String((Number(product.quantity || 1)) * lineQty),
+          quantity: String(Number(product.quantity || 1) * lineQty),
           price: handlePrice(product.sale_price).toFixed(2),
         })),
         orderQty: orderQty,
@@ -600,192 +646,208 @@ export default function AddProductModal({
 
   return (
     <div ref={fullscreenRef}>
-    <Modal
-      getContainer={getContainer}
-      key={String(isFullscreen)}
-      title="Add Products to Order"
-      open={visible}
-      onCancel={handleModalClose}
-      footer={
-        <div className="flex justify-end gap-2">
-          <Button onClick={handleModalClose}>Cancel</Button>
-          <Button
-            type="primary"
-            onClick={handleSubmit}
-            loading={isSubmitting}
-            disabled={selectedProducts.length === 0}
-            className="bg-green-600 border-green-600"
-          >
-            {isSubmitting ? "Creating..." : "Create"}
-          </Button>
-        </div>
-      }
-      width={800}
-      destroyOnClose
-      centered
-    >
-      <div className="space-y-4">
-        {/* Platform ID Display */}
-        <div className="bg-blue-50 p-3 rounded-lg">
-          {activeTab === "shopify" && selectedOrder?.orderId?.includes('gid://shopify/Order/') ? (
-            <p className="text-xs text-blue-600 mt-1">
-              Order ID: {selectedOrder?.orderId?.replace('gid://shopify/Order/', '')}
-            </p>
-          ) : (
-            <p className="text-xs text-blue-600 mt-1">
-              Order ID: {selectedOrder?.orderId}
-            </p>
-          )}
-        </div>
-
-        {/* Platform Selection Dropdown */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Platform
-          </label>
-          <Select
-            placeholder="Select Platform"
-            value={selectedPlatformId}
-            onChange={handlePlatformChange}
-            loading={platformsLoading}
-            style={{ width: "100%" }}
-            size="large"
-            disabled={true}
-            className="text-black"
-          >
-            {platforms.map((platform) => (
-              <Option key={platform._id} value={platform._id}>
-                {platform.plt_name}
-              </Option>
-            ))}
-          </Select>
-        </div>
-
-        {/* Search Dropdown */}
-        <div className="relative">
-          <Search
-            placeholder="Search products by name..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            allowClear
-            size="large"
-            prefix={<SearchOutlined />}
-          />
-
-          {/* Dropdown Results */}
-          {searchQuery.length > 0 && (
-            <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-10 max-h-60 overflow-y-auto">
-              {productsLoading ? (
-                <div className="p-4 text-center">
-                  <Spin size="small" />
-                </div>
-              ) : productsData?.products?.length > 0 ? (
-                <div>
-                  {productsData.products.map((product) => {
-                    const isSelected = selectedProducts.find(
-                      (p) => p._id === product._id
-                    );
-                    return (
-                      <div
-                        key={product._id}
-                        className={`p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0 ${
-                          isSelected ? "bg-blue-50" : ""
-                        }`}
-                        onClick={() => handleProductSelect(product)}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="font-medium text-gray-900">
-                              {product.pro_title}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              ${product?.sale_price}
-                            </div>
-                          </div>
-                          {isSelected && (
-                            <CheckOutlined className="text-blue-600 text-lg" />
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="p-4 text-center text-gray-500">
-                  No products found
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Selected Products List */}
-        {selectedProducts.length > 0 && (
+      <Modal
+        getContainer={getContainer}
+        key={String(isFullscreen)}
+        title="Add Products to Order"
+        open={visible}
+        onCancel={handleModalClose}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button onClick={handleModalClose}>Cancel</Button>
+            <Button
+              type="primary"
+              onClick={handleSubmit}
+              loading={isSubmitting}
+              disabled={selectedProducts.length === 0}
+              className="bg-green-600 border-green-600"
+            >
+              {isSubmitting ? "Creating..." : "Create"}
+            </Button>
+          </div>
+        }
+        width={800}
+        destroyOnClose
+        centered
+      >
+        <div className="space-y-4">
+          {/* Platform Selection Dropdown */}
           <div>
-            <div className="font-medium text-gray-800 mb-3">
-              Selected Products ({selectedProducts.length})
-            </div>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {selectedProducts.map((product) => (
-                <div
-                  key={product?._id}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Platform
+            </label>
+            <Select
+              placeholder="Select Platform"
+              value={selectedPlatformId}
+              onChange={handlePlatformChange}
+              loading={platformsLoading}
+              style={{ width: "100%" }}
+              size="large"
+              disabled={true}
+              className="text-black"
+            >
+              {platforms.map((platform) => (
+                <Option key={platform._id} value={platform._id}>
+                  {platform.plt_name}
+                </Option>
+              ))}
+            </Select>
+          </div>
+
+          {/* Categories */}
+          <div className="relative">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Product Type
+            </label>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {productTypes.map((type) => (
+                <button
+                  key={type.code}
+                  type="button"
+                  onClick={() => {
+                    setProductType(type.code);
+                  }}
+                  className={`
+                              p-2 rounded-lg border text-sm font-medium transition-all duration-200
+                              ${
+                                productType === type.code
+                                  ? "border-blue-500 bg-blue-50 text-blue-700 shadow-sm"
+                                  : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                              }
+                            `}
                 >
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-900">
-                      {product?.pro_title}
-                    </div>
-                    <p className="text-xs text-gray-500">
-                      Sale Price: ${(product?.sale_price || 0)}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      Calculated Price: $
-                      {Math.floor(handlePrice(product?.sale_price || 0) * 100) /
-                        100}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    {/* Quantity Controls */}
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="small"
-                        icon={<MinusOutlined />}
-                        onClick={() =>
-                          handleQuantityChange(
-                            product._id,
-                            product.quantity - 1
-                          )
-                        }
-                        disabled={product.quantity <= 1}
-                      />
-                      <span className="w-8 text-center font-medium">
-                        {product.quantity}
-                      </span>
-                      <Button
-                        size="small"
-                        icon={<PlusOutlined />}
-                        onClick={() =>
-                          handleQuantityChange(
-                            product._id,
-                            product.quantity + 1
-                          )
-                        }
-                      />
-                    </div>
-
-                    {/* Remove Button */}
-                    <Button
-                      size="small"
-                      danger
-                      icon={<DeleteOutlined />}
-                      onClick={() => handleRemoveProduct(product._id)}
-                    />
-                  </div>
-                </div>
+                  {type.label}
+                </button>
               ))}
             </div>
           </div>
+
+          {/* Search Dropdown */}
+          <div className="relative">
+            <Search
+              placeholder="Search products by name..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              allowClear
+              size="large"
+              prefix={<SearchOutlined />}
+            />
+
+            {/* Dropdown Results */}
+            {searchQuery.length > 0 && (
+              <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-10 max-h-60 overflow-y-auto">
+                {productsLoading ? (
+                  <div className="p-4 text-center">
+                    <Spin size="small" />
+                  </div>
+                ) : productsData?.products?.length > 0 ? (
+                  <div>
+                    {productsData.products.map((product) => {
+                      const isSelected = selectedProducts.find(
+                        (p) => p._id === product._id
+                      );
+                      return (
+                        <div
+                          key={product._id}
+                          className={`p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0 ${
+                            isSelected ? "bg-blue-50" : ""
+                          }`}
+                          onClick={() => handleProductSelect(product)}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="font-medium text-gray-900">
+                                {product.pro_title}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                ${product?.sale_price}
+                              </div>
+                            </div>
+                            {isSelected && (
+                              <CheckOutlined className="text-blue-600 text-lg" />
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="p-4 text-center text-gray-500">
+                    No products found
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Selected Products List */}
+          {selectedProducts.length > 0 && (
+            <div>
+              <div className="font-medium text-gray-800 mb-3">
+                Selected Products ({selectedProducts.length})
+              </div>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {selectedProducts.map((product) => (
+                  <div
+                    key={product?._id}
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                  >
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-900">
+                        {product?.pro_title}
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Sale Price: ${product?.sale_price || 0}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Calculated Price: $
+                        {Math.floor(
+                          handlePrice(product?.sale_price || 0) * 100
+                        ) / 100}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      {/* Quantity Controls */}
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="small"
+                          icon={<MinusOutlined />}
+                          onClick={() =>
+                            handleQuantityChange(
+                              product._id,
+                              product.quantity - 1
+                            )
+                          }
+                          disabled={product.quantity <= 1}
+                        />
+                        <span className="w-8 text-center font-medium">
+                          {product.quantity}
+                        </span>
+                        <Button
+                          size="small"
+                          icon={<PlusOutlined />}
+                          onClick={() =>
+                            handleQuantityChange(
+                              product._id,
+                              product.quantity + 1
+                            )
+                          }
+                        />
+                      </div>
+
+                      {/* Remove Button */}
+                      <Button
+                        size="small"
+                        danger
+                        icon={<DeleteOutlined />}
+                        onClick={() => handleRemoveProduct(product._id)}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       </Modal>
