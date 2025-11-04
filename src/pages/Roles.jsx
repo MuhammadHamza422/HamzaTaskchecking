@@ -97,6 +97,19 @@ const rolesOptions = [
       "return handling",    // mark Returned
     ],
   },
+  {
+    app: "procurement",
+    label: "Procurement Management",
+    menu: [
+      "dashboard",          // view procurement dashboard
+      "create order",       // create new procurement orders
+      "view orders",        // view all procurement orders
+      "manage suppliers",  // manage supplier relationships
+      "contracts",         // view and manage contracts
+      "approvals",         // handle approval workflows
+      "reports",           // view procurement reports
+    ],
+  },
 ];
 
 const CustomButton = ({
