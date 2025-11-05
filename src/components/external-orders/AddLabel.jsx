@@ -66,6 +66,7 @@ export default function AddLabelModal({
       packageCode: "",
       weight: { value: 0, units: "pounds" },
       dimensions: { length: 0, width: 0, height: 0, units: "inch" },
+      packageName: "",
     }),
     [activeTab]
   );
@@ -147,6 +148,7 @@ export default function AddLabelModal({
       platform: activeTab ?? "shopify",
       warehouseId: order?.warehouseId || "",
       packageCode: order?.packageCode || "",
+      packageName: order?.packageName || "",
       weight: {
         value: order?.weight?.value || 0,
         units: order?.weight?.units || "pounds",
@@ -179,6 +181,7 @@ export default function AddLabelModal({
       if (selectedPackage) {
         const newValues = {
           packageCode: selectedPackage.package_id,
+          packageName: selectedPackage.name,
           dimensions: {
             length: selectedPackage.dimensions?.length || 0,
             width: selectedPackage.dimensions?.width || 0,
@@ -237,12 +240,24 @@ export default function AddLabelModal({
     try {
       const values = form.getFieldsValue();
 
+      // Ensure packageName is included - get from selected package if missing
+      let packageName = values.packageName;
+      if (!packageName && values.packageCode) {
+        const selectedPackage = packages.find(
+          (pkg) => pkg.package_id === values.packageCode
+        );
+        packageName = selectedPackage?.name || "";
+      }
+
+      console.log("values", values);
+
       const { data } = await apiClient.patch(
         `/api/v1/orders/shipstation/label/${order.order_key}`,
         {
           platform: values.platform,
           warehouseId: values.warehouseId,
           packageCode: values.packageCode,
+          packageName: packageName,
           weight: {
             value: Number(values.weight.value),
             units: values.weight.units,
@@ -284,7 +299,7 @@ export default function AddLabelModal({
     } finally {
       setLoading(false);
     }
-  }, [validateForm, form, order, fetchProcessedOrders]);
+  }, [validateForm, form, order, fetchProcessedOrders, packages]);
 
   // Close handler with cleanup
   const handleClose = useCallback(() => {
@@ -342,7 +357,7 @@ export default function AddLabelModal({
             : "text-blue-600 hover:text-blue-700"
         }`}
       >
-        {order.packageCode ? "Labeled" : "Add Label"}
+        {order.packageCode ? "Fulfilled" : "Fulfillment Info"}
       </Button>
 
       <Modal
@@ -438,6 +453,11 @@ export default function AddLabelModal({
                     .includes(input.toLowerCase())
                 }
               />
+            </Form.Item>
+
+            {/* Hidden field for packageName */}
+            <Form.Item name="packageName" hidden>
+              <Input type="hidden" />
             </Form.Item>
 
             <Divider className="my-6">Package Details</Divider>

@@ -378,7 +378,7 @@ export default function ShopifyOrderTable({
       ),
     },
     {
-      title: "Status",
+      title: "FFM Status",
       dataIndex: "status",
       key: "status",
       width: 120,
@@ -533,7 +533,7 @@ export default function ShopifyOrderTable({
             activeTab={activeTab}
             fetchProcessedOrders={fetchProcessedOrders}
           />
-          <Button
+          {/* <Button
             type="link"
             size="small"
             onClick={(e) => {
@@ -543,8 +543,8 @@ export default function ShopifyOrderTable({
             className="text-blue-600 hover:text-blue-800 p-1"
           >
             Edit
-          </Button>
-          <Button
+          </Button> */}
+          {/* <Button
             type="link"
             size="small"
             onClick={(e) => {
@@ -554,7 +554,7 @@ export default function ShopifyOrderTable({
             className="text-green-600 hover:text-green-800 p-1"
           >
             View
-          </Button>
+          </Button> */}
         </div>
       ),
     },

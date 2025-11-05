@@ -830,10 +830,51 @@ export default function ProcessedOrdersPage() {
     const billing = sf?.billingAddress || {};
     const shipping = sf?.shippingAddress || {};
 
-    const advancedOptions = {};
+    const advancedOptions = {
+     
+    };
     if (productTitles[0]) advancedOptions.customField1 = productTitles[0];
     if (productTitles[1]) advancedOptions.customField2 = productTitles[1];
     if (productTitles[2]) advancedOptions.customField3 = productTitles[2];
+
+    if (sf?.dbInfo?.packageName ) {
+      advancedOptions.customField3 = sf.dbInfo.packageName; 
+    }
+  
+
+    // Validation for fulfillment info
+    const missingWarehouse = !sf?.dbInfo?.warehouseId;
+    const hasPkg = Boolean(sf?.dbInfo?.packageCode || sf?.dbInfo?.packageName);
+    const weightValid =
+      typeof sf?.dbInfo?.weight?.value === "number" &&
+      sf?.dbInfo?.weight?.value > 0 &&
+      ["pounds", "ounces", "grams"].includes(sf?.dbInfo?.weight?.units);
+
+    console.log(
+      "weightValid",
+      weightValid,
+      sf?.dbInfo?.weight,
+      missingWarehouse,
+      hasPkg
+    );
+
+    if (missingWarehouse || !hasPkg || !weightValid) {
+      Swal.fire({
+        icon: "warning",
+        title: "Add Fulfillment Info",
+        text:
+          "Please add warehouse, package, weight, and dimensions before moving to ShipStation.",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3500,
+        timerProgressBar: true,
+        background: "#f59e0b",
+        color: "#111827",
+        customClass: { popup: "rounded-lg" },
+      });
+      return null;
+    }
 
     return {
       orderNumber: String(tableOrder?.order_key || sf?.id || ""),
@@ -883,7 +924,8 @@ export default function ProcessedOrdersPage() {
       paymentMethod: (sf?.paymentGatewayNames || []).join(", ") || undefined,
       advancedOptions,
       warehouseId: sf?.dbInfo?.warehouseId,
-      packageCode: "package" || sf?.dbInfo?.packageCode,
+      packageCode: "package",
+      
       weight: {
         value:
           typeof sf?.dbInfo?.weight?.value === "number" &&
@@ -1025,6 +1067,10 @@ export default function ProcessedOrdersPage() {
         orderData = orderData.filter(
           (od) => Array.isArray(od?.items) && od.items.length > 0
         );
+
+        if(orderData.length === 0) {
+          return;
+        }
 
         const payload = { plateformId: String(platformId), orderData };
         // console.log("Posting ShipStation payload", payload);
