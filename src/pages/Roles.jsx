@@ -110,6 +110,13 @@ const rolesOptions = [
       "reports",           // view procurement reports
     ],
   },
+  {
+    app: "scan",
+    label: "Scan",
+    menu: [
+      "scan",              // access scan module
+    ],
+  },
 ];
 
 const CustomButton = ({

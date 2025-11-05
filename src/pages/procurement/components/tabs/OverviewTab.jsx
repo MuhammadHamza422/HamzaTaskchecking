@@ -32,10 +32,27 @@ const OverviewTab = ({ purchaseOrder }) => {
   };
 
   const formatCurrency = (amount, currency = "USD") => {
+    if (!amount && amount !== 0) {
+      if (currency === "JPY") return "¥0";
+      return "$0.00";
+    }
+    
+    // JPY doesn't use decimal places
+    if (currency === "JPY") {
+      return new Intl.NumberFormat("ja-JP", {
+        style: "currency",
+        currency: "JPY",
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(amount);
+    }
+    
     return new Intl.NumberFormat("en-US", {
       style: "currency",
-      currency: currency,
-    }).format(amount || 0);
+      currency: currency || "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
   };
 
   const getVendorName = () => {
@@ -105,9 +122,13 @@ const OverviewTab = ({ purchaseOrder }) => {
             className="h-full shadow-xl"
           >
             <InfoItem label="Vendor Name" value={getVendorName()} />
+            {/* vendor reference come in array like this  "vendorReference": [
+        "NCL Ship",
+        "COL"
+    ], show it as a comma separated list */}
             <InfoItem
               label="Vendor Reference"
-              value={purchaseOrder?.vendorReference || "-"}
+              value={purchaseOrder?.vendorReference?.join(", ") || "-"}
             />
             <InfoItem
               label="Currency"

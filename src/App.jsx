@@ -1,6 +1,7 @@
 
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./contexts/AuthContext";
+import { GlobalScannerProvider } from "./contexts/GlobalScannerContext";
 import PurchaserPendingPage from "./pages/purchaser/PurchaserPendingPage";
 
 // Layouts and Pages
@@ -53,6 +54,8 @@ import ProcurementDashboardPage from "./pages/procurement/ProcurementDashboardPa
 import PurchaseOrdersListPage from "./pages/procurement/PurchaseOrdersListPage";
 import PurchaseOrderDetailPage from "./pages/procurement/PurchaseOrderDetailPage";
 import CreatePurchaseOrderPage from "./pages/procurement/CreatePurchaseOrderPage";
+import QRCodeScannerPage from "./pages/scan/QRCodeScannerPage";
+import QRScanResultPage from "./pages/scan/QRScanResultPage";
 
 // 🔹 Role guard for specific routes
 const RequireRoles = ({ allow, children }) => {
@@ -84,16 +87,17 @@ const RequireRoles = ({ allow, children }) => {
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<LoginRoute />} />
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <MainLayout />
-            </ProtectedRoute>
-          }
-        >
+      <GlobalScannerProvider>
+        <Routes>
+          <Route path="/login" element={<LoginRoute />} />
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <MainLayout />
+              </ProtectedRoute>
+            }
+          >
           {/* Child routes of MainLayout */}
           <Route index element={<DashboardCards />} />
           <Route path="/sourcing/orders" element={<SourcingPage />} />
@@ -254,6 +258,14 @@ function App() {
             }
           />
           <Route
+            path="procurement/orders/:poId/edit"
+            element={
+              <RequireRoles allow={["admin", "procurement", "manager"]}>
+                <CreatePurchaseOrderPage />
+              </RequireRoles>
+            }
+          />
+          <Route
             path="procurement/orders/:poId"
             element={
               <RequireRoles allow={["admin", "procurement", "manager"]}>
@@ -261,10 +273,28 @@ function App() {
               </RequireRoles>
             }
           />
+          {/* Scan Module Routes */}
+          <Route
+            path="scan"
+            element={
+              <RequireRoles allow={["admin", "procurement", "manager"]}>
+                <QRCodeScannerPage />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="scan/result"
+            element={
+              <RequireRoles allow={["admin", "procurement", "manager"]}>
+                <QRScanResultPage />
+              </RequireRoles>
+            }
+          />
         </Route>
         {/* Catch all route - redirect to dashboard if logged in, login if not */}
         <Route path="*" element={<CatchAllRoute />} />
       </Routes>
+      </GlobalScannerProvider>
     </BrowserRouter>
   );
 }

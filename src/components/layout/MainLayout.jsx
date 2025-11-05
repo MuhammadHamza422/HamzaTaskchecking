@@ -256,7 +256,12 @@ const MainLayout = () => {
         link.app === "procurement" &&
         link.roles?.includes(user.roles.role) &&
         hasAppAccess(user, link.app) &&
-        hasMenuAccess(user, link.app, link.menuItem))
+        hasMenuAccess(user, link.app, link.menuItem)) ||
+      // Scan context
+      (pathName.startsWith("/scan") &&
+        link.app === "scan" &&
+        link.roles?.includes(user.roles.role) &&
+        hasAppAccess(user, link.app))
   );
 
   const handleLogout = async () => {
