@@ -11,7 +11,9 @@ import {
   Clock,
   CheckCircle,
 } from "lucide-react";
-import { Card, Skeleton, Table, Tag, Space, message, Breadcrumb, Button } from "antd";
+import { Card, Table, Tag, Space, message, Breadcrumb, Button, Row, Col } from "antd";
+import Skeleton from "react-loading-skeleton";
+import "react-loading-skeleton/dist/skeleton.css";
 import { getDashboardStats } from "../../api/procurement";
 import StatusBadge from "./components/StatusBadge";
 import dayjs from "dayjs";
@@ -239,7 +241,33 @@ export default function ProcurementDashboardPage() {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-7xl mx-auto">
-          <Skeleton active paragraph={{ rows: 8 }} />
+          <Skeleton height={32} width={300} style={{ marginBottom: 24 }} />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Card key={i} size="small">
+                <div className="flex items-center justify-between mb-4">
+                  <Skeleton height={48} width={48} circle />
+                  <Skeleton height={20} width={60} />
+                </div>
+                <Skeleton height={20} width={150} style={{ marginBottom: 8 }} />
+                <Skeleton height={32} width={100} />
+              </Card>
+            ))}
+          </div>
+          <Row gutter={16}>
+            <Col xs={24} lg={12}>
+              <Card size="small">
+                <Skeleton height={40} style={{ marginBottom: 16 }} />
+                <Skeleton height={200} />
+              </Card>
+            </Col>
+            <Col xs={24} lg={12}>
+              <Card size="small">
+                <Skeleton height={40} style={{ marginBottom: 16 }} />
+                <Skeleton height={200} />
+              </Card>
+            </Col>
+          </Row>
         </div>
       </div>
     );
@@ -339,17 +367,20 @@ export default function ProcurementDashboardPage() {
             size="small"
           >
             {stats?.recentOrders && stats.recentOrders.length > 0 ? (
-              <Table
-                columns={recentOrdersColumns}
-                dataSource={stats.recentOrders}
-                rowKey={(record) => record._id}
-                pagination={false}
-                size="small"
-                onRow={(record) => ({
-                  onClick: () => navigate(`/procurement/orders/${record._id}`),
-                  className: "cursor-pointer",
-                })}
-              />
+              <div className="overflow-x-auto -mx-4 px-4">
+                <Table
+                  columns={recentOrdersColumns}
+                  dataSource={stats.recentOrders}
+                  rowKey={(record) => record._id}
+                  pagination={false}
+                  size="small"
+                  scroll={{ x: "max-content" }}
+                  onRow={(record) => ({
+                    onClick: () => navigate(`/procurement/orders/${record._id}`),
+                    className: "cursor-pointer",
+                  })}
+                />
+              </div>
             ) : (
               <div className="text-center py-8 text-gray-500">
                 <FileText className="w-8 h-8 mx-auto mb-2 text-gray-400" />
@@ -386,17 +417,20 @@ export default function ProcurementDashboardPage() {
           >
             {stats?.overdueOrders?.orders &&
             stats.overdueOrders.orders.length > 0 ? (
-              <Table
-                columns={overdueOrdersColumns}
-                dataSource={stats.overdueOrders.orders}
-                rowKey={(record) => record._id}
-                pagination={false}
-                size="small"
-                onRow={(record) => ({
-                  onClick: () => navigate(`/procurement/orders/${record._id}`),
-                  className: "cursor-pointer",
-                })}
-              />
+              <div className="overflow-x-auto -mx-4 px-4">
+                <Table
+                  columns={overdueOrdersColumns}
+                  dataSource={stats.overdueOrders.orders}
+                  rowKey={(record) => record._id}
+                  pagination={false}
+                  size="small"
+                  scroll={{ x: "max-content" }}
+                  onRow={(record) => ({
+                    onClick: () => navigate(`/procurement/orders/${record._id}`),
+                    className: "cursor-pointer",
+                  })}
+                />
+              </div>
             ) : (
               <div className="text-center py-8 text-gray-500">
                 <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-400" />
@@ -426,10 +460,10 @@ export default function ProcurementDashboardPage() {
               <ShoppingBag className="w-5 h-5" />
               Create Purchase Order
             </Link>
-            <button className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-purple-400 hover:bg-purple-50 transition-colors duration-200 text-gray-600 hover:text-purple-600 font-medium">
+            {/* <button className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-purple-400 hover:bg-purple-50 transition-colors duration-200 text-gray-600 hover:text-purple-600 font-medium">
               <Package className="w-5 h-5" />
               View Contracts
-            </button>
+            </button> */}
           </div>
         </Card>
       </div>

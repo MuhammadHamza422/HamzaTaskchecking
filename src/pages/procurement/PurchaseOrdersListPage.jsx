@@ -11,12 +11,13 @@ import {
   Tag,
   Row,
   Col,
-  Skeleton,
   Breadcrumb,
 } from "antd";
 import dayjs from "dayjs";
-import { Plus, RefreshCcw } from "lucide-react";
+import { Plus, RefreshCcw, Star } from "lucide-react";
+import { toggleFavorite } from "../../api/procurement";
 import { Link } from "react-router-dom";
+import Swal from "sweetalert2";
 import {
   getPurchaseOrders,
   getVendors,
@@ -25,6 +26,7 @@ import {
 } from "../../api/procurement";
 import StatusBadge from "./components/StatusBadge";
 import ReceiptBadge from "./components/ReceiptBadge";
+import ProcurementTableSkeleton from "./components/ProcurementTableSkeleton";
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
@@ -47,6 +49,7 @@ const PurchaseOrdersListPage = () => {
     vendor: undefined,
     company: undefined,
     dateRange: undefined,
+    favorite: undefined,
   });
   const [pagination, setPagination] = useState({
     page: 1,
@@ -88,6 +91,7 @@ const PurchaseOrdersListPage = () => {
         status: filters.status || undefined,
         vendor: filters.vendor || undefined,
         company: filters.company || undefined,
+        favorite: filters.favorite !== undefined ? String(filters.favorite) : undefined,
       };
 
       if (filters.dateRange && filters.dateRange[0] && filters.dateRange[1]) {
@@ -126,7 +130,21 @@ const PurchaseOrdersListPage = () => {
   };
 
   const formatCurrency = (amount, currency = "USD") => {
-    if (!amount && amount !== 0) return "$0.00";
+    if (!amount && amount !== 0) {
+      if (currency === "JPY") return "¥0";
+      return "$0.00";
+    }
+    
+    // JPY doesn't use decimal places
+    if (currency === "JPY") {
+      return new Intl.NumberFormat("ja-JP", {
+        style: "currency",
+        currency: "JPY",
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(amount);
+    }
+    
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: currency || "USD",
@@ -173,6 +191,7 @@ const PurchaseOrdersListPage = () => {
       vendor: undefined,
       company: undefined,
       dateRange: undefined,
+      favorite: undefined,
     });
   };
 
@@ -194,7 +213,70 @@ const PurchaseOrdersListPage = () => {
     return buyer?.name || po.buyer?.name || "-";
   };
 
+  const handleToggleFavorite = async (poId, e) => {
+    e.stopPropagation();
+    try {
+      const response = await toggleFavorite(poId);
+      if (response.success) {
+        setPurchaseOrders((prev) =>
+          prev.map((po) =>
+            (po._id || po.id) === poId
+              ? { ...po, isFavorite: response.data.isFavorite }
+              : po
+          )
+        );
+        Swal.fire({
+          icon: "success",
+          title: response.data.isFavorite ? "Added to Favorites" : "Removed from Favorites",
+          text: response.data.isFavorite
+            ? "Purchase order has been marked as favorite"
+            : "Purchase order has been removed from favorites",
+          toast: true,
+          position: "top-end",
+          showConfirmButton: false,
+          timer: 3000,
+          timerProgressBar: true,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to toggle favorite:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Failed to Update Favorite",
+        text: error?.response?.data?.error?.message || "Failed to update favorite status",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 4000,
+        timerProgressBar: true,
+      });
+    }
+  };
+
   const columns = [
+    {
+      title: "",
+      key: "favorite",
+      width: 50,
+      fixed: "left",
+      render: (_, record) => (
+        <Button
+          type="text"
+          icon={
+            <Star
+              className={
+                record.isFavorite
+                  ? "fill-yellow-400 text-yellow-500"
+                  : "text-gray-300"
+              }
+              size={16}
+            />
+          }
+          onClick={(e) => handleToggleFavorite(record._id || record.id, e)}
+          size="small"
+        />
+      ),
+    },
     {
       title: "Date Created",
       dataIndex: "createdDate",
@@ -287,18 +369,20 @@ const PurchaseOrdersListPage = () => {
         </Breadcrumb>
 
         {/* Header */}
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-1">Purchase Orders</h1>
-            <p className="text-sm text-gray-600">Manage and track all purchase orders</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-1">Purchase Orders</h1>
+            <p className="text-xs sm:text-sm text-gray-600">Manage and track all purchase orders</p>
           </div>
           <Button
             type="primary"
             icon={<Plus size={16} />}
             onClick={() => navigate("/procurement/orders/new")}
             size="middle"
+            className="w-full sm:w-auto"
           >
-            New Purchase Order
+            <span className="hidden sm:inline">New Purchase Order</span>
+            <span className="sm:hidden">New Order</span>
           </Button>
         </div>
 
@@ -372,6 +456,19 @@ const PurchaseOrdersListPage = () => {
                 format="MM/DD/YYYY"
               />
             </Col>
+            <Col xs={24} sm={12} md={8} lg={3}>
+              <Select
+                allowClear
+                placeholder="Favorites"
+                value={filters.favorite}
+                onChange={(value) => setFilters({ ...filters, favorite: value })}
+                style={{ width: "100%" }}
+                size="middle"
+              >
+                <Option value={true}>Favorites Only</Option>
+                <Option value={false}>Non-Favorites</Option>
+              </Select>
+            </Col>
           </Row>
           <Row gutter={[12, 12]} className="mt-2">
             <Col span={24}>
@@ -387,10 +484,10 @@ const PurchaseOrdersListPage = () => {
           </Row>
         </Card>
 
-        {/* Table */}
-        <Card size="small">
+        {/* Desktop Table View */}
+        <Card size="small" className="hidden md:block">
           {loading ? (
-            <Skeleton active paragraph={{ rows: 8 }} />
+            <ProcurementTableSkeleton />
           ) : (
             <Table
               columns={columns}
@@ -416,6 +513,119 @@ const PurchaseOrdersListPage = () => {
             />
           )}
         </Card>
+
+        {/* Mobile Card View */}
+        <div className="md:hidden space-y-3">
+          {loading ? (
+            <div className="space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <Card key={i} size="small" loading={true} />
+              ))}
+            </div>
+          ) : purchaseOrders.length === 0 ? (
+            <Card size="small">
+              <div className="text-center py-8 text-gray-500">
+                <p>No purchase orders found</p>
+              </div>
+            </Card>
+          ) : (
+            purchaseOrders.map((order) => (
+              <Card
+                key={order._id || order.id}
+                size="small"
+                className="shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => navigate(`/procurement/orders/${order._id || order.id}`)}
+              >
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <Button
+                      type="text"
+                      icon={
+                        <Star
+                          className={
+                            order.isFavorite
+                              ? "fill-yellow-400 text-yellow-500"
+                              : "text-gray-300"
+                          }
+                          size={16}
+                        />
+                      }
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleFavorite(order._id || order.id, e);
+                      }}
+                      size="small"
+                      className="shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-gray-900 truncate">
+                        {order.reference || order._id || order.id}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {formatDate(order.createdDate || order.createdAt)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <StatusBadge status={order.status} />
+                    <ReceiptBadge status={order.receiptStatus || "none"} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-sm pt-3 border-t">
+                  <div>
+                    <div className="text-gray-400 text-xs mb-1">Vendor</div>
+                    <div className="font-medium text-gray-900">{getVendorName(order) || "-"}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-400 text-xs mb-1">Company</div>
+                    <div className="font-medium text-gray-900">{getCompanyName(order) || "-"}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-400 text-xs mb-1">Buyer</div>
+                    <div className="font-medium text-gray-900">{getBuyerName(order) || "-"}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-400 text-xs mb-1">Deadline</div>
+                    <div className={`font-medium text-gray-900 ${isOverdue(order.orderDeadline) ? "text-red-600" : ""}`}>
+                      {getDaysAgo(order.orderDeadline)}
+                    </div>
+                  </div>
+                  <div className="col-span-2">
+                    <div className="text-gray-400 text-xs mb-1">Total</div>
+                    <div className="font-bold text-lg text-gray-900">
+                      {formatCurrency(order.total, order.currency)}
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            ))
+          )}
+        </div>
+
+        {/* Mobile Pagination */}
+        {!loading && purchaseOrders.length > 0 && (
+          <div className="md:hidden mt-4 flex justify-center">
+            <Space>
+              <Button
+                size="small"
+                disabled={pagination.page === 1}
+                onClick={() => setPagination({ ...pagination, page: pagination.page - 1 })}
+              >
+                Previous
+              </Button>
+              <span className="text-sm text-gray-600">
+                Page {pagination.page} of {Math.ceil(pagination.total / pagination.limit)}
+              </span>
+              <Button
+                size="small"
+                disabled={pagination.page >= Math.ceil(pagination.total / pagination.limit)}
+                onClick={() => setPagination({ ...pagination, page: pagination.page + 1 })}
+              >
+                Next
+              </Button>
+            </Space>
+          </div>
+        )}
       </div>
     </div>
   );

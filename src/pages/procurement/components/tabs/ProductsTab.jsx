@@ -1,8 +1,9 @@
 import React, { useState } from "react";
-import { Table, Button, Tag, Checkbox, Space, Image } from "antd";
-import { Package, QrCode } from "lucide-react";
+import { Table, Button, Tag, Checkbox, Space, Image, Card, Row, Col } from "antd";
+import { Package, QrCode, Printer } from "lucide-react";
 import { getProductQRCode } from "../../../../api/procurement";
 import QRCodeModal from "../QRCodeModal";
+import BulkQRCodeModal from "../BulkQRCodeModal";
 
 /**
  * Products Tab Component
@@ -13,9 +14,24 @@ const ProductsTab = ({ purchaseOrder }) => {
   const [qrModalVisible, setQrModalVisible] = useState(false);
   const [qrData, setQrData] = useState(null);
   const [loadingQR, setLoadingQR] = useState(false);
+  const [bulkQRModalVisible, setBulkQRModalVisible] = useState(false);
 
   const formatCurrency = (amount, currency = "USD") => {
-    if (!amount && amount !== 0) return "$0.00";
+    if (!amount && amount !== 0) {
+      if (currency === "JPY") return "¥0";
+      return "$0.00";
+    }
+    
+    // JPY doesn't use decimal places
+    if (currency === "JPY") {
+      return new Intl.NumberFormat("ja-JP", {
+        style: "currency",
+        currency: "JPY",
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(amount);
+    }
+    
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: currency || "USD",
@@ -25,6 +41,17 @@ const ProductsTab = ({ purchaseOrder }) => {
   };
 
   const products = purchaseOrder?.products || [];
+
+  // Get selected products
+  const selectedProducts = selectedProductIndices.map((index) => products[index]).filter(Boolean);
+
+  // Handle bulk print labels
+  const handleBulkPrintLabels = () => {
+    if (selectedProducts.length === 0) {
+      return;
+    }
+    setBulkQRModalVisible(true);
+  };
 
   // Handle QR code button click
   const handleQRCodeClick = async (product) => {
@@ -182,16 +209,109 @@ const ProductsTab = ({ purchaseOrder }) => {
 
   return (
     <>
-      <Table
-        columns={columns}
-        dataSource={products}
-        rowKey={(record, index) => record.productId || record.kitId || record._id || index}
-        pagination={false}
-        size="small"
-        scroll={{ x: 700 }}
-      />
+      {/* Bulk Actions Bar */}
+      {selectedProducts.length > 0 && (
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+          <span className="text-sm font-medium text-blue-900">
+            {selectedProducts.length} item{selectedProducts.length > 1 ? "s" : ""} selected
+          </span>
+          <Button
+            type="primary"
+            icon={<Printer size={16} />}
+            onClick={handleBulkPrintLabels}
+            size="small"
+            className="w-full sm:w-auto"
+          >
+            Print Labels ({selectedProducts.length})
+          </Button>
+        </div>
+      )}
+
+      {/* Desktop Table View */}
+      <div className="hidden md:block">
+        <Table
+          columns={columns}
+          dataSource={products}
+          rowKey={(record, index) => record.productId || record.kitId || record._id || index}
+          pagination={false}
+          size="small"
+          scroll={{ x: 700 }}
+        />
+      </div>
+
+      {/* Mobile Card View */}
+      <div className="md:hidden space-y-3">
+        {products.map((product, index) => (
+          <Card
+            key={product.productId || product.kitId || product._id || index}
+            size="small"
+            className="shadow-sm"
+          >
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <Checkbox
+                checked={selectedProductIndices.includes(index)}
+                onChange={(e) => handleCheckboxChange(index, e.target.checked)}
+              />
+              <div className="flex-1 min-w-0">
+                {product.type === "kit" ? (
+                  <>
+                    <div className="font-medium text-gray-900 flex items-center gap-2 mb-1">
+                      <Package size={16} className="text-blue-600 shrink-0" />
+                      <span className="truncate">{product.name || "N/A"}</span>
+                    </div>
+                    <Tag color="blue" size="small" className="mb-1">
+                      Kit ({product.kitProducts?.length || 0} products)
+                    </Tag>
+                    {product.kitProducts && product.kitProducts.length > 0 && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        Contains: {product.kitProducts.slice(0, 2).map((p) => p.name).join(", ")}
+                        {product.kitProducts.length > 2 && ` +${product.kitProducts.length - 2} more`}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="font-medium text-gray-900 mb-1">{product.name || "N/A"}</div>
+                    <div className="text-xs text-gray-500">SKU: {product.sku || "N/A"}</div>
+                  </>
+                )}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-sm pt-3 border-t">
+              <div>
+                <div className="text-gray-400 text-xs mb-1">Quantity</div>
+                <div className="font-medium text-gray-900">{product.quantity || 0}</div>
+              </div>
+              <div>
+                <div className="text-gray-400 text-xs mb-1">UoM</div>
+                <div className="font-medium text-gray-900">{product.uom || "-"}</div>
+              </div>
+              {product.taxes && (
+                <div>
+                  <div className="text-gray-400 text-xs mb-1">Taxes</div>
+                  <div className="font-medium text-gray-900">
+                    {formatCurrency(product.taxes, purchaseOrder?.currency)}
+                  </div>
+                </div>
+              )}
+              <div className="flex justify-end items-end">
+                <Button
+                  type="link"
+                  icon={<QrCode size={16} />}
+                  onClick={() => handleQRCodeClick(product)}
+                  loading={loadingQR}
+                  size="small"
+                  className="p-0"
+                >
+                  QR Code
+                </Button>
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
       
-      {/* QR Code Modal */}
+      {/* Single QR Code Modal */}
       {qrData && (
         <QRCodeModal
           visible={qrModalVisible}
@@ -200,6 +320,17 @@ const ProductsTab = ({ purchaseOrder }) => {
             setQrData(null);
           }}
           qrData={qrData}
+        />
+      )}
+
+      {/* Bulk QR Code Modal */}
+      {purchaseOrder?._id && (
+        <BulkQRCodeModal
+          visible={bulkQRModalVisible}
+          onCancel={() => setBulkQRModalVisible(false)}
+          items={selectedProducts}
+          poId={purchaseOrder._id}
+          getQRCodeFunction={getProductQRCode}
         />
       )}
     </>

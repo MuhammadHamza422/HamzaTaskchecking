@@ -63,7 +63,17 @@ const QRCodeModal = ({ visible, onCancel, qrData }) => {
     if (qrData.type === "kit") {
       return qrData.qrData?.kitId || qrData.product?.kitId || "";
     } else if (qrData.type === "box") {
-      return qrData.qrData?.boxId || qrData.boxId || "";
+      const boxId = qrData.qrData?.boxId || qrData.boxId || qrData.box?.boxId || "";
+      // Try multiple possible locations for box name
+      const boxName = 
+        qrData.box?.name || 
+        qrData.qrData?.box?.name || 
+        qrData.name || 
+        "";
+      if (boxName && boxId) {
+        return `${boxName}\n${boxId}`;
+      }
+      return boxId || "";
     } else {
       return qrData.qrData?.sku || qrData.product?.sku || "";
     }
@@ -183,6 +193,8 @@ const QRCodeModal = ({ visible, onCancel, qrData }) => {
               margin-top: 5px;
               font-size: 10px;
               text-align: center;
+              white-space: pre-line;
+              word-break: break-word;
             }
           </style>
         </head>
@@ -350,7 +362,7 @@ const QRCodeModal = ({ visible, onCancel, qrData }) => {
                 }}
                 preview={false}
               />
-              <p className="mt-2 text-sm font-medium">{getLabelText()}</p>
+              <p className="mt-2 text-sm font-medium whitespace-pre-line">{getLabelText()}</p>
             </div>
           </div>
         </div>
