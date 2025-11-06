@@ -487,7 +487,7 @@ const QRCodeScannerPage = () => {
         />
       )}
 
-      <div className="relative w-full bg-black rounded-lg overflow-hidden" style={{ aspectRatio: "4/3" }}>
+      <div className="relative w-full bg-black rounded-lg overflow-hidden" style={{ maxHeight: "400px", aspectRatio: "16/9" }}>
         <video ref={videoRef} className="w-full h-full object-cover" playsInline />
         {scanning && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-50">

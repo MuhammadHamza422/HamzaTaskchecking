@@ -57,23 +57,40 @@ const QRCodeModal = ({ visible, onCancel, qrData }) => {
     setPageHeight(value);
   };
 
-  // Get label text based on type
+  // Get box name separately
+  const getBoxName = () => {
+    if (!qrData || qrData.type !== "box") return "";
+    return (
+      qrData.box?.name || 
+      qrData.qrData?.box?.name || 
+      qrData.name || 
+      ""
+    );
+  };
+
+  // Get box ID separately
+  const getBoxId = () => {
+    if (!qrData || qrData.type !== "box") return "";
+    return (
+      qrData.qrData?.boxId || 
+      qrData.boxId || 
+      qrData.box?.boxId || 
+      ""
+    );
+  };
+
+  // Get label text based on type (for filename/title purposes)
   const getLabelText = () => {
     if (!qrData) return "";
     if (qrData.type === "kit") {
       return qrData.qrData?.kitId || qrData.product?.kitId || "";
     } else if (qrData.type === "box") {
-      const boxId = qrData.qrData?.boxId || qrData.boxId || qrData.box?.boxId || "";
-      // Try multiple possible locations for box name
-      const boxName = 
-        qrData.box?.name || 
-        qrData.qrData?.box?.name || 
-        qrData.name || 
-        "";
+      const boxName = getBoxName();
+      const boxId = getBoxId();
       if (boxName && boxId) {
-        return `${boxName}\n${boxId}`;
+        return `${boxName}-${boxId}`;
       }
-      return boxId || "";
+      return boxId || boxName || "";
     } else {
       return qrData.qrData?.sku || qrData.product?.sku || "";
     }
@@ -193,15 +210,32 @@ const QRCodeModal = ({ visible, onCancel, qrData }) => {
               margin-top: 5px;
               font-size: 10px;
               text-align: center;
-              white-space: pre-line;
               word-break: break-word;
+            }
+            .box-name {
+              font-weight: bold;
+              font-size: 11px;
+              margin-bottom: 2px;
+            }
+            .box-id {
+              font-size: 9px;
+              color: #666;
+            }
+            .label-text {
+              font-weight: bold;
             }
           </style>
         </head>
         <body>
           <div class="print-container">
             <img src="${qrData.qrCode}" alt="QR Code" style="width: ${qrSize}px; height: ${qrSize}px;" />
-            <div class="label-info">${getLabelText()}</div>
+            ${qrData?.type === "box" 
+              ? `<div class="label-info">
+                  ${getBoxName() ? `<div class="box-name">${getBoxName()}</div>` : ""}
+                  ${getBoxId() ? `<div class="box-id">${getBoxId()}</div>` : ""}
+                </div>`
+              : `<div class="label-info label-text">${getLabelText()}</div>`
+            }
           </div>
         </body>
       </html>
@@ -362,7 +396,18 @@ const QRCodeModal = ({ visible, onCancel, qrData }) => {
                 }}
                 preview={false}
               />
-              <p className="mt-2 text-sm font-medium whitespace-pre-line">{getLabelText()}</p>
+              {qrData?.type === "box" ? (
+                <div className="mt-2 text-center">
+                  {getBoxName() && (
+                    <p className="text-lg font-bold mb-0">{getBoxName()}</p>
+                  )}
+                  {getBoxId() && (
+                    <p className="text-xs text-black mb-0">{getBoxId()}</p>
+                  )}
+                </div>
+              ) : (
+                <p className="mt-2 text-sm font-medium whitespace-pre-line">{getLabelText()}</p>
+              )}
             </div>
           </div>
         </div>

@@ -62,7 +62,7 @@ const CreatePurchaseOrderPage = () => {
 
   // Selected products (can be standalone products or kits)
   const [selectedProducts, setSelectedProducts] = useState([]);
-  
+
   // Checkbox selection for making kits
   const [selectedProductIndices, setSelectedProductIndices] = useState([]);
 
@@ -79,14 +79,16 @@ const CreatePurchaseOrderPage = () => {
     setLoadingOrder(true);
     try {
       const order = await getPurchaseOrder(poId);
-      
+
       // Check if order can be edited
       if (order.status !== "draft") {
         setCanEdit(false);
         Swal.fire({
           icon: "warning",
           title: "Cannot Edit Order",
-          text: "Only draft orders can be edited. This order's status is: " + order.status,
+          text:
+            "Only draft orders can be edited. This order's status is: " +
+            order.status,
           showConfirmButton: true,
         }).then(() => {
           navigate(`/procurement/orders/${poId}`);
@@ -99,15 +101,17 @@ const CreatePurchaseOrderPage = () => {
         vendor: order.vendor?.id || order.vendor?._id || order.vendor,
         company: order.company?.id || order.company?._id || order.company,
         buyer: order.buyer?.id || order.buyer?._id || order.buyer,
-        orderDeadline: order.orderDeadline ? dayjs(order.orderDeadline) : undefined,
+        orderDeadline: order.orderDeadline
+          ? dayjs(order.orderDeadline)
+          : undefined,
         shippingMethod: order.shippingMethod || undefined,
         deliverTo: order.deliverTo || undefined,
         currency: order.currency || "USD",
-        vendorReference: Array.isArray(order.vendorReference) 
-          ? order.vendorReference 
-          : order.vendorReference 
-            ? [order.vendorReference] 
-            : [],
+        vendorReference: Array.isArray(order.vendorReference)
+          ? order.vendorReference
+          : order.vendorReference
+          ? [order.vendorReference]
+          : [],
         termsAndConditions: order.termsAndConditions || undefined,
       });
 
@@ -122,7 +126,9 @@ const CreatePurchaseOrderPage = () => {
               unitPrice: product.unitPrice || 0,
               taxes: product.taxes || 0,
               kitProducts: product.kitProducts || [],
-              amount: (product.quantity || 1) * (product.unitPrice || 0) + (product.taxes || 0),
+              amount:
+                (product.quantity || 1) * (product.unitPrice || 0) +
+                (product.taxes || 0),
             };
           } else {
             return {
@@ -134,7 +140,9 @@ const CreatePurchaseOrderPage = () => {
               unitPrice: product.unitPrice || 0,
               uom: product.uom || "Unit",
               taxes: product.taxes || 0,
-              amount: (product.quantity || 0) * (product.unitPrice || 0) + (product.taxes || 0),
+              amount:
+                (product.quantity || 0) * (product.unitPrice || 0) +
+                (product.taxes || 0),
             };
           }
         });
@@ -145,7 +153,8 @@ const CreatePurchaseOrderPage = () => {
       Swal.fire({
         icon: "error",
         title: "Failed to Load Order",
-        text: error?.response?.data?.error?.message || "Failed to load order data",
+        text:
+          error?.response?.data?.error?.message || "Failed to load order data",
         showConfirmButton: true,
       }).then(() => {
         navigate("/procurement/orders");
@@ -200,11 +209,12 @@ const CreatePurchaseOrderPage = () => {
     }
   };
 
-
   const handleAddProduct = (product) => {
     // Check if product already exists (not in a kit)
     const exists = selectedProducts.some(
-      (p) => p.type === "product" && (p.productId || p._id) === (product._id || product.id)
+      (p) =>
+        p.type === "product" &&
+        (p.productId || p._id) === (product._id || product.id)
     );
     if (exists) {
       message.warning("Product already added");
@@ -335,7 +345,8 @@ const CreatePurchaseOrderPage = () => {
       if (field === "quantity" || field === "unitPrice") {
         const qty = field === "quantity" ? value : updated[index].quantity;
         const price = field === "unitPrice" ? value : updated[index].unitPrice;
-        updated[index].amount = (qty || 0) * (price || 0) + (updated[index].taxes || 0);
+        updated[index].amount =
+          (qty || 0) * (price || 0) + (updated[index].taxes || 0);
       }
       return updated;
     });
@@ -349,11 +360,6 @@ const CreatePurchaseOrderPage = () => {
   };
 
   const onFinish = async (values) => {
-    if (selectedProducts.length === 0) {
-      message.error("Please add at least one product or kit");
-      return;
-    }
-
     setSubmitting(true);
     try {
       // Build products payload for API
@@ -405,13 +411,14 @@ const CreatePurchaseOrderPage = () => {
         shippingMethod: values.shippingMethod || undefined,
         deliverTo: values.deliverTo || undefined,
         currency: values.currency || "USD",
-        vendorReference: Array.isArray(values.vendorReference) 
+        vendorReference: Array.isArray(values.vendorReference)
           ? values.vendorReference.filter(Boolean)
-          : values.vendorReference 
-            ? [values.vendorReference] 
-            : [],
+          : values.vendorReference
+          ? [values.vendorReference]
+          : [],
         termsAndConditions: values.termsAndConditions || undefined,
-        products: productsPayload,
+        // Always send empty products array - products will be added in details page
+        products: [],
       };
 
       if (isEditMode) {
@@ -420,7 +427,7 @@ const CreatePurchaseOrderPage = () => {
         Swal.fire({
           icon: "success",
           title: "Success!",
-          text: "Purchase order updated successfully",
+          text: "Draft updated successfully",
           showConfirmButton: true,
         }).then(() => {
           navigate(`/procurement/orders/${poId}`);
@@ -431,18 +438,22 @@ const CreatePurchaseOrderPage = () => {
         Swal.fire({
           icon: "success",
           title: "Success!",
-          text: "Purchase order created successfully",
+          text: "Draft created successfully. You can now add products in the Products tab.",
           showConfirmButton: true,
         }).then(() => {
           navigate(`/procurement/orders/${response._id || response.id}`);
         });
       }
     } catch (error) {
-      console.error(`Failed to ${isEditMode ? "update" : "create"} purchase order:`, error);
-      const errorMessage = error?.response?.data?.error?.message || 
-                          error?.response?.data?.message || 
-                          `Failed to ${isEditMode ? "update" : "create"} purchase order`;
-      
+      console.error(
+        `Failed to ${isEditMode ? "update" : "create"} purchase order:`,
+        error
+      );
+      const errorMessage =
+        error?.response?.data?.error?.message ||
+        error?.response?.data?.message ||
+        `Failed to ${isEditMode ? "update" : "create"} purchase order`;
+
       if (error?.response?.data?.error?.code === "EDIT_NOT_ALLOWED") {
         Swal.fire({
           icon: "warning",
@@ -470,7 +481,7 @@ const CreatePurchaseOrderPage = () => {
       if (currency === "JPY") return "¥0";
       return "$0.00";
     }
-    
+
     // JPY doesn't use decimal places
     if (currency === "JPY") {
       return new Intl.NumberFormat("ja-JP", {
@@ -480,7 +491,7 @@ const CreatePurchaseOrderPage = () => {
         maximumFractionDigits: 0,
       }).format(amount);
     }
-    
+
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: currency || "USD",
@@ -522,7 +533,9 @@ const CreatePurchaseOrderPage = () => {
         return (
           <Checkbox
             checked={selectedProductIndices.includes(record.index)}
-            onChange={(e) => handleCheckboxChange(record.index, e.target.checked)}
+            onChange={(e) =>
+              handleCheckboxChange(record.index, e.target.checked)
+            }
           />
         );
       },
@@ -580,7 +593,9 @@ const CreatePurchaseOrderPage = () => {
                   updated[record.index] = {
                     ...updated[record.index],
                     quantity: value || 1,
-                    amount: (updated[record.index].unitPrice || 0) * (value || 1) + (updated[record.index].taxes || 0),
+                    amount:
+                      (updated[record.index].unitPrice || 0) * (value || 1) +
+                      (updated[record.index].taxes || 0),
                   };
                   return updated;
                 });
@@ -665,7 +680,11 @@ const CreatePurchaseOrderPage = () => {
               <Row gutter={16}>
                 {Array.from({ length: 6 }).map((_, i) => (
                   <Col xs={24} sm={12} key={i}>
-                    <Skeleton height={20} width={100} style={{ marginBottom: 4 }} />
+                    <Skeleton
+                      height={20}
+                      width={100}
+                      style={{ marginBottom: 4 }}
+                    />
                     <Skeleton height={32} />
                   </Col>
                 ))}
@@ -696,27 +715,32 @@ const CreatePurchaseOrderPage = () => {
             <Link to="/procurement/orders">Purchase Orders</Link>
           </Breadcrumb.Item>
           <Breadcrumb.Item>
-            {isEditMode ? "Edit Order" : "Create Order"}
+            {isEditMode ? "Edit Draft" : "Create Draft"}
           </Breadcrumb.Item>
         </Breadcrumb>
 
         {/* Header */}
         <div className="mb-4">
-          <Button
-            icon={<ArrowLeft />}
-            onClick={() => navigate(isEditMode ? `/procurement/orders/${poId}` : "/procurement/orders")}
-            className="mb-2"
-            size="small"
+          <button
+            onClick={() =>
+              navigate(
+                isEditMode
+                  ? `/procurement/orders/${poId}`
+                  : "/procurement/orders"
+              )
+            }
+            className="mb-2 bg-black text-white hover:bg-black flex items-center gap-2 p-1.5 rounded"
           >
+            <ArrowLeft />
             Back
-          </Button>
+          </button>
           <Title level={3} className="mb-1">
-            {isEditMode ? "Edit Purchase Order" : "Create Purchase Order"}
+            {isEditMode ? "Edit Draft" : "Create Draft"}
           </Title>
           <p className="text-gray-600 text-sm">
             {isEditMode
-              ? "Update the details of the purchase order"
-              : "Fill in the details to create a new purchase order"}
+              ? "Update the details of the draft"
+              : "Fill in the details to create a new draft. Products can be added after creating the draft."}
           </p>
         </div>
 
@@ -729,7 +753,7 @@ const CreatePurchaseOrderPage = () => {
           }}
         >
           {/* Basic Information */}
-          <Card size="small" title="Basic Information" className="mb-4">
+          <Card size="small" title="Basic Information" className="mb-4 bg-gray-100">
             <Row gutter={[16, 16]} className="mt-4">
               <Col xs={24} sm={12} md={8}>
                 <Form.Item
@@ -798,7 +822,7 @@ const CreatePurchaseOrderPage = () => {
                 </Form.Item>
               </Col>
             </Row>
-            <Row gutter={[16, 16]}  className="mt-4">
+            <Row gutter={[16, 16]} className="mt-4">
               <Col xs={24} sm={12} md={8}>
                 <Form.Item name="orderDeadline" label="Order Deadline">
                   <DatePicker
@@ -826,7 +850,9 @@ const CreatePurchaseOrderPage = () => {
                     size="middle"
                     showSearch
                     filterOption={(input, option) =>
-                      (option?.label ?? "").toLowerCase().includes(input.toLowerCase())
+                      (option?.label ?? "")
+                        .toLowerCase()
+                        .includes(input.toLowerCase())
                     }
                   >
                     <Option value="USA">USA</Option>
@@ -836,7 +862,7 @@ const CreatePurchaseOrderPage = () => {
                 </Form.Item>
               </Col>
             </Row>
-            <Row gutter={[16, 16]}  className="mt-4">
+            <Row gutter={[16, 16]} className="mt-4">
               <Col xs={24} sm={12} md={8}>
                 <Form.Item name="currency" label="Currency">
                   <Select size="middle">
@@ -849,121 +875,55 @@ const CreatePurchaseOrderPage = () => {
                 </Form.Item>
               </Col>
               <Col xs={24} sm={12} md={8}>
-                <Form.Item name="vendorReference" label="Vendor Reference (Tags)">
+                <Form.Item
+                  name="vendorReference"
+                  label="Vendor Reference (Tags)"
+                >
                   <Select
                     mode="tags"
                     placeholder="Add vendor reference tags (press Enter to add)"
-                    tokenSeparators={[",", " "]}
+                    tokenSeparators={[","]}
                     style={{ width: "100%" }}
                     size="middle"
+                    tagRender={(props) => {
+                      const { label, value, closable, onClose } = props;
+                      // Generate random color for each tag
+                      const colors = [
+                        "blue",
+                        "green",
+                        "orange",
+                        "red",
+                        "purple",
+                        "cyan",
+                        "magenta",
+                        "geekblue",
+                        "volcano",
+                        "gold",
+                      ];
+                      const colorIndex = value
+                        ? value.toString().length % colors.length
+                        : 0;
+                      const color = colors[colorIndex];
+
+                      return (
+                        <Tag
+                          color={color}
+                          closable={closable}
+                          onClose={onClose}
+                          style={{ marginRight: 3 }}
+                        >
+                          {label}
+                        </Tag>
+                      );
+                    }}
                   />
                 </Form.Item>
               </Col>
             </Row>
           </Card>
 
-          {/* Products */}
-          <Card size="small" title="Products" className="mb-4">
-            {/* Action Bar */}
-            {selectedProductIndices.length >= 2 && (
-              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
-                <span className="text-sm text-blue-700">
-                  {selectedProductIndices.length} product(s) selected
-                </span>
-                <Button
-                  type="primary"
-                  icon={<Package size={16} />}
-                  onClick={handleMakeKit}
-                  size="small"
-                >
-                  Create Kit
-                </Button>
-              </div>
-            )}
-
-            {/* Product Search */}
-            <div className="mb-4">
-              <Input
-                placeholder="Search products by name or SKU..."
-                prefix={<Search size={16} />}
-                value={productSearch}
-                onChange={(e) => {
-                  setProductSearch(e.target.value);
-                  searchProducts(e.target.value);
-                }}
-                size="middle"
-                allowClear
-              />
-
-              {/* Product Search Results */}
-              {productSearch.trim().length > 1 && products.length > 0 && (
-                <div className="mt-2 border border-gray-200 rounded bg-white shadow-lg max-h-60 overflow-y-auto">
-                  {products.map((product) => (
-                    <div
-                      key={product._id || product.id}
-                      onClick={() => handleAddProduct(product)}
-                      className="p-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition-colors"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium text-sm mb-0">
-                            {product.pro_title ||
-                              product.name ||
-                              "Unknown Product"}
-                          </p>
-                          <p className="text-xs text-gray-500 mb-0">
-                            SKU: {product.sku || "N/A"} | Price:{" "}
-                            {formatCurrency(
-                              product.price || product.sale_price || 0,
-                              form.getFieldValue("currency")
-                            )}
-                          </p>
-                        </div>
-                        <Plus className="text-blue-600" size={16} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Products Table */}
-            {selectedProducts.length > 0 ? (
-              <>
-                <Table
-                  columns={productColumns}
-                  dataSource={buildTableData()}
-                  rowKey="key"
-                  pagination={false}
-                  size="small"
-                  summary={() => (
-                    <Table.Summary fixed>
-                      <Table.Summary.Row>
-                        <Table.Summary.Cell index={0} colSpan={5} align="right">
-                          <span className="font-semibold">Total:</span>
-                        </Table.Summary.Cell>
-                        <Table.Summary.Cell index={1} align="right">
-                          <span className="font-bold">
-                            {formatCurrency(
-                              calculateTotal(),
-                              form.getFieldValue("currency")
-                            )}
-                          </span>
-                        </Table.Summary.Cell>
-                      </Table.Summary.Row>
-                    </Table.Summary>
-                  )}
-                />
-              </>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <p>No products added yet. Search and add products above.</p>
-              </div>
-            )}
-          </Card>
-
           {/* Terms and Conditions */}
-          <Card size="small" title="Terms and Conditions" className="mb-4">
+          <Card size="small" title="Terms and Conditions" className="mb-4 bg-gray-100">
             <Form.Item name="termsAndConditions">
               <TextArea
                 rows={4}
@@ -989,12 +949,11 @@ const CreatePurchaseOrderPage = () => {
               size="middle"
               disabled={!canEdit && isEditMode}
             >
-              {isEditMode ? "Update Purchase Order" : "Create Purchase Order"}
+              {isEditMode ? "Update Draft" : "Create Draft"}
             </Button>
           </Space>
         </Form>
       </div>
-
     </div>
   );
 };

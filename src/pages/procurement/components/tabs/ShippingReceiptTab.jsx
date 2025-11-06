@@ -333,7 +333,7 @@ const ShippingReceiptTab = ({ purchaseOrder, poId }) => {
   return (
     <div className="space-y-6">
       {/* Shipping Details Section */}
-      <Card
+      <Card className="bg-gray-100"
         size="small"
         title={
           <Space>
@@ -420,7 +420,7 @@ const ShippingReceiptTab = ({ purchaseOrder, poId }) => {
       </Card>
 
       {/* Cost Management Section */}
-      <Card
+      <Card className="bg-gray-100"
         size="small"
         title={
           <Space>

@@ -126,7 +126,7 @@ export default function DashboardCards() {
       color: "text-orange-500",
       accessKey: "procurement",
       hoverColor: "group-hover:text-orange-600",
-      link: "/procurement/orders",
+      link: "/procurement",
       bgColor: "bg-orange-50",
       border: "border-orange-500",
     },

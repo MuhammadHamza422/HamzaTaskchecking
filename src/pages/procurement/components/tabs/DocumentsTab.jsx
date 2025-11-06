@@ -363,7 +363,7 @@ const DocumentsTab = ({ purchaseOrder, poId }) => {
       </div>
 
       {documents.length === 0 ? (
-        <Card>
+        <Card className="bg-gray-100">
           <div className="text-center py-12 text-gray-500">
             <FileText size={48} className="mx-auto mb-4 text-gray-300" />
             <p>No documents uploaded yet</p>

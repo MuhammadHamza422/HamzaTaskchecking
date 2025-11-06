@@ -10,7 +10,7 @@ import "react-loading-skeleton/dist/skeleton.css";
 const ProcurementTableSkeleton = () => {
   const columns = [
     { title: "Date Created", key: "date", width: 120 },
-    { title: "Reference", key: "ref", width: 100 },
+    { title: "PO #", key: "ref", width: 100 },
     { title: "Vendor", key: "vendor", width: 150 },
     { title: "Company", key: "company", width: 150 },
     { title: "Buyer", key: "buyer", width: 150 },

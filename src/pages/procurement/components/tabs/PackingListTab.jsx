@@ -48,9 +48,11 @@ const { Option } = Select;
  * Packing List Tab Component
  * Manage boxes, QR codes, and print labels
  */
-const PackingListTab = ({ purchaseOrder, poId }) => {
+const PackingListTab = ({ purchaseOrder, poId, onReload }) => {
   const [boxes, setBoxes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [creatingBox, setCreatingBox] = useState(false);
+  const [updatingBox, setUpdatingBox] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [viewBoxVisible, setViewBoxVisible] = useState(false);
   const [selectedBox, setSelectedBox] = useState(null);
@@ -83,6 +85,7 @@ const PackingListTab = ({ purchaseOrder, poId }) => {
   };
 
   const handleCreateBox = async (values) => {
+    setCreatingBox(true);
     try {
       await createBox(poId, {
         name: values.name,
@@ -91,7 +94,11 @@ const PackingListTab = ({ purchaseOrder, poId }) => {
       message.success("Box created successfully");
       setModalVisible(false);
       form.resetFields();
-      loadBoxes();
+      await loadBoxes();
+      // Reload purchase order to update product quantities in ProductsTab
+      if (onReload) {
+        await onReload();
+      }
     } catch (error) {
       console.error("Failed to create box:", error);
       const errorResponse = error?.response?.data?.error;
@@ -113,6 +120,8 @@ const PackingListTab = ({ purchaseOrder, poId }) => {
         timer: 5000,
         timerProgressBar: true,
       });
+    } finally {
+      setCreatingBox(false);
     }
   };
 
@@ -136,6 +145,7 @@ const PackingListTab = ({ purchaseOrder, poId }) => {
   const handleUpdateBox = async (values) => {
     if (!editingBox) return;
     
+    setUpdatingBox(true);
     try {
       await updateBox(editingBox.boxId, {
         name: values.name,
@@ -145,7 +155,11 @@ const PackingListTab = ({ purchaseOrder, poId }) => {
       setEditModalVisible(false);
       setEditingBox(null);
       editForm.resetFields();
-      loadBoxes();
+      await loadBoxes();
+      // Reload purchase order to update product quantities in ProductsTab
+      if (onReload) {
+        await onReload();
+      }
     } catch (error) {
       console.error("Failed to update box:", error);
       const errorResponse = error?.response?.data?.error;
@@ -167,6 +181,8 @@ const PackingListTab = ({ purchaseOrder, poId }) => {
         timer: 5000,
         timerProgressBar: true,
       });
+    } finally {
+      setUpdatingBox(false);
     }
   };
 
@@ -480,7 +496,7 @@ const PackingListTab = ({ purchaseOrder, poId }) => {
       )}
 
       {boxes.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">
+        <div className="text-center py-12 text-gray-500 bg-gray-100">
           <Package className="mx-auto mb-4" size={48} />
           <p>No boxes created yet</p>
           <Button
@@ -519,7 +535,7 @@ const PackingListTab = ({ purchaseOrder, poId }) => {
                 <Card
                   key={box._id || box.boxId}
                   size="small"
-                  className="shadow-sm"
+                  className="shadow-md bg-gray-100"
                 >
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <Checkbox
@@ -631,6 +647,7 @@ const PackingListTab = ({ purchaseOrder, poId }) => {
         form={form}
         purchaseOrder={purchaseOrder}
         boxes={boxes}
+        loading={creatingBox}
       />
 
       {/* View Box Modal */}
@@ -678,6 +695,7 @@ const PackingListTab = ({ purchaseOrder, poId }) => {
         purchaseOrder={purchaseOrder}
         boxes={boxes}
         box={editingBox}
+        loading={updatingBox}
       />
     </div>
   );
@@ -693,6 +711,7 @@ const CreateBoxModal = ({
   form,
   purchaseOrder,
   boxes = [],
+  loading = false,
 }) => {
   const [selectedItems, setSelectedItems] = useState([]);
   const products = purchaseOrder?.products || [];
@@ -832,10 +851,13 @@ const CreateBoxModal = ({
       width="90%"
       style={{ maxWidth: 700 }}
       okText="Create"
+      confirmLoading={loading}
+      okButtonProps={{ disabled: loading }}
+      cancelButtonProps={{ disabled: loading }}
     >
       <Form form={form} layout="vertical">
         <Form.Item name="name" label="Box Name (Optional)">
-          <Input placeholder="e.g., Box 1" />
+          <Input placeholder="e.g., Box 1"  />
         </Form.Item>
 
         <div className="mb-4">
@@ -846,6 +868,7 @@ const CreateBoxModal = ({
               icon={<Plus size={14} />}
               onClick={handleAddItem}
               size="small"
+              disabled={loading}
             >
               Add Item
             </Button>
@@ -871,7 +894,7 @@ const CreateBoxModal = ({
                 const isQuantityExceeded = item.quantity > availableQty;
                 
                 return (
-                  <Card key={index} size="small" className="mb-2">
+                  <Card key={index} size="small" className="mb-2 bg-gray-100">
                     <Row gutter={[16, 12]} align="middle">
                       <Col xs={24} sm={12}>
                         <Select
@@ -882,6 +905,7 @@ const CreateBoxModal = ({
                             handleItemChange(index, "itemId", value)
                           }
                           showSearch
+                          disabled={loading}
                           filterOption={(input, option) =>
                             (option?.label ?? "")
                               .toLowerCase()
@@ -918,6 +942,7 @@ const CreateBoxModal = ({
                             }
                             style={{ width: "100%" }}
                             status={isQuantityExceeded ? "error" : ""}
+                            disabled={loading}
                           />
                           {selectedProduct && (
                             <div className="text-xs mt-2 mb-0">
@@ -940,6 +965,7 @@ const CreateBoxModal = ({
                           icon={<Trash2 size={14} />}
                           onClick={() => handleRemoveItem(index)}
                           size="small"
+                          disabled={loading}
                         />
                       </Col>
                     </Row>
@@ -965,6 +991,7 @@ const EditBoxModal = ({
   purchaseOrder,
   boxes = [],
   box,
+  loading = false,
 }) => {
   const [selectedItems, setSelectedItems] = useState([]);
   const products = purchaseOrder?.products || [];
@@ -1127,10 +1154,13 @@ const EditBoxModal = ({
       width="90%"
       style={{ maxWidth: 700 }}
       okText="Update"
+      confirmLoading={loading}
+      okButtonProps={{ disabled: loading }}
+      cancelButtonProps={{ disabled: loading }}
     >
       <Form form={form} layout="vertical">
         <Form.Item name="name" label="Box Name (Optional)">
-          <Input placeholder="e.g., Box 1" />
+          <Input placeholder="e.g., Box 1" disabled={loading} />
         </Form.Item>
 
         <div className="mb-4">
@@ -1141,6 +1171,7 @@ const EditBoxModal = ({
               icon={<Plus size={14} />}
               onClick={handleAddItem}
               size="small"
+              disabled={loading}
             >
               Add Item
             </Button>
@@ -1187,6 +1218,7 @@ const EditBoxModal = ({
                             handleItemChange(index, "itemId", value)
                           }
                           showSearch
+                          disabled={loading}
                           filterOption={(input, option) =>
                             (option?.label ?? "")
                               .toLowerCase()
@@ -1221,6 +1253,7 @@ const EditBoxModal = ({
                             }
                             style={{ width: "100%" }}
                             status={isQuantityExceeded ? "error" : ""}
+                            disabled={loading}
                           />
                           {selectedProduct && (
                             <div className="text-xs mt-2 mb-0">
@@ -1243,6 +1276,7 @@ const EditBoxModal = ({
                           icon={<Trash2 size={14} />}
                           onClick={() => handleRemoveItem(index)}
                           size="small"
+                          disabled={loading}
                         />
                       </Col>
                     </Row>
@@ -1283,12 +1317,12 @@ const ViewBoxModal = ({ visible, onCancel, box }) => {
       width: 100,
       align: "right",
     },
-    {
-      title: "UOM",
-      dataIndex: "uom",
-      key: "uom",
-      width: 80,
-    },
+    // {
+    //   title: "UOM",
+    //   dataIndex: "uom",
+    //   key: "uom",
+    //   width: 80,
+    // },
   ];
 
   return (

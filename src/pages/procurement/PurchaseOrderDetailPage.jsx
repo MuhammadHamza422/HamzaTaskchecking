@@ -64,7 +64,11 @@ import PurchaseOrderReceiptModal from "./components/PurchaseOrderReceiptModal";
 const PurchaseOrderDetailPage = () => {
   const { poId } = useParams();
   const navigate = useNavigate();
-  const { isEnabled: scannerEnabled, setIsEnabled: setScannerEnabled, isProcessing: scannerProcessing } = useGlobalScanner();
+  const {
+    isEnabled: scannerEnabled,
+    setIsEnabled: setScannerEnabled,
+    isProcessing: scannerProcessing,
+  } = useGlobalScanner();
   const [purchaseOrder, setPurchaseOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
@@ -117,10 +121,15 @@ const PurchaseOrderDetailPage = () => {
       const response = await toggleFavorite(poId);
       if (response.success) {
         setIsFavorite(response.data.isFavorite);
-        setPurchaseOrder({ ...purchaseOrder, isFavorite: response.data.isFavorite });
+        setPurchaseOrder({
+          ...purchaseOrder,
+          isFavorite: response.data.isFavorite,
+        });
         Swal.fire({
           icon: "success",
-          title: response.data.isFavorite ? "Added to Favorites" : "Removed from Favorites",
+          title: response.data.isFavorite
+            ? "Added to Favorites"
+            : "Removed from Favorites",
           text: response.data.isFavorite
             ? "This purchase order has been marked as favorite"
             : "This purchase order has been removed from favorites",
@@ -136,7 +145,9 @@ const PurchaseOrderDetailPage = () => {
       Swal.fire({
         icon: "error",
         title: "Failed to Update Favorite",
-        text: error?.response?.data?.error?.message || "Failed to update favorite status",
+        text:
+          error?.response?.data?.error?.message ||
+          "Failed to update favorite status",
         toast: true,
         position: "top-end",
         showConfirmButton: false,
@@ -219,7 +230,11 @@ const PurchaseOrderDetailPage = () => {
     try {
       setUpdatingStatus(true);
       await updatePurchaseOrderStatus(poId, newStatus);
-      message.success(`Status updated to ${PO_STATUS_LABELS[newStatus] || newStatus.replace("_", " ")}`);
+      message.success(
+        `Status updated to ${
+          PO_STATUS_LABELS[newStatus] || newStatus.replace("_", " ")
+        }`
+      );
       // Reload purchase order to get updated status
       await loadPurchaseOrder();
     } catch (error) {
@@ -255,7 +270,9 @@ const PurchaseOrderDetailPage = () => {
       [PO_STATUS.RECEIVED]: "Mark as Received",
       [PO_STATUS.CANCELLED]: "Cancel Order",
     };
-    return labels[status] || PO_STATUS_LABELS[status] || status.replace("_", " ");
+    return (
+      labels[status] || PO_STATUS_LABELS[status] || status.replace("_", " ")
+    );
   };
 
   const po = enrichedPO || purchaseOrder;
@@ -311,7 +328,13 @@ const PurchaseOrderDetailPage = () => {
           <span>Products</span>
         </Space>
       ),
-      children: <ProductsTab purchaseOrder={po} />,
+      children: (
+        <ProductsTab
+          purchaseOrder={po}
+          poId={poId}
+          onReload={loadPurchaseOrder}
+        />
+      ),
     },
     {
       key: "packing",
@@ -321,7 +344,13 @@ const PurchaseOrderDetailPage = () => {
           <span>Packing List</span>
         </Space>
       ),
-      children: <PackingListTab purchaseOrder={po} poId={poId} />,
+      children: (
+        <PackingListTab
+          purchaseOrder={po}
+          poId={poId}
+          onReload={loadPurchaseOrder}
+        />
+      ),
     },
     {
       key: "shipping",
@@ -359,21 +388,18 @@ const PurchaseOrderDetailPage = () => {
           <Breadcrumb.Item>
             <Link to="/procurement/orders">Purchase Orders</Link>
           </Breadcrumb.Item>
-          <Breadcrumb.Item>
-            {po?.reference || poId}
-          </Breadcrumb.Item>
+          <Breadcrumb.Item>{po?.reference || poId}</Breadcrumb.Item>
         </Breadcrumb>
 
         {/* Header */}
         <div className="mb-4">
-          <Button
-            icon={<ArrowLeft size={14} />}
+          <button
             onClick={() => navigate("/procurement/orders")}
-            className="mb-2"
-            size="small"
+            className="mb-2 bg-black text-white hover:bg-black flex items-center gap-2 p-1.5 rounded"
           >
+            <ArrowLeft />
             Back
-          </Button>
+          </button>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
             <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
               <h1 className="text-xl sm:text-2xl font-bold mb-0">
@@ -402,8 +428,7 @@ const PurchaseOrderDetailPage = () => {
                 size="small"
                 className="text-xs"
               >
-                <span className="hidden sm:inline">Print Receipt</span>
-                <span className="sm:hidden">Receipt</span>
+                <span>Print Purchase Order</span>
               </Button>
               {po?.status === "draft" && (
                 <Button
@@ -432,7 +457,11 @@ const PurchaseOrderDetailPage = () => {
                 <span className="sm:hidden">Scanner</span>
               </Button> */}
               <StatusBadge status={po?.status} />
-              <ReceiptBadge status={po?.receiptStatus || "none"} />
+              {po?.status === "in_transit" ? (
+                <ReceiptBadge status="ready_to_receive" />
+              ) : (
+                <ReceiptBadge status={po?.receiptStatus || "none"} />
+              )}
             </Space>
           </div>
         </div>
@@ -441,14 +470,14 @@ const PurchaseOrderDetailPage = () => {
           {/* Main Content */}
           <Col xs={24} lg={16}>
             {/* Status Workflow */}
-            <Card size="small" className="mb-4">
+            <Card size="small" className="mb-4 bg-gray-100">
               {/* Desktop Horizontal View */}
-              <div className="hidden sm:flex items-center justify-between">
+              <div className="hidden sm:flex items-center justify-between ">
                 {statusFlow.map((status, index) => {
                   const isActive = po?.status === status;
                   const isCompleted = currentIndex > index;
                   const isCurrent = index === currentIndex;
-                  
+
                   return (
                     <React.Fragment key={status}>
                       <div className="flex items-center flex-1 min-w-0">
@@ -471,7 +500,8 @@ const PurchaseOrderDetailPage = () => {
                             {index + 1}
                           </div>
                           <div className="ml-2 text-xs">
-                            {PO_STATUS_LABELS[status] || status.replace("_", " ")}
+                            {PO_STATUS_LABELS[status] ||
+                              status.replace("_", " ")}
                           </div>
                         </div>
                       </div>
@@ -488,13 +518,13 @@ const PurchaseOrderDetailPage = () => {
                   );
                 })}
               </div>
-              
+
               {/* Mobile Vertical View */}
-              <div className="sm:hidden space-y-3">
+              <div className="sm:hidden space-y-3 bg-gray-100">
                 {statusFlow.map((status, index) => {
                   const isActive = po?.status === status;
                   const isCompleted = currentIndex > index;
-                  
+
                   return (
                     <div key={status} className="flex items-center gap-3">
                       <div
@@ -519,67 +549,82 @@ const PurchaseOrderDetailPage = () => {
                           {PO_STATUS_LABELS[status] || status.replace("_", " ")}
                         </div>
                         {isActive && (
-                          <div className="text-xs text-gray-500 mt-1">Current Status</div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            Current Status
+                          </div>
                         )}
                       </div>
                       {isCompleted && (
-                        <CheckCircle size={18} className="text-green-600 shrink-0" />
+                        <CheckCircle
+                          size={18}
+                          className="text-green-600 shrink-0"
+                        />
                       )}
                     </div>
                   );
                 })}
               </div>
-              
+
               {/* Next Step Button */}
-              {allowedNextStatuses.length > 0 && currentStatus !== PO_STATUS.RECEIVED && currentStatus !== PO_STATUS.CANCELLED && (
-                <div className="mt-4 pt-4 border-t border-gray-200">
-                  <Space direction="vertical" style={{ width: "100%" }}>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {nextStatus && nextStatus !== PO_STATUS.CANCELLED && (
-                        <Popconfirm
-                          title={`Move to ${PO_STATUS_LABELS[nextStatus]}?`}
-                          description={`This will update the order status from "${PO_STATUS_LABELS[currentStatus] || currentStatus}" to "${PO_STATUS_LABELS[nextStatus]}"`}
-                          onConfirm={() => handleStatusChange(nextStatus)}
-                          okText="Yes, Update"
-                          cancelText="Cancel"
-                        >
-                          <Button
-                            type="primary"
-                            icon={<ArrowRight size={16} />}
-                            loading={updatingStatus}
-                            size="small"
+              {allowedNextStatuses.length > 0 &&
+                currentStatus !== PO_STATUS.RECEIVED &&
+                currentStatus !== PO_STATUS.CANCELLED && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <Space direction="vertical" style={{ width: "100%" }}>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {nextStatus && nextStatus !== PO_STATUS.CANCELLED && (
+                          <Popconfirm
+                            title={`Move to ${PO_STATUS_LABELS[nextStatus]}?`}
+                            description={`This will update the order status from "${
+                              PO_STATUS_LABELS[currentStatus] || currentStatus
+                            }" to "${PO_STATUS_LABELS[nextStatus]}"`}
+                            onConfirm={() => handleStatusChange(nextStatus)}
+                            okText="Yes, Update"
+                            cancelText="Cancel"
                           >
-                            {getStatusButtonLabel(nextStatus)}
-                          </Button>
-                        </Popconfirm>
-                      )}
-                      {allowedNextStatuses.includes(PO_STATUS.CANCELLED) && (
-                        <Popconfirm
-                          title="Cancel this order?"
-                          description="This will cancel the purchase order. This action cannot be undone."
-                          onConfirm={() => handleStatusChange(PO_STATUS.CANCELLED)}
-                          okText="Yes, Cancel"
-                          cancelText="No"
-                          okButtonProps={{ danger: true }}
-                        >
-                          <Button
-                            danger
-                            icon={<XCircle size={16} />}
-                            loading={updatingStatus}
-                            size="small"
+                            <Button
+                              type="primary"
+                              icon={<ArrowRight size={16} />}
+                              loading={updatingStatus}
+                              size="small"
+                            >
+                              {getStatusButtonLabel(nextStatus)}
+                            </Button>
+                          </Popconfirm>
+                        )}
+                        {allowedNextStatuses.includes(PO_STATUS.CANCELLED) && (
+                          <Popconfirm
+                            title="Cancel this order?"
+                            description="This will cancel the purchase order. This action cannot be undone."
+                            onConfirm={() =>
+                              handleStatusChange(PO_STATUS.CANCELLED)
+                            }
+                            okText="Yes, Cancel"
+                            cancelText="No"
+                            okButtonProps={{ danger: true }}
                           >
-                            Cancel Order
-                          </Button>
-                        </Popconfirm>
-                      )}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      Current: <strong>{PO_STATUS_LABELS[currentStatus] || currentStatus}</strong>
-                      {nextStatus && ` → Next: ${PO_STATUS_LABELS[nextStatus]}`}
-                    </div>
-                  </Space>
-                </div>
-              )}
+                            <Button
+                              danger
+                              icon={<XCircle size={16} />}
+                              loading={updatingStatus}
+                              size="small"
+                            >
+                              Cancel Order
+                            </Button>
+                          </Popconfirm>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        Current:{" "}
+                        <strong>
+                          {PO_STATUS_LABELS[currentStatus] || currentStatus}
+                        </strong>
+                        {nextStatus &&
+                          ` → Next: ${PO_STATUS_LABELS[nextStatus]}`}
+                      </div>
+                    </Space>
+                  </div>
+                )}
             </Card>
 
             {/* Action Buttons */}

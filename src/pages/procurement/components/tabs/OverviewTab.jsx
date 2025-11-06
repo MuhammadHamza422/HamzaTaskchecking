@@ -108,7 +108,7 @@ const OverviewTab = ({ purchaseOrder }) => {
   );
 
   return (
-    <div className="bg-gray-50">
+    <div>
       <Row gutter={[16, 16]}>
         {/* Vendor Information Card */}
         <Col xs={24} lg={12} >
@@ -119,7 +119,7 @@ const OverviewTab = ({ purchaseOrder }) => {
               </span>
             }
             bordered={false}
-            className="h-full shadow-xl"
+            className="h-full shadow-xl bg-gray-100"
           >
             <InfoItem label="Vendor Name" value={getVendorName()} />
             {/* vendor reference come in array like this  "vendorReference": [
@@ -146,7 +146,7 @@ const OverviewTab = ({ purchaseOrder }) => {
               </span>
             }
             bordered={false}
-            className="h-full shadow-xl"
+            className="h-full shadow-xl bg-gray-100"
           >
             <InfoItem
               icon={<CalendarOutlined />}
@@ -181,7 +181,7 @@ const OverviewTab = ({ purchaseOrder }) => {
               </span>
             }
             bordered={false}
-            className="h-full shadow-xl"
+            className="h-full shadow-xl bg-gray-100"
           >
             <InfoItem
               icon={<CarOutlined />}
@@ -210,8 +210,7 @@ const OverviewTab = ({ purchaseOrder }) => {
                 <DollarOutlined /> Financial Summary
               </span>
             }
-            bordered={false}
-            className="h-full shadow-xl"
+            className="h-full shadow-xl bg-gray-100"
           >
             <div className="mb-4">
               <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">
