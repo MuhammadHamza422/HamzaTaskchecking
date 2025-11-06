@@ -357,7 +357,7 @@ export default function AddLabelModal({
             : "text-blue-600 hover:text-blue-700"
         }`}
       >
-        {order.packageCode ? "Fulfilled" : "Fulfillment Info"}
+        {order.packageCode ? "Info Added" : "Add Info"}
       </Button>
 
       <Modal
