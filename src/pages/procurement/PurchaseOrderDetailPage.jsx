@@ -6,7 +6,6 @@ import {
   Button,
   Space,
   Tag,
-  Skeleton,
   Row,
   Col,
   Descriptions,
@@ -27,6 +26,9 @@ import {
   Truck,
   FolderOpen,
   ArrowRight,
+  Keyboard,
+  Edit,
+  Printer,
 } from "lucide-react";
 import {
   getPurchaseOrder,
@@ -34,7 +36,10 @@ import {
   getCompanies,
   getUsers,
   updatePurchaseOrderStatus,
+  toggleFavorite,
 } from "../../api/procurement";
+import { useGlobalScanner } from "../../contexts/GlobalScannerContext";
+import Swal from "sweetalert2";
 import {
   PO_STATUS,
   PO_STATUS_LABELS,
@@ -49,6 +54,8 @@ import ProductsTab from "./components/tabs/ProductsTab";
 import PackingListTab from "./components/tabs/PackingListTab";
 import DocumentsTab from "./components/tabs/DocumentsTab";
 import ShippingReceiptTab from "./components/tabs/ShippingReceiptTab";
+import { DetailPageFullSkeleton } from "./components/DetailPageSkeleton";
+import PurchaseOrderReceiptModal from "./components/PurchaseOrderReceiptModal";
 
 /**
  * Purchase Order Detail Page
@@ -57,6 +64,7 @@ import ShippingReceiptTab from "./components/tabs/ShippingReceiptTab";
 const PurchaseOrderDetailPage = () => {
   const { poId } = useParams();
   const navigate = useNavigate();
+  const { isEnabled: scannerEnabled, setIsEnabled: setScannerEnabled, isProcessing: scannerProcessing } = useGlobalScanner();
   const [purchaseOrder, setPurchaseOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
@@ -66,6 +74,7 @@ const PurchaseOrderDetailPage = () => {
   const [buyers, setBuyers] = useState([]);
   const [enrichedPO, setEnrichedPO] = useState(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [receiptModalVisible, setReceiptModalVisible] = useState(false);
 
   useEffect(() => {
     loadPurchaseOrder();
@@ -99,6 +108,43 @@ const PurchaseOrderDetailPage = () => {
       setPurchaseOrder(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleFavorite = async () => {
+    setUpdatingStatus(true);
+    try {
+      const response = await toggleFavorite(poId);
+      if (response.success) {
+        setIsFavorite(response.data.isFavorite);
+        setPurchaseOrder({ ...purchaseOrder, isFavorite: response.data.isFavorite });
+        Swal.fire({
+          icon: "success",
+          title: response.data.isFavorite ? "Added to Favorites" : "Removed from Favorites",
+          text: response.data.isFavorite
+            ? "This purchase order has been marked as favorite"
+            : "This purchase order has been removed from favorites",
+          toast: true,
+          position: "top-end",
+          showConfirmButton: false,
+          timer: 3000,
+          timerProgressBar: true,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to toggle favorite:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Failed to Update Favorite",
+        text: error?.response?.data?.error?.message || "Failed to update favorite status",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 4000,
+        timerProgressBar: true,
+      });
+    } finally {
+      setUpdatingStatus(false);
     }
   };
 
@@ -215,11 +261,7 @@ const PurchaseOrderDetailPage = () => {
   const po = enrichedPO || purchaseOrder;
 
   if (loading) {
-    return (
-      <div className="p-4">
-        <Skeleton active paragraph={{ rows: 10 }} />
-      </div>
-    );
+    return <DetailPageFullSkeleton />;
   }
 
   if (!purchaseOrder) {
@@ -332,9 +374,9 @@ const PurchaseOrderDetailPage = () => {
           >
             Back
           </Button>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold mb-0">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-bold mb-0">
                 {po?.reference || poId}
               </h1>
               <Button
@@ -347,11 +389,48 @@ const PurchaseOrderDetailPage = () => {
                     size={16}
                   />
                 }
-                onClick={() => setIsFavorite(!isFavorite)}
+                onClick={handleToggleFavorite}
                 size="small"
+                loading={updatingStatus}
               />
             </div>
-            <Space>
+            <Space className="flex-wrap" size={[8, 8]}>
+              <Button
+                type="default"
+                icon={<Printer size={16} />}
+                onClick={() => setReceiptModalVisible(true)}
+                size="small"
+                className="text-xs"
+              >
+                <span className="hidden sm:inline">Print Receipt</span>
+                <span className="sm:hidden">Receipt</span>
+              </Button>
+              {po?.status === "draft" && (
+                <Button
+                  type="default"
+                  icon={<Edit size={16} />}
+                  onClick={() => navigate(`/procurement/orders/${poId}/edit`)}
+                  size="small"
+                  className="text-xs"
+                >
+                  <span className="hidden sm:inline">Edit Order</span>
+                  <span className="sm:hidden">Edit</span>
+                </Button>
+              )}
+              {/* <Button
+                type={scannerEnabled ? "primary" : "default"}
+                icon={<Keyboard size={16} />}
+                onClick={() => setScannerEnabled(!scannerEnabled)}
+                size="small"
+                danger={scannerEnabled}
+                loading={scannerProcessing}
+                className="text-xs"
+              >
+                <span className="hidden sm:inline">
+                  {scannerEnabled ? "Disable Scanner" : "Enable Scanner"}
+                </span>
+                <span className="sm:hidden">Scanner</span>
+              </Button> */}
               <StatusBadge status={po?.status} />
               <ReceiptBadge status={po?.receiptStatus || "none"} />
             </Space>
@@ -363,7 +442,8 @@ const PurchaseOrderDetailPage = () => {
           <Col xs={24} lg={16}>
             {/* Status Workflow */}
             <Card size="small" className="mb-4">
-              <div className="flex items-center justify-between">
+              {/* Desktop Horizontal View */}
+              <div className="hidden sm:flex items-center justify-between">
                 {statusFlow.map((status, index) => {
                   const isActive = po?.status === status;
                   const isCompleted = currentIndex > index;
@@ -371,16 +451,16 @@ const PurchaseOrderDetailPage = () => {
                   
                   return (
                     <React.Fragment key={status}>
-                      <div className="flex items-center flex-1">
+                      <div className="flex items-center flex-1 min-w-0">
                         <div
-                          className={`flex-1 flex items-center ${
+                          className={`flex-1 flex items-center min-w-0 ${
                             isActive || isCompleted
                               ? "text-green-600"
                               : "text-gray-400"
                           }`}
                         >
                           <div
-                            className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-medium ${
+                            className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-medium shrink-0 ${
                               isActive
                                 ? "border-green-600 bg-green-50 text-green-700"
                                 : isCompleted
@@ -397,7 +477,7 @@ const PurchaseOrderDetailPage = () => {
                       </div>
                       {index < statusFlow.length - 1 && (
                         <div
-                          className={`h-0.5 flex-1 mx-2 ${
+                          className={`h-0.5 flex-1 mx-2 min-w-[20px] ${
                             isCompleted || isActive
                               ? "bg-green-600"
                               : "bg-gray-300"
@@ -405,6 +485,47 @@ const PurchaseOrderDetailPage = () => {
                         />
                       )}
                     </React.Fragment>
+                  );
+                })}
+              </div>
+              
+              {/* Mobile Vertical View */}
+              <div className="sm:hidden space-y-3">
+                {statusFlow.map((status, index) => {
+                  const isActive = po?.status === status;
+                  const isCompleted = currentIndex > index;
+                  
+                  return (
+                    <div key={status} className="flex items-center gap-3">
+                      <div
+                        className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm font-medium shrink-0 ${
+                          isActive
+                            ? "border-green-600 bg-green-50 text-green-700"
+                            : isCompleted
+                            ? "border-green-600 bg-green-100 text-green-700"
+                            : "border-gray-300 bg-gray-50 text-gray-400"
+                        }`}
+                      >
+                        {index + 1}
+                      </div>
+                      <div className="flex-1">
+                        <div
+                          className={`text-sm font-medium ${
+                            isActive || isCompleted
+                              ? "text-green-700"
+                              : "text-gray-400"
+                          }`}
+                        >
+                          {PO_STATUS_LABELS[status] || status.replace("_", " ")}
+                        </div>
+                        {isActive && (
+                          <div className="text-xs text-gray-500 mt-1">Current Status</div>
+                        )}
+                      </div>
+                      {isCompleted && (
+                        <CheckCircle size={18} className="text-green-600 shrink-0" />
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -528,6 +649,13 @@ const PurchaseOrderDetailPage = () => {
           </Col>
         </Row>
       </div>
+
+      {/* Receipt Modal */}
+      <PurchaseOrderReceiptModal
+        visible={receiptModalVisible}
+        onCancel={() => setReceiptModalVisible(false)}
+        poId={poId}
+      />
     </div>
   );
 };

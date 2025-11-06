@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useParams } from "react-router-dom";
 import {
   Card,
   Form,
@@ -12,7 +12,6 @@ import {
   Row,
   Col,
   InputNumber,
-  Skeleton,
   message,
   Typography,
   Tag,
@@ -21,8 +20,12 @@ import {
 } from "antd";
 import dayjs from "dayjs";
 import { ArrowLeft, Plus, Trash2, Save, Search, Package } from "lucide-react";
+import Skeleton from "react-loading-skeleton";
+import "react-loading-skeleton/dist/skeleton.css";
 import {
   createPurchaseOrder,
+  updatePurchaseOrder,
+  getPurchaseOrder,
   getVendors,
   getCompanies,
   getUsers,
@@ -40,10 +43,14 @@ const { Title } = Typography;
  */
 const CreatePurchaseOrderPage = () => {
   const navigate = useNavigate();
+  const { poId } = useParams();
+  const isEditMode = !!poId;
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [loadingDropdowns, setLoadingDropdowns] = useState(true);
+  const [loadingOrder, setLoadingOrder] = useState(isEditMode);
   const [submitting, setSubmitting] = useState(false);
+  const [canEdit, setCanEdit] = useState(true);
 
   // Dropdown data
   const [vendors, setVendors] = useState([]);
@@ -59,10 +66,94 @@ const CreatePurchaseOrderPage = () => {
   // Checkbox selection for making kits
   const [selectedProductIndices, setSelectedProductIndices] = useState([]);
 
-  // Load dropdown data
+  // Load dropdown data and order data (if edit mode)
   useEffect(() => {
     loadDropdownData();
-  }, []);
+    if (isEditMode) {
+      loadOrderData();
+    }
+  }, [poId]);
+
+  const loadOrderData = async () => {
+    if (!poId) return;
+    setLoadingOrder(true);
+    try {
+      const order = await getPurchaseOrder(poId);
+      
+      // Check if order can be edited
+      if (order.status !== "draft") {
+        setCanEdit(false);
+        Swal.fire({
+          icon: "warning",
+          title: "Cannot Edit Order",
+          text: "Only draft orders can be edited. This order's status is: " + order.status,
+          showConfirmButton: true,
+        }).then(() => {
+          navigate(`/procurement/orders/${poId}`);
+        });
+        return;
+      }
+
+      // Set form values
+      form.setFieldsValue({
+        vendor: order.vendor?.id || order.vendor?._id || order.vendor,
+        company: order.company?.id || order.company?._id || order.company,
+        buyer: order.buyer?.id || order.buyer?._id || order.buyer,
+        orderDeadline: order.orderDeadline ? dayjs(order.orderDeadline) : undefined,
+        shippingMethod: order.shippingMethod || undefined,
+        deliverTo: order.deliverTo || undefined,
+        currency: order.currency || "USD",
+        vendorReference: Array.isArray(order.vendorReference) 
+          ? order.vendorReference 
+          : order.vendorReference 
+            ? [order.vendorReference] 
+            : [],
+        termsAndConditions: order.termsAndConditions || undefined,
+      });
+
+      // Load existing products
+      if (order.products && order.products.length > 0) {
+        const mappedProducts = order.products.map((product) => {
+          if (product.type === "kit") {
+            return {
+              type: "kit",
+              name: product.name,
+              quantity: product.quantity || 1,
+              unitPrice: product.unitPrice || 0,
+              taxes: product.taxes || 0,
+              kitProducts: product.kitProducts || [],
+              amount: (product.quantity || 1) * (product.unitPrice || 0) + (product.taxes || 0),
+            };
+          } else {
+            return {
+              type: "product",
+              productId: product.productId || product._id,
+              name: product.name,
+              sku: product.sku,
+              quantity: product.quantity || 0,
+              unitPrice: product.unitPrice || 0,
+              uom: product.uom || "Unit",
+              taxes: product.taxes || 0,
+              amount: (product.quantity || 0) * (product.unitPrice || 0) + (product.taxes || 0),
+            };
+          }
+        });
+        setSelectedProducts(mappedProducts);
+      }
+    } catch (error) {
+      console.error("Failed to load order:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Failed to Load Order",
+        text: error?.response?.data?.error?.message || "Failed to load order data",
+        showConfirmButton: true,
+      }).then(() => {
+        navigate("/procurement/orders");
+      });
+    } finally {
+      setLoadingOrder(false);
+    }
+  };
 
   const loadDropdownData = async () => {
     setLoadingDropdowns(true);
@@ -283,11 +374,22 @@ const CreatePurchaseOrderPage = () => {
           });
         } else if (item.type === "kit") {
           // Kit
+          const kitProductsPayload = (item.kitProducts || []).map((kp) => ({
+            productId: kp.productId || kp._id,
+            name: kp.name,
+            sku: kp.sku,
+            quantity: Number(kp.quantity) || 0,
+            unitPrice: Number(kp.unitPrice) || 0,
+            taxes: Number(kp.taxes) || 0,
+            uom: kp.uom || "Unit",
+          }));
+
           productsPayload.push({
             type: "kit",
             name: item.name,
             quantity: Number(item.quantity) || 1,
-            kitProducts: item.kitProducts || [],
+            unitPrice: Number(item.unitPrice) || 0,
+            kitProducts: kitProductsPayload,
             taxes: Number(item.taxes) || 0,
           });
         }
@@ -303,38 +405,88 @@ const CreatePurchaseOrderPage = () => {
         shippingMethod: values.shippingMethod || undefined,
         deliverTo: values.deliverTo || undefined,
         currency: values.currency || "USD",
-        vendorReference: values.vendorReference || undefined,
+        vendorReference: Array.isArray(values.vendorReference) 
+          ? values.vendorReference.filter(Boolean)
+          : values.vendorReference 
+            ? [values.vendorReference] 
+            : [],
         termsAndConditions: values.termsAndConditions || undefined,
         products: productsPayload,
       };
 
-      const response = await createPurchaseOrder(payload);
-
-      Swal.fire({
-        icon: "success",
-        title: "Success!",
-        text: "Purchase order created successfully",
-        showConfirmButton: true,
-      }).then(() => {
-        navigate(`/procurement/orders/${response._id || response.id}`);
-      });
+      if (isEditMode) {
+        // Update existing order
+        const response = await updatePurchaseOrder(poId, payload);
+        Swal.fire({
+          icon: "success",
+          title: "Success!",
+          text: "Purchase order updated successfully",
+          showConfirmButton: true,
+        }).then(() => {
+          navigate(`/procurement/orders/${poId}`);
+        });
+      } else {
+        // Create new order
+        const response = await createPurchaseOrder(payload);
+        Swal.fire({
+          icon: "success",
+          title: "Success!",
+          text: "Purchase order created successfully",
+          showConfirmButton: true,
+        }).then(() => {
+          navigate(`/procurement/orders/${response._id || response.id}`);
+        });
+      }
     } catch (error) {
-      console.error("Failed to create purchase order:", error);
-      message.error(
-        error.response?.data?.message || "Failed to create purchase order"
-      );
+      console.error(`Failed to ${isEditMode ? "update" : "create"} purchase order:`, error);
+      const errorMessage = error?.response?.data?.error?.message || 
+                          error?.response?.data?.message || 
+                          `Failed to ${isEditMode ? "update" : "create"} purchase order`;
+      
+      if (error?.response?.data?.error?.code === "EDIT_NOT_ALLOWED") {
+        Swal.fire({
+          icon: "warning",
+          title: "Cannot Edit Order",
+          text: errorMessage,
+          showConfirmButton: true,
+        }).then(() => {
+          navigate(`/procurement/orders/${poId}`);
+        });
+      } else {
+        Swal.fire({
+          icon: "error",
+          title: `Failed to ${isEditMode ? "Update" : "Create"} Order`,
+          text: errorMessage,
+          showConfirmButton: true,
+        });
+      }
     } finally {
       setSubmitting(false);
     }
   };
 
   const formatCurrency = (amount, currency = "USD") => {
+    if (!amount && amount !== 0) {
+      if (currency === "JPY") return "¥0";
+      return "$0.00";
+    }
+    
+    // JPY doesn't use decimal places
+    if (currency === "JPY") {
+      return new Intl.NumberFormat("ja-JP", {
+        style: "currency",
+        currency: "JPY",
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(amount);
+    }
+    
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: currency || "USD",
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(amount || 0);
+    }).format(amount);
   };
 
   // Build table data
@@ -501,10 +653,30 @@ const CreatePurchaseOrderPage = () => {
     },
   ];
 
-  if (loadingDropdowns) {
+  if (loadingDropdowns || loadingOrder) {
     return (
       <div className="p-4">
-        <Skeleton active paragraph={{ rows: 8 }} />
+        <div className="max-w-6xl mx-auto">
+          <Skeleton height={24} width={60} style={{ marginBottom: 8 }} />
+          <Skeleton height={32} width={300} style={{ marginBottom: 16 }} />
+          <div className="space-y-4">
+            <Card>
+              <Skeleton height={20} width={150} style={{ marginBottom: 16 }} />
+              <Row gutter={16}>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Col xs={24} sm={12} key={i}>
+                    <Skeleton height={20} width={100} style={{ marginBottom: 4 }} />
+                    <Skeleton height={32} />
+                  </Col>
+                ))}
+              </Row>
+            </Card>
+            <Card>
+              <Skeleton height={32} width={150} style={{ marginBottom: 16 }} />
+              <Skeleton height={200} />
+            </Card>
+          </div>
+        </div>
       </div>
     );
   }
@@ -523,24 +695,28 @@ const CreatePurchaseOrderPage = () => {
           <Breadcrumb.Item>
             <Link to="/procurement/orders">Purchase Orders</Link>
           </Breadcrumb.Item>
-          <Breadcrumb.Item>Create Order</Breadcrumb.Item>
+          <Breadcrumb.Item>
+            {isEditMode ? "Edit Order" : "Create Order"}
+          </Breadcrumb.Item>
         </Breadcrumb>
 
         {/* Header */}
         <div className="mb-4">
           <Button
             icon={<ArrowLeft />}
-            onClick={() => navigate("/procurement/orders")}
+            onClick={() => navigate(isEditMode ? `/procurement/orders/${poId}` : "/procurement/orders")}
             className="mb-2"
             size="small"
           >
             Back
           </Button>
           <Title level={3} className="mb-1">
-            Create Purchase Order
+            {isEditMode ? "Edit Purchase Order" : "Create Purchase Order"}
           </Title>
           <p className="text-gray-600 text-sm">
-            Fill in the details to create a new purchase order
+            {isEditMode
+              ? "Update the details of the purchase order"
+              : "Fill in the details to create a new purchase order"}
           </p>
         </div>
 
@@ -554,7 +730,7 @@ const CreatePurchaseOrderPage = () => {
         >
           {/* Basic Information */}
           <Card size="small" title="Basic Information" className="mb-4">
-            <Row gutter={16}>
+            <Row gutter={[16, 16]} className="mt-4">
               <Col xs={24} sm={12} md={8}>
                 <Form.Item
                   name="vendor"
@@ -622,7 +798,7 @@ const CreatePurchaseOrderPage = () => {
                 </Form.Item>
               </Col>
             </Row>
-            <Row gutter={16} className="mt-2">
+            <Row gutter={[16, 16]}  className="mt-4">
               <Col xs={24} sm={12} md={8}>
                 <Form.Item name="orderDeadline" label="Order Deadline">
                   <DatePicker
@@ -645,28 +821,40 @@ const CreatePurchaseOrderPage = () => {
               </Col>
               <Col xs={24} sm={12} md={8}>
                 <Form.Item name="deliverTo" label="Deliver To">
-                  <Input
-                    placeholder="e.g., Transfer Warehouse: Receipts"
+                  <Select
+                    placeholder="Select Country"
                     size="middle"
-                  />
+                    showSearch
+                    filterOption={(input, option) =>
+                      (option?.label ?? "").toLowerCase().includes(input.toLowerCase())
+                    }
+                  >
+                    <Option value="USA">USA</Option>
+                    <Option value="Colombia">Colombia</Option>
+                    <Option value="Japan">Japan</Option>
+                  </Select>
                 </Form.Item>
               </Col>
             </Row>
-            <Row gutter={16} className="mt-2">
+            <Row gutter={[16, 16]}  className="mt-4">
               <Col xs={24} sm={12} md={8}>
                 <Form.Item name="currency" label="Currency">
                   <Select size="middle">
-                    <Option value="USD">USD</Option>
-                    <Option value="EUR">EUR</Option>
-                    <Option value="GBP">GBP</Option>
-                    <Option value="CAD">CAD</Option>
+                    <Option value="USD">USD (US Dollar)</Option>
+                    <Option value="EUR">EUR (Euro)</Option>
+                    <Option value="GBP">GBP (British Pound)</Option>
+                    <Option value="CAD">CAD (Canadian Dollar)</Option>
+                    <Option value="JPY">JPY (Japanese Yen)</Option>
                   </Select>
                 </Form.Item>
               </Col>
               <Col xs={24} sm={12} md={8}>
-                <Form.Item name="vendorReference" label="Vendor Reference">
-                  <Input
-                    placeholder="e.g., Mandy SeaShipment #3-14"
+                <Form.Item name="vendorReference" label="Vendor Reference (Tags)">
+                  <Select
+                    mode="tags"
+                    placeholder="Add vendor reference tags (press Enter to add)"
+                    tokenSeparators={[",", " "]}
+                    style={{ width: "100%" }}
                     size="middle"
                   />
                 </Form.Item>
@@ -688,7 +876,7 @@ const CreatePurchaseOrderPage = () => {
                   onClick={handleMakeKit}
                   size="small"
                 >
-                  Make Kit
+                  Create Kit
                 </Button>
               </div>
             )}
@@ -799,8 +987,9 @@ const CreatePurchaseOrderPage = () => {
               icon={<Save size={16} />}
               loading={submitting}
               size="middle"
+              disabled={!canEdit && isEditMode}
             >
-              Create Purchase Order
+              {isEditMode ? "Update Purchase Order" : "Create Purchase Order"}
             </Button>
           </Space>
         </Form>

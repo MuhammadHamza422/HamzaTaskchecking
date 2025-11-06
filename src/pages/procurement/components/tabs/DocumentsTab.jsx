@@ -14,6 +14,7 @@ import {
   Skeleton,
   Image,
   Typography,
+  Dropdown,
 } from "antd";
 import {
   Upload as UploadIcon,
@@ -22,6 +23,7 @@ import {
   FileText,
   Eye,
   Plus,
+  MoreVertical,
 } from "lucide-react";
 import {
   uploadDocument,
@@ -219,7 +221,7 @@ const DocumentsTab = ({ purchaseOrder, poId }) => {
       width: 300,
       render: (_, record) => (
         <div className="flex items-center gap-3">
-          <span className="text-2xl">{getFileIcon(record.fileType)}</span>
+          <span className="text-base">{getFileIcon(record.fileType)}</span>
           <div>
             <div className="font-medium">{record.name || record.originalName}</div>
             <div className="text-xs text-gray-500">
@@ -249,7 +251,7 @@ const DocumentsTab = ({ purchaseOrder, poId }) => {
       width: 150,
       render: (_, record) => (
         <div>
-          <div className="text-sm">{record.uploadedBy?.name || "Unknown"}</div>
+          <div className="text-xs">{record.uploadedBy?.name || "Unknown"}</div>
           <div className="text-xs text-gray-500">
             {dayjs(record.createdAt).format("MMM DD, YYYY")}
           </div>
@@ -259,38 +261,65 @@ const DocumentsTab = ({ purchaseOrder, poId }) => {
     {
       title: "Actions",
       key: "actions",
-      width: 200,
-      render: (_, record) => (
-        <Space>
-          {record.fileType?.startsWith("image/") && (
+      width: 80,
+      align: "center",
+      render: (_, record) => {
+        const menuItems = [
+          ...(record.fileType?.startsWith("image/")
+            ? [
+                {
+                  key: "view",
+                  label: (
+                    <Space>
+                      <Eye size={14} />
+                      <span>View</span>
+                    </Space>
+                  ),
+                  onClick: () => handlePreview(record),
+                },
+              ]
+            : []),
+          {
+            key: "download",
+            label: (
+              <Space>
+                <Download size={14} />
+                <span>Download</span>
+              </Space>
+            ),
+            onClick: () => handleDownload(record),
+          },
+          {
+            type: "divider",
+          },
+          {
+            key: "delete",
+            label: (
+              <Space>
+                <Trash2 size={14} />
+                <span style={{ color: "#ff4d4f" }}>Delete</span>
+              </Space>
+            ),
+            danger: true,
+            onClick: () => handleDelete(record._id),
+          },
+        ];
+
+        return (
+          <Dropdown
+            menu={{ items: menuItems }}
+            trigger={["click"]}
+            placement="bottomRight"
+          >
             <Button
-              type="link"
-              icon={<Eye size={14} />}
-              onClick={() => handlePreview(record)}
+              type="text"
+              icon={<MoreVertical size={16} />}
               size="small"
-            >
-              Preview
-            </Button>
-          )}
-          <Button
-            type="link"
-            icon={<Download size={14} />}
-            onClick={() => handleDownload(record)}
-            size="small"
-          >
-            Download
-          </Button>
-          <Button
-            type="link"
-            danger
-            icon={<Trash2 size={14} />}
-            onClick={() => handleDelete(record._id)}
-            size="small"
-          >
-            Delete
-          </Button>
-        </Space>
-      ),
+              onClick={(e) => e.stopPropagation()}
+            />
+          </Dropdown>
+        );
+      },
     },
   ];
 

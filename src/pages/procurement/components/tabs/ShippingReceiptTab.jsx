@@ -16,6 +16,7 @@ import {
   Col,
   InputNumber,
   Select,
+  Dropdown,
 } from "antd";
 import {
   Plus,
@@ -24,6 +25,7 @@ import {
   Save,
   Truck,
   DollarSign,
+  MoreVertical,
 } from "lucide-react";
 import {
   getShippingDetails,
@@ -191,7 +193,21 @@ const ShippingReceiptTab = ({ purchaseOrder, poId }) => {
   };
 
   const formatCurrency = (amount, currency = "USD") => {
-    if (!amount && amount !== 0) return "$0.00";
+    if (!amount && amount !== 0) {
+      if (currency === "JPY") return "¥0";
+      return "$0.00";
+    }
+    
+    // JPY doesn't use decimal places
+    if (currency === "JPY") {
+      return new Intl.NumberFormat("ja-JP", {
+        style: "currency",
+        currency: "JPY",
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(amount);
+    }
+    
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: currency || "USD",
@@ -262,28 +278,51 @@ const ShippingReceiptTab = ({ purchaseOrder, poId }) => {
     {
       title: "Actions",
       key: "actions",
-      width: 150,
-      render: (_, record) => (
-        <Space>
-          <Button
-            type="link"
-            icon={<Edit size={14} />}
-            onClick={() => handleEditCost(record)}
-            size="small"
+      width: 80,
+      align: "center",
+      render: (_, record) => {
+        const menuItems = [
+          {
+            key: "edit",
+            label: (
+              <Space>
+                <Edit size={14} />
+                <span>Edit</span>
+              </Space>
+            ),
+            onClick: () => handleEditCost(record),
+          },
+          {
+            type: "divider",
+          },
+          {
+            key: "delete",
+            label: (
+              <Space>
+                <Trash2 size={14} />
+                <span style={{ color: "#ff4d4f" }}>Delete</span>
+              </Space>
+            ),
+            danger: true,
+            onClick: () => handleDeleteCost(record._id),
+          },
+        ];
+
+        return (
+          <Dropdown
+            menu={{ items: menuItems }}
+            trigger={["click"]}
+            placement="bottomRight"
           >
-            Edit
-          </Button>
-          <Button
-            type="link"
-            danger
-            icon={<Trash2 size={14} />}
-            onClick={() => handleDeleteCost(record._id)}
-            size="small"
-          >
-            Delete
-          </Button>
-        </Space>
-      ),
+            <Button
+              type="text"
+              icon={<MoreVertical size={16} />}
+              size="small"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </Dropdown>
+        );
+      },
     },
   ];
 

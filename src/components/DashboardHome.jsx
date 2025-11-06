@@ -9,6 +9,7 @@ import {
   CalendarArrowUp,
   UserCheck,
   FileText,
+  QrCode,
 } from "lucide-react";
 import { LuWarehouse } from "react-icons/lu";
 
@@ -128,6 +129,16 @@ export default function DashboardCards() {
       link: "/procurement/orders",
       bgColor: "bg-orange-50",
       border: "border-orange-500",
+    },
+    {
+      title: "Scan",
+      icon: QrCode,
+      color: "text-blue-500",
+      accessKey: "scan",
+      hoverColor: "group-hover:text-blue-600",
+      link: "/scan",
+      bgColor: "bg-blue-50",
+      border: "border-blue-500",
     },
     // {
     //   title: "Products",

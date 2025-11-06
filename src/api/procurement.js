@@ -33,12 +33,32 @@ export const getPurchaseOrder = async (poId) => {
 };
 
 /**
+ * Get purchase order receipt data
+ * @param {string} poId - Purchase order ID
+ * @returns {Promise} Receipt data for printing
+ */
+export const getPurchaseOrderReceipt = async (poId) => {
+  const { data } = await apiClient.get(`/api/v1/procurement/orders/${poId}/receipt`);
+  return data;
+};
+
+/**
  * Create new purchase order
  * @param {Object} purchaseOrder - Purchase order data
  * @returns {Promise} Created purchase order
  */
 export const createPurchaseOrder = async (purchaseOrder) => {
   const { data } = await apiClient.post("/api/v1/procurement/orders", purchaseOrder);
+  return data;
+};
+
+/**
+ * Toggle favorite status of a purchase order
+ * @param {string} poId - Purchase order ID
+ * @returns {Promise} Response with isFavorite status
+ */
+export const toggleFavorite = async (poId) => {
+  const { data } = await apiClient.put(`/api/v1/procurement/orders/${poId}/favorite`);
   return data;
 };
 
@@ -422,6 +442,19 @@ export const scanBox = async (boxId) => {
  */
 export const scanProduct = async (productId, params = {}) => {
   const { data } = await apiClient.get(`/api/v1/procurement/scan/product/${productId}`, {
+    params,
+  });
+  return data;
+};
+
+/**
+ * Scan kit QR code (get kit details from scan)
+ * @param {string} kitId - Kit ID (e.g., "KIT-P00021-1")
+ * @param {Object} params - Query parameters (poId - optional)
+ * @returns {Promise} Kit details with kitProducts array
+ */
+export const scanKit = async (kitId, params = {}) => {
+  const { data } = await apiClient.get(`/api/v1/procurement/scan/kit/${kitId}`, {
     params,
   });
   return data;

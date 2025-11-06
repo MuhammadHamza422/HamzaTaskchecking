@@ -14,6 +14,8 @@ import {
   Row,
   Col,
   Select,
+  Checkbox,
+  Dropdown,
 } from "antd";
 import Swal from "sweetalert2";
 import {
@@ -23,6 +25,8 @@ import {
   QrCode,
   Package,
   Eye,
+  MoreVertical,
+  Edit as EditIcon,
 } from "lucide-react";
 import {
   getBoxes,
@@ -36,6 +40,7 @@ import {
   scanBox,
 } from "../../../../api/procurement";
 import QRCodeModal from "../QRCodeModal";
+import BulkQRCodeModal from "../BulkQRCodeModal";
 
 const { Option } = Select;
 
@@ -51,7 +56,12 @@ const PackingListTab = ({ purchaseOrder, poId }) => {
   const [selectedBox, setSelectedBox] = useState(null);
   const [boxQRVisible, setBoxQRVisible] = useState(false);
   const [boxQRCode, setBoxQRCode] = useState(null);
+  const [selectedBoxIndices, setSelectedBoxIndices] = useState([]);
+  const [bulkQRModalVisible, setBulkQRModalVisible] = useState(false);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editingBox, setEditingBox] = useState(null);
   const [form] = Form.useForm();
+  const [editForm] = Form.useForm();
 
   useEffect(() => {
     if (poId) {
@@ -93,6 +103,60 @@ const PackingListTab = ({ purchaseOrder, poId }) => {
       Swal.fire({
         icon: "error",
         title: "Cannot Create Box",
+        text: shortMessage || errorMessage,
+        html: details.shortMessage 
+          ? `<p><strong>${shortMessage}</strong></p>${details.kitName || details.productName ? `<p class="text-sm text-gray-600 mt-2"><strong>${details.kitName || details.productName}</strong>: Only ${details.available} available (requested: ${details.requested})</p>` : ''}`
+          : errorMessage,
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 5000,
+        timerProgressBar: true,
+      });
+    }
+  };
+
+  const handleEditBox = async (boxId) => {
+    try {
+      const response = await getBox(boxId);
+      const box = response?.data;
+      setEditingBox(box);
+      setEditModalVisible(true);
+      
+      // Pre-populate form with box data
+      editForm.setFieldsValue({
+        name: box.name || "",
+      });
+    } catch (error) {
+      console.error("Failed to load box for editing:", error);
+      message.error("Failed to load box details");
+    }
+  };
+
+  const handleUpdateBox = async (values) => {
+    if (!editingBox) return;
+    
+    try {
+      await updateBox(editingBox.boxId, {
+        name: values.name,
+        items: values.items,
+      });
+      message.success("Box updated successfully");
+      setEditModalVisible(false);
+      setEditingBox(null);
+      editForm.resetFields();
+      loadBoxes();
+    } catch (error) {
+      console.error("Failed to update box:", error);
+      const errorResponse = error?.response?.data?.error;
+      const errorMessage = errorResponse?.message || "Failed to update box";
+      const shortMessage = errorResponse?.details?.shortMessage;
+      const details = errorResponse?.details || {};
+      
+      // Show SweetAlert toast with the improved error message
+      Swal.fire({
+        icon: "error",
+        title: "Cannot Update Box",
         text: shortMessage || errorMessage,
         html: details.shortMessage 
           ? `<p><strong>${shortMessage}</strong></p>${details.kitName || details.productName ? `<p class="text-sm text-gray-600 mt-2"><strong>${details.kitName || details.productName}</strong>: Only ${details.available} available (requested: ${details.requested})</p>` : ''}`
@@ -154,7 +218,18 @@ const PackingListTab = ({ purchaseOrder, poId }) => {
   const handleShowQRCode = async (boxId) => {
     try {
       const response = await getBoxQRCode(boxId, { format: "json" });
-      setBoxQRCode(response?.data);
+      // Find the box from the boxes list to get the name
+      const box = boxes.find((b) => b.boxId === boxId || b._id === boxId);
+      
+      // Merge QR code response with box data to include name
+      setBoxQRCode({
+        ...response?.data,
+        box: box ? {
+          ...box,
+          name: box.name,
+        } : response?.data?.box,
+        name: box?.name || response?.data?.box?.name || response?.data?.name,
+      });
       setBoxQRVisible(true);
     } catch (error) {
       console.error("Failed to load QR code:", error);
@@ -198,9 +273,57 @@ const PackingListTab = ({ purchaseOrder, poId }) => {
     }
   };
 
+  // Get selected boxes
+  const selectedBoxes = selectedBoxIndices.map((index) => boxes[index]).filter(Boolean);
+
+  // Handle bulk print labels
+  const handleBulkPrintLabels = () => {
+    if (selectedBoxes.length === 0) {
+      return;
+    }
+    setBulkQRModalVisible(true);
+  };
+
+  // Handle checkbox selection
+  const handleCheckboxChange = (index, checked) => {
+    if (checked) {
+      setSelectedBoxIndices((prev) => [...prev, index]);
+    } else {
+      setSelectedBoxIndices((prev) => prev.filter((i) => i !== index));
+    }
+  };
+
+  // Handle select all
+  const handleSelectAll = (checked) => {
+    if (checked) {
+      setSelectedBoxIndices(boxes.map((_, idx) => idx));
+    } else {
+      setSelectedBoxIndices([]);
+    }
+  };
+
   const columns = [
     {
-      title: "Box ID",
+      title: (
+        <Checkbox
+          indeterminate={
+            selectedBoxIndices.length > 0 && selectedBoxIndices.length < boxes.length
+          }
+          checked={boxes.length > 0 && selectedBoxIndices.length === boxes.length}
+          onChange={(e) => handleSelectAll(e.target.checked)}
+        />
+      ),
+      key: "checkbox",
+      width: 50,
+      render: (_, record, index) => (
+        <Checkbox
+          checked={selectedBoxIndices.includes(index)}
+          onChange={(e) => handleCheckboxChange(index, e.target.checked)}
+        />
+      ),
+    },
+    {
+      title: "Box Number",
       dataIndex: "boxId",
       key: "boxId",
       width: 150,
@@ -235,36 +358,81 @@ const PackingListTab = ({ purchaseOrder, poId }) => {
     {
       title: "Actions",
       key: "actions",
-      width: 250,
-      render: (_, record) => (
-        <Space>
-          <Button
-            type="link"
-            icon={<Eye size={14} />}
-            onClick={() => handleViewBox(record.boxId)}
-            size="small"
+      width: 80,
+      align: "center",
+      render: (_, record) => {
+        const menuItems = [
+          {
+            key: "view",
+            label: (
+              <Space>
+                <Eye size={14} />
+                <span>View</span>
+              </Space>
+            ),
+            onClick: () => handleViewBox(record.boxId),
+          },
+          {
+            key: "edit",
+            label: (
+              <Space>
+                <EditIcon size={14} />
+                <span>Edit</span>
+              </Space>
+            ),
+            onClick: () => handleEditBox(record.boxId),
+          },
+          {
+            key: "qrCode",
+            label: (
+              <Space>
+                <QrCode size={14} />
+                <span>QR Code</span>
+              </Space>
+            ),
+            onClick: () => handleShowQRCode(record.boxId),
+          },
+          {
+            key: "print",
+            label: (
+              <Space>
+                <Printer size={14} />
+                <span>Print Labels</span>
+              </Space>
+            ),
+            onClick: () => handlePrintLabels([record.boxId]),
+          },
+          {
+            type: "divider",
+          },
+          {
+            key: "delete",
+            label: (
+              <Space>
+                <Trash2 size={14} />
+                <span style={{ color: "#ff4d4f" }}>Delete</span>
+              </Space>
+            ),
+            danger: true,
+            onClick: () => handleDeleteBox(record.boxId),
+          },
+        ];
+
+        return (
+          <Dropdown
+            menu={{ items: menuItems }}
+            trigger={["click"]}
+            placement="bottomRight"
           >
-            View
-          </Button>
-          <Button
-            type="link"
-            icon={<QrCode size={14} />}
-            onClick={() => handleShowQRCode(record.boxId)}
-            size="small"
-          >
-            QR
-          </Button>
-          <Button
-            type="link"
-            danger
-            icon={<Trash2 size={14} />}
-            onClick={() => handleDeleteBox(record.boxId)}
-            size="small"
-          >
-            Delete
-          </Button>
-        </Space>
-      ),
+            <Button
+              type="text"
+              icon={<MoreVertical size={16} />}
+              size="small"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </Dropdown>
+        );
+      },
     },
   ];
 
@@ -274,25 +442,42 @@ const PackingListTab = ({ purchaseOrder, poId }) => {
 
   return (
     <div>
-      <div className="mb-4 flex justify-between items-center">
-        <Space>
+      <div className="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <Button
+          type="primary"
+          icon={<Plus size={16} />}
+          onClick={() => setModalVisible(true)}
+          size="middle"
+          className="w-full sm:w-auto"
+        >
+          Add Box
+        </Button>
+        {/* <Button
+          icon={<Printer size={16} />}
+          onClick={handlePrintPackingList}
+          size="middle"
+        >
+          Print Packing List
+        </Button> */}
+      </div>
+
+      {/* Bulk Actions Bar */}
+      {selectedBoxes.length > 0 && (
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+          <span className="text-sm font-medium text-blue-900">
+            {selectedBoxes.length} box{selectedBoxes.length > 1 ? "es" : ""} selected
+          </span>
           <Button
             type="primary"
-            icon={<Plus size={16} />}
-            onClick={() => setModalVisible(true)}
-            size="middle"
-          >
-            Add Box
-          </Button>
-          {/* <Button
             icon={<Printer size={16} />}
-            onClick={handlePrintPackingList}
-            size="middle"
+            onClick={handleBulkPrintLabels}
+            size="small"
+            className="w-full sm:w-auto"
           >
-            Print Packing List
-          </Button> */}
-        </Space>
-      </div>
+            Print Labels ({selectedBoxes.length})
+          </Button>
+        </div>
+      )}
 
       {boxes.length === 0 ? (
         <div className="text-center py-12 text-gray-500">
@@ -309,13 +494,130 @@ const PackingListTab = ({ purchaseOrder, poId }) => {
           </Button>
         </div>
       ) : (
-        <Table
-          columns={columns}
-          dataSource={boxes}
-          rowKey={(record) => record._id || record.boxId}
-          pagination={false}
-          size="small"
-        />
+        <>
+          {/* Desktop Table View */}
+          <div className="hidden md:block">
+            <Table
+              columns={columns}
+              dataSource={boxes}
+              rowKey={(record) => record._id || record.boxId}
+              pagination={false}
+              size="small"
+            />
+          </div>
+
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-3">
+            {boxes.map((box, index) => {
+              const itemsCount = box.items?.length || box.itemsCount || 0;
+              const totalQuantity = box.items?.reduce(
+                (sum, item) => sum + (item.quantity || 0),
+                0
+              ) || box.totalItems || 0;
+
+              return (
+                <Card
+                  key={box._id || box.boxId}
+                  size="small"
+                  className="shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <Checkbox
+                      checked={selectedBoxIndices.includes(index)}
+                      onChange={(e) => handleCheckboxChange(index, e.target.checked)}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <Tag color="blue" className="mb-2">
+                        {box.boxId}
+                      </Tag>
+                      {box.name && (
+                        <div className="font-medium text-gray-900 mb-1">{box.name}</div>
+                      )}
+                    </div>
+                    <Dropdown
+                      menu={{
+                        items: [
+                          {
+                            key: "view",
+                            label: (
+                              <Space>
+                                <Eye size={14} />
+                                <span>View</span>
+                              </Space>
+                            ),
+                            onClick: () => handleViewBox(box.boxId),
+                          },
+                          {
+                            key: "edit",
+                            label: (
+                              <Space>
+                                <EditIcon size={14} />
+                                <span>Edit</span>
+                              </Space>
+                            ),
+                            onClick: () => handleEditBox(box.boxId),
+                          },
+                          {
+                            key: "qrCode",
+                            label: (
+                              <Space>
+                                <QrCode size={14} />
+                                <span>QR Code</span>
+                              </Space>
+                            ),
+                            onClick: () => handleShowQRCode(box.boxId),
+                          },
+                          {
+                            key: "print",
+                            label: (
+                              <Space>
+                                <Printer size={14} />
+                                <span>Print Labels</span>
+                              </Space>
+                            ),
+                            onClick: () => handlePrintLabels([box.boxId]),
+                          },
+                          {
+                            type: "divider",
+                          },
+                          {
+                            key: "delete",
+                            label: (
+                              <Space>
+                                <Trash2 size={14} />
+                                <span style={{ color: "#ff4d4f" }}>Delete</span>
+                              </Space>
+                            ),
+                            danger: true,
+                            onClick: () => handleDeleteBox(box.boxId),
+                          },
+                        ],
+                      }}
+                      trigger={["click"]}
+                      placement="bottomRight"
+                    >
+                      <Button
+                        type="text"
+                        icon={<MoreVertical size={16} />}
+                        size="small"
+                      />
+                    </Dropdown>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-sm pt-3 border-t">
+                    <div>
+                      <span className="text-gray-500">Items:</span>
+                      <span className="ml-2 font-medium">{itemsCount}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Total Qty:</span>
+                      <span className="ml-2 font-medium">{totalQuantity}</span>
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {/* Create Box Modal */}
@@ -338,7 +640,7 @@ const PackingListTab = ({ purchaseOrder, poId }) => {
         box={selectedBox}
       />
 
-      {/* QR Code Modal */}
+      {/* Single QR Code Modal */}
       {boxQRCode && (
         <QRCodeModal
           visible={boxQRVisible}
@@ -352,6 +654,31 @@ const PackingListTab = ({ purchaseOrder, poId }) => {
           }}
         />
       )}
+
+      {/* Bulk QR Code Modal */}
+      <BulkQRCodeModal
+        visible={bulkQRModalVisible}
+        onCancel={() => setBulkQRModalVisible(false)}
+        items={selectedBoxes.map((box) => ({ ...box, type: "box", boxId: box.boxId }))}
+        poId={poId}
+        getQRCodeFunction={getBoxQRCode}
+        isBox={true}
+      />
+
+      {/* Edit Box Modal */}
+      <EditBoxModal
+        visible={editModalVisible}
+        onCancel={() => {
+          setEditModalVisible(false);
+          setEditingBox(null);
+          editForm.resetFields();
+        }}
+        onFinish={handleUpdateBox}
+        form={editForm}
+        purchaseOrder={purchaseOrder}
+        boxes={boxes}
+        box={editingBox}
+      />
     </div>
   );
 };
@@ -502,7 +829,8 @@ const CreateBoxModal = ({
       open={visible}
       onCancel={onCancel}
       onOk={handleSubmit}
-      width={700}
+      width="90%"
+      style={{ maxWidth: 700 }}
       okText="Create"
     >
       <Form form={form} layout="vertical">
@@ -544,8 +872,8 @@ const CreateBoxModal = ({
                 
                 return (
                   <Card key={index} size="small" className="mb-2">
-                    <Row gutter={16} align="middle">
-                      <Col span={12}>
+                    <Row gutter={[16, 12]} align="middle">
+                      <Col xs={24} sm={12}>
                         <Select
                           placeholder="Select Product or Kit"
                           style={{ width: "100%" }}
@@ -578,8 +906,8 @@ const CreateBoxModal = ({
                           })}
                         />
                       </Col>
-                      <Col span={8}>
-                        <div>
+                      <Col xs={18} sm={8}>
+                        <div className="flex flex-col">
                           <InputNumber
                             placeholder="Quantity"
                             min={1}
@@ -592,7 +920,7 @@ const CreateBoxModal = ({
                             status={isQuantityExceeded ? "error" : ""}
                           />
                           {selectedProduct && (
-                            <div className="text-xs mt-1">
+                            <div className="text-xs mt-2 mb-0">
                               <span className={isQuantityExceeded ? "text-red-600" : "text-gray-500"}>
                                 {availableQty} available
                                 {isQuantityExceeded && (
@@ -605,7 +933,310 @@ const CreateBoxModal = ({
                           )}
                         </div>
                       </Col>
-                      <Col span={4}>
+                      <Col xs={6} sm={4}>
+                        <Button
+                          type="text"
+                          danger
+                          icon={<Trash2 size={14} />}
+                          onClick={() => handleRemoveItem(index)}
+                          size="small"
+                        />
+                      </Col>
+                    </Row>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </Form>
+    </Modal>
+  );
+};
+
+/**
+ * Edit Box Modal Component
+ */
+const EditBoxModal = ({
+  visible,
+  onCancel,
+  onFinish,
+  form,
+  purchaseOrder,
+  boxes = [],
+  box,
+}) => {
+  const [selectedItems, setSelectedItems] = useState([]);
+  const products = purchaseOrder?.products || [];
+
+  // Calculate available quantity for each product/kit
+  // When editing, we need to account for items already in this box
+  const getAvailableQuantity = (product, excludeCurrentBox = true) => {
+    if (!product) return 0;
+    
+    const totalInPO = product.quantity || 0;
+    
+    // Calculate how many are already assigned to boxes
+    let alreadyAssigned = 0;
+    boxes.forEach((b) => {
+      // Skip current box when calculating available quantity
+      if (excludeCurrentBox && box && (b.boxId === box.boxId || b._id === box._id)) {
+        return;
+      }
+      
+      if (b.items) {
+        b.items.forEach((item) => {
+          if (product.type === "kit") {
+            // For kits, check kitId
+            if (item.kitId === product.kitId) {
+              alreadyAssigned += item.quantity || 0;
+            }
+          } else {
+            // For products, check productId
+            if (item.productId === (product.productId || product._id)) {
+              alreadyAssigned += item.quantity || 0;
+            }
+          }
+        });
+      }
+    });
+    
+    return Math.max(0, totalInPO - alreadyAssigned);
+  };
+
+  const handleAddItem = () => {
+    const newItem = {
+      itemId: null,
+      itemType: null,
+      quantity: 1,
+    };
+    setSelectedItems([...selectedItems, newItem]);
+  };
+
+  const handleRemoveItem = (index) => {
+    setSelectedItems(selectedItems.filter((_, i) => i !== index));
+  };
+
+  const handleItemChange = (index, field, value) => {
+    const updated = [...selectedItems];
+    
+    if (field === "itemId") {
+      const selectedProduct = products.find(
+        (p) => {
+          if (p.type === "kit") {
+            return p.kitId === value || p._id === value;
+          } else {
+            return p.productId === value || p._id === value;
+          }
+        }
+      );
+      
+      updated[index] = {
+        ...updated[index],
+        itemId: value,
+        itemType: selectedProduct?.type || "product",
+      };
+    } else {
+      updated[index] = { ...updated[index], [field]: value };
+    }
+    
+    setSelectedItems(updated);
+  };
+
+  const handleSubmit = () => {
+    if (selectedItems.length === 0) {
+      message.error("Please add at least one item to the box");
+      return;
+    }
+
+    form.validateFields().then((values) => {
+      const payloadItems = selectedItems.map((item) => {
+        const product = products.find(
+          (p) => {
+            if (p.type === "kit") {
+              return p.kitId === item.itemId || p._id === item.itemId;
+            } else {
+              return p.productId === item.itemId || p._id === item.itemId;
+            }
+          }
+        );
+        
+        const payloadItem = {
+          productId: item.itemType === "kit" ? null : item.itemId,
+          kitId: item.itemType === "kit" ? item.itemId : null,
+          quantity: item.quantity,
+          sku: product?.sku || null,
+        };
+
+        return payloadItem;
+      });
+
+      onFinish({
+        ...values,
+        items: payloadItems,
+      });
+    });
+  };
+
+  // Initialize form when box data is loaded
+  useEffect(() => {
+    if (visible && box) {
+      // Populate form with existing box data
+      form.setFieldsValue({
+        name: box.name || "",
+      });
+
+      // Populate items from existing box
+      if (box.items && box.items.length > 0) {
+        const mappedItems = box.items.map((item) => {
+          // Determine itemId and itemType from the item
+          let itemId = null;
+          let itemType = "product";
+
+          if (item.kitId) {
+            itemId = item.kitId;
+            itemType = "kit";
+          } else if (item.productId) {
+            itemId = item.productId;
+            itemType = "product";
+          }
+
+          return {
+            itemId,
+            itemType,
+            quantity: item.quantity || 1,
+          };
+        });
+        setSelectedItems(mappedItems);
+      } else {
+        setSelectedItems([]);
+      }
+    } else if (visible && !box) {
+      // Reset if modal is opened without box data
+      setSelectedItems([]);
+      form.resetFields();
+    }
+  }, [visible, box, form]);
+
+  return (
+    <Modal
+      title={`Edit Box: ${box?.boxId || ""}`}
+      open={visible}
+      onCancel={onCancel}
+      onOk={handleSubmit}
+      width="90%"
+      style={{ maxWidth: 700 }}
+      okText="Update"
+    >
+      <Form form={form} layout="vertical">
+        <Form.Item name="name" label="Box Name (Optional)">
+          <Input placeholder="e.g., Box 1" />
+        </Form.Item>
+
+        <div className="mb-4">
+          <div className="flex justify-between items-center my-2">
+            <span className="font-medium">Items</span>
+            <Button
+              type="dashed"
+              icon={<Plus size={14} />}
+              onClick={handleAddItem}
+              size="small"
+            >
+              Add Item
+            </Button>
+          </div>
+
+          {selectedItems.length === 0 ? (
+            <div className="text-center py-4 text-gray-400 text-sm">
+              Click "Add Item" to add products to this box
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {selectedItems.map((item, index) => {
+                const selectedProduct = products.find((p) => {
+                  const itemId = p.type === "kit" ? p.kitId : p.productId || p._id;
+                  return itemId === item.itemId;
+                });
+                
+                const availableQty = selectedProduct
+                  ? getAvailableQuantity(selectedProduct, true) // Exclude current box
+                  : 0;
+                
+                // For existing items, we need to account for current quantity in the box
+                const currentBoxQty = box?.items?.find((bi) => {
+                  if (item.itemType === "kit") {
+                    return bi.kitId === item.itemId;
+                  } else {
+                    return bi.productId === item.itemId;
+                  }
+                })?.quantity || 0;
+                
+                // Add current box quantity to available (since we're editing this box)
+                const totalAvailable = availableQty + currentBoxQty;
+                const isQuantityExceeded = item.quantity > totalAvailable;
+                
+                return (
+                  <Card key={index} size="small" className="mb-2">
+                    <Row gutter={[16, 12]} align="middle">
+                      <Col xs={24} sm={12}>
+                        <Select
+                          placeholder="Select Product or Kit"
+                          style={{ width: "100%" }}
+                          value={item.itemId}
+                          onChange={(value) =>
+                            handleItemChange(index, "itemId", value)
+                          }
+                          showSearch
+                          filterOption={(input, option) =>
+                            (option?.label ?? "")
+                              .toLowerCase()
+                              .includes(input.toLowerCase())
+                          }
+                          options={products.map((p) => {
+                            const itemId = p.type === "kit" 
+                              ? p.kitId 
+                              : p.productId || p._id;
+                            
+                            const typeLabel = p.type === "kit" ? " [Kit]" : "";
+                            const skuLabel = p.sku ? ` (${p.sku})` : "";
+                            const available = getAvailableQuantity(p, true);
+                            const availableLabel = available > 0 ? ` - ${available} available` : " - Out of stock";
+                            
+                            return {
+                              value: itemId,
+                              label: `${p.name}${typeLabel}${skuLabel}${availableLabel}`,
+                            };
+                          })}
+                        />
+                      </Col>
+                      <Col xs={18} sm={8}>
+                        <div className="flex flex-col">
+                          <InputNumber
+                            placeholder="Quantity"
+                            min={1}
+                            max={totalAvailable}
+                            value={item.quantity}
+                            onChange={(value) =>
+                              handleItemChange(index, "quantity", value)
+                            }
+                            style={{ width: "100%" }}
+                            status={isQuantityExceeded ? "error" : ""}
+                          />
+                          {selectedProduct && (
+                            <div className="text-xs mt-2 mb-0">
+                              <span className={isQuantityExceeded ? "text-red-600" : "text-gray-500"}>
+                                {totalAvailable} available
+                                {isQuantityExceeded && (
+                                  <span className="ml-1 font-semibold">
+                                    (Requested: {item.quantity})
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </Col>
+                      <Col xs={6} sm={4}>
                         <Button
                           type="text"
                           danger

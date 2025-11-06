@@ -1,8 +1,11 @@
 import React from "react";
-import { Table, Skeleton } from "antd";
+import { Table } from "antd";
+import Skeleton from "react-loading-skeleton";
+import "react-loading-skeleton/dist/skeleton.css";
 
 /**
  * Skeleton loader for Purchase Orders Table
+ * Uses react-loading-skeleton for better visual design
  */
 const ProcurementTableSkeleton = () => {
   const columns = [
@@ -23,7 +26,13 @@ const ProcurementTableSkeleton = () => {
     <Table
       columns={columns.map((col) => ({
         ...col,
-        render: () => <Skeleton.Button active size="small" style={{ width: "100%" }} />,
+        render: () => (
+          <Skeleton
+            height={20}
+            borderRadius={4}
+            style={{ margin: "4px 0" }}
+          />
+        ),
       }))}
       dataSource={dataSource}
       pagination={false}
@@ -33,4 +42,3 @@ const ProcurementTableSkeleton = () => {
 };
 
 export default ProcurementTableSkeleton;
-
