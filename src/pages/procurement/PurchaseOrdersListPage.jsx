@@ -285,7 +285,7 @@ const PurchaseOrdersListPage = () => {
       render: (date, record) => formatDate(date || record.createdAt),
     },
     {
-      title: "Order ID",
+      title: "PO #",
       dataIndex: "reference",
       key: "reference",
       width: 100,
@@ -304,6 +304,12 @@ const PurchaseOrdersListPage = () => {
       key: "vendor",
       width: 150,
       render: (_, record) => getVendorName(record),
+    },
+    {
+      title: "Vendor Reference",
+      key: "vendorReference",
+      width: 150,
+      render: (_, record) => record.vendorReference || "-",
     },
     {
       title: "Company",
@@ -350,7 +356,13 @@ const PurchaseOrdersListPage = () => {
       dataIndex: "receiptStatus",
       key: "receiptStatus",
       width: 130,
-      render: (status) => <ReceiptBadge status={status || "none"} />,
+      render: (status, record) => {
+        // Show "Ready to Receive" when status is "in_transit"
+        if (record.status === "in_transit") {
+          return <ReceiptBadge status="ready_to_receive" />;
+        }
+        return <ReceiptBadge status={status || "none"} />;
+      },
     },
   ];
 
@@ -387,7 +399,7 @@ const PurchaseOrdersListPage = () => {
         </div>
 
         {/* Filters - Always Visible */}
-        <Card size="small" className="mb-4">
+        <Card size="small" className="mb-4 bg-gray-100">
           <Row gutter={[12, 12]}>
             <Col xs={24} sm={12} md={8} lg={6}>
               <Search
@@ -485,7 +497,7 @@ const PurchaseOrdersListPage = () => {
         </Card>
 
         {/* Desktop Table View */}
-        <Card size="small" className="hidden md:block">
+        <Card size="small" className="hidden md:block bg-gray-100">
           {loading ? (
             <ProcurementTableSkeleton />
           ) : (
@@ -519,11 +531,11 @@ const PurchaseOrdersListPage = () => {
           {loading ? (
             <div className="space-y-3">
               {[...Array(5)].map((_, i) => (
-                <Card key={i} size="small" loading={true} />
+                <Card key={i} size="small" loading={true} className="bg-gray-100" />
               ))}
             </div>
           ) : purchaseOrders.length === 0 ? (
-            <Card size="small">
+            <Card size="small" className="bg-gray-100">
               <div className="text-center py-8 text-gray-500">
                 <p>No purchase orders found</p>
               </div>
@@ -533,7 +545,7 @@ const PurchaseOrdersListPage = () => {
               <Card
                 key={order._id || order.id}
                 size="small"
-                className="shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+                className="shadow-sm cursor-pointer hover:shadow-md transition-shadow bg-gray-100"
                 onClick={() => navigate(`/procurement/orders/${order._id || order.id}`)}
               >
                 <div className="flex items-start justify-between gap-3 mb-3">
@@ -568,7 +580,11 @@ const PurchaseOrdersListPage = () => {
                   </div>
                   <div className="flex flex-col items-end gap-1 shrink-0">
                     <StatusBadge status={order.status} />
-                    <ReceiptBadge status={order.receiptStatus || "none"} />
+                    {order.status === "in_transit" ? (
+                      <ReceiptBadge status="ready_to_receive" />
+                    ) : (
+                      <ReceiptBadge status={order.receiptStatus || "none"} />
+                    )}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3 text-sm pt-3 border-t">

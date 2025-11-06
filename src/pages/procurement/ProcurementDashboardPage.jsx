@@ -10,29 +10,49 @@ import {
   AlertCircle,
   Clock,
   CheckCircle,
+  Calendar,
 } from "lucide-react";
-import { Card, Table, Tag, Space, message, Breadcrumb, Button, Row, Col } from "antd";
+import {
+  Card,
+  Table,
+  Tag,
+  Space,
+  message,
+  Breadcrumb,
+  Button,
+  Row,
+  Col,
+  DatePicker,
+} from "antd";
 import Skeleton from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
 import { getDashboardStats } from "../../api/procurement";
 import StatusBadge from "./components/StatusBadge";
 import dayjs from "dayjs";
 
+const { RangePicker } = DatePicker;
+
 export default function ProcurementDashboardPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(null);
   const [error, setError] = useState(null);
+  const [dateRange, setDateRange] = useState(null);
 
   useEffect(() => {
     loadDashboardStats();
-  }, []);
+  }, [dateRange]);
 
   const loadDashboardStats = async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await getDashboardStats();
+      const params = {};
+      if (dateRange && dateRange.length === 2) {
+        params.startDate = dateRange[0].startOf("day").toISOString();
+        params.endDate = dateRange[1].endOf("day").toISOString();
+      }
+      const response = await getDashboardStats(params);
       setStats(response?.data || null);
     } catch (error) {
       console.error("Failed to load dashboard stats:", error);
@@ -82,37 +102,40 @@ export default function ProcurementDashboardPage() {
   const statsCards = stats
     ? [
         {
-          title: "Total Procurement Orders",
+          title: "Total Purchase Orders",
           value: stats.totalOrders?.value || 0,
           change: stats.totalOrders?.change,
           changeType: stats.totalOrders?.changeType,
+          changePercentage: stats.totalOrders?.changePercentage,
           icon: FileText,
           color: "text-blue-600",
           bgColor: "bg-blue-50",
           borderColor: "border-blue-200",
         },
         {
-          title: "Pending Approvals",
-          value: stats.pendingApprovals?.value || 0,
-          change: stats.pendingApprovals?.change,
-          changeType: stats.pendingApprovals?.changeType,
+          title: "Purchase Orders Draft",
+          value: stats.draftCount?.value || 0,
+          change: stats.draftCount?.change,
+          changeType: stats.draftCount?.changeType,
+          changePercentage: stats.draftCount?.changePercentage,
           icon: ShoppingBag,
           color: "text-yellow-600",
           bgColor: "bg-yellow-50",
           borderColor: "border-yellow-200",
         },
         {
-          title: "Active Contracts",
-          value: stats.activeContracts?.value || 0,
-          change: stats.activeContracts?.change,
-          changeType: stats.activeContracts?.changeType,
+          title: "Purchase Orders Confirmed",
+          value: stats.confirmedCount?.value || 0,
+          change: stats.confirmedCount?.change,
+          changeType: stats.confirmedCount?.changeType,
+          changePercentage: stats.confirmedCount?.changePercentage,
           icon: Package,
           color: "text-green-600",
           bgColor: "bg-green-50",
           borderColor: "border-green-200",
         },
         {
-          title: "Total Spend",
+          title: "Total Procurement Cost",
           value: formatCurrency(
             stats.totalSpend?.value || 0,
             stats.totalSpend?.currency || "USD"
@@ -137,9 +160,7 @@ export default function ProcurementDashboardPage() {
       render: (ref, record) => (
         <Button
           type="link"
-          onClick={() =>
-            navigate(`/procurement/orders/${record._id}`)
-          }
+          onClick={() => navigate(`/procurement/orders/${record._id}`)}
           className="p-0 h-auto font-semibold"
         >
           {ref}
@@ -189,9 +210,7 @@ export default function ProcurementDashboardPage() {
       render: (ref, record) => (
         <Button
           type="link"
-          onClick={() =>
-            navigate(`/procurement/orders/${record._id}`)
-          }
+          onClick={() => navigate(`/procurement/orders/${record._id}`)}
           className="p-0 h-auto font-semibold"
         >
           {ref}
@@ -279,8 +298,13 @@ export default function ProcurementDashboardPage() {
         <div className="max-w-7xl mx-auto">
           <Card>
             <div className="text-center py-12">
-              <AlertCircle className="text-5xl text-red-400 mb-4 mx-auto" size={48} />
-              <h2 className="text-xl font-bold mb-2">Failed to Load Dashboard</h2>
+              <AlertCircle
+                className="text-5xl text-red-400 mb-4 mx-auto"
+                size={48}
+              />
+              <h2 className="text-xl font-bold mb-2">
+                Failed to Load Dashboard
+              </h2>
               <p className="text-gray-600 mb-6">{error}</p>
               <button
                 onClick={loadDashboardStats}
@@ -296,7 +320,7 @@ export default function ProcurementDashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen p-6">
       <div className="max-w-7xl mx-auto">
         {/* Breadcrumbs */}
         <Breadcrumb className="mb-4">
@@ -311,13 +335,65 @@ export default function ProcurementDashboardPage() {
 
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Procurement Dashboard
-          </h1>
-          <p className="text-gray-600">
-            Manage your procurement processes, orders, and supplier relationships
-          </p>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                Procurement Dashboard
+              </h1>
+              <p className="text-gray-600">
+                Manage your procurement processes, orders, and supplier
+                relationships
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Calendar size={18} className="text-gray-500" />
+              <RangePicker
+                value={dateRange}
+                onChange={(dates) => setDateRange(dates)}
+                format="YYYY-MM-DD"
+                allowClear
+                placeholder={["Start Date", "End Date"]}
+                size="middle"
+              />
+              {dateRange && (
+                <Button
+                  size="small"
+                  onClick={() => setDateRange(null)}
+                  type="text"
+                >
+                  Clear
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
+
+        {/* Quick Actions */}
+        <Card size="small" className="mb-8 bg-gray-100">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">
+            Quick Actions
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Link
+              to="/procurement/orders"
+              className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors duration-200 text-gray-600 hover:text-blue-600 font-medium"
+            >
+              <FileText className="w-5 h-5" />
+              View Purchase Orders
+            </Link>
+            <Link
+              to="/procurement/orders/new"
+              className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-green-400 hover:bg-green-50 transition-colors duration-200 text-gray-600 hover:text-green-600 font-medium"
+            >
+              <ShoppingBag className="w-5 h-5" />
+              Create Draft
+            </Link>
+            {/* <button className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-purple-400 hover:bg-purple-50 transition-colors duration-200 text-gray-600 hover:text-purple-600 font-medium">
+              <Package className="w-5 h-5" />
+              View Contracts
+            </button> */}
+          </div>
+        </Card>
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -328,7 +404,9 @@ export default function ProcurementDashboardPage() {
               size="small"
             >
               <div className="flex items-center justify-between mb-4">
-                <div className={`${stat.color} p-3 rounded-lg bg-white shadow-sm`}>
+                <div
+                  className={`${stat.color} p-3 rounded-lg bg-white shadow-sm`}
+                >
                   <stat.icon className="w-6 h-6" />
                 </div>
                 {getChangeIndicator(stat.changeType, stat.change)}
@@ -348,9 +426,10 @@ export default function ProcurementDashboardPage() {
         </div>
 
         {/* Two Column Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 gap-6 mb-8">
           {/* Recent Orders */}
           <Card
+            className="bg-gray-100"
             title={
               <Space>
                 <FileText size={18} />
@@ -369,6 +448,7 @@ export default function ProcurementDashboardPage() {
             {stats?.recentOrders && stats.recentOrders.length > 0 ? (
               <div className="overflow-x-auto -mx-4 px-4">
                 <Table
+                  className="[&_.ant-table-thead>tr>th]:bg-white"
                   columns={recentOrdersColumns}
                   dataSource={stats.recentOrders}
                   rowKey={(record) => record._id}
@@ -376,7 +456,8 @@ export default function ProcurementDashboardPage() {
                   size="small"
                   scroll={{ x: "max-content" }}
                   onRow={(record) => ({
-                    onClick: () => navigate(`/procurement/orders/${record._id}`),
+                    onClick: () =>
+                      navigate(`/procurement/orders/${record._id}`),
                     className: "cursor-pointer",
                   })}
                 />
@@ -391,6 +472,7 @@ export default function ProcurementDashboardPage() {
 
           {/* Overdue Orders */}
           <Card
+            className="bg-gray-100"
             title={
               <Space>
                 <AlertCircle size={18} className="text-red-600" />
@@ -419,6 +501,7 @@ export default function ProcurementDashboardPage() {
             stats.overdueOrders.orders.length > 0 ? (
               <div className="overflow-x-auto -mx-4 px-4">
                 <Table
+                  className="[&_.ant-table-thead>tr>th]:bg-white"
                   columns={overdueOrdersColumns}
                   dataSource={stats.overdueOrders.orders}
                   rowKey={(record) => record._id}
@@ -426,7 +509,8 @@ export default function ProcurementDashboardPage() {
                   size="small"
                   scroll={{ x: "max-content" }}
                   onRow={(record) => ({
-                    onClick: () => navigate(`/procurement/orders/${record._id}`),
+                    onClick: () =>
+                      navigate(`/procurement/orders/${record._id}`),
                     className: "cursor-pointer",
                   })}
                 />
@@ -439,33 +523,6 @@ export default function ProcurementDashboardPage() {
             )}
           </Card>
         </div>
-
-        {/* Quick Actions */}
-        <Card size="small" className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">
-            Quick Actions
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Link
-              to="/procurement/orders"
-              className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors duration-200 text-gray-600 hover:text-blue-600 font-medium"
-            >
-              <FileText className="w-5 h-5" />
-              View Purchase Orders
-            </Link>
-            <Link
-              to="/procurement/orders/new"
-              className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-green-400 hover:bg-green-50 transition-colors duration-200 text-gray-600 hover:text-green-600 font-medium"
-            >
-              <ShoppingBag className="w-5 h-5" />
-              Create Purchase Order
-            </Link>
-            {/* <button className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-purple-400 hover:bg-purple-50 transition-colors duration-200 text-gray-600 hover:text-purple-600 font-medium">
-              <Package className="w-5 h-5" />
-              View Contracts
-            </button> */}
-          </div>
-        </Card>
       </div>
     </div>
   );

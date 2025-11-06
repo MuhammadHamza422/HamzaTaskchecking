@@ -68,11 +68,16 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
           }
           
           if (response?.success && response?.data) {
+            // For boxes, preserve the box name from the original item
+            const boxData = response.data.box || response.data;
             return {
               ...item,
               qrCode: response.data.qrCode,
               qrData: response.data.qrData,
-              product: response.data.product || response.data.kit || response.data.box,
+              product: response.data.product || response.data.kit || boxData,
+              box: boxData ? { ...boxData, name: item.name || boxData.name } : item.box,
+              // Preserve name from original item if available
+              name: item.name || boxData?.name || response.data.box?.name,
               type: item.type || "product",
             };
           }
@@ -116,7 +121,18 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
     if (item.type === "kit") {
       return item.qrData?.kitId || item.kitId || "";
     } else if (item.type === "box") {
-      return item.qrData?.boxId || item.boxId || "";
+      const boxId = item.qrData?.boxId || item.boxId || "";
+      // Try multiple possible locations for box name
+      const boxName = 
+        item.name || 
+        item.box?.name || 
+        item.qrData?.box?.name || 
+        item.product?.name || 
+        "";
+      if (boxName && boxId) {
+        return `${boxName}\n${boxId}`;
+      }
+      return boxId || "";
     } else {
       return item.qrData?.sku || item.sku || "";
     }
@@ -186,7 +202,7 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
         tempContainer.style.boxSizing = "border-box";
         tempContainer.innerHTML = `
           <img src="${item.qrCode}" alt="QR Code" style="width: ${qrSize}px; height: ${qrSize}px; max-width: 100%; max-height: 70%; object-fit: contain;" />
-          <div style="margin-top: 8px; font-size: 10px; text-align: center; word-break: break-word;">
+          <div style="margin-top: 8px; font-size: 10px; text-align: center; word-break: break-word; white-space: pre-line;">
             ${getLabelText(item)}
           </div>
         `;
@@ -263,7 +279,7 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
         (item) => `
       <div class="label-page" style="width: ${widthIn}in; height: ${heightIn}in; padding: 10px; margin: 0; page-break-after: always; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px solid #ddd; box-sizing: border-box;">
         <img src="${item.qrCode}" alt="QR Code" style="width: ${qrSize}px; height: ${qrSize}px; max-width: 100%; max-height: 70%; object-fit: contain;" />
-        <div style="margin-top: 8px; font-size: 10px; text-align: center; word-break: break-word;">
+        <div style="margin-top: 8px; font-size: 10px; text-align: center; word-break: break-word; white-space: pre-line;">
           ${getLabelText(item)}
         </div>
       </div>
@@ -478,11 +494,8 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
                     alt="QR Code"
                     style={{ width: `${qrSize}px`, height: `${qrSize}px` }}
                   />
-                  <div className="mt-2 text-xs text-center text-gray-600">
+                  <div className="mt-2 text-xs text-center text-gray-600 whitespace-pre-line">
                     {getLabelText(item)}
-                  </div>
-                  <div className="mt-1 text-xs text-center text-gray-500">
-                    {item.name || item.product?.name || ""}
                   </div>
                 </div>
               </Col>

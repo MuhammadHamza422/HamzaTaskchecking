@@ -55,6 +55,7 @@ const navLinks = [
       { to: "/admin/users", label: "Users", default: true },
       { to: "/admin/user-activity", label: "User Activity" },
       { to: "/admin/roles", label: "Role Management" },
+      { to: "/admin/companies", label: "Companies" },
     ],
   },
   {

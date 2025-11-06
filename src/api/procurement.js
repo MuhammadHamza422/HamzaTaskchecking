@@ -1,6 +1,7 @@
 import apiClient from "./client";
 import { fetchAllUsers } from "./auth";
 import { fetchCompanies } from "./company";
+import { getEmployees } from "./employees";
 
 /**
  * PROCUREMENT API CLIENT
@@ -184,22 +185,24 @@ export const getVendors = async (params = {}) => {
 
 /**
  * Get list of users (for buyer selection)
- * Uses the auth API endpoint: /api/v1/auth/all
+ * Uses the employees API endpoint: /api/v1/employees/list
  * @returns {Promise} Users list formatted for components
  */
 export const getUsers = async () => {
   try {
-    const users = await fetchAllUsers();
-    return users.map((user) => ({
-      id: user._id || user.id,
-      name: user.firstName && user.lastName 
-        ? `${user.firstName} ${user.lastName}` 
-        : user.name || user.email?.split("@")[0] || "Unknown",
-      email: user.email || "",
-      avatar: user.avatar || null,
+    const response = await getEmployees({ page: 1, limit: 10000 });
+    const employees = response?.data || [];
+    return employees.map((employee) => ({
+      id: employee._id || employee.id,
+      name: employee.fullName || 
+            (employee.firstName && employee.lastName 
+              ? `${employee.firstName} ${employee.lastName}` 
+              : employee.name || employee.email?.split("@")[0] || "Unknown"),
+      email: employee.email || "",
+      avatar: employee.avatar || null,
     }));
   } catch (error) {
-    console.error("Failed to fetch users:", error);
+    console.error("Failed to fetch employees:", error);
     return [];
   }
 };
