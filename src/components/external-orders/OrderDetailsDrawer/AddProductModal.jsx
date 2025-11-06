@@ -141,7 +141,7 @@ export default function AddProductModal({
     const [_, search, productType] = queryKey;
 
     const response = await apiClient.get(
-      `/api/v1/products?type=${productType}`,
+      `/api/v1/products/all?type=${productType}`,
       {
         params: {
           search,
