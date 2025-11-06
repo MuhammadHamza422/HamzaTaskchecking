@@ -58,6 +58,8 @@ export default function AddLabelModal({
   const [packages, setPackages] = useState([]);
   const [form] = Form.useForm();
 
+  console.log("order", order);
+
   // Initial form data
   const initialFormData = useMemo(
     () => ({
@@ -249,10 +251,10 @@ export default function AddLabelModal({
         packageName = selectedPackage?.name || "";
       }
 
-      console.log("values", values);
+      const orderId = activeTab==="shopify"? order.order_key: order.orderId;
 
       const { data } = await apiClient.patch(
-        `/api/v1/orders/shipstation/label/${order.order_key}`,
+        `/api/v1/orders/shipstation/label/${orderId}`,
         {
           platform: values.platform,
           warehouseId: values.warehouseId,
@@ -288,8 +290,8 @@ export default function AddLabelModal({
           customClass: { popup: "rounded-lg" },
         });
 
-        fetchProcessedOrders();
         handleClose();
+        fetchProcessedOrders();
       }
     } catch (err) {
       const errorMessage =

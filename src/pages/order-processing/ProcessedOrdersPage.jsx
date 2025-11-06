@@ -587,6 +587,8 @@ export default function ProcessedOrdersPage() {
   }) => {
     const wc = details?.order || details; // safety
     const kitsArray = Array.isArray(kits?.allKits) ? kits.allKits : [];
+    const dbInfo = details?.order?.dbInfo || details?.dbInfo || {};
+    console.log("wcdata",  dbInfo);
 
     const items = [];
     const productTitles = [];
@@ -623,6 +625,37 @@ export default function ProcessedOrdersPage() {
     if (productTitles[1]) advancedOptions.customField2 = productTitles[1];
     if (productTitles[2]) advancedOptions.customField3 = productTitles[2];
 
+    if (dbInfo?.packageName ) {
+      advancedOptions.customField3 = dbInfo.packageName; 
+    }
+
+    // Validation for fulfillment info
+    const missingWarehouse = !dbInfo?.warehouseId;
+    const hasPkg = Boolean(dbInfo?.packageCode || dbInfo?.packageName);
+    const weightValid =
+      typeof dbInfo?.weight?.value === "number" &&
+      dbInfo?.weight?.value > 0 &&
+      ["pounds", "ounces", "grams"].includes(dbInfo?.weight?.units);
+
+      if (missingWarehouse || !hasPkg || !weightValid) {
+        Swal.fire({
+          icon: "warning",
+          title: "Add Fulfillment Info",
+          text:
+            "Please add warehouse, package, weight, and dimensions before moving to ShipStation.",
+          toast: true,
+          position: "top-end",
+          showConfirmButton: false,
+          timer: 3500,
+          timerProgressBar: true,
+          background: "#f59e0b",
+          color: "#111827",
+          customClass: { popup: "rounded-lg" },
+        });
+        return null;
+      }
+
+
     return {
       orderNumber: String(tableOrder?.orderId || wc?.id || wc?.number || ""),
       orderKey: String(tableOrder?._id || wc?.id || wc?.number || ""),
@@ -634,7 +667,9 @@ export default function ProcessedOrdersPage() {
       tagIds: tagId ? [Number(tagId)] : undefined,
       billTo: {
         name:
-          [billing?.first_name, billing?.last_name].filter(Boolean).join(" ") ||
+          [billing?.first_name, billing?.last_name].filter(Boolean).join(" ") ||  [shipping?.first_name, shipping?.last_name]
+          .filter(Boolean)
+          .join(" ") ||
           null,
         company: billing?.company || null,
         street1: billing?.address_1 || null,
@@ -672,6 +707,40 @@ export default function ProcessedOrdersPage() {
       paymentMethod:
         wc?.payment_method_title || wc?.payment_method || undefined,
       advancedOptions,
+      warehouseId: dbInfo?.warehouseId,
+      packageCode: "package",
+      
+      weight: {
+        value:
+          typeof dbInfo?.weight?.value === "number" &&
+          dbInfo?.weight?.value > 0
+            ? dbInfo.weight.value
+            : 1, // default to 1 if missing or 0
+        units: ["pounds", "ounces", "grams"].includes(dbInfo?.weight?.units)
+          ? dbInfo.weight.units
+          : "ounces", // default to valid unit
+      },
+
+      dimensions: {
+        length:
+          typeof dbInfo?.dimensions?.length === "number" &&
+          dbInfo?.dimensions?.length > 0
+            ? dbInfo.dimensions.length
+            : 10,
+        width:
+          typeof dbInfo?.dimensions?.width === "number" &&
+          dbInfo?.dimensions?.width > 0
+            ? dbInfo.dimensions.width
+            : 10,
+        height:
+          typeof dbInfo?.dimensions?.height === "number" &&
+          dbInfo?.dimensions?.height > 0
+            ? dbInfo.dimensions.height
+            : 5,
+        units: ["inches", "centimeters"].includes(dbInfo?.dimensions?.units)
+          ? dbInfo.dimensions.units
+          : "inches",
+      },
     };
   };
 
@@ -683,7 +752,10 @@ export default function ProcessedOrdersPage() {
     tagId,
   }) => {
     const wm = details?.order?.order || details?.order || details || {};
+    const dbInfo = details?.order?.dbInfo || details?.dbInfo || {};
     const kitsArray = Array.isArray(kits?.allKits) ? kits.allKits : [];
+
+    // console.log("wmdata",  dbInfo);
 
     const items = [];
     const productTitles = [];
@@ -720,6 +792,39 @@ export default function ProcessedOrdersPage() {
     if (productTitles[0]) advancedOptions.customField1 = productTitles[0];
     if (productTitles[1]) advancedOptions.customField2 = productTitles[1];
     if (productTitles[2]) advancedOptions.customField3 = productTitles[2];
+
+    if (dbInfo?.packageName) {
+      advancedOptions.customField3 = dbInfo.packageName; 
+    }
+
+    // Validation for fulfillment info
+    const missingWarehouse = !dbInfo?.warehouseId;
+    const hasPkg = Boolean(dbInfo?.packageCode || dbInfo?.packageName);
+    const weightValid =
+      typeof dbInfo?.weight?.value === "number" &&
+      dbInfo?.weight?.value > 0 &&
+      ["pounds", "ounces", "grams"].includes(dbInfo?.weight?.units);
+
+ 
+
+
+    if (missingWarehouse || !hasPkg || !weightValid) {
+      Swal.fire({
+        icon: "warning",
+        title: "Add Fulfillment Info",
+        text:
+          "Please add warehouse, package, weight, and dimensions before moving to ShipStation.",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3500,
+        timerProgressBar: true,
+        background: "#f59e0b",
+        color: "#111827",
+        customClass: { popup: "rounded-lg" },
+      });
+      return null;
+    }
 
     return {
       orderNumber: String(tableOrder?.orderId),
@@ -766,6 +871,40 @@ export default function ProcessedOrdersPage() {
       gift: false,
       paymentMethod: undefined,
       advancedOptions,
+      warehouseId: dbInfo?.warehouseId,
+      packageCode: "package",
+      
+      weight: {
+        value:
+          typeof dbInfo?.weight?.value === "number" &&
+          dbInfo?.weight?.value > 0
+            ? dbInfo.weight.value
+            : 1, // default to 1 if missing or 0
+        units: ["pounds", "ounces", "grams"].includes(dbInfo?.weight?.units)
+          ? dbInfo.weight.units
+          : "ounces", // default to valid unit
+      },
+
+      dimensions: {
+        length:
+          typeof dbInfo?.dimensions?.length === "number" &&
+          dbInfo?.dimensions?.length > 0
+            ? dbInfo.dimensions.length
+            : 10,
+        width:
+          typeof dbInfo?.dimensions?.width === "number" &&
+          dbInfo?.dimensions?.width > 0
+            ? dbInfo.dimensions.width
+            : 10,
+        height:
+          typeof dbInfo?.dimensions?.height === "number" &&
+          dbInfo?.dimensions?.height > 0
+            ? dbInfo.dimensions.height
+            : 5,
+        units: ["inches", "centimeters"].includes(dbInfo?.dimensions?.units)
+          ? dbInfo.dimensions.units
+          : "inches",
+      },
     };
   };
 

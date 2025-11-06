@@ -232,12 +232,30 @@ export default function AddProductModal({
   // Helper: get base total for the current line (supports merged products)
   const getWooCommerceLineTotal = () => {
     const order = orderDetails?.order;
-    const lineItem = order?.line_items?.find(
-      (item) => (item.product_id || item.id) === selectedLineItemId
-    );
-    let lineItemTotal = parseFloat(lineItem?.total || 0);
+    const selId = String(selectedLineItemId || "");
+
+    // Find by either Woo line item id or product_id, comparing as strings
+    const lineItem = (order?.line_items || []).find((item) => {
+      const byId = String(item?.id ?? "") === selId;
+      const byProdId = String(item?.product_id ?? "") === selId;
+      return byId || byProdId;
+    });
+
+    // Prefer Woo's total if present; it's usually a string
+    let lineItemTotal = Number.parseFloat(lineItem?.total);
+
+    // Fallback to price * quantity if total is missing/zero/NaN
+    if (!Number.isFinite(lineItemTotal) || lineItemTotal <= 0) {
+      const unitPrice = Number.parseFloat(lineItem?.price);
+      const qty = Number(lineItem?.quantity || 1);
+      if (Number.isFinite(unitPrice) && qty > 0) {
+        lineItemTotal = unitPrice * qty;
+      }
+    }
+
+    // Final fallback: use merged mapping price when applicable
     if (
-      !lineItemTotal &&
+      (!Number.isFinite(lineItemTotal) || lineItemTotal <= 0) &&
       Array.isArray(mergedProducts) &&
       mergedProducts.length > 0
     ) {
@@ -246,10 +264,12 @@ export default function AddProductModal({
         (mp?.productIds || []).map(String).includes(idStr)
       );
       if (foundMerged) {
-        lineItemTotal = parseFloat(foundMerged.price || 0);
+        const mergedPrice = Number.parseFloat(foundMerged.price);
+        if (Number.isFinite(mergedPrice)) lineItemTotal = mergedPrice;
       }
     }
-    return lineItemTotal;
+
+    return Number.isFinite(lineItemTotal) ? lineItemTotal : 0;
   };
 
   const handlePrice = (sale_price) => {
