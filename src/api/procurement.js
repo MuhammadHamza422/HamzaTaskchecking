@@ -428,9 +428,23 @@ export const regenerateProductQRCode = async (poId, productId, params = {}) => {
 // ==================== Scanning ====================
 
 /**
+ * Universal scan endpoint - auto-detects identifier type (SKU, boxId, kitId, or product ObjectId)
+ * @param {string} identifier - SKU, boxId, kitId, or product ObjectId
+ * @returns {Promise} Scan result with type (product, box, or kit) and complete data
+ */
+export const scanUniversal = async (identifier) => {
+  const trimmed = identifier.trim();
+  const { data } = await apiClient.get(
+    `/api/v1/procurement/scan/${encodeURIComponent(trimmed)}`
+  );
+  return data;
+};
+
+/**
  * Scan box QR code (get box details from scan)
  * @param {string} boxId - Box ID
  * @returns {Promise} Box details with items
+ * @deprecated Use scanUniversal instead
  */
 export const scanBox = async (boxId) => {
   const { data } = await apiClient.get(`/api/v1/procurement/scan/box/${boxId}`);
@@ -442,6 +456,7 @@ export const scanBox = async (boxId) => {
  * @param {string} productId - Product ID
  * @param {Object} params - Query parameters (sku, boxId, poId)
  * @returns {Promise} Product details with context
+ * @deprecated Use scanUniversal instead
  */
 export const scanProduct = async (productId, params = {}) => {
   const { data } = await apiClient.get(`/api/v1/procurement/scan/product/${productId}`, {
@@ -455,6 +470,7 @@ export const scanProduct = async (productId, params = {}) => {
  * @param {string} kitId - Kit ID (e.g., "KIT-P00021-1")
  * @param {Object} params - Query parameters (poId - optional)
  * @returns {Promise} Kit details with kitProducts array
+ * @deprecated Use scanUniversal instead
  */
 export const scanKit = async (kitId, params = {}) => {
   const { data } = await apiClient.get(`/api/v1/procurement/scan/kit/${kitId}`, {

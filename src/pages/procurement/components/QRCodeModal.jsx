@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Modal, Button, Row, Col, InputNumber, Slider, Image, Radio, Space, message } from "antd";
 import { Printer, Download } from "lucide-react";
 import html2canvas from "html2canvas-pro";
@@ -14,58 +14,143 @@ const QRCodeModal = ({ visible, onCancel, qrData }) => {
   const printRef = useRef(null);
   const [downloading, setDownloading] = useState(false);
   const [qrSize, setQrSize] = useState(200); // Default QR code size in pixels
-  const [pageWidth, setPageWidth] = useState(2.7); // Default 2 inches width
-  const [pageHeight, setPageHeight] = useState(2.8); // Default 1 inch height
-  const [unit, setUnit] = useState("in"); // "in" or "mm"
+  const [unit, setUnit] = useState("mm"); // "in" or "mm" - default to mm
+  
+  // Default values: 1767mm width, 1802mm height (converted to inches for internal storage)
+  const defaultWidthMm = 1767;
+  const defaultHeightMm = 1802;
+  const defaultWidthIn = 2.7;
+  const defaultHeightIn = 2.8;
+  
+  // Initialize with mm defaults (convert to inches for internal storage)
+  const [pageWidth, setPageWidth] = useState(defaultWidthMm / 25.4);
+  const [pageHeight, setPageHeight] = useState(defaultHeightMm / 25.4);
 
-  // Convert inches to mm
-  const inchesToMm = (inches) => inches * 25.4;
-  // Convert mm to inches
-  const mmToInches = (mm) => mm / 25.4;
+  // Convert inches to mm with proper rounding
+  const inchesToMm = (inches) => {
+    const mm = inches * 25.4;
+    // Round to 2 decimal places to avoid floating-point precision issues
+    return Math.round(mm * 100) / 100;
+  };
+
+  // Convert mm to inches with proper rounding
+  const mmToInches = (mm) => {
+    const inches = mm / 25.4;
+    // Round to 4 decimal places for inches (more precision needed)
+    return Math.round(inches * 10000) / 10000;
+  };
+
+  // Round value to appropriate precision based on unit
+  const roundValue = (value, currentUnit) => {
+    if (value === null || value === undefined) return value;
+    if (currentUnit === "mm") {
+      // Round mm to 2 decimal places
+      return Math.round(value * 100) / 100;
+    } else {
+      // Round inches to 4 decimal places
+      return Math.round(value * 10000) / 10000;
+    }
+  };
 
   // Get display values based on unit
   const getDisplayWidth = () => {
-    return unit === "mm" ? inchesToMm(pageWidth) : pageWidth;
+    if (unit === "mm") {
+      return roundValue(inchesToMm(pageWidth), "mm");
+    }
+    return roundValue(pageWidth, "in");
   };
 
   const getDisplayHeight = () => {
-    return unit === "mm" ? inchesToMm(pageHeight) : pageHeight;
+    if (unit === "mm") {
+      return roundValue(inchesToMm(pageHeight), "mm");
+    }
+    return roundValue(pageHeight, "in");
   };
 
   // Handle unit change
   const handleUnitChange = (e) => {
     const newUnit = e.target.value;
+    
+    // When switching units, reset to defaults for that unit
     if (newUnit === "mm") {
-      // Convert from inches to mm
-      setPageWidth(inchesToMm(pageWidth));
-      setPageHeight(inchesToMm(pageHeight));
+      // Set to mm defaults (convert to inches for storage)
+      setPageWidth(defaultWidthMm / 25.4);
+      setPageHeight(defaultHeightMm / 25.4);
     } else {
-      // Convert from mm to inches
-      setPageWidth(mmToInches(pageWidth));
-      setPageHeight(mmToInches(pageHeight));
+      // Set to inch defaults
+      setPageWidth(defaultWidthIn);
+      setPageHeight(defaultHeightIn);
     }
+    
     setUnit(newUnit);
   };
+  
+  // Reset to defaults when modal opens (only on visibility change, not unit change)
+  useEffect(() => {
+    if (visible) {
+      // Reset to defaults based on current unit
+      if (unit === "mm") {
+        setPageWidth(defaultWidthMm / 25.4);
+        setPageHeight(defaultHeightMm / 25.4);
+      } else {
+        setPageWidth(defaultWidthIn);
+        setPageHeight(defaultHeightIn);
+      }
+      setQrSize(200); // Reset QR size to default
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]); // Only depend on visible, not unit (unit change is handled separately
 
   // Handle width change
   const handleWidthChange = (value) => {
-    setPageWidth(value);
+    if (value === null || value === undefined) return;
+    
+    // Round the input value based on current unit
+    const roundedValue = roundValue(value, unit);
+    
+    if (unit === "mm") {
+      // Convert mm input to inches for internal storage
+      const inchesValue = mmToInches(roundedValue);
+      setPageWidth(inchesValue);
+    } else {
+      // Store inches directly
+      setPageWidth(roundedValue);
+    }
   };
 
   // Handle height change
   const handleHeightChange = (value) => {
-    setPageHeight(value);
+    if (value === null || value === undefined) return;
+    
+    // Round the input value based on current unit
+    const roundedValue = roundValue(value, unit);
+    
+    if (unit === "mm") {
+      // Convert mm input to inches for internal storage
+      const inchesValue = mmToInches(roundedValue);
+      setPageHeight(inchesValue);
+    } else {
+      // Store inches directly
+      setPageHeight(roundedValue);
+    }
   };
 
-  // Get box name separately
+  // Get box name separately - returns empty string if no name exists (NO FALLBACKS)
   const getBoxName = () => {
     if (!qrData || qrData.type !== "box") return "";
-    return (
+    // Only check actual box name fields, no fallbacks to product name or generated names
+    const boxName = (
       qrData.box?.name || 
       qrData.qrData?.box?.name || 
       qrData.name || 
       ""
     );
+    // Return empty string if name is empty/null/undefined (strictly no fallback)
+    // Also filter out any names that look like generated fallbacks (e.g., "Box P00014-box-3")
+    if (!boxName) return "";
+    // If the name starts with "Box " followed by what looks like a box ID pattern, it's likely a fallback
+    if (boxName.trim().match(/^Box\s+P\d+-box-\d+/i)) return "";
+    return boxName.trim();
   };
 
   // Get box ID separately
@@ -231,8 +316,14 @@ const QRCodeModal = ({ visible, onCancel, qrData }) => {
             <img src="${qrData.qrCode}" alt="QR Code" style="width: ${qrSize}px; height: ${qrSize}px;" />
             ${qrData?.type === "box" 
               ? `<div class="label-info">
-                  ${getBoxName() ? `<div class="box-name">${getBoxName()}</div>` : ""}
-                  ${getBoxId() ? `<div class="box-id">${getBoxId()}</div>` : ""}
+                  ${getBoxName() && getBoxId() 
+                    ? `<div class="box-name">${getBoxName()}</div><div class="box-id">${getBoxId()}</div>`
+                    : getBoxName() 
+                      ? `<div class="box-name">${getBoxName()}</div>`
+                      : getBoxId()
+                        ? `<div class="box-name">${getBoxId()}</div>`
+                        : ""
+                  }
                 </div>`
               : `<div class="label-info label-text">${getLabelText()}</div>`
             }
@@ -347,7 +438,7 @@ const QRCodeModal = ({ visible, onCancel, qrData }) => {
                 </label>
                 <InputNumber
                   min={unit === "mm" ? 10 : 0.5}
-                  max={unit === "mm" ? 200 : 8}
+                  max={undefined}
                   step={unit === "mm" ? 1 : 0.1}
                   value={getDisplayWidth()}
                   onChange={handleWidthChange}
@@ -361,7 +452,7 @@ const QRCodeModal = ({ visible, onCancel, qrData }) => {
                 </label>
                 <InputNumber
                   min={unit === "mm" ? 10 : 0.5}
-                  max={unit === "mm" ? 200 : 8}
+                  max={undefined}
                   step={unit === "mm" ? 1 : 0.1}
                   value={getDisplayHeight()}
                   onChange={handleHeightChange}
@@ -376,7 +467,7 @@ const QRCodeModal = ({ visible, onCancel, qrData }) => {
         {/* Preview */}
         <div className="text-center mt-6">
           <div className="mb-2">
-            <strong>Preview:</strong> {getDisplayWidth().toFixed(1)}{unit === "mm" ? "mm" : '"'} × {getDisplayHeight().toFixed(1)}{unit === "mm" ? "mm" : '"'} | QR Size: {qrSize}px
+            <strong>Preview:</strong> {unit === "mm" ? getDisplayWidth().toFixed(2) : getDisplayWidth().toFixed(3)}{unit === "mm" ? "mm" : '"'} × {unit === "mm" ? getDisplayHeight().toFixed(2) : getDisplayHeight().toFixed(3)}{unit === "mm" ? "mm" : '"'} | QR Size: {qrSize}px
           </div>
           <div
             ref={printRef}
@@ -398,12 +489,16 @@ const QRCodeModal = ({ visible, onCancel, qrData }) => {
               />
               {qrData?.type === "box" ? (
                 <div className="mt-2 text-center">
-                  {getBoxName() && (
+                  {getBoxName() && getBoxId() ? (
+                    <>
+                      <p className="text-lg font-bold mb-0">{getBoxName()}</p>
+                      <p className="text-xs text-black mb-0">{getBoxId()}</p>
+                    </>
+                  ) : getBoxName() ? (
                     <p className="text-lg font-bold mb-0">{getBoxName()}</p>
-                  )}
-                  {getBoxId() && (
-                    <p className="text-xs text-black mb-0">{getBoxId()}</p>
-                  )}
+                  ) : getBoxId() ? (
+                    <p className="text-lg font-bold mb-0">{getBoxId()}</p>
+                  ) : null}
                 </div>
               ) : (
                 <p className="mt-2 text-sm font-medium whitespace-pre-line">{getLabelText()}</p>

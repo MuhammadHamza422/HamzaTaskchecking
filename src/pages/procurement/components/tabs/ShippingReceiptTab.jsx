@@ -44,7 +44,7 @@ const { Title } = Typography;
  * Shipping & Receipt Tab Component
  * Two sections: Shipping Details and Cost Management
  */
-const ShippingReceiptTab = ({ purchaseOrder, poId }) => {
+const ShippingReceiptTab = ({ purchaseOrder, poId, onShippingDetailsUpdated }) => {
   const [shippingDetails, setShippingDetails] = useState(null);
   const [costs, setCosts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -111,6 +111,10 @@ const ShippingReceiptTab = ({ purchaseOrder, poId }) => {
       setShippingDetails(response?.data);
       message.success("Shipping details saved successfully");
       setShippingModalVisible(false);
+      // Notify parent to reload shipping details
+      if (onShippingDetailsUpdated) {
+        onShippingDetailsUpdated();
+      }
     } catch (error) {
       console.error("Failed to save shipping details:", error);
       message.error(
