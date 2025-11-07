@@ -167,9 +167,9 @@ export default function CompanyManager() {
       };
       formData.append("contactDetails", JSON.stringify(contactDetails));
       
-      // Logo file
-      if (logoFile && logoFile.originFileObj) {
-        formData.append("logo", logoFile.originFileObj);
+      // Logo file - append the actual File object
+      if (logoFile) {
+        formData.append("logo", logoFile);
       }
       
       if (editing) {
@@ -223,27 +223,35 @@ export default function CompanyManager() {
   const handleLogoChange = (info) => {
     const file = info.file;
     
+    // Get the actual file object (could be file.originFileObj or file itself)
+    const actualFile = file?.originFileObj || file;
+    
+    if (!actualFile) {
+      return;
+    }
+    
     // Validate file type
     const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp", "image/svg+xml"];
-    if (file && !validTypes.includes(file.type)) {
+    if (!validTypes.includes(actualFile.type)) {
       message.error("Invalid file type. Only JPEG, PNG, GIF, WEBP, and SVG are allowed.");
       return;
     }
     
     // Validate file size (5MB)
-    if (file && file.size > 5 * 1024 * 1024) {
+    if (actualFile.size > 5 * 1024 * 1024) {
       message.error("File size must be less than 5MB.");
       return;
     }
     
-    if (file && file.originFileObj) {
-      setLogoFile(file);
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setLogoPreview(e.target?.result);
-      };
-      reader.readAsDataURL(file.originFileObj);
-    }
+    // Store the actual File object
+    setLogoFile(actualFile);
+    
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setLogoPreview(e.target?.result);
+    };
+    reader.readAsDataURL(actualFile);
   };
 
   const removeLogo = () => {
@@ -383,7 +391,7 @@ export default function CompanyManager() {
 
   return (
     <div className="p-4">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-[1480px] mx-auto">
         {/* Breadcrumbs */}
         <Breadcrumb className="mb-4">
           <Breadcrumb.Item>
@@ -504,14 +512,12 @@ export default function CompanyManager() {
                           height={100}
                           style={{ objectFit: "contain", border: "1px solid #d9d9d9", borderRadius: "4px" }}
                         />
-                        <Button
-                          type="text"
-                          danger
-                          icon={<X size={14} />}
+                        <button
                           onClick={removeLogo}
-                          className="absolute -top-2 -right-2"
-                          size="small"
-                        />
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1"
+                        >
+                          <X size={14} className="text-white" />
+                        </button>
                       </div>
                     )}
                     <Upload

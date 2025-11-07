@@ -111,7 +111,7 @@ const ReceiptTemplate = ({
       </div>
 
       {/* Terms and Conditions - Static Content (starts on page 2) */}
-      <div className="terms-section mt-[400px]">
+      <div className="terms-section mt-[1000px]">
         <TermsAndConditions />
       </div>
     </div>

@@ -26,10 +26,8 @@ import {
   createPurchaseOrder,
   updatePurchaseOrder,
   getPurchaseOrder,
-  getVendors,
-  getCompanies,
-  getUsers,
 } from "../../api/procurement";
+import { useProcurementData } from "../../contexts/ProcurementDataContext";
 import apiClient from "../../api/client";
 import Swal from "sweetalert2";
 
@@ -47,15 +45,13 @@ const CreatePurchaseOrderPage = () => {
   const isEditMode = !!poId;
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
-  const [loadingDropdowns, setLoadingDropdowns] = useState(true);
   const [loadingOrder, setLoadingOrder] = useState(isEditMode);
   const [submitting, setSubmitting] = useState(false);
   const [canEdit, setCanEdit] = useState(true);
 
-  // Dropdown data
-  const [vendors, setVendors] = useState([]);
-  const [companies, setCompanies] = useState([]);
-  const [buyers, setBuyers] = useState([]);
+  // Use shared dropdown data from context
+  const { vendors, companies, buyers } = useProcurementData();
+  
   const [products, setProducts] = useState([]);
   const [productSearch, setProductSearch] = useState("");
   const [searchingProducts, setSearchingProducts] = useState(false);
@@ -68,11 +64,22 @@ const CreatePurchaseOrderPage = () => {
 
   // Load dropdown data and order data (if edit mode)
   useEffect(() => {
-    loadDropdownData();
     if (isEditMode) {
       loadOrderData();
     }
   }, [poId]);
+
+  // Debounced product search
+  useEffect(() => {
+    if (productSearch.trim().length >= 2) {
+      const timeoutId = setTimeout(() => {
+        searchProducts(productSearch);
+      }, 300);
+      return () => clearTimeout(timeoutId);
+    } else {
+      setProducts([]);
+    }
+  }, [productSearch]);
 
   const loadOrderData = async () => {
     if (!poId) return;
@@ -161,25 +168,6 @@ const CreatePurchaseOrderPage = () => {
       });
     } finally {
       setLoadingOrder(false);
-    }
-  };
-
-  const loadDropdownData = async () => {
-    setLoadingDropdowns(true);
-    try {
-      const [vendorsData, companiesData, buyersData] = await Promise.all([
-        getVendors({ page: 1, limit: 1000, q: "", sort: "-updatedAt" }),
-        getCompanies(),
-        getUsers(),
-      ]);
-      setVendors(vendorsData || []);
-      setCompanies(companiesData || []);
-      setBuyers(buyersData || []);
-    } catch (error) {
-      console.error("Failed to load dropdown data:", error);
-      message.error("Failed to load form data");
-    } finally {
-      setLoadingDropdowns(false);
     }
   };
 

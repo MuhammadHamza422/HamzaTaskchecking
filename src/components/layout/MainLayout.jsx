@@ -134,7 +134,7 @@ const navLinks = [
     to: "/procurement",
     label: "Dashboard",
     app: "procurement",
-    menuItem: "dashboard",
+    // menuItem: "dashboard",
     roles: ["admin", "procurement", "manager"],
   },
   {

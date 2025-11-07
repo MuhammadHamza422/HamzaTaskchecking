@@ -5,15 +5,25 @@ import React from "react";
  * Displays company logo and information
  */
 const ReceiptHeader = ({ company }) => {
+  // Use dynamic logo from API response, fallback to static logo
+  const logoUrl = company?.logo || "/Retro vGame_logo.png";
+  const logoAlt = company?.name ? `${company.name} Logo` : "Retro vGame Logo";
+
   return (
     <div className="mb-10">
       <div className="flex items-start gap-4 mb-4">
         {/* Logo Container */}
         <div className="rounded w-[150px] h-auto flex flex-col items-center justify-center p-2 shrink-0">
           <img
-            src="/Retro vGame_logo.png"
-            alt="Retro vGame Logo"
+            src={logoUrl}
+            alt={logoAlt}
             className="object-contain max-w-[150px] max-h-[150px]"
+            onError={(e) => {
+              // Fallback to static logo if dynamic logo fails to load
+              if (e.target.src !== "/Retro vGame_logo.png") {
+                e.target.src = "/Retro vGame_logo.png";
+              }
+            }}
           />
         </div>
 

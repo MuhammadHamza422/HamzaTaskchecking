@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   FileText,
@@ -39,19 +39,24 @@ export default function ProcurementDashboardPage() {
   const [error, setError] = useState(null);
   const [dateRange, setDateRange] = useState(null);
 
+  // Memoize date range params to prevent unnecessary API calls
+  const dateRangeParams = useMemo(() => {
+    if (!dateRange || dateRange.length !== 2) return null;
+    return {
+      startDate: dateRange[0].startOf("day").toISOString(),
+      endDate: dateRange[1].endOf("day").toISOString(),
+    };
+  }, [dateRange?.[0]?.toISOString(), dateRange?.[1]?.toISOString()]);
+
   useEffect(() => {
     loadDashboardStats();
-  }, [dateRange]);
+  }, [dateRangeParams]);
 
   const loadDashboardStats = async () => {
     setLoading(true);
     setError(null);
     try {
-      const params = {};
-      if (dateRange && dateRange.length === 2) {
-        params.startDate = dateRange[0].startOf("day").toISOString();
-        params.endDate = dateRange[1].endOf("day").toISOString();
-      }
+      const params = dateRangeParams || {};
       const response = await getDashboardStats(params);
       setStats(response?.data || null);
     } catch (error) {
@@ -259,7 +264,7 @@ export default function ProcurementDashboardPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-[1480px] mx-auto">
           <Skeleton height={32} width={300} style={{ marginBottom: 24 }} />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -295,7 +300,7 @@ export default function ProcurementDashboardPage() {
   if (error && !stats) {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-[1480px] mx-auto">
           <Card>
             <div className="text-center py-12">
               <AlertCircle
@@ -321,7 +326,7 @@ export default function ProcurementDashboardPage() {
 
   return (
     <div className="min-h-screen p-6">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-[1480px] mx-auto">
         {/* Breadcrumbs */}
         <Breadcrumb className="mb-4">
           <Breadcrumb.Item>
