@@ -357,11 +357,11 @@ const PurchaseOrdersListPage = () => {
       key: "receiptStatus",
       width: 130,
       render: (status, record) => {
-        // Show "Ready to Receive" when status is "in_transit"
+        // Show "Ready to Receive" badge only when status is "in_transit"
         if (record.status === "in_transit") {
           return <ReceiptBadge status="ready_to_receive" />;
         }
-        return <ReceiptBadge status={status || "none"} />;
+        return <span className="text-gray-400 text-xs">-</span>;
       },
     },
   ];
@@ -580,10 +580,8 @@ const PurchaseOrdersListPage = () => {
                   </div>
                   <div className="flex flex-col items-end gap-1 shrink-0">
                     <StatusBadge status={order.status} />
-                    {order.status === "in_transit" ? (
+                    {order.status === "in_transit" && (
                       <ReceiptBadge status="ready_to_receive" />
-                    ) : (
-                      <ReceiptBadge status={order.receiptStatus || "none"} />
                     )}
                   </div>
                 </div>

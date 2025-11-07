@@ -457,10 +457,8 @@ const PurchaseOrderDetailPage = () => {
                 <span className="sm:hidden">Scanner</span>
               </Button> */}
               <StatusBadge status={po?.status} />
-              {po?.status === "in_transit" ? (
+              {po?.status === "in_transit" && (
                 <ReceiptBadge status="ready_to_receive" />
-              ) : (
-                <ReceiptBadge status={po?.receiptStatus || "none"} />
               )}
             </Space>
           </div>
@@ -470,99 +468,213 @@ const PurchaseOrderDetailPage = () => {
           {/* Main Content */}
           <Col xs={24} lg={16}>
             {/* Status Workflow */}
-            <Card size="small" className="mb-4 bg-gray-100">
-              {/* Desktop Horizontal View */}
-              <div className="hidden sm:flex items-center justify-between ">
-                {statusFlow.map((status, index) => {
-                  const isActive = po?.status === status;
-                  const isCompleted = currentIndex > index;
-                  const isCurrent = index === currentIndex;
-
-                  return (
-                    <React.Fragment key={status}>
-                      <div className="flex items-center flex-1 min-w-0">
-                        <div
-                          className={`flex-1 flex items-center min-w-0 ${
-                            isActive || isCompleted
-                              ? "text-green-600"
-                              : "text-gray-400"
-                          }`}
-                        >
-                          <div
-                            className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-medium shrink-0 ${
-                              isActive
-                                ? "border-green-600 bg-green-50 text-green-700"
-                                : isCompleted
-                                ? "border-green-600 bg-green-100 text-green-700"
-                                : "border-gray-300 bg-gray-50"
-                            }`}
-                          >
-                            {index + 1}
-                          </div>
-                          <div className="ml-2 text-xs">
-                            {PO_STATUS_LABELS[status] ||
-                              status.replace("_", " ")}
-                          </div>
-                        </div>
-                      </div>
-                      {index < statusFlow.length - 1 && (
-                        <div
-                          className={`h-0.5 flex-1 mx-2 min-w-[20px] ${
-                            isCompleted || isActive
-                              ? "bg-green-600"
-                              : "bg-gray-300"
-                          }`}
-                        />
-                      )}
-                    </React.Fragment>
-                  );
-                })}
+            <Card 
+              size="small" 
+              className="mb-4 shadow-md border"
+              style={{
+                background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+                borderColor: currentStatus === PO_STATUS.CANCELLED ? '#ef4444' : '#e2e8f0'
+              }}
+            >
+              <div className="mb-4">
+                <h3 className="text-base font-semibold text-gray-800 mb-1">Order Status</h3>
+                <div className="text-xs text-gray-500">Track the progress of your purchase order</div>
               </div>
 
-              {/* Mobile Vertical View */}
-              <div className="sm:hidden space-y-3 bg-gray-100">
-                {statusFlow.map((status, index) => {
-                  const isActive = po?.status === status;
-                  const isCompleted = currentIndex > index;
+              {/* Desktop Horizontal View - Improved */}
+              <div className="hidden lg:block">
+                <div className="flex items-center justify-between py-4 px-2">
+                  {statusFlow.map((status, index) => {
+                    const isActive = po?.status === status;
+                    const isCompleted = currentIndex > index;
+                    const isPending = currentIndex < index;
+                    const lineCompleted = currentIndex > index;
 
-                  return (
-                    <div key={status} className="flex items-center gap-3">
-                      <div
-                        className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm font-medium shrink-0 ${
-                          isActive
-                            ? "border-green-600 bg-green-50 text-green-700"
-                            : isCompleted
-                            ? "border-green-600 bg-green-100 text-green-700"
-                            : "border-gray-300 bg-gray-50 text-gray-400"
-                        }`}
-                      >
-                        {index + 1}
-                      </div>
-                      <div className="flex-1">
-                        <div
-                          className={`text-sm font-medium ${
-                            isActive || isCompleted
-                              ? "text-green-700"
-                              : "text-gray-400"
-                          }`}
-                        >
-                          {PO_STATUS_LABELS[status] || status.replace("_", " ")}
+                    return (
+                      <React.Fragment key={status}>
+                        <div className="flex flex-col items-center flex-1 min-w-0 relative z-10">
+                          {/* Status Circle */}
+                          <div
+                            className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-sm font-semibold shrink-0 transition-all relative ${
+                              isActive
+                                ? "border-blue-600 bg-blue-50 text-blue-700 shadow-lg scale-110 ring-4 ring-blue-100"
+                                : isCompleted
+                                ? "border-green-600 bg-green-50 text-green-700 shadow-md"
+                                : "border-gray-300 bg-white text-gray-400"
+                            }`}
+                            style={{ borderWidth: '3px' }}
+                          >
+                            {isCompleted ? (
+                              <CheckCircle size={20} className="text-green-600" />
+                            ) : (
+                              <span className={isActive ? "text-blue-700" : ""}>{index + 1}</span>
+                            )}
+                          </div>
+                          {/* Status Label */}
+                          <div className={`mt-2 text-center ${
+                            isActive
+                              ? "text-blue-700 font-semibold"
+                              : isCompleted
+                              ? "text-green-700 font-medium"
+                              : "text-gray-500"
+                          }`}>
+                            <div className="text-xs font-medium whitespace-nowrap">
+                              {PO_STATUS_LABELS[status] || status.replace("_", " ")}
+                            </div>
+                          </div>
                         </div>
-                        {isActive && (
-                          <div className="text-xs text-gray-500 mt-1">
-                            Current Status
+                        {/* Connecting Line - Much More Prominent */}
+                        {index < statusFlow.length - 1 && (
+                          <div className="flex-1 mx-2 relative" style={{ minWidth: '40px', maxWidth: '120px' }}>
+                            <div className="relative h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                              {/* Progress Fill */}
+                              <div
+                                className={`absolute top-0 left-0 h-full rounded-full transition-all duration-500 ${
+                                  lineCompleted
+                                    ? "bg-gradient-to-r from-green-500 to-green-600 w-full"
+                                    : isActive
+                                    ? "bg-gradient-to-r from-blue-400 to-blue-500 w-1/2"
+                                    : "bg-gray-300 w-0"
+                                }`}
+                                style={{
+                                  boxShadow: lineCompleted 
+                                    ? '0 2px 8px rgba(34, 197, 94, 0.4)' 
+                                    : isActive 
+                                    ? '0 2px 8px rgba(59, 130, 246, 0.4)' 
+                                    : 'none'
+                                }}
+                              />
+                              {/* Animated Shine Effect for Active */}
+                              {isActive && (
+                                <div 
+                                  className="absolute top-0 left-0 h-full w-full bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-50 animate-pulse"
+                                />
+                              )}
+                            </div>
                           </div>
                         )}
-                      </div>
-                      {isCompleted && (
-                        <CheckCircle
-                          size={18}
-                          className="text-green-600 shrink-0"
-                        />
-                      )}
-                    </div>
-                  );
-                })}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Tablet/Medium Screen View */}
+              <div className="hidden md:block lg:hidden">
+                <div className="flex items-center justify-between py-3 px-1">
+                  {statusFlow.map((status, index) => {
+                    const isActive = po?.status === status;
+                    const isCompleted = currentIndex > index;
+                    const lineCompleted = currentIndex > index;
+
+                    return (
+                      <React.Fragment key={status}>
+                        <div className="flex flex-col items-center flex-1 min-w-0 relative z-10">
+                          <div
+                            className={`w-10 h-10 rounded-full border-3 flex items-center justify-center text-xs font-bold shrink-0 transition-all ${
+                              isActive
+                                ? "border-blue-600 bg-blue-50 text-blue-700 shadow-lg scale-110 ring-4 ring-blue-100"
+                                : isCompleted
+                                ? "border-green-600 bg-green-50 text-green-700 shadow-md"
+                                : "border-gray-300 bg-white text-gray-400"
+                            }`}
+                            style={{ borderWidth: '3px' }}
+                          >
+                            {isCompleted ? (
+                              <CheckCircle size={18} className="text-green-600" />
+                            ) : (
+                              index + 1
+                            )}
+                          </div>
+                          <div className={`mt-1.5 text-center ${
+                            isActive ? "text-blue-700 font-semibold" : isCompleted ? "text-green-700" : "text-gray-500"
+                          }`}>
+                            <div className="text-xs font-medium leading-tight">
+                              {PO_STATUS_LABELS[status]?.split(' ')[0] || status.replace("_", " ")}
+                            </div>
+                          </div>
+                        </div>
+                        {index < statusFlow.length - 1 && (
+                          <div className="flex-1 mx-1.5 relative" style={{ minWidth: '20px' }}>
+                            <div className="relative h-2 bg-gray-200 rounded-full overflow-hidden">
+                              <div
+                                className={`absolute top-0 left-0 h-full rounded-full transition-all duration-500 ${
+                                  lineCompleted
+                                    ? "bg-gradient-to-r from-green-500 to-green-600 w-full"
+                                    : isActive
+                                    ? "bg-gradient-to-r from-blue-400 to-blue-500 w-1/2"
+                                    : "bg-gray-300 w-0"
+                                }`}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Mobile Vertical View - Improved */}
+              <div className="md:hidden">
+                <div className="space-y-2">
+                  {statusFlow.map((status, index) => {
+                    const isActive = po?.status === status;
+                    const isCompleted = currentIndex > index;
+                    const hasNext = index < statusFlow.length - 1;
+
+                    return (
+                      <React.Fragment key={status}>
+                        <div className="flex items-start gap-3 relative">
+                          {/* Vertical Line */}
+                          {hasNext && (
+                            <div className="absolute left-5 top-12 bottom-0 w-0.5 z-0">
+                              <div className={`h-full w-full rounded-full ${
+                                isCompleted ? "bg-green-500" : "bg-gray-300"
+                              }`} />
+                            </div>
+                          )}
+                          {/* Status Circle */}
+                          <div
+                            className={`w-10 h-10 rounded-full border-3 flex items-center justify-center text-sm font-bold shrink-0 transition-all relative z-10 ${
+                              isActive
+                                ? "border-blue-600 bg-blue-50 text-blue-700 shadow-lg ring-4 ring-blue-100"
+                                : isCompleted
+                                ? "border-green-600 bg-green-50 text-green-700 shadow-md"
+                                : "border-gray-300 bg-white text-gray-400"
+                            }`}
+                            style={{ borderWidth: '3px' }}
+                          >
+                            {isCompleted ? (
+                              <CheckCircle size={18} className="text-green-600" />
+                            ) : (
+                              index + 1
+                            )}
+                          </div>
+                          {/* Status Content */}
+                          <div className="flex-1 pt-1 pb-4">
+                            <div
+                              className={`text-sm font-medium ${
+                                isActive
+                                  ? "text-blue-700 font-semibold"
+                                  : isCompleted
+                                  ? "text-green-700"
+                                  : "text-gray-500"
+                              }`}
+                            >
+                              {PO_STATUS_LABELS[status] || status.replace("_", " ")}
+                            </div>
+                            {isActive && (
+                              <div className="text-xs text-blue-600 mt-0.5 font-medium">
+                                Current Status
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Next Step Button */}
