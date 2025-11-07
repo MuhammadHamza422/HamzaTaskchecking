@@ -461,9 +461,9 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
         return (
           <div>
             <div className="font-medium text-gray-900">{record.name || "N/A"}</div>
-            <div className="text-xs text-gray-500 mt-1">
+            {/* <div className="text-xs text-gray-500 mt-1">
               SKU: {record.sku || "N/A"}
-            </div>
+            </div> */}
           </div>
         );
       },
