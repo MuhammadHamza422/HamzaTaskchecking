@@ -50,7 +50,7 @@ const CreatePurchaseOrderPage = () => {
   const [canEdit, setCanEdit] = useState(true);
 
   // Use shared dropdown data from context
-  const { vendors, companies, buyers } = useProcurementData();
+  const { vendors, companies, buyers, loading: loadingDropdowns } = useProcurementData();
   
   const [products, setProducts] = useState([]);
   const [productSearch, setProductSearch] = useState("");
