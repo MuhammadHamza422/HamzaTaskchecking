@@ -17,13 +17,13 @@ const ReceiptTemplate = ({
   formatDate: formatDateProp,
 }) => {
   // Debug: Log received data
-  React.useEffect(() => {
-    console.log("ReceiptTemplate - received data:", data);
-    console.log("ReceiptTemplate - allLineItems:", data?.allLineItems);
-    console.log("ReceiptTemplate - boxesSummary:", data?.boxesSummary);
-    console.log("ReceiptTemplate - looseLineItems:", data?.looseLineItems);
-    console.log("ReceiptTemplate - lineItems:", data?.lineItems);
-  }, [data]);
+  // React.useEffect(() => {
+  //   console.log("ReceiptTemplate - received data:", data);
+  //   console.log("ReceiptTemplate - allLineItems:", data?.allLineItems);
+  //   console.log("ReceiptTemplate - boxesSummary:", data?.boxesSummary);
+  //   console.log("ReceiptTemplate - looseLineItems:", data?.looseLineItems);
+  //   console.log("ReceiptTemplate - lineItems:", data?.lineItems);
+  // }, [data]);
 
   const {
     company,
