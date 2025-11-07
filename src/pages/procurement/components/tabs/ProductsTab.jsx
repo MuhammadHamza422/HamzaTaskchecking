@@ -12,7 +12,7 @@ import Swal from "sweetalert2";
  * Shows products and kits with checkboxes and QR code buttons
  * Allows adding/removing products when order is in draft status
  */
-const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
+const ProductsTab = ({ purchaseOrder, poId, onReload, onValidate, onUnsavedChangesChange }) => {
   const [selectedProductIndices, setSelectedProductIndices] = useState([]);
   const [qrModalVisible, setQrModalVisible] = useState(false);
   const [qrData, setQrData] = useState(null);
@@ -24,28 +24,148 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [newlyAddedIndices, setNewlyAddedIndices] = useState(new Set()); // Track newly added products
-  const [pendingSave, setPendingSave] = useState(null); // Track pending save with debounce
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false); // Track if there are unsaved changes
 
   const isDraft = purchaseOrder?.status === "draft";
 
+  // Sync unsaved changes with parent
   useEffect(() => {
-    setLocalProducts(purchaseOrder?.products || []);
+    if (onUnsavedChangesChange) {
+      onUnsavedChangesChange(hasUnsavedChanges);
+    }
+  }, [hasUnsavedChanges, onUnsavedChangesChange]);
+
+  // Save products function
+  const saveProducts = async (productsToSave) => {
+    if (!isDraft || !poId) return;
+
+    setSaving(true);
+    try {
+      // Validate kits before saving
+      const invalidKits = productsToSave.filter(
+        (item) => item.type === "kit" && (!item.kitProducts || item.kitProducts.length === 0)
+      );
+      
+      if (invalidKits.length > 0) {
+        const kitNames = invalidKits.map(k => k.name || 'Unnamed Kit').join(', ');
+        throw new Error(`The following kit(s) have no products: ${kitNames}. Please add products to kits before saving.`);
+      }
+
+      const productsPayload = productsToSave.map((item) => {
+        if (item.type === "product") {
+          return {
+            type: "product",
+            productId: item.productId,
+            name: item.name,
+            sku: item.sku,
+            quantity: Number(item.quantity) || 0,
+            unitPrice: Number(item.unitPrice) || 0,
+            uom: item.uom || "Unit",
+            taxes: Number(item.taxes) || 0,
+          };
+        } else {
+          // For kits, ensure kitProducts exists and is not empty
+          const kitProducts = item.kitProducts || item.components || [];
+          
+          if (kitProducts.length === 0) {
+            throw new Error(`Kit "${item.name || 'Unnamed Kit'}" must have at least one product.`);
+          }
+          
+          return {
+            type: "kit",
+            name: item.name,
+            quantity: Number(item.quantity) || 1,
+            unitPrice: Number(item.unitPrice) || 0,
+            kitProducts: kitProducts.map((kp) => ({
+              productId: kp.productId || kp._id,
+              name: kp.name,
+              sku: kp.sku,
+              quantity: Number(kp.quantity) || 0,
+              unitPrice: Number(kp.unitPrice) || 0,
+              taxes: Number(kp.taxes) || 0,
+              uom: kp.uom || "Unit",
+            })),
+            taxes: Number(item.taxes) || 0,
+          };
+        }
+      });
+
+      await updatePurchaseOrder(poId, { products: productsPayload });
+      
+      // Refetch the purchase order to get updated data (needed for box modal to show latest products)
+      if (onReload) {
+        await onReload();
+      }
+      
+      // Clear unsaved changes flag after successful save
+      setHasUnsavedChanges(false);
+      
+      message.success("Products updated successfully");
+    } catch (error) {
+      console.error("Failed to save products:", error);
+      
+      // Handle validation errors for kits
+      if (error?.response?.data?.error?.code === "VALIDATION_ERROR" || 
+          error?.message?.includes("kitProducts") ||
+          error?.message?.includes("kit")) {
+        const errorMessage = error?.response?.data?.error?.message || error?.message || "Kit validation failed";
+        Swal.fire({
+          icon: "error",
+          title: "Kit Validation Error",
+          text: errorMessage,
+        });
+      } else {
+        const errorMessage = error?.response?.data?.error?.message || error?.message || "Failed to update products";
+        if (error?.response?.data?.error?.code === "EDIT_NOT_ALLOWED") {
+          Swal.fire({
+            icon: "warning",
+            title: "Cannot Update Products",
+            text: errorMessage,
+          });
+        } else {
+          message.error(errorMessage);
+        }
+      }
+      
+      // Revert on error
+      setLocalProducts(purchaseOrder?.products || []);
+      setEditingProducts({});
+      setHasUnsavedChanges(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Expose save function to parent via onValidate
+  const handleValidate = React.useCallback(async () => {
+    if (hasUnsavedChanges) {
+      await saveProducts(localProducts);
+    }
+  }, [hasUnsavedChanges, localProducts, isDraft, poId, onReload, purchaseOrder]);
+
+  useEffect(() => {
+    if (onValidate) {
+      // Store the validate handler
+      onValidate.current = handleValidate;
+    }
+  }, [onValidate, handleValidate]);
+
+  useEffect(() => {
+    // Normalize products - ensure kits have kitProducts array
+    const normalizedProducts = (purchaseOrder?.products || []).map((item) => {
+      if (item.type === "kit") {
+        // Ensure kitProducts exists (some APIs might use 'components')
+        return {
+          ...item,
+          kitProducts: item.kitProducts || item.components || [],
+        };
+      }
+      return item;
+    });
+    setLocalProducts(normalizedProducts);
     setEditingProducts({}); // Clear editing state when purchase order changes
-    setNewlyAddedIndices(new Set()); // Clear newly added tracking
+    setHasUnsavedChanges(false); // Reset unsaved changes when purchase order changes
   }, [purchaseOrder]);
-
-  // Debounced save effect - waits 1 second after last change before saving
-  useEffect(() => {
-    if (!pendingSave || !isDraft || !poId) return;
-
-    const timeoutId = setTimeout(() => {
-      saveProducts(pendingSave);
-      setPendingSave(null);
-    }, 1000); // Wait 1 second after user stops typing
-
-    return () => clearTimeout(timeoutId);
-  }, [pendingSave, isDraft, poId]);
 
   // Search products
   useEffect(() => {
@@ -74,7 +194,7 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
     }
   };
 
-  const handleAddProduct = (product) => {
+  const handleAddProduct = async (product) => {
     const exists = localProducts.some(
       (p) => p.type === "product" && (p.productId || p._id) === (product._id || product.id)
     );
@@ -103,17 +223,31 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
       ...editingProducts,
       [newIndex]: { ...newProduct },
     });
-    // Track as newly added
-    setNewlyAddedIndices(new Set([...newlyAddedIndices, newIndex]));
     
-    // Schedule debounced save
-    setPendingSave(updated);
-    setProductSearch("");
-    setSearchResults([]);
+    // Call API immediately when adding a product
+    setSaving(true);
+    try {
+      await saveProducts(updated);
+      message.success("Product added successfully");
+      setProductSearch("");
+      setSearchResults([]);
+    } catch (error) {
+      console.error("Failed to add product:", error);
+      // Revert on error
+      setLocalProducts(purchaseOrder?.products || []);
+      setEditingProducts({});
+      setHasUnsavedChanges(false);
+      const errorMessage = error?.response?.data?.error?.message || "Failed to add product";
+      message.error(errorMessage);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleRemoveProduct = async (index) => {
     const updated = localProducts.filter((_, i) => i !== index);
+    
+    // Update local state immediately
     setLocalProducts(updated);
     setSelectedProductIndices((prev) => prev.filter((i) => i !== index).map(i => i > index ? i - 1 : i));
     
@@ -132,8 +266,22 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
     });
     setEditingProducts(adjustedEditing);
     
-    // Save immediately for delete (no debounce needed)
-    await saveProducts(updated);
+    // Call API immediately when deleting a product
+    setSaving(true);
+    try {
+      await saveProducts(updated);
+      message.success("Product removed successfully");
+    } catch (error) {
+      console.error("Failed to remove product:", error);
+      // Revert on error
+      setLocalProducts(purchaseOrder?.products || []);
+      setEditingProducts({});
+      setHasUnsavedChanges(false);
+      const errorMessage = error?.response?.data?.error?.message || "Failed to remove product";
+      message.error(errorMessage);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleMakeKit = async () => {
@@ -191,81 +339,12 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
       [newKitIndex]: { ...newKit },
     });
     
-    // Schedule debounced save
-    setPendingSave(updated);
+    // Mark as having unsaved changes
+    setHasUnsavedChanges(true);
     message.success("Kit created successfully");
     } catch (error) {
       console.error("Failed to create kit:", error);
       message.error("Failed to create kit");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const saveProducts = async (productsToSave) => {
-    if (!isDraft || !poId) return;
-
-    setSaving(true);
-    try {
-      const productsPayload = productsToSave.map((item) => {
-        if (item.type === "product") {
-          return {
-            type: "product",
-            productId: item.productId,
-            name: item.name,
-            sku: item.sku,
-            quantity: Number(item.quantity) || 0,
-            unitPrice: Number(item.unitPrice) || 0,
-            uom: item.uom || "Unit",
-            taxes: Number(item.taxes) || 0,
-          };
-        } else {
-          return {
-            type: "kit",
-            name: item.name,
-            quantity: Number(item.quantity) || 1,
-            unitPrice: Number(item.unitPrice) || 0,
-            kitProducts: (item.kitProducts || []).map((kp) => ({
-              productId: kp.productId || kp._id,
-              name: kp.name,
-              sku: kp.sku,
-              quantity: Number(kp.quantity) || 0,
-              unitPrice: Number(kp.unitPrice) || 0,
-              taxes: Number(kp.taxes) || 0,
-              uom: kp.uom || "Unit",
-            })),
-            taxes: Number(item.taxes) || 0,
-          };
-        }
-      });
-
-      await updatePurchaseOrder(poId, { products: productsPayload });
-      
-      // Refetch the purchase order to get updated data (needed for box modal to show latest products)
-      if (onReload) {
-        await onReload();
-      }
-      
-      // Clear newly added tracking after successful save
-      setNewlyAddedIndices(new Set());
-      
-      // Silent success - no message to avoid spam
-      // message.success("Products updated successfully");
-    } catch (error) {
-      console.error("Failed to save products:", error);
-      const errorMessage = error?.response?.data?.error?.message || "Failed to update products";
-      if (error?.response?.data?.error?.code === "EDIT_NOT_ALLOWED") {
-        Swal.fire({
-          icon: "warning",
-          title: "Cannot Update Products",
-          text: errorMessage,
-        });
-      } else {
-        message.error(errorMessage);
-      }
-      // Revert on error
-      setLocalProducts(purchaseOrder?.products || []);
-      setEditingProducts({});
     } finally {
       setSaving(false);
     }
@@ -357,22 +436,39 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
   // Handle product field update (only updates local editing state, doesn't save immediately)
   const handleProductFieldChange = (index, field, value) => {
     const currentEditing = editingProducts[index] || { ...localProducts[index] };
+    const originalProduct = localProducts[index];
+    
+    // For kits, preserve kitProducts array when updating other fields
     const updatedEditing = {
       ...editingProducts,
       [index]: {
         ...currentEditing,
         [field]: value,
+        // Preserve kitProducts for kits (don't lose them when editing quantity/price)
+        ...(originalProduct?.type === "kit" && originalProduct?.kitProducts 
+          ? { kitProducts: originalProduct.kitProducts } 
+          : {}),
+        // Also preserve components if it exists (API might use this)
+        ...(originalProduct?.type === "kit" && originalProduct?.components 
+          ? { components: originalProduct.components } 
+          : {}),
       },
     };
     setEditingProducts(updatedEditing);
     
     // Update local products immediately for UI responsiveness
     const updated = [...localProducts];
-    updated[index] = updatedEditing[index];
+    updated[index] = {
+      ...updatedEditing[index],
+      // Ensure kitProducts is preserved in local state too
+      ...(originalProduct?.type === "kit" && originalProduct?.kitProducts 
+        ? { kitProducts: originalProduct.kitProducts } 
+        : {}),
+    };
     setLocalProducts(updated);
     
-    // Schedule debounced save
-    setPendingSave(updated);
+    // Mark as having unsaved changes
+    setHasUnsavedChanges(true);
   };
 
   // Enable edit mode for a product (for non-draft or manual edit)

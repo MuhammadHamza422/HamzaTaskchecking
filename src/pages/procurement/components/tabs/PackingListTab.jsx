@@ -4,18 +4,13 @@ import {
   Button,
   Space,
   Table,
-  Modal,
   Form,
-  Input,
-  InputNumber,
   Tag,
   message,
   Skeleton,
-  Row,
-  Col,
-  Select,
   Checkbox,
   Dropdown,
+  Descriptions,
 } from "antd";
 import Swal from "sweetalert2";
 import {
@@ -24,46 +19,51 @@ import {
   Printer,
   QrCode,
   Package,
-  Eye,
   MoreVertical,
   Edit as EditIcon,
 } from "lucide-react";
 import {
   getBoxes,
+  getBox,
   createBox,
   updateBox,
   deleteBox,
-  getBox,
   getBoxQRCode,
   printBoxLabels,
   printPackingList,
-  scanBox,
 } from "../../../../api/procurement";
 import QRCodeModal from "../QRCodeModal";
 import BulkQRCodeModal from "../BulkQRCodeModal";
-
-const { Option } = Select;
+import CreateBoxModal from "./CreateBoxModal";
+import EditBoxModal from "./EditBoxModal";
 
 /**
  * Packing List Tab Component
  * Manage boxes, QR codes, and print labels
  */
-const PackingListTab = ({ purchaseOrder, poId, onReload }) => {
+const PackingListTab = ({ purchaseOrder, poId, onReload, onUnsavedChangesChange }) => {
   const [boxes, setBoxes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creatingBox, setCreatingBox] = useState(false);
   const [updatingBox, setUpdatingBox] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
-  const [viewBoxVisible, setViewBoxVisible] = useState(false);
-  const [selectedBox, setSelectedBox] = useState(null);
   const [boxQRVisible, setBoxQRVisible] = useState(false);
   const [boxQRCode, setBoxQRCode] = useState(null);
   const [selectedBoxIndices, setSelectedBoxIndices] = useState([]);
   const [bulkQRModalVisible, setBulkQRModalVisible] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editingBox, setEditingBox] = useState(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [expandedRowKeys, setExpandedRowKeys] = useState([]);
   const [form] = Form.useForm();
   const [editForm] = Form.useForm();
+
+  // Sync unsaved changes with parent
+  useEffect(() => {
+    if (onUnsavedChangesChange) {
+      onUnsavedChangesChange(hasUnsavedChanges);
+    }
+  }, [hasUnsavedChanges, onUnsavedChangesChange]);
 
   useEffect(() => {
     if (poId) {
@@ -75,7 +75,10 @@ const PackingListTab = ({ purchaseOrder, poId, onReload }) => {
     setLoading(true);
     try {
       const response = await getBoxes(poId, { includeItems: true });
-      setBoxes(response?.data?.boxes || []);
+      const boxesData = response?.data?.boxes || [];
+      setBoxes(boxesData);
+      // Clear unsaved changes when boxes are loaded
+      setHasUnsavedChanges(false);
     } catch (error) {
       console.error("Failed to load boxes:", error);
       message.error("Failed to load boxes");
@@ -87,18 +90,26 @@ const PackingListTab = ({ purchaseOrder, poId, onReload }) => {
   const handleCreateBox = async (values) => {
     setCreatingBox(true);
     try {
+      // Call createBox API immediately
       await createBox(poId, {
         name: values.name,
         items: values.items,
       });
+      
       message.success("Box created successfully");
       setModalVisible(false);
       form.resetFields();
+      
+      // Reload boxes from server to get the box ID and latest data
       await loadBoxes();
-      // Reload purchase order to update product quantities in ProductsTab
+      
+      // Automatically reload PO to update product quantities
       if (onReload) {
         await onReload();
       }
+      
+      // Clear unsaved changes since we auto-updated PO
+      setHasUnsavedChanges(false);
     } catch (error) {
       console.error("Failed to create box:", error);
       const errorResponse = error?.response?.data?.error;
@@ -155,11 +166,16 @@ const PackingListTab = ({ purchaseOrder, poId, onReload }) => {
       setEditModalVisible(false);
       setEditingBox(null);
       editForm.resetFields();
+      // Reload boxes to get latest data
       await loadBoxes();
-      // Reload purchase order to update product quantities in ProductsTab
+      
+      // Automatically reload PO to update product quantities
       if (onReload) {
         await onReload();
       }
+      
+      // Clear unsaved changes since we auto-updated PO
+      setHasUnsavedChanges(false);
     } catch (error) {
       console.error("Failed to update box:", error);
       const errorResponse = error?.response?.data?.error;
@@ -205,7 +221,15 @@ const PackingListTab = ({ purchaseOrder, poId, onReload }) => {
       try {
         await deleteBox(boxId);
         message.success("Box deleted successfully");
-        loadBoxes();
+        await loadBoxes();
+        
+        // Automatically reload PO to update product quantities
+        if (onReload) {
+          await onReload();
+        }
+        
+        // Clear unsaved changes since we auto-updated PO
+        setHasUnsavedChanges(false);
       } catch (error) {
         console.error("Failed to delete box:", error);
         const errorMessage =
@@ -220,16 +244,6 @@ const PackingListTab = ({ purchaseOrder, poId, onReload }) => {
     }
   };
 
-  const handleViewBox = async (boxId) => {
-    try {
-      const response = await getBox(boxId);
-      setSelectedBox(response?.data);
-      setViewBoxVisible(true);
-    } catch (error) {
-      console.error("Failed to load box:", error);
-      message.error("Failed to load box details");
-    }
-  };
 
   const handleShowQRCode = async (boxId) => {
     try {
@@ -346,7 +360,7 @@ const PackingListTab = ({ purchaseOrder, poId, onReload }) => {
       render: (text) => <Tag color="blue">{text}</Tag>,
     },
     {
-      title: "Name",
+      title: "Description",
       dataIndex: "name",
       key: "name",
       width: 200,
@@ -378,16 +392,6 @@ const PackingListTab = ({ purchaseOrder, poId, onReload }) => {
       align: "center",
       render: (_, record) => {
         const menuItems = [
-          {
-            key: "view",
-            label: (
-              <Space>
-                <Eye size={14} />
-                <span>View</span>
-              </Space>
-            ),
-            onClick: () => handleViewBox(record.boxId),
-          },
           {
             key: "edit",
             label: (
@@ -519,6 +523,66 @@ const PackingListTab = ({ purchaseOrder, poId, onReload }) => {
               rowKey={(record) => record._id || record.boxId}
               pagination={false}
               size="small"
+              expandable={{
+                expandedRowKeys,
+                onExpand: (expanded, record) => {
+                  if (expanded) {
+                    setExpandedRowKeys([...expandedRowKeys, record._id || record.boxId]);
+                  } else {
+                    setExpandedRowKeys(expandedRowKeys.filter(key => key !== (record._id || record.boxId)));
+                  }
+                },
+                expandedRowRender: (record) => {
+                  const items = record.items || [];
+                  return (
+                    <div className="p-4 bg-gray-50">
+                      <Descriptions title="Box Items" bordered size="small" column={1}>
+                        {items.map((item, index) => (
+                          <Descriptions.Item key={index} label={`Item ${index + 1}`}>
+                            <div>
+                              <div className="font-medium">{item.name || "Unknown Product"}</div>
+                              {item.sku && <div className="text-xs text-gray-500">SKU: {item.sku}</div>}
+                              <div className="text-sm mt-1">
+                                Quantity: <span className="font-semibold">{item.quantity}</span> {item.uom || "Unit"}
+                              </div>
+                              {item.unitPrice && (
+                                <div className="text-sm text-gray-600">
+                                  Unit Price: ${item.unitPrice}
+                                </div>
+                              )}
+                            </div>
+                          </Descriptions.Item>
+                        ))}
+                      </Descriptions>
+                    </div>
+                  );
+                },
+                expandIcon: ({ expanded, onExpand, record }) => (
+                  <Button
+                    type="text"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onExpand(record, e);
+                    }}
+                    size="small"
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      width: '30px',
+                      height: '30px',
+                    }}
+                  >
+                    <Plus 
+                      size={24} 
+                      style={{ 
+                        transform: expanded ? 'rotate(45deg)' : 'rotate(0deg)', 
+                        transition: 'transform 0.2s' 
+                      }} 
+                    />
+                  </Button>
+                ),
+              }}
             />
           </div>
 
@@ -553,16 +617,6 @@ const PackingListTab = ({ purchaseOrder, poId, onReload }) => {
                     <Dropdown
                       menu={{
                         items: [
-                          {
-                            key: "view",
-                            label: (
-                              <Space>
-                                <Eye size={14} />
-                                <span>View</span>
-                              </Space>
-                            ),
-                            onClick: () => handleViewBox(box.boxId),
-                          },
                           {
                             key: "edit",
                             label: (
@@ -646,16 +700,9 @@ const PackingListTab = ({ purchaseOrder, poId, onReload }) => {
         onFinish={handleCreateBox}
         form={form}
         purchaseOrder={purchaseOrder}
-        boxes={boxes}
         loading={creatingBox}
       />
 
-      {/* View Box Modal */}
-      <ViewBoxModal
-        visible={viewBoxVisible}
-        onCancel={() => setViewBoxVisible(false)}
-        box={selectedBox}
-      />
 
       {/* Single QR Code Modal */}
       {boxQRCode && (
@@ -693,675 +740,12 @@ const PackingListTab = ({ purchaseOrder, poId, onReload }) => {
         onFinish={handleUpdateBox}
         form={editForm}
         purchaseOrder={purchaseOrder}
-        boxes={boxes}
         box={editingBox}
         loading={updatingBox}
       />
     </div>
   );
 };
-
-/**
- * Create Box Modal Component
- */
-const CreateBoxModal = ({
-  visible,
-  onCancel,
-  onFinish,
-  form,
-  purchaseOrder,
-  boxes = [],
-  loading = false,
-}) => {
-  const [selectedItems, setSelectedItems] = useState([]);
-  const products = purchaseOrder?.products || [];
-
-  // Calculate available quantity for each product/kit
-  const getAvailableQuantity = (product) => {
-    if (!product) return 0;
-    
-    const totalInPO = product.quantity || 0;
-    
-    // Calculate how many are already assigned to boxes
-    let alreadyAssigned = 0;
-    boxes.forEach((box) => {
-      if (box.items) {
-        box.items.forEach((item) => {
-          if (product.type === "kit") {
-            // For kits, check kitId
-            if (item.kitId === product.kitId) {
-              alreadyAssigned += item.quantity || 0;
-            }
-          } else {
-            // For products, check productId
-            if (item.productId === (product.productId || product._id)) {
-              alreadyAssigned += item.quantity || 0;
-            }
-          }
-        });
-      }
-    });
-    
-    return Math.max(0, totalInPO - alreadyAssigned);
-  };
-
-  const handleAddItem = () => {
-    const newItem = {
-      itemId: null, // Can be productId or kitId
-      itemType: null, // "product" or "kit"
-      quantity: 1,
-    };
-    setSelectedItems([...selectedItems, newItem]);
-  };
-
-  const handleRemoveItem = (index) => {
-    setSelectedItems(selectedItems.filter((_, i) => i !== index));
-  };
-
-  const handleItemChange = (index, field, value) => {
-    const updated = [...selectedItems];
-    
-    // If changing the item selection, also update the itemType
-    if (field === "itemId") {
-      const selectedProduct = products.find(
-        (p) => {
-          if (p.type === "kit") {
-            return p.kitId === value || p._id === value;
-          } else {
-            return p.productId === value || p._id === value;
-          }
-        }
-      );
-      
-      updated[index] = {
-        ...updated[index],
-        itemId: value,
-        itemType: selectedProduct?.type || "product",
-      };
-    } else {
-      updated[index] = { ...updated[index], [field]: value };
-    }
-    
-    setSelectedItems(updated);
-  };
-
-  const handleSubmit = () => {
-    if (selectedItems.length === 0) {
-      message.error("Please add at least one item to the box");
-      return;
-    }
-
-    form.validateFields().then((values) => {
-      const payloadItems = selectedItems.map((item) => {
-        const product = products.find(
-          (p) => {
-            if (p.type === "kit") {
-              return p.kitId === item.itemId || p._id === item.itemId;
-            } else {
-              return p.productId === item.itemId || p._id === item.itemId;
-            }
-          }
-        );
-        
-        const payloadItem = {
-          productId: item.itemType === "kit" ? null : item.itemId,
-          kitId: item.itemType === "kit" ? item.itemId : null,
-          quantity: item.quantity,
-          sku: product?.sku || null,
-        };
-
-        // Debug logging
-        console.log("=== Frontend Box Creation Debug ===");
-        console.log("Selected Item:", item);
-        console.log("Found Product/Kit:", product);
-        console.log("Payload Item:", payloadItem);
-        console.log("Available Products in PO:", products.map(p => ({
-          type: p.type,
-          kitId: p.kitId,
-          productId: p.productId,
-          name: p.name
-        })));
-        
-        return payloadItem;
-      });
-
-      console.log("=== Final Payload ===");
-      console.log("Items:", payloadItems);
-      
-      onFinish({
-        ...values,
-        items: payloadItems,
-      });
-    });
-  };
-
-  useEffect(() => {
-    if (visible) {
-      setSelectedItems([]);
-      form.resetFields();
-    }
-  }, [visible]);
-
-  return (
-    <Modal
-      title="Create Box"
-      open={visible}
-      onCancel={onCancel}
-      onOk={handleSubmit}
-      width="90%"
-      style={{ maxWidth: 700 }}
-      okText="Create"
-      confirmLoading={loading}
-      okButtonProps={{ disabled: loading }}
-      cancelButtonProps={{ disabled: loading }}
-    >
-      <Form form={form} layout="vertical">
-        <Form.Item name="name" label="Box Name (Optional)">
-          <Input placeholder="e.g., Box 1"  />
-        </Form.Item>
-
-        <div className="mb-4">
-          <div className="flex justify-between items-center my-2">
-            <span className="font-medium">Items</span>
-            <Button
-              type="dashed"
-              icon={<Plus size={14} />}
-              onClick={handleAddItem}
-              size="small"
-              disabled={loading}
-            >
-              Add Item
-            </Button>
-          </div>
-
-          {selectedItems.length === 0 ? (
-            <div className="text-center py-4 text-gray-400 text-sm">
-              Click "Add Item" to add products to this box
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {selectedItems.map((item, index) => {
-                // Find the selected product/kit to get available quantity
-                const selectedProduct = products.find((p) => {
-                  const itemId = p.type === "kit" ? p.kitId : p.productId || p._id;
-                  return itemId === item.itemId;
-                });
-                
-                const availableQty = selectedProduct
-                  ? getAvailableQuantity(selectedProduct)
-                  : 0;
-                
-                const isQuantityExceeded = item.quantity > availableQty;
-                
-                return (
-                  <Card key={index} size="small" className="mb-2 bg-gray-100">
-                    <Row gutter={[16, 12]} align="middle">
-                      <Col xs={24} sm={12}>
-                        <Select
-                          placeholder="Select Product or Kit"
-                          style={{ width: "100%" }}
-                          value={item.itemId}
-                          onChange={(value) =>
-                            handleItemChange(index, "itemId", value)
-                          }
-                          showSearch
-                          disabled={loading}
-                          filterOption={(input, option) =>
-                            (option?.label ?? "")
-                              .toLowerCase()
-                              .includes(input.toLowerCase())
-                          }
-                          options={products.map((p) => {
-                            // Use productId for products, kitId for kits, or _id as fallback
-                            const itemId = p.type === "kit" 
-                              ? p.kitId 
-                              : p.productId || p._id;
-                            
-                            // Build label with type indicator
-                            const typeLabel = p.type === "kit" ? " [Kit]" : "";
-                            const skuLabel = p.sku ? ` (${p.sku})` : "";
-                            const available = getAvailableQuantity(p);
-                            const availableLabel = available > 0 ? ` - ${available} available` : " - Out of stock";
-                            
-                            return {
-                              value: itemId,
-                              label: `${p.name}${typeLabel}${skuLabel}${availableLabel}`,
-                            };
-                          })}
-                        />
-                      </Col>
-                      <Col xs={18} sm={8}>
-                        <div className="flex flex-col">
-                          <InputNumber
-                            placeholder="Quantity"
-                            min={1}
-                            max={availableQty}
-                            value={item.quantity}
-                            onChange={(value) =>
-                              handleItemChange(index, "quantity", value)
-                            }
-                            style={{ width: "100%" }}
-                            status={isQuantityExceeded ? "error" : ""}
-                            disabled={loading}
-                          />
-                          {selectedProduct && (
-                            <div className="text-xs mt-2 mb-0">
-                              <span className={isQuantityExceeded ? "text-red-600" : "text-gray-500"}>
-                                {availableQty} available
-                                {isQuantityExceeded && (
-                                  <span className="ml-1 font-semibold">
-                                    (Requested: {item.quantity})
-                                  </span>
-                                )}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </Col>
-                      <Col xs={6} sm={4}>
-                        <Button
-                          type="text"
-                          danger
-                          icon={<Trash2 size={14} />}
-                          onClick={() => handleRemoveItem(index)}
-                          size="small"
-                          disabled={loading}
-                        />
-                      </Col>
-                    </Row>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </Form>
-    </Modal>
-  );
-};
-
-/**
- * Edit Box Modal Component
- */
-const EditBoxModal = ({
-  visible,
-  onCancel,
-  onFinish,
-  form,
-  purchaseOrder,
-  boxes = [],
-  box,
-  loading = false,
-}) => {
-  const [selectedItems, setSelectedItems] = useState([]);
-  const products = purchaseOrder?.products || [];
-
-  // Calculate available quantity for each product/kit
-  // When editing, we need to account for items already in this box
-  const getAvailableQuantity = (product, excludeCurrentBox = true) => {
-    if (!product) return 0;
-    
-    const totalInPO = product.quantity || 0;
-    
-    // Calculate how many are already assigned to boxes
-    let alreadyAssigned = 0;
-    boxes.forEach((b) => {
-      // Skip current box when calculating available quantity
-      if (excludeCurrentBox && box && (b.boxId === box.boxId || b._id === box._id)) {
-        return;
-      }
-      
-      if (b.items) {
-        b.items.forEach((item) => {
-          if (product.type === "kit") {
-            // For kits, check kitId
-            if (item.kitId === product.kitId) {
-              alreadyAssigned += item.quantity || 0;
-            }
-          } else {
-            // For products, check productId
-            if (item.productId === (product.productId || product._id)) {
-              alreadyAssigned += item.quantity || 0;
-            }
-          }
-        });
-      }
-    });
-    
-    return Math.max(0, totalInPO - alreadyAssigned);
-  };
-
-  const handleAddItem = () => {
-    const newItem = {
-      itemId: null,
-      itemType: null,
-      quantity: 1,
-    };
-    setSelectedItems([...selectedItems, newItem]);
-  };
-
-  const handleRemoveItem = (index) => {
-    setSelectedItems(selectedItems.filter((_, i) => i !== index));
-  };
-
-  const handleItemChange = (index, field, value) => {
-    const updated = [...selectedItems];
-    
-    if (field === "itemId") {
-      const selectedProduct = products.find(
-        (p) => {
-          if (p.type === "kit") {
-            return p.kitId === value || p._id === value;
-          } else {
-            return p.productId === value || p._id === value;
-          }
-        }
-      );
-      
-      updated[index] = {
-        ...updated[index],
-        itemId: value,
-        itemType: selectedProduct?.type || "product",
-      };
-    } else {
-      updated[index] = { ...updated[index], [field]: value };
-    }
-    
-    setSelectedItems(updated);
-  };
-
-  const handleSubmit = () => {
-    if (selectedItems.length === 0) {
-      message.error("Please add at least one item to the box");
-      return;
-    }
-
-    form.validateFields().then((values) => {
-      const payloadItems = selectedItems.map((item) => {
-        const product = products.find(
-          (p) => {
-            if (p.type === "kit") {
-              return p.kitId === item.itemId || p._id === item.itemId;
-            } else {
-              return p.productId === item.itemId || p._id === item.itemId;
-            }
-          }
-        );
-        
-        const payloadItem = {
-          productId: item.itemType === "kit" ? null : item.itemId,
-          kitId: item.itemType === "kit" ? item.itemId : null,
-          quantity: item.quantity,
-          sku: product?.sku || null,
-        };
-
-        return payloadItem;
-      });
-
-      onFinish({
-        ...values,
-        items: payloadItems,
-      });
-    });
-  };
-
-  // Initialize form when box data is loaded
-  useEffect(() => {
-    if (visible && box) {
-      // Populate form with existing box data
-      form.setFieldsValue({
-        name: box.name || "",
-      });
-
-      // Populate items from existing box
-      if (box.items && box.items.length > 0) {
-        const mappedItems = box.items.map((item) => {
-          // Determine itemId and itemType from the item
-          let itemId = null;
-          let itemType = "product";
-
-          if (item.kitId) {
-            itemId = item.kitId;
-            itemType = "kit";
-          } else if (item.productId) {
-            itemId = item.productId;
-            itemType = "product";
-          }
-
-          return {
-            itemId,
-            itemType,
-            quantity: item.quantity || 1,
-          };
-        });
-        setSelectedItems(mappedItems);
-      } else {
-        setSelectedItems([]);
-      }
-    } else if (visible && !box) {
-      // Reset if modal is opened without box data
-      setSelectedItems([]);
-      form.resetFields();
-    }
-  }, [visible, box, form]);
-
-  return (
-    <Modal
-      title={`Edit Box: ${box?.boxId || ""}`}
-      open={visible}
-      onCancel={onCancel}
-      onOk={handleSubmit}
-      width="90%"
-      style={{ maxWidth: 700 }}
-      okText="Update"
-      confirmLoading={loading}
-      okButtonProps={{ disabled: loading }}
-      cancelButtonProps={{ disabled: loading }}
-    >
-      <Form form={form} layout="vertical">
-        <Form.Item name="name" label="Box Name (Optional)">
-          <Input placeholder="e.g., Box 1" disabled={loading} />
-        </Form.Item>
-
-        <div className="mb-4">
-          <div className="flex justify-between items-center my-2">
-            <span className="font-medium">Items</span>
-            <Button
-              type="dashed"
-              icon={<Plus size={14} />}
-              onClick={handleAddItem}
-              size="small"
-              disabled={loading}
-            >
-              Add Item
-            </Button>
-          </div>
-
-          {selectedItems.length === 0 ? (
-            <div className="text-center py-4 text-gray-400 text-sm">
-              Click "Add Item" to add products to this box
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {selectedItems.map((item, index) => {
-                const selectedProduct = products.find((p) => {
-                  const itemId = p.type === "kit" ? p.kitId : p.productId || p._id;
-                  return itemId === item.itemId;
-                });
-                
-                const availableQty = selectedProduct
-                  ? getAvailableQuantity(selectedProduct, true) // Exclude current box
-                  : 0;
-                
-                // For existing items, we need to account for current quantity in the box
-                const currentBoxQty = box?.items?.find((bi) => {
-                  if (item.itemType === "kit") {
-                    return bi.kitId === item.itemId;
-                  } else {
-                    return bi.productId === item.itemId;
-                  }
-                })?.quantity || 0;
-                
-                // Add current box quantity to available (since we're editing this box)
-                const totalAvailable = availableQty + currentBoxQty;
-                const isQuantityExceeded = item.quantity > totalAvailable;
-                
-                return (
-                  <Card key={index} size="small" className="mb-2">
-                    <Row gutter={[16, 12]} align="middle">
-                      <Col xs={24} sm={12}>
-                        <Select
-                          placeholder="Select Product or Kit"
-                          style={{ width: "100%" }}
-                          value={item.itemId}
-                          onChange={(value) =>
-                            handleItemChange(index, "itemId", value)
-                          }
-                          showSearch
-                          disabled={loading}
-                          filterOption={(input, option) =>
-                            (option?.label ?? "")
-                              .toLowerCase()
-                              .includes(input.toLowerCase())
-                          }
-                          options={products.map((p) => {
-                            const itemId = p.type === "kit" 
-                              ? p.kitId 
-                              : p.productId || p._id;
-                            
-                            const typeLabel = p.type === "kit" ? " [Kit]" : "";
-                            const skuLabel = p.sku ? ` (${p.sku})` : "";
-                            const available = getAvailableQuantity(p, true);
-                            const availableLabel = available > 0 ? ` - ${available} available` : " - Out of stock";
-                            
-                            return {
-                              value: itemId,
-                              label: `${p.name}${typeLabel}${skuLabel}${availableLabel}`,
-                            };
-                          })}
-                        />
-                      </Col>
-                      <Col xs={18} sm={8}>
-                        <div className="flex flex-col">
-                          <InputNumber
-                            placeholder="Quantity"
-                            min={1}
-                            max={totalAvailable}
-                            value={item.quantity}
-                            onChange={(value) =>
-                              handleItemChange(index, "quantity", value)
-                            }
-                            style={{ width: "100%" }}
-                            status={isQuantityExceeded ? "error" : ""}
-                            disabled={loading}
-                          />
-                          {selectedProduct && (
-                            <div className="text-xs mt-2 mb-0">
-                              <span className={isQuantityExceeded ? "text-red-600" : "text-gray-500"}>
-                                {totalAvailable} available
-                                {isQuantityExceeded && (
-                                  <span className="ml-1 font-semibold">
-                                    (Requested: {item.quantity})
-                                  </span>
-                                )}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </Col>
-                      <Col xs={6} sm={4}>
-                        <Button
-                          type="text"
-                          danger
-                          icon={<Trash2 size={14} />}
-                          onClick={() => handleRemoveItem(index)}
-                          size="small"
-                          disabled={loading}
-                        />
-                      </Col>
-                    </Row>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </Form>
-    </Modal>
-  );
-};
-
-/**
- * View Box Modal Component
- */
-const ViewBoxModal = ({ visible, onCancel, box }) => {
-  if (!box) return null;
-
-  const columns = [
-    {
-      title: "Product",
-      dataIndex: "name",
-      key: "name",
-      width: 250,
-    },
-    {
-      title: "SKU",
-      dataIndex: "sku",
-      key: "sku",
-      width: 150,
-    },
-    {
-      title: "Quantity",
-      dataIndex: "quantity",
-      key: "quantity",
-      width: 100,
-      align: "right",
-    },
-    // {
-    //   title: "UOM",
-    //   dataIndex: "uom",
-    //   key: "uom",
-    //   width: 80,
-    // },
-  ];
-
-  return (
-    <Modal
-      title={`Box Details: ${box.boxId}`}
-      open={visible}
-      onCancel={onCancel}
-      footer={[
-        <Button key="close" onClick={onCancel}>
-          Close
-        </Button>,
-      ]}
-      width={800}
-    >
-      <div className="mb-4">
-        <p>
-          <strong>Box ID:</strong> {box.boxId}
-        </p>
-        {box.name && (
-          <p>
-            <strong>Name:</strong> {box.name}
-          </p>
-        )}
-        <p>
-          <strong>Purchase Order:</strong> {box.poReference}
-        </p>
-      </div>
-
-      <Table
-        columns={columns}
-        dataSource={box.items || []}
-        rowKey={(record, index) => record.productId || index}
-        pagination={false}
-        size="small"
-      />
-    </Modal>
-  );
-};
-
 
 export default PackingListTab;
 

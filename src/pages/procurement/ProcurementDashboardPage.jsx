@@ -179,6 +179,12 @@ export default function ProcurementDashboardPage() {
       render: (_, record) => record.vendor?.name || "-",
     },
     {
+      title: "Vendor Reference",
+      key: "vendorReference",
+      width: 150,
+      render: (_, record) => record.vendorReference?.join(", ") || "-",
+    },
+    {
       title: "Status",
       dataIndex: "status",
       key: "status",
@@ -227,6 +233,12 @@ export default function ProcurementDashboardPage() {
       key: "vendor",
       width: 200,
       render: (_, record) => record.vendor?.name || "-",
+    },
+    {
+      title: "Vendor Reference",
+      key: "vendorReference",
+      width: 150,
+      render: (_, record) => record.vendorReference?.join(", ") || "-",
     },
     {
       title: "Deadline",
@@ -379,24 +391,32 @@ export default function ProcurementDashboardPage() {
             Quick Actions
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Link
-              to="/procurement/orders"
-              className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors duration-200 text-gray-600 hover:text-blue-600 font-medium"
+            <Button
+              type="default"
+              size="large"
+              icon={<FileText size={18} />}
+              onClick={() => navigate("/procurement/orders")}
+              className="h-auto py-4 flex items-center justify-center gap-2 font-medium"
             >
-              <FileText className="w-5 h-5" />
               View Purchase Orders
-            </Link>
-            <Link
-              to="/procurement/orders/new"
-              className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-green-400 hover:bg-green-50 transition-colors duration-200 text-gray-600 hover:text-green-600 font-medium"
+            </Button>
+            <Button
+              type="primary"
+              size="large"
+              icon={<ShoppingBag size={18} />}
+              onClick={() => navigate("/procurement/orders/new")}
+              className="h-auto py-4 flex items-center justify-center gap-2 font-medium"
             >
-              <ShoppingBag className="w-5 h-5" />
-              Create Draft
-            </Link>
-            {/* <button className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-purple-400 hover:bg-purple-50 transition-colors duration-200 text-gray-600 hover:text-purple-600 font-medium">
-              <Package className="w-5 h-5" />
+              Create Purchase Order
+            </Button>
+            {/* <Button
+              type="default"
+              size="large"
+              icon={<Package size={18} />}
+              className="h-auto py-4 flex items-center justify-center gap-2 font-medium"
+            >
               View Contracts
-            </button> */}
+            </Button> */}
           </div>
         </Card>
 

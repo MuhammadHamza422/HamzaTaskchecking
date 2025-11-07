@@ -4,7 +4,7 @@ import { Card, Button, Space, Input, Form, Spin, Alert, Row, Col } from "antd";
 import Swal from "sweetalert2";
 import { ArrowLeft, QrCode, Camera, Search, Keyboard } from "lucide-react";
 import QrScanner from "qr-scanner";
-import { scanBox, scanProduct, scanKit } from "../../api/procurement";
+import { scanUniversal } from "../../api/procurement";
 
 const SCAN_METHODS = {
   CAMERA: "camera",
@@ -54,23 +54,13 @@ const QRCodeScannerPage = () => {
     setScannerBuffer("");
 
     try {
-      let qrData;
-      try {
-        qrData = JSON.parse(scannedData);
-      } catch (parseError) {
-        const idType = detectIdType(scannedData);
-        if (idType) {
-          await handleDirectScan(scannedData, idType);
-          return;
-        }
-        throw new Error("Invalid QR code format");
+      // QR codes now contain plain text (SKU, boxId, kitId, or product ObjectId)
+      const identifier = scannedData.trim();
+      if (!identifier) {
+        throw new Error("Empty scan data");
       }
 
-      if (!qrData || typeof qrData !== "object" || !qrData.type) {
-        throw new Error("Invalid QR code format: missing type");
-      }
-
-      await processQRCode(qrData);
+      await handleUniversalScan(identifier);
     } catch (err) {
       console.error("Scanner error:", err);
       const errorMessage = err.message || err.response?.data?.error?.message || "Failed to process scan";
@@ -215,23 +205,13 @@ const QRCodeScannerPage = () => {
     setLoading(true);
 
     try {
-      let qrData;
-      try {
-        qrData = JSON.parse(scanDataString);
-      } catch (parseError) {
-        const idType = detectIdType(scanDataString);
-        if (idType) {
-          await handleDirectScan(scanDataString, idType);
-          return;
-        }
-        throw new Error("Invalid QR code format");
+      // QR codes now contain plain text (SKU, boxId, kitId, or product ObjectId)
+      const identifier = scanDataString.trim();
+      if (!identifier) {
+        throw new Error("Empty scan data");
       }
 
-      if (!qrData || typeof qrData !== "object" || !qrData.type) {
-        throw new Error("Invalid QR code format: missing type");
-      }
-
-      await processQRCode(qrData);
+      await handleUniversalScan(identifier);
     } catch (err) {
       console.error("Scan error:", err);
       const errorMessage = err.message || err.response?.data?.error?.message || "Failed to scan";
@@ -255,79 +235,69 @@ const QRCodeScannerPage = () => {
     }
   };
 
-  const handleDirectScan = async (id, idType) => {
+  /**
+   * Universal scan function - handles SKU, boxId, kitId, or product ObjectId
+   * @param {string} identifier - The scanned identifier (plain text)
+   */
+  const handleUniversalScan = async (identifier) => {
     try {
-      let scanData = null;
-      let detectedType = null;
+      const response = await scanUniversal(identifier);
 
-      if (idType === "kit") {
-        scanData = await scanKit(id, { poId });
-        detectedType = "kit";
-      } else if (idType === "box") {
-        scanData = await scanBox(id);
-        detectedType = "box";
-      } else if (idType === "objectId") {
-        try {
-          scanData = await scanBox(id);
-          detectedType = "box";
-        } catch {
-          scanData = await scanProduct(id, { poId });
-          detectedType = "product";
+      if (response?.success && response?.data) {
+        const { type, ...scanData } = response.data;
+        
+        // Handle based on detected type
+        switch (type) {
+          case "product":
+            navigateToResult(scanData, "product", identifier);
+            break;
+          case "box":
+            navigateToResult(scanData, "box", identifier);
+            break;
+          case "kit":
+            navigateToResult(scanData, "kit", identifier);
+            break;
+          default:
+            throw new Error(`Unknown scan type: ${type}`);
         }
       } else {
-        throw new Error("Unable to determine item type from ID");
-      }
-
-      if (scanData?.success) {
-        navigateToResult(scanData.data, detectedType, id);
+        // Handle error response
+        const errorCode = response?.error?.code;
+        const errorMessage = response?.error?.message || "Failed to scan";
+        
+        switch (errorCode) {
+          case "NOT_FOUND":
+            throw new Error(`Item not found: ${identifier}`);
+          case "VALIDATION_ERROR":
+            throw new Error(errorMessage);
+          default:
+            throw new Error(errorMessage);
+        }
       }
     } catch (err) {
-      throw new Error(`ID "${id}" not found. Please verify the ID.`);
+      // Re-throw with user-friendly message
+      if (err.response?.data?.error) {
+        const error = err.response.data.error;
+        switch (error.code) {
+          case "NOT_FOUND":
+            throw new Error(`Item not found: ${identifier}`);
+          case "VALIDATION_ERROR":
+            throw new Error(error.message);
+          default:
+            throw new Error(error.message || "Failed to scan. Please try again.");
+        }
+      }
+      throw err;
     }
   };
 
-  const processQRCode = async (qrData) => {
-    let scanData = null;
-    let detectedType = null;
-
-    switch (qrData.type) {
-      case "product":
-        if (!qrData.productId) throw new Error("Invalid product QR code: missing productId");
-        scanData = await scanProduct(qrData.productId, { poId: qrData.poId || poId, sku: qrData.sku });
-        detectedType = "product";
-        break;
-
-      case "kit":
-        if (!qrData.kitId) throw new Error("Invalid kit QR code: missing kitId");
-        scanData = await scanKit(qrData.kitId, { poId: qrData.poId || poId });
-        detectedType = "kit";
-        break;
-
-      case "box":
-        if (!qrData.boxId) throw new Error("Invalid box QR code: missing boxId");
-        scanData = await scanBox(qrData.boxId);
-        detectedType = "box";
-        break;
-
-      default:
-        throw new Error(`Unknown QR code type: ${qrData.type}`);
-    }
-
-    if (scanData?.success) {
-      navigateToResult(scanData.data, detectedType, qrData);
-    } else {
-      throw new Error(scanData?.error?.message || "Failed to scan: Invalid response");
-    }
-  };
-
-  const navigateToResult = (scanData, type, qrDataOrId) => {
-    const qrData = typeof qrDataOrId === "object" 
-      ? qrDataOrId 
-      : {
-          type,
-          [type === "box" ? "boxId" : type === "kit" ? "kitId" : "productId"]: qrDataOrId,
-          poId: poId || undefined,
-        };
+  const navigateToResult = (scanData, type, identifier) => {
+    // Create qrData object for backward compatibility with result page
+    const qrData = {
+      type,
+      [type === "box" ? "boxId" : type === "kit" ? "kitId" : "productId"]: identifier,
+      poId: poId || scanData?.purchaseOrder?._id || undefined,
+    };
 
     navigate(`/procurement/scan/result`, {
       state: {
@@ -336,16 +306,6 @@ const QRCodeScannerPage = () => {
         poId: qrData.poId || poId,
       },
     });
-  };
-
-  const detectIdType = (id) => {
-    if (!id || typeof id !== "string") return null;
-    const trimmedId = id.trim();
-
-    if (/^KIT-[A-Z0-9]+-\d+$/i.test(trimmedId)) return "kit";
-    if (/^[A-Z0-9]+-box-\d+$/i.test(trimmedId)) return "box";
-    if (/^[0-9a-fA-F]{24}$/.test(trimmedId)) return "objectId";
-    return null;
   };
 
   const handleManualSearch = async (values) => {
@@ -368,47 +328,8 @@ const QRCodeScannerPage = () => {
     setError(null);
 
     try {
-      const idType = detectIdType(trimmedId);
-      let scanData = null;
-      let detectedType = null;
-
-      if (idType === "kit") {
-        scanData = await scanKit(trimmedId, { poId });
-        detectedType = "kit";
-      } else if (idType === "box") {
-        scanData = await scanBox(trimmedId);
-        detectedType = "box";
-      } else if (idType === "objectId") {
-        try {
-          scanData = await scanBox(trimmedId);
-          detectedType = "box";
-        } catch {
-          scanData = await scanProduct(trimmedId, { poId });
-          detectedType = "product";
-        }
-      } else {
-        if (trimmedId.toUpperCase().startsWith("KIT-")) {
-          scanData = await scanKit(trimmedId, { poId });
-          detectedType = "kit";
-        } else if (trimmedId.toLowerCase().includes("-box-")) {
-          scanData = await scanBox(trimmedId);
-          detectedType = "box";
-        } else {
-          try {
-            scanData = await scanBox(trimmedId);
-            detectedType = "box";
-          } catch {
-            scanData = await scanProduct(trimmedId, { poId });
-            detectedType = "product";
-          }
-        }
-      }
-
-      if (scanData?.success) {
-        navigateToResult(scanData.data, detectedType, trimmedId);
-      } else {
-        throw new Error(scanData?.error?.message || "Failed to search");
-      }
+      // Use universal scan endpoint - auto-detects identifier type
+      await handleUniversalScan(trimmedId);
     } catch (err) {
       const errorMessage = err.message || err.response?.data?.error?.message || "Failed to search";
       setError(errorMessage);
@@ -644,9 +565,9 @@ const QRCodeScannerPage = () => {
       <div className="mt-4 p-4 bg-gray-50 rounded-lg">
         <p className="font-semibold mb-2 text-sm">Supported ID formats:</p>
         <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
-          <li><strong>Box:</strong> P00021-box-1 or MongoDB ObjectId</li>
-          <li><strong>Kit:</strong> KIT-P00021-1</li>
-          <li><strong>Product:</strong> MongoDB ObjectId (24 hex characters)</li>
+          <li><strong>Product:</strong> SKU (e.g., GAM-NIN-SWT-ITD-STD-U-410343) or MongoDB ObjectId</li>
+          <li><strong>Box:</strong> Box ID (e.g., P00021-box-1)</li>
+          <li><strong>Kit:</strong> Kit ID (e.g., KIT-P00021-1)</li>
         </ul>
       </div>
     </div>

@@ -12,6 +12,7 @@ import {
   message,
   Popconfirm,
   Breadcrumb,
+  Skeleton,
 } from "antd";
 import {
   ArrowLeft,
@@ -34,6 +35,7 @@ import {
   getPurchaseOrder,
   updatePurchaseOrderStatus,
   toggleFavorite,
+  getShippingDetails,
 } from "../../api/procurement";
 import { useGlobalScanner } from "../../contexts/GlobalScannerContext";
 import { useProcurementData } from "../../contexts/ProcurementDataContext";
@@ -69,18 +71,49 @@ const PurchaseOrderDetailPage = () => {
   } = useGlobalScanner();
   const [purchaseOrder, setPurchaseOrder] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadingPO, setLoadingPO] = useState(false); // Separate loading state for PO data only
   const [activeTab, setActiveTab] = useState("overview");
   const [isFavorite, setIsFavorite] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [receiptModalVisible, setReceiptModalVisible] = useState(false);
+  const [hasUnsavedProducts, setHasUnsavedProducts] = useState(false);
+  const [shippingDetails, setShippingDetails] = useState(null);
+  const productsTabValidateRef = React.useRef(null);
   
   // Use shared dropdown data from context
   const { vendors, companies, buyers } = useProcurementData();
 
   useEffect(() => {
     loadPurchaseOrder();
+    loadShippingDetails();
   }, [poId]);
 
+  const loadShippingDetails = async () => {
+    try {
+      const response = await getShippingDetails(poId);
+      setShippingDetails(response?.data || null);
+    } catch (error) {
+      console.error("Failed to load shipping details:", error);
+      setShippingDetails(null);
+    }
+  };
+
+  // Load PO data only (for box updates) - doesn't affect other APIs
+  const loadPurchaseOrderOnly = async () => {
+    setLoadingPO(true);
+    try {
+      const data = await getPurchaseOrder(poId);
+      setPurchaseOrder(data);
+      setIsFavorite(data.isFavorite || false);
+    } catch (error) {
+      console.error("Failed to load purchase order:", error);
+      // Don't set to null on error, keep existing data
+    } finally {
+      setLoadingPO(false);
+    }
+  };
+
+  // Full page load (initial load)
   const loadPurchaseOrder = async () => {
     setLoading(true);
     try {
@@ -195,8 +228,34 @@ const PurchaseOrderDetailPage = () => {
     return enriched;
   }, [purchaseOrder, vendors, companies, buyers]);
 
+  // Check if shipping details exist
+  const hasShippingDetails = () => {
+    if (!shippingDetails) return false;
+    // At least one of these should be present
+    return !!(
+      shippingDetails.bookingDate ||
+      shippingDetails.crd ||
+      shippingDetails.trackingId ||
+      shippingDetails.trackingLink
+    );
+  };
+
   // Handle status change
   const handleStatusChange = async (newStatus) => {
+    // Validate shipping details when moving from confirmed to pickup_scheduled
+    if (
+      purchaseOrder?.status === PO_STATUS.CONFIRMED &&
+      newStatus === PO_STATUS.PICKUP_SCHEDULED &&
+      !hasShippingDetails()
+    ) {
+      message.warning(
+        "Please add shipping details before scheduling pickup. Go to Shipping & Receipt tab to add details."
+      );
+      // Switch to shipping tab
+      setActiveTab("shipping");
+      return;
+    }
+
     try {
       setUpdatingStatus(true);
       await updatePurchaseOrderStatus(poId, newStatus);
@@ -207,6 +266,8 @@ const PurchaseOrderDetailPage = () => {
       );
       // Update local state instead of full refetch
       setPurchaseOrder((prev) => prev ? { ...prev, status: newStatus } : null);
+      // Reload shipping details in case they were updated
+      await loadShippingDetails();
     } catch (error) {
       console.error("Failed to update status:", error);
       message.error(
@@ -288,7 +349,13 @@ const PurchaseOrderDetailPage = () => {
           <span>Overview</span>
         </Space>
       ),
-      children: <OverviewTab purchaseOrder={po} />,
+      children: loadingPO ? (
+        <Card size="small">
+          <Skeleton active paragraph={{ rows: 6 }} />
+        </Card>
+      ) : (
+        <OverviewTab purchaseOrder={po} />
+      ),
     },
     {
       key: "products",
@@ -298,11 +365,17 @@ const PurchaseOrderDetailPage = () => {
           <span>Products</span>
         </Space>
       ),
-      children: (
+      children: loadingPO ? (
+        <Card size="small">
+          <Skeleton active paragraph={{ rows: 6 }} />
+        </Card>
+      ) : (
         <ProductsTab
           purchaseOrder={po}
           poId={poId}
-          onReload={loadPurchaseOrder}
+          onReload={loadPurchaseOrderOnly}
+          onValidate={productsTabValidateRef}
+          onUnsavedChangesChange={setHasUnsavedProducts}
         />
       ),
     },
@@ -314,11 +387,16 @@ const PurchaseOrderDetailPage = () => {
           <span>Packing List</span>
         </Space>
       ),
-      children: (
+      children: loadingPO ? (
+        <Card size="small">
+          <Skeleton active paragraph={{ rows: 6 }} />
+        </Card>
+      ) : (
         <PackingListTab
           purchaseOrder={po}
           poId={poId}
-          onReload={loadPurchaseOrder}
+          onReload={loadPurchaseOrderOnly}
+          onUnsavedChangesChange={() => {}} // Boxes auto-update, no need to track
         />
       ),
     },
@@ -330,7 +408,13 @@ const PurchaseOrderDetailPage = () => {
           <span>Shipping & Receipt</span>
         </Space>
       ),
-      children: <ShippingReceiptTab purchaseOrder={po} poId={poId} />,
+      children: (
+        <ShippingReceiptTab
+          purchaseOrder={po}
+          poId={poId}
+          onShippingDetailsUpdated={loadShippingDetails}
+        />
+      ),
     },
     {
       key: "documents",
@@ -391,6 +475,21 @@ const PurchaseOrderDetailPage = () => {
               />
             </div>
             <Space className="flex-wrap" size={[8, 8]}>
+              {hasUnsavedProducts && (
+                <Button
+                  type="primary"
+                  onClick={async () => {
+                    // Validate products if there are unsaved changes
+                    if (productsTabValidateRef.current) {
+                      await productsTabValidateRef.current();
+                    }
+                  }}
+                  size="small"
+                  className="text-xs"
+                >
+                  Validate & Save
+                </Button>
+              )}
               <Button
                 type="default"
                 icon={<Printer size={16} />}
@@ -437,6 +536,18 @@ const PurchaseOrderDetailPage = () => {
         <Row gutter={16}>
           {/* Main Content */}
           <Col xs={24} lg={16}>
+            {/* Show skeleton only for PO-related sections when loadingPO is true */}
+            {loadingPO ? (
+              <>
+                <Card size="small" className="mb-4">
+                  <Skeleton active paragraph={{ rows: 4 }} />
+                </Card>
+                <Card size="small">
+                  <Skeleton active paragraph={{ rows: 6 }} />
+                </Card>
+              </>
+            ) : (
+              <>
             {/* Status Workflow */}
             <Card 
               size="small" 
@@ -647,6 +758,32 @@ const PurchaseOrderDetailPage = () => {
                 </div>
               </div>
 
+              {/* Shipping Details Warning */}
+              {currentStatus === PO_STATUS.CONFIRMED &&
+                nextStatus === PO_STATUS.PICKUP_SCHEDULED &&
+                !hasShippingDetails() && (
+                  <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <div className="flex items-start gap-2">
+                      <span className="text-yellow-600 text-lg">⚠️</span>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-yellow-800 mb-1">
+                          Shipping Details Required
+                        </p>
+                        <p className="text-xs text-yellow-700">
+                          Please add shipping details (booking date, tracking ID, etc.) in the{" "}
+                          <button
+                            onClick={() => setActiveTab("shipping")}
+                            className="text-yellow-800 underline font-medium hover:text-yellow-900"
+                          >
+                            Shipping & Receipt
+                          </button>{" "}
+                          tab before scheduling pickup.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
               {/* Next Step Button */}
               {allowedNextStatuses.length > 0 &&
                 currentStatus !== PO_STATUS.RECEIVED &&
@@ -768,6 +905,8 @@ const PurchaseOrderDetailPage = () => {
                 size="small"
               />
             </Card>
+              </>
+            )}
           </Col>
 
           {/* Activity Sidebar */}

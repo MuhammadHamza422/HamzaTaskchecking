@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Modal, Button, Row, Col, InputNumber, Slider, Space, Spin, message } from "antd";
+import { Modal, Button, Row, Col, InputNumber, Slider, Space, Spin, message, Radio } from "antd";
 import { Printer, Download } from "lucide-react";
 import html2canvas from "html2canvas-pro";
 import jsPDF from "jspdf";
@@ -15,15 +15,75 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
   const [loading, setLoading] = useState(false);
   const [qrCodes, setQrCodes] = useState([]);
   const [qrSize, setQrSize] = useState(200); // Default QR code size in pixels
-  const [pageWidth, setPageWidth] = useState(2.7); // Default 2.7 inches width
-  const [pageHeight, setPageHeight] = useState(2.8); // Default 2.8 inches height
-  const [unit, setUnit] = useState("in"); // "in" or "mm"
+  const [unit, setUnit] = useState("mm"); // "in" or "mm" - default to mm
   const [labelsPerRow, setLabelsPerRow] = useState(2); // Number of labels per row
+  
+  // Default values: 1767mm width, 1802mm height (converted to inches for internal storage)
+  const defaultWidthMm = 1767;
+  const defaultHeightMm = 1802;
+  const defaultWidthIn = 2.7;
+  const defaultHeightIn = 2.8;
+  
+  // Initialize with mm defaults (convert to inches for internal storage)
+  const [pageWidth, setPageWidth] = useState(defaultWidthMm / 25.4);
+  const [pageHeight, setPageHeight] = useState(defaultHeightMm / 25.4);
 
-  // Convert inches to mm
-  const inchesToMm = (inches) => inches * 25.4;
-  // Convert mm to inches
-  const mmToInches = (mm) => mm / 25.4;
+  // Convert inches to mm with proper rounding
+  const inchesToMm = (inches) => {
+    const mm = inches * 25.4;
+    // Round to 2 decimal places to avoid floating-point precision issues
+    return Math.round(mm * 100) / 100;
+  };
+
+  // Convert mm to inches with proper rounding
+  const mmToInches = (mm) => {
+    const inches = mm / 25.4;
+    // Round to 4 decimal places for inches (more precision needed)
+    return Math.round(inches * 10000) / 10000;
+  };
+
+  // Round value to appropriate precision based on unit
+  const roundValue = (value, currentUnit) => {
+    if (value === null || value === undefined) return value;
+    if (currentUnit === "mm") {
+      // Round mm to 2 decimal places
+      return Math.round(value * 100) / 100;
+    } else {
+      // Round inches to 4 decimal places
+      return Math.round(value * 10000) / 10000;
+    }
+  };
+
+  // Get display values based on unit
+  const getDisplayWidth = () => {
+    if (unit === "mm") {
+      return roundValue(inchesToMm(pageWidth), "mm");
+    }
+    return roundValue(pageWidth, "in");
+  };
+
+  const getDisplayHeight = () => {
+    if (unit === "mm") {
+      return roundValue(inchesToMm(pageHeight), "mm");
+    }
+    return roundValue(pageHeight, "in");
+  };
+
+  // Reset to defaults when modal opens (only on visibility change, not unit change)
+  useEffect(() => {
+    if (visible) {
+      // Reset to defaults based on current unit
+      if (unit === "mm") {
+        setPageWidth(defaultWidthMm / 25.4);
+        setPageHeight(defaultHeightMm / 25.4);
+      } else {
+        setPageWidth(defaultWidthIn);
+        setPageHeight(defaultHeightIn);
+      }
+      setQrSize(200); // Reset QR size to default
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]); // Only depend on visible, not unit (unit change is handled separately
 
   // Load QR codes for all items
   useEffect(() => {
@@ -116,12 +176,11 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
   };
 
   // Get label text based on type
-  const getLabelText = (item) => {
+  const getLabelText = (item, index = 0) => {
     if (!item) return "";
     if (item.type === "kit") {
       return item.qrData?.kitId || item.kitId || "";
     } else if (item.type === "box") {
-      const boxId = item.qrData?.boxId || item.boxId || "";
       // Try multiple possible locations for box name
       const boxName = 
         item.name || 
@@ -129,10 +188,23 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
         item.qrData?.box?.name || 
         item.product?.name || 
         "";
+      // Get box ID
+      const boxId = item.qrData?.boxId || item.boxId || "";
+      
+      // If box has both name and id, show both
       if (boxName && boxId) {
         return `${boxName}\n${boxId}`;
       }
-      return boxId || "";
+      // If box has just name, show name
+      if (boxName) {
+        return boxName;
+      }
+      // If box has just id, show id
+      if (boxId) {
+        return boxId;
+      }
+      // No fallback - return empty
+      return "";
     } else {
       return item.qrData?.sku || item.sku || "";
     }
@@ -148,8 +220,9 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
     setDownloading(true);
     try {
       // Convert dimensions based on unit
-      const widthIn = unit === "mm" ? mmToInches(pageWidth) : pageWidth;
-      const heightIn = unit === "mm" ? mmToInches(pageHeight) : pageHeight;
+      // pageWidth and pageHeight are always stored in inches internally
+      const widthIn = pageWidth;
+      const heightIn = pageHeight;
 
       // Convert to mm for jsPDF
       const widthMm = inchesToMm(widthIn);
@@ -203,7 +276,7 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
         tempContainer.innerHTML = `
           <img src="${item.qrCode}" alt="QR Code" style="width: ${qrSize}px; height: ${qrSize}px; max-width: 100%; max-height: 70%; object-fit: contain;" />
           <div style="margin-top: 8px; font-size: 10px; text-align: center; word-break: break-word; white-space: pre-line;">
-            ${getLabelText(item)}
+            ${getLabelText(item, i)}
           </div>
         `;
         document.body.appendChild(tempContainer);
@@ -264,8 +337,9 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
       return;
     }
 
-    const widthIn = unit === "mm" ? mmToInches(pageWidth) : pageWidth;
-    const heightIn = unit === "mm" ? mmToInches(pageHeight) : pageHeight;
+    // pageWidth and pageHeight are always stored in inches internally
+    const widthIn = pageWidth;
+    const heightIn = pageHeight;
 
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
@@ -276,11 +350,11 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
     // Create one label per page
     const labelsHtml = qrCodes
       .map(
-        (item) => `
+        (item, index) => `
       <div class="label-page" style="width: ${widthIn}in; height: ${heightIn}in; padding: 10px; margin: 0; page-break-after: always; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px solid #ddd; box-sizing: border-box;">
         <img src="${item.qrCode}" alt="QR Code" style="width: ${qrSize}px; height: ${qrSize}px; max-width: 100%; max-height: 70%; object-fit: contain;" />
         <div style="margin-top: 8px; font-size: 10px; text-align: center; word-break: break-word; white-space: pre-line;">
-          ${getLabelText(item)}
+          ${getLabelText(item, index)}
         </div>
       </div>
     `
@@ -397,18 +471,27 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
                   Page Width ({unit === "mm" ? "mm" : "inches"})
                 </label>
                 <InputNumber
-                  value={unit === "mm" ? inchesToMm(pageWidth) : pageWidth}
+                  value={getDisplayWidth()}
                   onChange={(value) => {
+                    if (value === null || value === undefined) return;
+                    
+                    // Round the input value based on current unit
+                    const roundedValue = roundValue(value, unit);
+                    
                     if (unit === "mm") {
-                      setPageWidth(mmToInches(value));
+                      // Convert mm input to inches for internal storage
+                      const inchesValue = mmToInches(roundedValue);
+                      setPageWidth(inchesValue);
                     } else {
-                      setPageWidth(value);
+                      // Store inches directly
+                      setPageWidth(roundedValue);
                     }
                   }}
-                  min={0.5}
-                  max={unit === "mm" ? 200 : 8}
+                  min={unit === "mm" ? 10 : 0.5}
+                  max={undefined}
                   step={unit === "mm" ? 1 : 0.1}
                   style={{ width: "100%" }}
+                  addonAfter={unit === "mm" ? "mm" : "in"}
                 />
               </div>
             </Col>
@@ -418,50 +501,55 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
                   Page Height ({unit === "mm" ? "mm" : "inches"})
                 </label>
                 <InputNumber
-                  value={unit === "mm" ? inchesToMm(pageHeight) : pageHeight}
+                  value={getDisplayHeight()}
                   onChange={(value) => {
+                    if (value === null || value === undefined) return;
+                    
+                    // Round the input value based on current unit
+                    const roundedValue = roundValue(value, unit);
+                    
                     if (unit === "mm") {
-                      setPageHeight(mmToInches(value));
+                      // Convert mm input to inches for internal storage
+                      const inchesValue = mmToInches(roundedValue);
+                      setPageHeight(inchesValue);
                     } else {
-                      setPageHeight(value);
+                      // Store inches directly
+                      setPageHeight(roundedValue);
                     }
                   }}
-                  min={0.5}
-                  max={unit === "mm" ? 200 : 8}
+                  min={unit === "mm" ? 10 : 0.5}
+                  max={undefined}
                   step={unit === "mm" ? 1 : 0.1}
                   style={{ width: "100%" }}
+                  addonAfter={unit === "mm" ? "mm" : "in"}
                 />
               </div>
             </Col>
             <Col span={8}>
               <div>
                 <label className="text-sm font-medium mb-1 block">Unit</label>
-                <Space>
-                  <Button
-                    type={unit === "in" ? "primary" : "default"}
-                    onClick={() => {
-                      if (unit === "mm") {
-                        setPageWidth(mmToInches(pageWidth));
-                        setPageHeight(mmToInches(pageHeight));
-                      }
-                      setUnit("in");
-                    }}
-                  >
-                    Inches
-                  </Button>
-                  <Button
-                    type={unit === "mm" ? "primary" : "default"}
-                    onClick={() => {
-                      if (unit === "in") {
-                        setPageWidth(inchesToMm(pageWidth));
-                        setPageHeight(inchesToMm(pageHeight));
-                      }
-                      setUnit("mm");
-                    }}
-                  >
-                    Millimeters
-                  </Button>
-                </Space>
+                <Radio.Group 
+                  value={unit} 
+                  onChange={(e) => {
+                    const newUnit = e.target.value;
+                    
+                    // When switching units, reset to defaults for that unit
+                    if (newUnit === "mm") {
+                      // Set to mm defaults (convert to inches for storage)
+                      setPageWidth(defaultWidthMm / 25.4);
+                      setPageHeight(defaultHeightMm / 25.4);
+                    } else {
+                      // Set to inch defaults
+                      setPageWidth(defaultWidthIn);
+                      setPageHeight(defaultHeightIn);
+                    }
+                    
+                    setUnit(newUnit);
+                  }}
+                >
+                  <Radio value="in">Inches</Radio>
+                  <Radio value="mm">Millimeters</Radio>
+                </Radio.Group>
               </div>
             </Col>
           </Row>
@@ -495,7 +583,7 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
                     style={{ width: `${qrSize}px`, height: `${qrSize}px` }}
                   />
                   <div className="mt-2 text-xs text-center text-gray-600 whitespace-pre-line">
-                    {getLabelText(item)}
+                    {getLabelText(item, index)}
                   </div>
                 </div>
               </Col>
