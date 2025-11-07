@@ -84,17 +84,50 @@ const ActivityLog = ({ poId, purchaseOrder }) => {
     }
   };
 
-  const getActivityIcon = (type) => {
+  const getActivityIcon = (type, color) => {
+    const iconColor = color?.primary || "#6b7280";
+    const style = { color: iconColor };
+    
     switch (type) {
       case "status_change":
-        return <ClockCircleOutlined className="text-blue-500" />;
+        return <ClockCircleOutlined style={style} />;
       case "note":
-        return <FileTextOutlined className="text-green-500" />;
+        return <FileTextOutlined style={style} />;
       case "message":
-        return <MessageOutlined className="text-purple-500" />;
+        return <MessageOutlined style={style} />;
       default:
-        return <ClockCircleOutlined className="text-gray-500" />;
+        return <ClockCircleOutlined style={style} />;
     }
+  };
+
+  // Get default colors if backend doesn't provide them
+  const getDefaultColors = (type) => {
+    const defaults = {
+      status_change: {
+        primary: "#3b82f6",
+        background: "#dbeafe",
+        text: "#1e40af",
+        badge: "blue"
+      },
+      note: {
+        primary: "#f59e0b",
+        background: "#fef3c7",
+        text: "#92400e",
+        badge: "amber"
+      },
+      message: {
+        primary: "#8b5cf6",
+        background: "#ede9fe",
+        text: "#5b21b6",
+        badge: "purple"
+      }
+    };
+    return defaults[type] || {
+      primary: "#6b7280",
+      background: "#f3f4f6",
+      text: "#374151",
+      badge: "gray"
+    };
   };
 
   return (
@@ -153,48 +186,87 @@ const ActivityLog = ({ poId, purchaseOrder }) => {
         <List
           dataSource={activities}
           size="small"
-          renderItem={(activity, index) => (
-            <List.Item className="!px-0 !py-2 border-b-0">
-              <List.Item.Meta
-                avatar={
-                  <Avatar
-                    src={activity.user?.avatar}
-                    style={{
-                      backgroundColor: "#1890ff",
-                    }}
-                  >
-                    {(activity.user?.name || "S").charAt(0).toUpperCase()}
-                  </Avatar>
-                }
-                title={
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">
-                      {activity.user?.name || "System"}
-                    </span>
-                    <span className="text-xs text-gray-400">
-                      {formatDate(
-                        activity.createdAt ||
-                          activity.timestamp ||
-                          activity.createdDate
-                      )}
-                    </span>
-                  </div>
-                }
-                description={
-                  <div>
-                    <div className="text-sm text-gray-700 mb-1">
-                      {activity.message || activity.description || activity.type}
+          renderItem={(activity, index) => {
+            // Use backend color object, fallback to defaults if not provided
+            const color = activity.color || getDefaultColors(activity.type);
+            const isNote = activity.type === "note";
+            
+            return (
+              <List.Item
+                className="px-1 !py-2 border-b-0"
+                style={{
+                  borderLeft: `3px solid ${color.primary}`,
+                  backgroundColor: isNote ? color.background : "transparent",
+                  borderRadius: isNote ? "8px" : "0",
+                  padding: isNote ? "12px" : "8px 4px",
+                  marginBottom: isNote ? "8px" : "0",
+                  border: isNote ? `1px solid ${color.primary}20` : "none",
+                }}
+              >
+                <List.Item.Meta
+                  avatar={
+                    <Avatar
+                      src={activity.user?.avatar}
+                      style={{
+                        backgroundColor: color.primary,
+                        border: `2px solid ${color.primary}40`,
+                      }}
+                    >
+                      {(activity.user?.name || "S").charAt(0).toUpperCase()}
+                    </Avatar>
+                  }
+                  title={
+                    <div className="flex items-center justify-between">
+                      <span 
+                        className="text-sm font-medium"
+                        style={{ color: isNote ? color.text : "#1f2937" }}
+                      >
+                        {activity.user?.name || "System"}
+                      </span>
+                      <span 
+                        className="text-xs"
+                        style={{ color: isNote ? color.text : "#9ca3af" }}
+                      >
+                        {formatDate(
+                          activity.createdAt ||
+                            activity.timestamp ||
+                            activity.createdDate
+                        )}
+                      </span>
                     </div>
-                    {activity.details && (
-                      <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
-                        {activity.details}
+                  }
+                  description={
+                    <div>
+                      <div 
+                        className="text-sm mb-1 flex items-center gap-2"
+                        style={{ 
+                          color: isNote ? color.text : "#374151",
+                          fontWeight: isNote ? "500" : "400"
+                        }}
+                      >
+                        <span style={{ color: color.primary, display: 'flex', alignItems: 'center' }}>
+                          {getActivityIcon(activity.type, color)}
+                        </span>
+                        <span>{activity.message || activity.description || activity.type}</span>
                       </div>
-                    )}
-                  </div>
-                }
-              />
-            </List.Item>
-          )}
+                      {activity.details && (
+                        <div 
+                          className="text-xs p-2 rounded mt-2"
+                          style={{
+                            backgroundColor: `${color.background}80`,
+                            color: color.text,
+                            border: `1px solid ${color.primary}30`,
+                          }}
+                        >
+                          {activity.details}
+                        </div>
+                      )}
+                    </div>
+                  }
+                />
+              </List.Item>
+            );
+          }}
         />
       )}
     </Card>
