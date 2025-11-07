@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { Table, Button, Tag, Checkbox, Space, Card, Input, InputNumber, message, Select } from "antd";
-import { Package, QrCode, Printer, Search, Plus, Trash2 } from "lucide-react";
+import { Table, Button, Tag, Checkbox, Space, Card, Input, InputNumber, message, Select, Dropdown } from "antd";
+import { Package, QrCode, Printer, Search, Plus, Trash2, MoreVertical } from "lucide-react";
 import { getProductQRCode, updatePurchaseOrder } from "../../../../api/procurement";
 import QRCodeModal from "../QRCodeModal";
 import BulkQRCodeModal from "../BulkQRCodeModal";
@@ -24,13 +24,28 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [newlyAddedIndices, setNewlyAddedIndices] = useState(new Set()); // Track newly added products
+  const [pendingSave, setPendingSave] = useState(null); // Track pending save with debounce
 
   const isDraft = purchaseOrder?.status === "draft";
 
   useEffect(() => {
     setLocalProducts(purchaseOrder?.products || []);
     setEditingProducts({}); // Clear editing state when purchase order changes
+    setNewlyAddedIndices(new Set()); // Clear newly added tracking
   }, [purchaseOrder]);
+
+  // Debounced save effect - waits 1 second after last change before saving
+  useEffect(() => {
+    if (!pendingSave || !isDraft || !poId) return;
+
+    const timeoutId = setTimeout(() => {
+      saveProducts(pendingSave);
+      setPendingSave(null);
+    }, 1000); // Wait 1 second after user stops typing
+
+    return () => clearTimeout(timeoutId);
+  }, [pendingSave, isDraft, poId]);
 
   // Search products
   useEffect(() => {
@@ -80,8 +95,19 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
     };
 
     const updated = [...localProducts, newProduct];
+    const newIndex = updated.length - 1;
+    
     setLocalProducts(updated);
-    saveProducts(updated);
+    // Auto-enable edit mode for newly added product
+    setEditingProducts({
+      ...editingProducts,
+      [newIndex]: { ...newProduct },
+    });
+    // Track as newly added
+    setNewlyAddedIndices(new Set([...newlyAddedIndices, newIndex]));
+    
+    // Schedule debounced save
+    setPendingSave(updated);
     setProductSearch("");
     setSearchResults([]);
   };
@@ -90,6 +116,23 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
     const updated = localProducts.filter((_, i) => i !== index);
     setLocalProducts(updated);
     setSelectedProductIndices((prev) => prev.filter((i) => i !== index).map(i => i > index ? i - 1 : i));
+    
+    // Remove from editing state
+    const updatedEditing = { ...editingProducts };
+    delete updatedEditing[index];
+    // Adjust indices for editing state
+    const adjustedEditing = {};
+    Object.keys(updatedEditing).forEach(key => {
+      const keyNum = parseInt(key);
+      if (keyNum > index) {
+        adjustedEditing[keyNum - 1] = updatedEditing[key];
+      } else if (keyNum < index) {
+        adjustedEditing[keyNum] = updatedEditing[key];
+      }
+    });
+    setEditingProducts(adjustedEditing);
+    
+    // Save immediately for delete (no debounce needed)
     await saveProducts(updated);
   };
 
@@ -140,7 +183,16 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
 
     setLocalProducts(updated);
     setSelectedProductIndices([]);
-    await saveProducts(updated);
+    
+    // Auto-enable edit mode for newly created kit
+    const newKitIndex = updated.length - 1;
+    setEditingProducts({
+      ...editingProducts,
+      [newKitIndex]: { ...newKit },
+    });
+    
+    // Schedule debounced save
+    setPendingSave(updated);
     message.success("Kit created successfully");
     } catch (error) {
       console.error("Failed to create kit:", error);
@@ -188,8 +240,17 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
       });
 
       await updatePurchaseOrder(poId, { products: productsPayload });
-      if (onReload) onReload();
-      message.success("Products updated successfully");
+      
+      // Refetch the purchase order to get updated data (needed for box modal to show latest products)
+      if (onReload) {
+        await onReload();
+      }
+      
+      // Clear newly added tracking after successful save
+      setNewlyAddedIndices(new Set());
+      
+      // Silent success - no message to avoid spam
+      // message.success("Products updated successfully");
     } catch (error) {
       console.error("Failed to save products:", error);
       const errorMessage = error?.response?.data?.error?.message || "Failed to update products";
@@ -204,6 +265,7 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
       }
       // Revert on error
       setLocalProducts(purchaseOrder?.products || []);
+      setEditingProducts({});
     } finally {
       setSaving(false);
     }
@@ -292,19 +354,28 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
     }
   };
 
-  // Handle product field update (only updates local editing state, doesn't save)
+  // Handle product field update (only updates local editing state, doesn't save immediately)
   const handleProductFieldChange = (index, field, value) => {
     const currentEditing = editingProducts[index] || { ...localProducts[index] };
-    setEditingProducts({
+    const updatedEditing = {
       ...editingProducts,
       [index]: {
         ...currentEditing,
         [field]: value,
       },
-    });
+    };
+    setEditingProducts(updatedEditing);
+    
+    // Update local products immediately for UI responsiveness
+    const updated = [...localProducts];
+    updated[index] = updatedEditing[index];
+    setLocalProducts(updated);
+    
+    // Schedule debounced save
+    setPendingSave(updated);
   };
 
-  // Enable edit mode for a product
+  // Enable edit mode for a product (for non-draft or manual edit)
   const handleStartEdit = (index) => {
     setEditingProducts({
       ...editingProducts,
@@ -319,7 +390,7 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
     setEditingProducts(updated);
   };
 
-  // Update a single product
+  // Update a single product (manual save button - for non-draft orders or explicit save)
   const handleUpdateProduct = async (index) => {
     if (!editingProducts[index]) return;
 
@@ -334,7 +405,7 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
     delete updatedEditing[index];
     setEditingProducts(updatedEditing);
 
-    // Save to API
+    // Save immediately (no debounce for manual save)
     await saveProducts(updated);
   };
 
@@ -355,6 +426,7 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
       ),
       key: "checkbox",
       width: 50,
+      fixed: "left",
       render: (_, record, index) => (
         <Checkbox
           checked={selectedProductIndices.includes(index)}
@@ -365,7 +437,7 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
     {
       title: "Product",
       key: "product",
-      width: 300,
+      width: 280,
       render: (_, record) => {
         if (record.type === "kit") {
           return (
@@ -400,20 +472,31 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
       title: "Quantity",
       dataIndex: "quantity",
       key: "quantity",
-      width: 120,
+      width: 100,
       align: "right",
       render: (quantity, record, index) => {
         if (isDraft) {
-          const isEditing = editingProducts[index] !== undefined;
-          const displayValue = isEditing ? (editingProducts[index]?.quantity || 1) : (quantity || 1);
+          // Always editable in draft mode - use editingProducts if available, otherwise use record value
+          const displayValue = editingProducts[index]?.quantity !== undefined 
+            ? (editingProducts[index]?.quantity || 1) 
+            : (quantity || 1);
           return (
             <InputNumber
               min={1}
               value={displayValue}
-              onChange={(value) => handleProductFieldChange(index, "quantity", value || 1)}
+              onChange={(value) => {
+                // Auto-enable edit mode if not already editing
+                if (editingProducts[index] === undefined) {
+                  setEditingProducts({
+                    ...editingProducts,
+                    [index]: { ...localProducts[index] },
+                  });
+                }
+                handleProductFieldChange(index, "quantity", value || 1);
+              }}
               size="small"
               style={{ width: "100%" }}
-              disabled={!isEditing || saving}
+              disabled={saving}
             />
           );
         }
@@ -424,21 +507,32 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
       title: "Unit Price",
       dataIndex: "unitPrice",
       key: "unitPrice",
-      width: 120,
+      width: 110,
       align: "right",
       render: (unitPrice, record, index) => {
         if (isDraft) {
-          const isEditing = editingProducts[index] !== undefined;
-          const displayValue = isEditing ? (editingProducts[index]?.unitPrice || 0) : (unitPrice || 0);
+          // Always editable in draft mode - use editingProducts if available, otherwise use record value
+          const displayValue = editingProducts[index]?.unitPrice !== undefined 
+            ? (editingProducts[index]?.unitPrice || 0) 
+            : (unitPrice || 0);
           return (
             <InputNumber
               min={0}
               step={0.01}
               value={displayValue}
-              onChange={(value) => handleProductFieldChange(index, "unitPrice", value || 0)}
+              onChange={(value) => {
+                // Auto-enable edit mode if not already editing
+                if (editingProducts[index] === undefined) {
+                  setEditingProducts({
+                    ...editingProducts,
+                    [index]: { ...localProducts[index] },
+                  });
+                }
+                handleProductFieldChange(index, "unitPrice", value || 0);
+              }}
               size="small"
               style={{ width: "100%" }}
-              disabled={!isEditing || saving}
+              disabled={saving}
             />
           );
         }
@@ -495,7 +589,7 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
     {
       title: "Total",
       key: "total",
-      width: 120,
+      width: 100,
       align: "right",
       render: (_, record, index) => {
         const isEditing = editingProducts[index] !== undefined;
@@ -512,77 +606,56 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
       },
     },
     {
-      title: "QR Code",
-      key: "qrCode",
-      width: 100,
-      render: (_, record, index) => (
-        <Button
-          type="link"
-          icon={<QrCode size={16} />}
-          onClick={() => handleQRCodeClick(record)}
-          loading={loadingQR}
-          size="small"
-        >
-          QR
-        </Button>
-      ),
-    },
-    ...(isDraft
-      ? [
+      title: "Actions",
+      key: "actions",
+      width: 70,
+      align: "center",
+      fixed: "right",
+      render: (_, record, index) => {
+        const menuItems = [
           {
-            title: "Actions",
-            key: "actions",
-            width: 180,
-            render: (_, record, index) => {
-              const isEditing = editingProducts[index] !== undefined;
-              return (
-                <Space size="small">
-                  {!isEditing ? (
-                    <>
-                      <Button
-                        type="link"
-                        size="small"
-                        onClick={() => handleStartEdit(index)}
-                        disabled={saving}
-                      >
-                        Edit
-                      </Button>
-              <Button
-                type="text"
-                danger
-                icon={<Trash2 size={14} />}
-                onClick={() => handleRemoveProduct(index)}
-                size="small"
-                loading={saving}
-              />
-                    </>
-                  ) : (
-                    <>
-                      <Button
-                        type="primary"
-                        size="small"
-                        onClick={() => handleUpdateProduct(index)}
-                        loading={saving}
-                        disabled={saving}
-                      >
-                        Update
-                      </Button>
-                      <Button
-                        type="text"
-                        size="small"
-                        onClick={() => handleCancelEdit(index)}
-                        disabled={saving}
-                      >
-                        Cancel
-                      </Button>
-                    </>
-                  )}
-                </Space>
-              );
-            },
+            key: "qrCode",
+            label: (
+              <Space>
+                <QrCode size={16} />
+                <span>View QR Code</span>
+              </Space>
+            ),
+            onClick: () => handleQRCodeClick(record),
           },
-        ]
-      : []),
+        ];
+
+        // Add delete option only for draft orders
+        if (isDraft) {
+          menuItems.push({
+            key: "delete",
+            label: (
+              <Space>
+                <Trash2 size={16} />
+                <span>Delete</span>
+              </Space>
+            ),
+            danger: true,
+            onClick: () => handleRemoveProduct(index),
+          });
+        }
+
+        return (
+          <Dropdown
+            menu={{ items: menuItems }}
+            trigger={["click"]}
+            placement="bottomRight"
+          >
+            <Button
+              type="text"
+              icon={<MoreVertical size={16} />}
+              size="small"
+              loading={loadingQR || saving}
+            />
+          </Dropdown>
+        );
+      },
+    },
   ];
 
   return (
@@ -687,7 +760,7 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
           rowKey={(record, index) => record.productId || record.kitId || record._id || index}
           pagination={false}
           size="small"
-            scroll={{ x: 1000 }}
+          scroll={{ x: 710 }}
         />
       </div>
       )}
@@ -736,16 +809,26 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
                 <div className="text-gray-400 text-xs mb-1">Quantity</div>
                 {isDraft ? (
                   (() => {
-                    const isEditing = editingProducts[index] !== undefined;
-                    const displayValue = isEditing ? (editingProducts[index]?.quantity || 1) : (product.quantity || 1);
+                    const displayValue = editingProducts[index]?.quantity !== undefined 
+                      ? (editingProducts[index]?.quantity || 1) 
+                      : (product.quantity || 1);
                     return (
                       <InputNumber
                         min={1}
                         value={displayValue}
-                        onChange={(value) => handleProductFieldChange(index, "quantity", value || 1)}
+                        onChange={(value) => {
+                          // Auto-enable edit mode if not already editing
+                          if (editingProducts[index] === undefined) {
+                            setEditingProducts({
+                              ...editingProducts,
+                              [index]: { ...localProducts[index] },
+                            });
+                          }
+                          handleProductFieldChange(index, "quantity", value || 1);
+                        }}
                         size="small"
                         style={{ width: "100%" }}
-                        disabled={!isEditing || saving}
+                        disabled={saving}
                       />
                     );
                   })()
@@ -757,15 +840,25 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
                 <div className="text-gray-400 text-xs mb-1">UoM</div>
                 {isDraft ? (
                   (() => {
-                    const isEditing = editingProducts[index] !== undefined;
-                    const displayValue = isEditing ? (editingProducts[index]?.uom || "Unit") : (product.uom || "Unit");
+                    const displayValue = editingProducts[index]?.uom !== undefined 
+                      ? (editingProducts[index]?.uom || "Unit") 
+                      : (product.uom || "Unit");
                     return (
                       <Select
                         value={displayValue}
-                        onChange={(value) => handleProductFieldChange(index, "uom", value)}
+                        onChange={(value) => {
+                          // Auto-enable edit mode if not already editing
+                          if (editingProducts[index] === undefined) {
+                            setEditingProducts({
+                              ...editingProducts,
+                              [index]: { ...localProducts[index] },
+                            });
+                          }
+                          handleProductFieldChange(index, "uom", value);
+                        }}
                         size="small"
                         style={{ width: "100%" }}
-                        disabled={!isEditing || saving}
+                        disabled={saving}
                         options={[
                           { value: "Unit", label: "Unit" },
                           { value: "Piece", label: "Piece" },
@@ -788,17 +881,27 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
                 <div className="text-gray-400 text-xs mb-1">Unit Price</div>
                 {isDraft ? (
                   (() => {
-                    const isEditing = editingProducts[index] !== undefined;
-                    const displayValue = isEditing ? (editingProducts[index]?.unitPrice || 0) : (product.unitPrice || 0);
+                    const displayValue = editingProducts[index]?.unitPrice !== undefined 
+                      ? (editingProducts[index]?.unitPrice || 0) 
+                      : (product.unitPrice || 0);
                     return (
                       <InputNumber
                         min={0}
                         step={0.01}
                         value={displayValue}
-                        onChange={(value) => handleProductFieldChange(index, "unitPrice", value || 0)}
+                        onChange={(value) => {
+                          // Auto-enable edit mode if not already editing
+                          if (editingProducts[index] === undefined) {
+                            setEditingProducts({
+                              ...editingProducts,
+                              [index]: { ...localProducts[index] },
+                            });
+                          }
+                          handleProductFieldChange(index, "unitPrice", value || 0);
+                        }}
                         size="small"
                         style={{ width: "100%" }}
-                        disabled={!isEditing || saving}
+                        disabled={saving}
                         formatter={(value) => formatCurrency(value || 0, purchaseOrder?.currency).replace(/[^\d.-]/g, "")}
                         parser={(value) => value.replace(/[^\d.-]/g, "")}
                       />
@@ -814,17 +917,27 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
                   <div className="text-gray-400 text-xs mb-1">Taxes</div>
                 {isDraft ? (
                   (() => {
-                    const isEditing = editingProducts[index] !== undefined;
-                    const displayValue = isEditing ? (editingProducts[index]?.taxes || 0) : (product.taxes || 0);
+                    const displayValue = editingProducts[index]?.taxes !== undefined 
+                      ? (editingProducts[index]?.taxes || 0) 
+                      : (product.taxes || 0);
                     return (
                       <InputNumber
                         min={0}
                         step={0.01}
                         value={displayValue}
-                        onChange={(value) => handleProductFieldChange(index, "taxes", value || 0)}
+                        onChange={(value) => {
+                          // Auto-enable edit mode if not already editing
+                          if (editingProducts[index] === undefined) {
+                            setEditingProducts({
+                              ...editingProducts,
+                              [index]: { ...localProducts[index] },
+                            });
+                          }
+                          handleProductFieldChange(index, "taxes", value || 0);
+                        }}
                         size="small"
                         style={{ width: "100%" }}
-                        disabled={!isEditing || saving}
+                        disabled={saving}
                         formatter={(value) => formatCurrency(value || 0, purchaseOrder?.currency).replace(/[^\d.-]/g, "")}
                         parser={(value) => value.replace(/[^\d.-]/g, "")}
                       />
@@ -849,65 +962,47 @@ const ProductsTab = ({ purchaseOrder, poId, onReload }) => {
                   })()}
                   </div>
                 </div>
-              <div className="col-span-2 flex justify-between items-center gap-2 pt-2 border-t">
-                <div className="flex gap-2">
-                  {isDraft && (
-                    <>
-                      {editingProducts[index] === undefined ? (
-                        <Button
-                          type="link"
-                          size="small"
-                          onClick={() => handleStartEdit(index)}
-                          disabled={saving}
-                        >
-                          Edit
-                        </Button>
-                      ) : (
-                        <>
-                          <Button
-                            type="primary"
-                            size="small"
-                            onClick={() => handleUpdateProduct(index)}
-                            loading={saving}
-                            disabled={saving}
-                          >
-                            Update
-                          </Button>
-                          <Button
-                            type="text"
-                            size="small"
-                            onClick={() => handleCancelEdit(index)}
-                            disabled={saving}
-                          >
-                            Cancel
-                          </Button>
-                        </>
-                      )}
-                    </>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                <Button
-                  type="link"
-                  icon={<QrCode size={16} />}
-                  onClick={() => handleQRCodeClick(product)}
-                  loading={loadingQR}
-                  size="small"
-                  className="p-0"
+              <div className="col-span-2 flex justify-end items-center gap-2 pt-2 border-t">
+                <Dropdown
+                  menu={{
+                    items: [
+                      {
+                        key: "qrCode",
+                        label: (
+                          <Space>
+                            <QrCode size={16} />
+                            <span>View QR Code</span>
+                          </Space>
+                        ),
+                        onClick: () => handleQRCodeClick(product),
+                      },
+                      ...(isDraft
+                        ? [
+                            {
+                              key: "delete",
+                              label: (
+                                <Space>
+                                  <Trash2 size={16} />
+                                  <span>Delete</span>
+                                </Space>
+                              ),
+                              danger: true,
+                              onClick: () => handleRemoveProduct(index),
+                            },
+                          ]
+                        : []),
+                    ],
+                  }}
+                  trigger={["click"]}
+                  placement="bottomRight"
                 >
-                  QR Code
-                </Button>
-                {isDraft && (
                   <Button
                     type="text"
-                    danger
-                    icon={<Trash2 size={14} />}
-                    onClick={() => handleRemoveProduct(index)}
+                    icon={<MoreVertical size={16} />}
                     size="small"
-                    loading={saving}
+                    loading={loadingQR || saving}
                   />
-                )}
-                </div>
+                </Dropdown>
               </div>
             </div>
           </Card>

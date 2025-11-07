@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   Card,
@@ -32,13 +32,11 @@ import {
 } from "lucide-react";
 import {
   getPurchaseOrder,
-  getVendors,
-  getCompanies,
-  getUsers,
   updatePurchaseOrderStatus,
   toggleFavorite,
 } from "../../api/procurement";
 import { useGlobalScanner } from "../../contexts/GlobalScannerContext";
+import { useProcurementData } from "../../contexts/ProcurementDataContext";
 import Swal from "sweetalert2";
 import {
   PO_STATUS,
@@ -73,32 +71,15 @@ const PurchaseOrderDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
   const [isFavorite, setIsFavorite] = useState(false);
-  const [vendors, setVendors] = useState([]);
-  const [companies, setCompanies] = useState([]);
-  const [buyers, setBuyers] = useState([]);
-  const [enrichedPO, setEnrichedPO] = useState(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [receiptModalVisible, setReceiptModalVisible] = useState(false);
+  
+  // Use shared dropdown data from context
+  const { vendors, companies, buyers } = useProcurementData();
 
   useEffect(() => {
     loadPurchaseOrder();
-    loadDropdownData();
   }, [poId]);
-
-  const loadDropdownData = async () => {
-    try {
-      const [vendorsData, companiesData, buyersData] = await Promise.all([
-        getVendors({ limit: 1000 }),
-        getCompanies(),
-        getUsers(),
-      ]);
-      setVendors(vendorsData || []);
-      setCompanies(companiesData || []);
-      setBuyers(buyersData || []);
-    } catch (error) {
-      console.error("Failed to load dropdown data:", error);
-    }
-  };
 
   const loadPurchaseOrder = async () => {
     setLoading(true);
@@ -106,7 +87,6 @@ const PurchaseOrderDetailPage = () => {
       const data = await getPurchaseOrder(poId);
       setPurchaseOrder(data);
       setIsFavorite(data.isFavorite || false);
-      enrichPurchaseOrder(data);
     } catch (error) {
       console.error("Failed to load purchase order:", error);
       setPurchaseOrder(null);
@@ -159,70 +139,60 @@ const PurchaseOrderDetailPage = () => {
     }
   };
 
-  // Enrich purchase order with names from IDs
-  const enrichPurchaseOrder = (po) => {
-    if (!po) return;
+  // Enrich purchase order with names from IDs - memoized to avoid unnecessary recalculations
+  const enrichedPO = useMemo(() => {
+    if (!purchaseOrder || vendors.length === 0 || companies.length === 0 || buyers.length === 0) {
+      return purchaseOrder;
+    }
 
-    const enriched = { ...po };
+    const enriched = { ...purchaseOrder };
 
     // Enrich vendor
-    if (po.vendor && (po.vendor.id || po.vendor._id)) {
-      const vendorId = po.vendor.id || po.vendor._id;
+    if (purchaseOrder.vendor && (purchaseOrder.vendor.id || purchaseOrder.vendor._id)) {
+      const vendorId = purchaseOrder.vendor.id || purchaseOrder.vendor._id;
       const vendor = vendors.find(
         (v) => v.id === vendorId || v._id === vendorId
       );
       if (vendor) {
         enriched.vendor = {
-          ...po.vendor,
+          ...purchaseOrder.vendor,
           name: vendor.name,
-          email: vendor.email || po.vendor.email,
-          phone: vendor.phone || po.vendor.phone,
-          address: vendor.address || po.vendor.address,
+          email: vendor.email || purchaseOrder.vendor.email,
+          phone: vendor.phone || purchaseOrder.vendor.phone,
+          address: vendor.address || purchaseOrder.vendor.address,
         };
       }
     }
 
     // Enrich company
-    if (po.company && (po.company.id || po.company._id)) {
-      const companyId = po.company.id || po.company._id;
+    if (purchaseOrder.company && (purchaseOrder.company.id || purchaseOrder.company._id)) {
+      const companyId = purchaseOrder.company.id || purchaseOrder.company._id;
       const company = companies.find(
         (c) => c.id === companyId || c._id === companyId
       );
       if (company) {
         enriched.company = {
-          ...po.company,
+          ...purchaseOrder.company,
           name: company.name,
         };
       }
     }
 
     // Enrich buyer
-    if (po.buyer && (po.buyer.id || po.buyer._id)) {
-      const buyerId = po.buyer.id || po.buyer._id;
+    if (purchaseOrder.buyer && (purchaseOrder.buyer.id || purchaseOrder.buyer._id)) {
+      const buyerId = purchaseOrder.buyer.id || purchaseOrder.buyer._id;
       const buyer = buyers.find((b) => b.id === buyerId || b._id === buyerId);
       if (buyer) {
         enriched.buyer = {
-          ...po.buyer,
+          ...purchaseOrder.buyer,
           name: buyer.name,
-          email: buyer.email || po.buyer.email,
-          avatar: buyer.avatar || po.buyer.avatar,
+          email: buyer.email || purchaseOrder.buyer.email,
+          avatar: buyer.avatar || purchaseOrder.buyer.avatar,
         };
       }
     }
 
-    setEnrichedPO(enriched);
-  };
-
-  // Re-enrich when dropdowns are loaded
-  useEffect(() => {
-    if (
-      purchaseOrder &&
-      vendors.length > 0 &&
-      companies.length > 0 &&
-      buyers.length > 0
-    ) {
-      enrichPurchaseOrder(purchaseOrder);
-    }
+    return enriched;
   }, [purchaseOrder, vendors, companies, buyers]);
 
   // Handle status change
@@ -235,8 +205,8 @@ const PurchaseOrderDetailPage = () => {
           PO_STATUS_LABELS[newStatus] || newStatus.replace("_", " ")
         }`
       );
-      // Reload purchase order to get updated status
-      await loadPurchaseOrder();
+      // Update local state instead of full refetch
+      setPurchaseOrder((prev) => prev ? { ...prev, status: newStatus } : null);
     } catch (error) {
       console.error("Failed to update status:", error);
       message.error(
@@ -275,7 +245,7 @@ const PurchaseOrderDetailPage = () => {
     );
   };
 
-  const po = enrichedPO || purchaseOrder;
+  const po = enrichedPO;
 
   if (loading) {
     return <DetailPageFullSkeleton />;
@@ -376,7 +346,7 @@ const PurchaseOrderDetailPage = () => {
 
   return (
     <div className="p-4">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-[1480px] mx-auto">
         {/* Breadcrumbs */}
         <Breadcrumb className="mb-4">
           <Breadcrumb.Item>

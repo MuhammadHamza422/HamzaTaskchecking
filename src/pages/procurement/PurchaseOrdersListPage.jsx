@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Table,
@@ -20,10 +20,8 @@ import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
 import {
   getPurchaseOrders,
-  getVendors,
-  getCompanies,
-  getUsers,
 } from "../../api/procurement";
+import { useProcurementData } from "../../contexts/ProcurementDataContext";
 import StatusBadge from "./components/StatusBadge";
 import ReceiptBadge from "./components/ReceiptBadge";
 import ProcurementTableSkeleton from "./components/ProcurementTableSkeleton";
@@ -40,9 +38,11 @@ const PurchaseOrdersListPage = () => {
   const navigate = useNavigate();
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [vendors, setVendors] = useState([]);
-  const [companies, setCompanies] = useState([]);
-  const [buyers, setBuyers] = useState([]);
+  
+  // Use shared dropdown data from context
+  const { vendors, companies, buyers } = useProcurementData();
+  
+  // Memoize filters to prevent unnecessary re-renders
   const [filters, setFilters] = useState({
     search: "",
     status: undefined,
@@ -57,29 +57,21 @@ const PurchaseOrdersListPage = () => {
     total: 0,
   });
 
-  // Load dropdown data
-  useEffect(() => {
-    const loadDropdownData = async () => {
-      try {
-        const [vendorsData, companiesData, buyersData] = await Promise.all([
-          getVendors({ limit: 1000 }),
-          getCompanies(),
-          getUsers(),
-        ]);
-        setVendors(vendorsData || []);
-        setCompanies(companiesData || []);
-        setBuyers(buyersData || []);
-      } catch (error) {
-        console.error("Failed to load dropdown data:", error);
-      }
-    };
-    loadDropdownData();
-  }, []);
+  // Memoize filter values for dependency comparison
+  const filterDeps = useMemo(() => ({
+    search: filters.search,
+    status: filters.status,
+    vendor: filters.vendor,
+    company: filters.company,
+    dateFrom: filters.dateRange?.[0]?.toISOString(),
+    dateTo: filters.dateRange?.[1]?.toISOString(),
+    favorite: filters.favorite,
+  }), [filters.search, filters.status, filters.vendor, filters.company, filters.dateRange?.[0], filters.dateRange?.[1], filters.favorite]);
 
   // Load purchase orders
   useEffect(() => {
     loadPurchaseOrders();
-  }, [filters, pagination.page]);
+  }, [filterDeps, pagination.page]);
 
   const loadPurchaseOrders = async () => {
     setLoading(true);

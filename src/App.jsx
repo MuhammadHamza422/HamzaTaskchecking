@@ -2,6 +2,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./contexts/AuthContext";
 import { GlobalScannerProvider } from "./contexts/GlobalScannerContext";
+import { ProcurementDataProvider } from "./contexts/ProcurementDataContext";
 import PurchaserPendingPage from "./pages/purchaser/PurchaserPendingPage";
 
 // Layouts and Pages
@@ -237,7 +238,9 @@ function App() {
             path="procurement"
             element={
               <RequireRoles allow={["admin", "procurement", "manager"]}>
-                <ProcurementDashboardPage />
+                <ProcurementDataProvider>
+                  <ProcurementDashboardPage />
+                </ProcurementDataProvider>
               </RequireRoles>
             }
           />
@@ -245,7 +248,9 @@ function App() {
             path="procurement/orders"
             element={
               <RequireRoles allow={["admin", "procurement", "manager"]}>
-                <PurchaseOrdersListPage />
+                <ProcurementDataProvider>
+                  <PurchaseOrdersListPage />
+                </ProcurementDataProvider>
               </RequireRoles>
             }
           />
@@ -253,7 +258,9 @@ function App() {
             path="procurement/orders/new"
             element={
               <RequireRoles allow={["admin", "procurement", "manager"]}>
-                <CreatePurchaseOrderPage />
+                <ProcurementDataProvider>
+                  <CreatePurchaseOrderPage />
+                </ProcurementDataProvider>
               </RequireRoles>
             }
           />
@@ -261,7 +268,9 @@ function App() {
             path="procurement/orders/:poId/edit"
             element={
               <RequireRoles allow={["admin", "procurement", "manager"]}>
-                <CreatePurchaseOrderPage />
+                <ProcurementDataProvider>
+                  <CreatePurchaseOrderPage />
+                </ProcurementDataProvider>
               </RequireRoles>
             }
           />
@@ -269,7 +278,9 @@ function App() {
             path="procurement/orders/:poId"
             element={
               <RequireRoles allow={["admin", "procurement", "manager"]}>
-                <PurchaseOrderDetailPage />
+                <ProcurementDataProvider>
+                  <PurchaseOrderDetailPage />
+                </ProcurementDataProvider>
               </RequireRoles>
             }
           />

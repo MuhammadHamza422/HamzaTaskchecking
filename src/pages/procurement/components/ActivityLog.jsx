@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Card, Input, Button, Space, List, Avatar, Skeleton, message } from "antd";
 import {
   MessageOutlined,
@@ -10,6 +10,9 @@ import { getPurchaseOrderActivities, createActivity } from "../../../api/procure
 
 const { TextArea } = Input;
 
+// Simple cache for activities - cleared when component unmounts
+const activitiesCache = new Map();
+
 /**
  * Activity Log Sidebar Component
  * Displays timeline of activities using Ant Design
@@ -19,22 +22,45 @@ const ActivityLog = ({ poId, purchaseOrder }) => {
   const [loading, setLoading] = useState(true);
   const [showNoteForm, setShowNoteForm] = useState(false);
   const [noteMessage, setNoteMessage] = useState("");
+  const mountedRef = useRef(true);
 
   useEffect(() => {
+    mountedRef.current = true;
     loadActivities();
+    return () => {
+      mountedRef.current = false;
+    };
   }, [poId]);
 
   const loadActivities = async () => {
+    // Check cache first
+    if (activitiesCache.has(poId)) {
+      setActivities(activitiesCache.get(poId));
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       const response = await getPurchaseOrderActivities(poId);
       const activities = response.data || response || [];
-      setActivities(Array.isArray(activities) ? activities : []);
+      const activitiesArray = Array.isArray(activities) ? activities : [];
+      
+      // Cache the activities
+      activitiesCache.set(poId, activitiesArray);
+      
+      if (mountedRef.current) {
+        setActivities(activitiesArray);
+      }
     } catch (error) {
       console.error("Failed to load activities:", error);
-      setActivities([]);
+      if (mountedRef.current) {
+        setActivities([]);
+      }
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -52,6 +78,8 @@ const ActivityLog = ({ poId, purchaseOrder }) => {
       message.success("Note added successfully");
       setNoteMessage("");
       setShowNoteForm(false);
+      // Clear cache and reload activities
+      activitiesCache.delete(poId);
       loadActivities();
     } catch (error) {
       console.error("Failed to create note:", error);
