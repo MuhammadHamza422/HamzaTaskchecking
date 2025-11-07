@@ -135,17 +135,22 @@ const QRCodeModal = ({ visible, onCancel, qrData }) => {
     }
   };
 
-  // Get box name separately - returns empty string if no name exists
+  // Get box name separately - returns empty string if no name exists (NO FALLBACKS)
   const getBoxName = () => {
     if (!qrData || qrData.type !== "box") return "";
+    // Only check actual box name fields, no fallbacks to product name or generated names
     const boxName = (
       qrData.box?.name || 
       qrData.qrData?.box?.name || 
       qrData.name || 
       ""
     );
-    // Return empty string if name is empty/null/undefined (no fallback to ID)
-    return boxName || "";
+    // Return empty string if name is empty/null/undefined (strictly no fallback)
+    // Also filter out any names that look like generated fallbacks (e.g., "Box P00014-box-3")
+    if (!boxName) return "";
+    // If the name starts with "Box " followed by what looks like a box ID pattern, it's likely a fallback
+    if (boxName.trim().match(/^Box\s+P\d+-box-\d+/i)) return "";
+    return boxName.trim();
   };
 
   // Get box ID separately

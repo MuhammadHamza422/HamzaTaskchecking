@@ -128,16 +128,23 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
           }
           
           if (response?.success && response?.data) {
-            // For boxes, preserve the box name from the original item
+            // For boxes, preserve the box name from the original item (NO FALLBACKS)
             const boxData = response.data.box || response.data;
+            // Only use actual box name, no fallbacks
+            const actualBoxName = item.name || boxData?.name || response.data.box?.name || "";
+            // Filter out generated fallback names (e.g., "Box P00014-box-3")
+            const cleanBoxName = actualBoxName && !actualBoxName.trim().match(/^Box\s+P\d+-box-\d+/i) 
+              ? actualBoxName.trim() 
+              : "";
+            
             return {
               ...item,
               qrCode: response.data.qrCode,
               qrData: response.data.qrData,
               product: response.data.product || response.data.kit || boxData,
-              box: boxData ? { ...boxData, name: item.name || boxData.name } : item.box,
-              // Preserve name from original item if available
-              name: item.name || boxData?.name || response.data.box?.name,
+              box: boxData ? { ...boxData, name: cleanBoxName } : item.box,
+              // Only set name if it's a real name, not a fallback
+              name: cleanBoxName,
               type: item.type || "product",
             };
           }
@@ -175,36 +182,37 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
     }
   };
 
-  // Get label text based on type
+  // Get box name separately - returns empty string if no name exists (NO FALLBACKS)
+  const getBoxName = (item) => {
+    if (!item || item.type !== "box") return "";
+    // Only check actual box name fields, no fallbacks to product name or generated names
+    const boxName = 
+      item.name || 
+      item.box?.name || 
+      item.qrData?.box?.name || 
+      "";
+    // Return empty string if name is empty/null/undefined (strictly no fallback)
+    // Also filter out any names that look like generated fallbacks (e.g., "Box P00014-box-3")
+    if (!boxName) return "";
+    // If the name starts with "Box " followed by what looks like a box ID pattern, it's likely a fallback
+    if (boxName.trim().match(/^Box\s+P\d+-box-\d+/i)) return "";
+    return boxName.trim();
+  };
+
+  // Get box ID separately
+  const getBoxId = (item) => {
+    if (!item || item.type !== "box") return "";
+    return item.qrData?.boxId || item.boxId || "";
+  };
+
+  // Get label text based on type (for non-box items)
   const getLabelText = (item, index = 0) => {
     if (!item) return "";
     if (item.type === "kit") {
       return item.qrData?.kitId || item.kitId || "";
     } else if (item.type === "box") {
-      // Try multiple possible locations for box name
-      const boxName = 
-        item.name || 
-        item.box?.name || 
-        item.qrData?.box?.name || 
-        item.product?.name || 
-        "";
-      // Get box ID
-      const boxId = item.qrData?.boxId || item.boxId || "";
-      
-      // If box has both name and id, show both
-      if (boxName && boxId) {
-        return `${boxName}\n${boxId}`;
-      }
-      // If box has just name, show name
-      if (boxName) {
-        return boxName;
-      }
-      // If box has just id, show id
-      if (boxId) {
-        return boxId;
-      }
-      // No fallback - return empty
-      return "";
+      // For boxes, return box ID (name is handled separately)
+      return getBoxId(item);
     } else {
       return item.qrData?.sku || item.sku || "";
     }
@@ -273,11 +281,34 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
         tempContainer.style.border = "1px solid #ddd";
         tempContainer.style.backgroundColor = "#ffffff";
         tempContainer.style.boxSizing = "border-box";
+        // For boxes, show name and ID separately
+        const labelHtml = item.type === "box" 
+          ? (() => {
+              const boxName = getBoxName(item);
+              const boxId = getBoxId(item);
+              if (boxName && boxId) {
+                return `<div style="margin-top: 8px; font-size: 10px; text-align: center; word-break: break-word;">
+                  <div style="font-weight: bold; font-size: 11px; margin-bottom: 2px;">${boxName}</div>
+                  <div style="font-size: 9px; color: #666;">${boxId}</div>
+                </div>`;
+              } else if (boxName) {
+                return `<div style="margin-top: 8px; font-size: 10px; text-align: center; word-break: break-word;">
+                  <div style="font-weight: bold; font-size: 11px;">${boxName}</div>
+                </div>`;
+              } else if (boxId) {
+                return `<div style="margin-top: 8px; font-size: 10px; text-align: center; word-break: break-word;">
+                  <div style="font-size: 11px;">${boxId}</div>
+                </div>`;
+              }
+              return "";
+            })()
+          : `<div style="margin-top: 8px; font-size: 10px; text-align: center; word-break: break-word; white-space: pre-line;">
+              ${getLabelText(item, i)}
+            </div>`;
+        
         tempContainer.innerHTML = `
           <img src="${item.qrCode}" alt="QR Code" style="width: ${qrSize}px; height: ${qrSize}px; max-width: 100%; max-height: 70%; object-fit: contain;" />
-          <div style="margin-top: 8px; font-size: 10px; text-align: center; word-break: break-word; white-space: pre-line;">
-            ${getLabelText(item, i)}
-          </div>
+          ${labelHtml}
         `;
         document.body.appendChild(tempContainer);
 
@@ -350,14 +381,39 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
     // Create one label per page
     const labelsHtml = qrCodes
       .map(
-        (item, index) => `
+        (item, index) => {
+          // For boxes, show name and ID separately
+          const labelContent = item.type === "box" 
+            ? (() => {
+                const boxName = getBoxName(item);
+                const boxId = getBoxId(item);
+                if (boxName && boxId) {
+                  return `<div style="margin-top: 8px; font-size: 10px; text-align: center; word-break: break-word;">
+                    <div style="font-weight: bold; font-size: 11px; margin-bottom: 2px;">${boxName}</div>
+                    <div style="font-size: 9px; color: #666;">${boxId}</div>
+                  </div>`;
+                } else if (boxName) {
+                  return `<div style="margin-top: 8px; font-size: 10px; text-align: center; word-break: break-word;">
+                    <div style="font-weight: bold; font-size: 11px;">${boxName}</div>
+                  </div>`;
+                } else if (boxId) {
+                  return `<div style="margin-top: 8px; font-size: 10px; text-align: center; word-break: break-word;">
+                    <div style="font-size: 11px;">${boxId}</div>
+                  </div>`;
+                }
+                return "";
+              })()
+            : `<div style="margin-top: 8px; font-size: 10px; text-align: center; word-break: break-word; white-space: pre-line;">
+                ${getLabelText(item, index)}
+              </div>`;
+          
+          return `
       <div class="label-page" style="width: ${widthIn}in; height: ${heightIn}in; padding: 10px; margin: 0; page-break-after: always; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px solid #ddd; box-sizing: border-box;">
         <img src="${item.qrCode}" alt="QR Code" style="width: ${qrSize}px; height: ${qrSize}px; max-width: 100%; max-height: 70%; object-fit: contain;" />
-        <div style="margin-top: 8px; font-size: 10px; text-align: center; word-break: break-word; white-space: pre-line;">
-          ${getLabelText(item, index)}
-        </div>
+        ${labelContent}
       </div>
-    `
+    `;
+        }
       )
       .join("");
 
@@ -582,9 +638,24 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
                     alt="QR Code"
                     style={{ width: `${qrSize}px`, height: `${qrSize}px` }}
                   />
-                  <div className="mt-2 text-xs text-center text-gray-600 whitespace-pre-line">
-                    {getLabelText(item, index)}
-                  </div>
+                  {item.type === "box" ? (
+                    <div className="mt-2 text-center">
+                      {getBoxName(item) && getBoxId(item) ? (
+                        <>
+                          <div className="text-lg font-bold mb-0">{getBoxName(item)}</div>
+                          <div className="text-xs text-gray-600 mb-0">{getBoxId(item)}</div>
+                        </>
+                      ) : getBoxName(item) ? (
+                        <div className="text-xs font-bold mb-0">{getBoxName(item)}</div>
+                      ) : getBoxId(item) ? (
+                        <div className="text-base mb-0">{getBoxId(item)}</div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="mt-2 text-xs text-center text-gray-600 whitespace-pre-line">
+                      {getLabelText(item, index)}
+                    </div>
+                  )}
                 </div>
               </Col>
             ))}

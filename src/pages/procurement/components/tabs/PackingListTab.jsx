@@ -245,20 +245,36 @@ const PackingListTab = ({ purchaseOrder, poId, onReload, onUnsavedChangesChange 
   };
 
 
+  // Helper function to filter out fallback box names
+  const getCleanBoxName = (boxName) => {
+    if (!boxName) return "";
+    // Filter out generated fallback names (e.g., "Box P00014-box-3")
+    if (boxName.trim().match(/^Box\s+P\d+-box-\d+/i)) return "";
+    return boxName.trim();
+  };
+
   const handleShowQRCode = async (boxId) => {
     try {
       const response = await getBoxQRCode(boxId, { format: "json" });
       // Find the box from the boxes list to get the name
       const box = boxes.find((b) => b.boxId === boxId || b._id === boxId);
       
-      // Merge QR code response with box data to include name
+      // Get clean box name (no fallbacks)
+      const cleanBoxName = getCleanBoxName(
+        box?.name || response?.data?.box?.name || response?.data?.name
+      );
+      
+      // Merge QR code response with box data to include name (only if it's a real name)
       setBoxQRCode({
         ...response?.data,
         box: box ? {
           ...box,
-          name: box.name,
+          name: cleanBoxName,
+        } : response?.data?.box ? {
+          ...response?.data?.box,
+          name: cleanBoxName,
         } : response?.data?.box,
-        name: box?.name || response?.data?.box?.name || response?.data?.name,
+        name: cleanBoxName,
       });
       setBoxQRVisible(true);
     } catch (error) {
@@ -364,6 +380,12 @@ const PackingListTab = ({ purchaseOrder, poId, onReload, onUnsavedChangesChange 
       dataIndex: "name",
       key: "name",
       width: 200,
+      render: (text) => {
+        // Filter out fallback names like "Box P00014-box-3"
+        if (!text) return "-";
+        const cleanName = text.trim().match(/^Box\s+P\d+-box-\d+/i) ? "" : text.trim();
+        return cleanName || "-";
+      },
     },
     {
       title: "Items Count",
@@ -610,9 +632,15 @@ const PackingListTab = ({ purchaseOrder, poId, onReload, onUnsavedChangesChange 
                       <Tag color="blue" className="mb-2">
                         {box.boxId}
                       </Tag>
-                      {box.name && (
-                        <div className="font-medium text-gray-900 mb-1">{box.name}</div>
-                      )}
+                      {(() => {
+                        // Filter out fallback names like "Box P00014-box-3"
+                        const cleanName = box.name && !box.name.trim().match(/^Box\s+P\d+-box-\d+/i)
+                          ? box.name.trim()
+                          : "";
+                        return cleanName ? (
+                          <div className="font-medium text-gray-900 mb-1">{cleanName}</div>
+                        ) : null;
+                      })()}
                     </div>
                     <Dropdown
                       menu={{
@@ -723,7 +751,18 @@ const PackingListTab = ({ purchaseOrder, poId, onReload, onUnsavedChangesChange 
       <BulkQRCodeModal
         visible={bulkQRModalVisible}
         onCancel={() => setBulkQRModalVisible(false)}
-        items={selectedBoxes.map((box) => ({ ...box, type: "box", boxId: box.boxId }))}
+        items={selectedBoxes.map((box) => {
+          // Filter out fallback names before passing to BulkQRCodeModal
+          const cleanName = box.name && !box.name.trim().match(/^Box\s+P\d+-box-\d+/i)
+            ? box.name.trim()
+            : "";
+          return { 
+            ...box, 
+            type: "box", 
+            boxId: box.boxId,
+            name: cleanName, // Only pass clean name, no fallbacks
+          };
+        })}
         poId={poId}
         getQRCodeFunction={getBoxQRCode}
         isBox={true}
