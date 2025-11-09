@@ -18,9 +18,10 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
   const [unit, setUnit] = useState("mm"); // "in" or "mm" - default to mm
   const [labelsPerRow, setLabelsPerRow] = useState(2); // Number of labels per row
   
-  // Default values: 1767mm width, 1802mm height (converted to inches for internal storage)
-  const defaultWidthMm = 1767;
-  const defaultHeightMm = 1802;
+  // Default values: reasonable label sizes
+  // 2.7 inches = ~68.58mm, 2.8 inches = ~71.12mm
+  const defaultWidthMm = 70; // ~2.75 inches
+  const defaultHeightMm = 71; // ~2.8 inches
   const defaultWidthIn = 2.7;
   const defaultHeightIn = 2.8;
   
@@ -54,19 +55,29 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
     }
   };
 
-  // Get display values based on unit
-  const getDisplayWidth = () => {
+  // Get display values based on unit - memoized to prevent infinite loops
+  const getDisplayWidth = React.useMemo(() => {
     if (unit === "mm") {
       return roundValue(inchesToMm(pageWidth), "mm");
     }
     return roundValue(pageWidth, "in");
-  };
+  }, [unit, pageWidth]);
 
-  const getDisplayHeight = () => {
+  const getDisplayHeight = React.useMemo(() => {
     if (unit === "mm") {
       return roundValue(inchesToMm(pageHeight), "mm");
     }
     return roundValue(pageHeight, "in");
+  }, [unit, pageHeight]);
+
+  // Use refs to track last values to prevent circular updates
+  const lastWidthRef = React.useRef(null);
+  const lastHeightRef = React.useRef(null);
+  
+  // Helper to check if value actually changed (with tolerance for floating point)
+  const hasValueChanged = (newValue, oldValue, tolerance = 0.001) => {
+    if (oldValue === null || oldValue === undefined) return true;
+    return Math.abs(newValue - oldValue) > tolerance;
   };
 
   // Reset to defaults when modal opens (only on visibility change, not unit change)
@@ -74,11 +85,17 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
     if (visible) {
       // Reset to defaults based on current unit
       if (unit === "mm") {
-        setPageWidth(defaultWidthMm / 25.4);
-        setPageHeight(defaultHeightMm / 25.4);
+        const newWidth = defaultWidthMm / 25.4;
+        const newHeight = defaultHeightMm / 25.4;
+        setPageWidth(newWidth);
+        setPageHeight(newHeight);
+        lastWidthRef.current = newWidth;
+        lastHeightRef.current = newHeight;
       } else {
         setPageWidth(defaultWidthIn);
         setPageHeight(defaultHeightIn);
+        lastWidthRef.current = defaultWidthIn;
+        lastHeightRef.current = defaultHeightIn;
       }
       setQrSize(200); // Reset QR size to default
     }
@@ -236,8 +253,7 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
       const widthMm = inchesToMm(widthIn);
       const heightMm = inchesToMm(heightIn);
 
-      // PDF settings: 2 labels per row with gaps
-      const labelsPerRow = 2;
+      // PDF settings: Use the labelsPerRow state variable
       const gapMm = 10; // Gap between labels in mm
       const marginMm = 10; // Page margin in mm
       
@@ -306,8 +322,17 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
               ${getLabelText(item, i)}
             </div>`;
         
+        // Calculate max QR code size to fit within label (leave space for text)
+        const paddingPx = 20; // Padding inside label
+        const textHeightPx = 30; // Estimated space for text below QR code
+        const containerWidthPx = widthIn * 96; // Convert inches to pixels
+        const containerHeightPx = heightIn * 96; // Convert inches to pixels
+        const maxQrWidth = Math.max(0, containerWidthPx - paddingPx * 2);
+        const maxQrHeight = Math.max(0, containerHeightPx - paddingPx * 2 - textHeightPx);
+        const constrainedQrSize = Math.min(qrSize, maxQrWidth, maxQrHeight);
+        
         tempContainer.innerHTML = `
-          <img src="${item.qrCode}" alt="QR Code" style="width: ${qrSize}px; height: ${qrSize}px; max-width: 100%; max-height: 70%; object-fit: contain;" />
+          <img src="${item.qrCode}" alt="QR Code" style="width: ${constrainedQrSize}px; height: ${constrainedQrSize}px; max-width: 100%; max-height: 70%; object-fit: contain;" />
           ${labelHtml}
         `;
         document.body.appendChild(tempContainer);
@@ -407,9 +432,18 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
                 ${getLabelText(item, index)}
               </div>`;
           
+          // Calculate max QR code size to fit within label (leave space for text)
+          const paddingPx = 20; // Padding inside label
+          const textHeightPx = 30; // Estimated space for text below QR code
+          const containerWidthPx = widthIn * 96; // Convert inches to pixels
+          const containerHeightPx = heightIn * 96; // Convert inches to pixels
+          const maxQrWidth = Math.max(0, containerWidthPx - paddingPx * 2);
+          const maxQrHeight = Math.max(0, containerHeightPx - paddingPx * 2 - textHeightPx);
+          const constrainedQrSize = Math.min(qrSize, maxQrWidth, maxQrHeight);
+          
           return `
       <div class="label-page" style="width: ${widthIn}in; height: ${heightIn}in; padding: 10px; margin: 0; page-break-after: always; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px solid #ddd; box-sizing: border-box;">
-        <img src="${item.qrCode}" alt="QR Code" style="width: ${qrSize}px; height: ${qrSize}px; max-width: 100%; max-height: 70%; object-fit: contain;" />
+        <img src="${item.qrCode}" alt="QR Code" style="width: ${constrainedQrSize}px; height: ${constrainedQrSize}px; max-width: 100%; max-height: 70%; object-fit: contain;" />
         ${labelContent}
       </div>
     `;
@@ -527,24 +561,36 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
                   Page Width ({unit === "mm" ? "mm" : "inches"})
                 </label>
                 <InputNumber
-                  value={getDisplayWidth()}
+                  value={getDisplayWidth}
                   onChange={(value) => {
                     if (value === null || value === undefined) return;
                     
-                    // Round the input value based on current unit
-                    const roundedValue = roundValue(value, unit);
+                    // Limit maximum values to prevent overflow and crashes
+                    const maxValue = unit === "mm" ? 500 : 20; // Max 500mm or 20 inches
+                    const clampedValue = Math.min(value, maxValue);
                     
+                    // Round the input value based on current unit
+                    const roundedValue = roundValue(clampedValue, unit);
+                    
+                    // Calculate what the new internal value would be
+                    let newInternalValue;
                     if (unit === "mm") {
                       // Convert mm input to inches for internal storage
-                      const inchesValue = mmToInches(roundedValue);
-                      setPageWidth(inchesValue);
+                      newInternalValue = mmToInches(roundedValue);
                     } else {
                       // Store inches directly
-                      setPageWidth(roundedValue);
+                      newInternalValue = roundedValue;
+                    }
+                    
+                    // Only update if the value actually changed (prevent circular updates)
+                    const tolerance = unit === "mm" ? 0.01 : 0.0001; // More tolerance for mm
+                    if (hasValueChanged(newInternalValue, lastWidthRef.current, tolerance)) {
+                      lastWidthRef.current = newInternalValue;
+                      setPageWidth(newInternalValue);
                     }
                   }}
                   min={unit === "mm" ? 10 : 0.5}
-                  max={undefined}
+                  max={unit === "mm" ? 500 : 20}
                   step={unit === "mm" ? 1 : 0.1}
                   style={{ width: "100%" }}
                   addonAfter={unit === "mm" ? "mm" : "in"}
@@ -557,24 +603,36 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
                   Page Height ({unit === "mm" ? "mm" : "inches"})
                 </label>
                 <InputNumber
-                  value={getDisplayHeight()}
+                  value={getDisplayHeight}
                   onChange={(value) => {
                     if (value === null || value === undefined) return;
                     
-                    // Round the input value based on current unit
-                    const roundedValue = roundValue(value, unit);
+                    // Limit maximum values to prevent overflow and crashes
+                    const maxValue = unit === "mm" ? 500 : 20; // Max 500mm or 20 inches
+                    const clampedValue = Math.min(value, maxValue);
                     
+                    // Round the input value based on current unit
+                    const roundedValue = roundValue(clampedValue, unit);
+                    
+                    // Calculate what the new internal value would be
+                    let newInternalValue;
                     if (unit === "mm") {
                       // Convert mm input to inches for internal storage
-                      const inchesValue = mmToInches(roundedValue);
-                      setPageHeight(inchesValue);
+                      newInternalValue = mmToInches(roundedValue);
                     } else {
                       // Store inches directly
-                      setPageHeight(roundedValue);
+                      newInternalValue = roundedValue;
+                    }
+                    
+                    // Only update if the value actually changed (prevent circular updates)
+                    const tolerance = unit === "mm" ? 0.01 : 0.0001; // More tolerance for mm
+                    if (hasValueChanged(newInternalValue, lastHeightRef.current, tolerance)) {
+                      lastHeightRef.current = newInternalValue;
+                      setPageHeight(newInternalValue);
                     }
                   }}
                   min={unit === "mm" ? 10 : 0.5}
-                  max={undefined}
+                  max={unit === "mm" ? 500 : 20}
                   step={unit === "mm" ? 1 : 0.1}
                   style={{ width: "100%" }}
                   addonAfter={unit === "mm" ? "mm" : "in"}
@@ -592,12 +650,18 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
                     // When switching units, reset to defaults for that unit
                     if (newUnit === "mm") {
                       // Set to mm defaults (convert to inches for storage)
-                      setPageWidth(defaultWidthMm / 25.4);
-                      setPageHeight(defaultHeightMm / 25.4);
+                      const newWidth = defaultWidthMm / 25.4;
+                      const newHeight = defaultHeightMm / 25.4;
+                      setPageWidth(newWidth);
+                      setPageHeight(newHeight);
+                      lastWidthRef.current = newWidth;
+                      lastHeightRef.current = newHeight;
                     } else {
                       // Set to inch defaults
                       setPageWidth(defaultWidthIn);
                       setPageHeight(defaultHeightIn);
+                      lastWidthRef.current = defaultWidthIn;
+                      lastHeightRef.current = defaultHeightIn;
                     }
                     
                     setUnit(newUnit);
@@ -624,41 +688,68 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
       ) : (
         <div ref={printRef} className="border border-gray-200 p-4 rounded">
           <Row gutter={[16, 16]}>
-            {qrCodes.map((item, index) => (
-              <Col key={index} span={24 / labelsPerRow}>
-                <div
-                  className="border border-gray-300 p-4 rounded flex flex-col items-center justify-center"
-                  style={{
-                    minHeight: "250px",
-                    backgroundColor: "#ffffff",
-                  }}
-                >
-                  <img
-                    src={item.qrCode}
-                    alt="QR Code"
-                    style={{ width: `${qrSize}px`, height: `${qrSize}px` }}
-                  />
-                  {item.type === "box" ? (
-                    <div className="mt-2 text-center">
-                      {getBoxName(item) && getBoxId(item) ? (
-                        <>
-                          <div className="text-lg font-bold mb-0">{getBoxName(item)}</div>
-                          <div className="text-xs text-gray-600 mb-0">{getBoxId(item)}</div>
-                        </>
-                      ) : getBoxName(item) ? (
-                        <div className="text-xs font-bold mb-0">{getBoxName(item)}</div>
-                      ) : getBoxId(item) ? (
-                        <div className="text-base mb-0">{getBoxId(item)}</div>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <div className="mt-2 text-xs text-center text-gray-600 whitespace-pre-line">
-                      {getLabelText(item, index)}
-                    </div>
-                  )}
-                </div>
-              </Col>
-            ))}
+            {qrCodes.map((item, index) => {
+              // Convert dimensions for display (convert to pixels for preview)
+              // pageWidth and pageHeight are stored in inches internally
+              // Cap at reasonable max to prevent overflow (500mm = ~19685px, but we'll cap at 2000px for safety)
+              const maxPixels = 2000;
+              const rawWidthPx = pageWidth * 96; // Convert inches to pixels (96 DPI)
+              const rawHeightPx = pageHeight * 96;
+              const displayWidthPx = Math.min(rawWidthPx, maxPixels);
+              const displayHeightPx = Math.min(rawHeightPx, maxPixels);
+              
+              // Calculate max QR code size to fit within label (leave space for text)
+              const paddingPx = 20; // Padding inside label
+              const textHeightPx = 30; // Estimated space for text below QR code
+              const maxQrWidth = Math.max(0, displayWidthPx - paddingPx * 2);
+              const maxQrHeight = Math.max(0, displayHeightPx - paddingPx * 2 - textHeightPx);
+              const constrainedQrSize = Math.min(qrSize, maxQrWidth, maxQrHeight);
+              
+              return (
+                <Col key={index} span={24 / labelsPerRow}>
+                  <div
+                    className="border border-gray-300 p-4 rounded flex flex-col items-center justify-center"
+                    style={{
+                      width: `${displayWidthPx}px`,
+                      height: `${displayHeightPx}px`,
+                      backgroundColor: "#ffffff",
+                      boxSizing: "border-box",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <img
+                      src={item.qrCode}
+                      alt="QR Code"
+                      style={{ 
+                        width: `${constrainedQrSize}px`, 
+                        height: `${constrainedQrSize}px`,
+                        maxWidth: "100%",
+                        maxHeight: "70%",
+                        objectFit: "contain",
+                      }}
+                    />
+                    {item.type === "box" ? (
+                      <div className="mt-2 text-center">
+                        {getBoxName(item) && getBoxId(item) ? (
+                          <>
+                            <div className="text-lg font-bold mb-0">{getBoxName(item)}</div>
+                            <div className="text-xs text-gray-600 mb-0">{getBoxId(item)}</div>
+                          </>
+                        ) : getBoxName(item) ? (
+                          <div className="text-xs font-bold mb-0">{getBoxName(item)}</div>
+                        ) : getBoxId(item) ? (
+                          <div className="text-base mb-0">{getBoxId(item)}</div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="mt-2 text-xs text-center text-gray-600 whitespace-pre-line">
+                        {getLabelText(item, index)}
+                      </div>
+                    )}
+                  </div>
+                </Col>
+              );
+            })}
           </Row>
         </div>
       )}
