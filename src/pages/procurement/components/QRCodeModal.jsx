@@ -16,9 +16,10 @@ const QRCodeModal = ({ visible, onCancel, qrData }) => {
   const [qrSize, setQrSize] = useState(200); // Default QR code size in pixels
   const [unit, setUnit] = useState("mm"); // "in" or "mm" - default to mm
   
-  // Default values: 1767mm width, 1802mm height (converted to inches for internal storage)
-  const defaultWidthMm = 1767;
-  const defaultHeightMm = 1802;
+  // Default values: reasonable label sizes
+  // 2.7 inches = ~68.58mm, 2.8 inches = ~71.12mm
+  const defaultWidthMm = 70; // ~2.75 inches
+  const defaultHeightMm = 71; // ~2.8 inches
   const defaultWidthIn = 2.7;
   const defaultHeightIn = 2.8;
   
@@ -190,9 +191,9 @@ const QRCodeModal = ({ visible, onCancel, qrData }) => {
 
     setDownloading(true);
     try {
-      // Convert dimensions based on unit
-      const widthIn = unit === "mm" ? mmToInches(pageWidth) : pageWidth;
-      const heightIn = unit === "mm" ? mmToInches(pageHeight) : pageHeight;
+      // pageWidth and pageHeight are always stored in inches internally
+      const widthIn = pageWidth;
+      const heightIn = pageHeight;
 
       // Convert to mm for jsPDF (jsPDF uses mm as default unit)
       const widthMm = inchesToMm(widthIn);
@@ -248,9 +249,18 @@ const QRCodeModal = ({ visible, onCancel, qrData }) => {
       return;
     }
 
-    // Convert dimensions to inches for print
-    const widthIn = unit === "mm" ? mmToInches(pageWidth) : pageWidth;
-    const heightIn = unit === "mm" ? mmToInches(pageHeight) : pageHeight;
+    // pageWidth and pageHeight are always stored in inches internally
+    const widthIn = pageWidth;
+    const heightIn = pageHeight;
+    
+    // Calculate constrained QR code size for print
+    const containerWidthPx = widthIn * 96;
+    const containerHeightPx = heightIn * 96;
+    const paddingPx = 20;
+    const textHeightPx = 30;
+    const maxQrWidth = Math.max(0, containerWidthPx - paddingPx * 2);
+    const maxQrHeight = Math.max(0, containerHeightPx - paddingPx * 2 - textHeightPx);
+    const constrainedQrSize = Math.min(qrSize, maxQrWidth, maxQrHeight);
 
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
@@ -313,7 +323,7 @@ const QRCodeModal = ({ visible, onCancel, qrData }) => {
         </head>
         <body>
           <div class="print-container">
-            <img src="${qrData.qrCode}" alt="QR Code" style="width: ${qrSize}px; height: ${qrSize}px;" />
+            <img src="${qrData.qrCode}" alt="QR Code" style="width: ${constrainedQrSize}px; height: ${constrainedQrSize}px; max-width: 100%; max-height: 70%; object-fit: contain;" />
             ${qrData?.type === "box" 
               ? `<div class="label-info">
                   ${getBoxName() && getBoxId() 
@@ -367,12 +377,16 @@ const QRCodeModal = ({ visible, onCancel, qrData }) => {
   }
 
   // Convert dimensions for display (convert to pixels for preview)
-  const displayWidthPx = unit === "mm" 
-    ? (pageWidth / 25.4) * 96 
-    : pageWidth * 96;
-  const displayHeightPx = unit === "mm"
-    ? (pageHeight / 25.4) * 96
-    : pageHeight * 96;
+  // pageWidth and pageHeight are stored in inches internally
+  const displayWidthPx = pageWidth * 96; // Convert inches to pixels (96 DPI)
+  const displayHeightPx = pageHeight * 96; // Convert inches to pixels (96 DPI)
+  
+  // Calculate max QR code size to fit within label (leave space for text)
+  const paddingPx = 20; // Padding inside label
+  const textHeightPx = 30; // Estimated space for text below QR code
+  const maxQrWidth = Math.max(0, displayWidthPx - paddingPx * 2);
+  const maxQrHeight = Math.max(0, displayHeightPx - paddingPx * 2 - textHeightPx);
+  const constrainedQrSize = Math.min(qrSize, maxQrWidth, maxQrHeight);
 
   return (
     <Modal
@@ -438,7 +452,7 @@ const QRCodeModal = ({ visible, onCancel, qrData }) => {
                 </label>
                 <InputNumber
                   min={unit === "mm" ? 10 : 0.5}
-                  max={undefined}
+                  max={unit === "mm" ? 500 : 20}
                   step={unit === "mm" ? 1 : 0.1}
                   value={getDisplayWidth()}
                   onChange={handleWidthChange}
@@ -452,7 +466,7 @@ const QRCodeModal = ({ visible, onCancel, qrData }) => {
                 </label>
                 <InputNumber
                   min={unit === "mm" ? 10 : 0.5}
-                  max={undefined}
+                  max={unit === "mm" ? 500 : 20}
                   step={unit === "mm" ? 1 : 0.1}
                   value={getDisplayHeight()}
                   onChange={handleHeightChange}
@@ -482,8 +496,11 @@ const QRCodeModal = ({ visible, onCancel, qrData }) => {
                 src={qrData.qrCode}
                 alt="QR Code"
                 style={{
-                  width: `${qrSize}px`,
-                  height: `${qrSize}px`,
+                  width: `${constrainedQrSize}px`,
+                  height: `${constrainedQrSize}px`,
+                  maxWidth: "100%",
+                  maxHeight: "70%",
+                  objectFit: "contain",
                 }}
                 preview={false}
               />
