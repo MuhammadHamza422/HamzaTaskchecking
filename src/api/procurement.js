@@ -39,7 +39,12 @@ export const getPurchaseOrder = async (poId) => {
  * @returns {Promise} Receipt data for printing
  */
 export const getPurchaseOrderReceipt = async (poId) => {
-  const { data } = await apiClient.get(`/api/v1/procurement/orders/${poId}/receipt`);
+  // Add timestamp to prevent caching
+  const { data } = await apiClient.get(`/api/v1/procurement/orders/${poId}/receipt`, {
+    params: {
+      _t: Date.now(), // Cache busting parameter
+    },
+  });
   return data;
 };
 

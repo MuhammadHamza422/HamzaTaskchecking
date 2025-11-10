@@ -18,15 +18,29 @@ const PurchaseOrderReceiptModal = ({ visible, onCancel, poId }) => {
   const [downloading, setDownloading] = useState(false);
   const printRef = useRef(null);
 
+  // Clear data when modal closes
+  useEffect(() => {
+    if (!visible) {
+      setReceiptData(null);
+      setLoading(false);
+    }
+  }, [visible]);
+
+  // Load fresh data every time modal opens
   useEffect(() => {
     if (visible && poId) {
+      // Always load fresh data when modal opens
       loadReceiptData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, poId]);
 
   const loadReceiptData = async () => {
+    // Clear old data first
+    setReceiptData(null);
     setLoading(true);
     try {
+      // Always fetch fresh data - add timestamp to prevent caching
       const res = await getPurchaseOrderReceipt(poId);
       let receiptData = null;
 
@@ -530,13 +544,13 @@ const PurchaseOrderReceiptModal = ({ visible, onCancel, poId }) => {
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold">Purchase Order Receipt</h2>
           <div className="flex gap-2">
-            <Button
+            {/* <Button
               icon={<Printer size={16} />}
               onClick={handlePrint}
               disabled={loading || !receiptData}
             >
               Print
-            </Button>
+            </Button> */}
             <Button
               type="primary"
               icon={<Download size={16} />}
@@ -556,8 +570,8 @@ const PurchaseOrderReceiptModal = ({ visible, onCancel, poId }) => {
           </div>
         )}
 
-        {/* Receipt Content */}
-        {receiptData && (
+        {/* Receipt Content - Only show when not loading and data exists */}
+        {!loading && receiptData && (
           <div
             ref={printRef}
             className="bg-white p-8 receipt-print-area"

@@ -1,5 +1,4 @@
 import React from "react";
-import { Card, Row, Col, Tag, Divider } from "antd";
 import {
   CalendarOutlined,
   ShopOutlined,
@@ -10,11 +9,8 @@ import {
 import { SHIPPING_METHODS } from "../../constants/procurementConstants";
 import StatusBadge from "../StatusBadge";
 
-/**
- * Improved Overview Tab Component
- * Clean card-based design with better visual hierarchy
- */
-const OverviewTab = ({ purchaseOrder }) => {
+// Tailwind-based, modern replacement for OverviewTab
+export default function OverviewTab({ purchaseOrder = {} }) {
   const formatDate = (dateString) => {
     if (!dateString) return "-";
     try {
@@ -32,12 +28,11 @@ const OverviewTab = ({ purchaseOrder }) => {
   };
 
   const formatCurrency = (amount, currency = "USD") => {
-    if (!amount && amount !== 0) {
+    if (amount === null || amount === undefined) {
       if (currency === "JPY") return "¥0";
       return "$0.00";
     }
-    
-    // JPY doesn't use decimal places
+
     if (currency === "JPY") {
       return new Intl.NumberFormat("ja-JP", {
         style: "currency",
@@ -46,7 +41,7 @@ const OverviewTab = ({ purchaseOrder }) => {
         maximumFractionDigits: 0,
       }).format(amount);
     }
-    
+
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: currency || "USD",
@@ -64,68 +59,92 @@ const OverviewTab = ({ purchaseOrder }) => {
   const shippingMethod =
     SHIPPING_METHODS.find(
       (method) => method.value === purchaseOrder?.shippingMethod
-    )?.label || purchaseOrder?.shippingMethod || "-";
+    )?.label ||
+    purchaseOrder?.shippingMethod ||
+    "-";
 
-  // Additional status tags
   const additionalTags = [];
   if (purchaseOrder?.partiallyShipped)
     additionalTags.push(
-      <Tag color="orange" key="ps">
+      <span
+        key="ps"
+        className="px-2 py-0.5 rounded text-xs bg-orange-100 text-orange-800"
+      >
         Partially Shipped
-      </Tag>
+      </span>
     );
   if (purchaseOrder?.fullyShipped)
     additionalTags.push(
-      <Tag color="green" key="fs">
+      <span
+        key="fs"
+        className="px-2 py-0.5 rounded text-xs bg-green-100 text-green-800"
+      >
         Fully Shipped
-      </Tag>
+      </span>
     );
   if (purchaseOrder?.partiallyPaid)
     additionalTags.push(
-      <Tag color="orange" key="pp">
+      <span
+        key="pp"
+        className="px-2 py-0.5 rounded text-xs bg-orange-100 text-orange-800"
+      >
         Partially Paid
-      </Tag>
+      </span>
     );
   if (purchaseOrder?.fullyPaid)
     additionalTags.push(
-      <Tag color="green" key="fp">
+      <span
+        key="fp"
+        className="px-2 py-0.5 rounded text-xs bg-green-100 text-green-800"
+      >
         Fully Paid
-      </Tag>
+      </span>
     );
 
   const InfoItem = ({ icon, label, value, valueClassName = "" }) => (
     <div className="mb-4">
-      <div className="flex items-center gap-2 mb-1">
-        {icon && <span className="text-gray-400">{icon}</span>}
-        <span className="text-xs text-gray-500 uppercase tracking-wide">
-          {label}
-        </span>
-      </div>
-      <div className={`text-base font-medium text-gray-800 ${valueClassName}`}>
-        {value}
+      <div className="flex items-center gap-3 mb-1">
+        {icon && (
+          <div className="w-9 h-9 flex items-center justify-center rounded-full bg-white/60 ring-1 ring-white/30 shadow-sm">
+            <div className="text-gray-600 text-lg">{icon}</div>
+          </div>
+        )}
+        <div>
+          <div className="text-xs text-gray-400 uppercase tracking-wide">
+            {label}
+          </div>
+          <div
+            className={`text-base font-semibold text-gray-900 ${valueClassName}`}
+          >
+            {value}
+          </div>
+        </div>
       </div>
     </div>
   );
 
   return (
-    <div>
-      <Row gutter={[16, 16]}>
-        {/* Vendor Information Card */}
-        <Col xs={24} lg={12} >
-          <Card
-            title={
-              <span className="flex items-center gap-2">
-                <ShopOutlined /> Vendor Information
-              </span>
-            }
-            bordered={false}
-            className="h-full shadow-xl bg-gray-100"
-          >
+    <section className="space-y-6">
+      {/* Page background container - keep it subtle */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Vendor Card */}
+        <div className="bg-gradient-to-br from-white to-slate-50 rounded-2xl shadow-md p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-indigo-600 to-blue-500 text-white shadow">
+                <ShopOutlined />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">
+                Vendor Information
+              </h3>
+            </div>
+            <div className="text-sm text-gray-500">
+              {purchaseOrder?.purchaseOrderNumber}
+            </div>
+          </div>
+
+          <div className="mt-2">
             <InfoItem label="Vendor Name" value={getVendorName()} />
-            {/* vendor reference come in array like this  "vendorReference": [
-        "NCL Ship",
-        "COL"
-    ], show it as a comma separated list */}
             <InfoItem
               label="Vendor Reference"
               value={purchaseOrder?.vendorReference?.join(", ") || "-"}
@@ -134,20 +153,24 @@ const OverviewTab = ({ purchaseOrder }) => {
               label="Currency"
               value={purchaseOrder?.currency || "USD"}
             />
-          </Card>
-        </Col>
+          </div>
+        </div>
 
-        {/* Dates & Timeline Card */}
-        <Col xs={24} lg={12}>
-          <Card
-            title={
-              <span className="flex items-center gap-2">
-                <CalendarOutlined /> Dates & Timeline
-              </span>
-            }
-            bordered={false}
-            className="h-full shadow-xl bg-gray-100"
-          >
+        {/* Dates Card */}
+        <div className="bg-gradient-to-br from-white to-slate-50 rounded-2xl shadow-md p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-emerald-600 to-green-500 text-white shadow">
+                <CalendarOutlined />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">
+                Dates & Timeline
+              </h3>
+            </div>
+            <div className="text-sm text-gray-500">{purchaseOrder?.status}</div>
+          </div>
+
+          <div className="mt-2">
             <InfoItem
               icon={<CalendarOutlined />}
               label="Date Created"
@@ -169,20 +192,24 @@ const OverviewTab = ({ purchaseOrder }) => {
                 value={formatDate(purchaseOrder.confirmationDate)}
               />
             )}
-          </Card>
-        </Col>
+          </div>
+        </div>
 
-        {/* Shipping & Delivery Card */}
-        <Col xs={24} lg={12}>
-          <Card
-            title={
-              <span className="flex items-center gap-2">
-                <CarOutlined /> Shipping & Delivery
-              </span>
-            }
-            bordered={false}
-            className="h-full shadow-xl bg-gray-100"
-          >
+        {/* Shipping Card */}
+        <div className="bg-gradient-to-br from-white to-slate-50 rounded-2xl shadow-md p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-yellow-600 to-orange-400 text-white shadow">
+                <CarOutlined />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">
+                Shipping & Delivery
+              </h3>
+            </div>
+            <div className="text-sm text-gray-500">{shippingMethod}</div>
+          </div>
+
+          <div className="mt-2">
             <InfoItem
               icon={<CarOutlined />}
               label="Shipping Method"
@@ -198,80 +225,75 @@ const OverviewTab = ({ purchaseOrder }) => {
               }
             />
             {purchaseOrder?.askConfirmation && (
-              <InfoItem
-                label="Confirmation Required"
-                value={<Tag color="blue">Yes</Tag>}
-              />
+              <div className="mt-2">
+                <span className="inline-flex items-center px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-sm">
+                  Confirmation Required
+                </span>
+              </div>
             )}
-          </Card>
-        </Col>
+          </div>
+        </div>
 
-        {/* Status & Financial Summary Card */}
-        <Col xs={24} lg={12}>
-          <Card
-            title={
-              <span className="flex items-center gap-2">
-                <DollarOutlined /> Financial Summary
-              </span>
-            }
-            className="h-full shadow-xl bg-gray-100"
-          >
-            <div className="mb-4">
-              <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">
-                Status
+        {/* Financial Card */}
+        <div className="bg-gradient-to-br from-white to-slate-50 rounded-2xl shadow-md p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-sky-600 to-indigo-500 text-white shadow">
+                <DollarOutlined />
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <StatusBadge status={purchaseOrder?.status} />
-                {additionalTags.length > 0 && (
-                  <div className="flex flex-wrap gap-1">{additionalTags}</div>
+              <h3 className="text-lg font-semibold text-gray-900">
+                Financial Summary
+              </h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <StatusBadge status={purchaseOrder?.status} />
+              {additionalTags.length > 0 && (
+                <p className="flex gap-2">{additionalTags}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-2 space-y-3">
+            <div className="flex justify-between items-center">
+              <p className="text-sm text-gray-500">Untaxed Amount</p>
+              <p className="text-base font-semibold text-gray-900">
+                {formatCurrency(
+                  purchaseOrder?.untaxedAmount,
+                  purchaseOrder?.currency
                 )}
-              </div>
+              </p>
             </div>
 
-            <Divider className="my-4" />
-
-            <div className="space-y-3">
+            {purchaseOrder?.taxes > 0 && (
               <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Untaxed Amount</span>
-                <span className="text-base font-semibold text-gray-800">
-                  {formatCurrency(
-                    purchaseOrder?.untaxedAmount,
-                    purchaseOrder?.currency
-                  )}
-                </span>
+                <p className="text-sm text-gray-500">Taxes</p>
+                <p className="text-base font-semibold text-gray-900">
+                  {formatCurrency(purchaseOrder.taxes, purchaseOrder.currency)}
+                </p>
               </div>
+            )}
 
-              {purchaseOrder?.taxes > 0 && (
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">Taxes</span>
-                  <span className="text-base font-semibold text-gray-800">
-                    {formatCurrency(
-                      purchaseOrder.taxes,
-                      purchaseOrder.currency
-                    )}
-                  </span>
-                </div>
-              )}
-
-              <Divider className="my-3" />
-
-              <div className="flex justify-between items-center bg-blue-50 p-3 rounded-lg">
-                <span className="text-base font-semibold text-gray-700">
+            <div className="border-t pt-3">
+              <div className="flex justify-between items-center bg-gradient-to-r from-white/60 to-slate-50 p-3 rounded-lg">
+                <p  className="text-base font-semibold text-gray-700">
                   Total Amount
-                </span>
-                <span className="text-2xl font-bold text-blue-600">
+                </p>
+                <p className="text-2xl font-bold text-indigo-600">
                   {formatCurrency(
                     purchaseOrder?.total,
                     purchaseOrder?.currency
                   )}
-                </span>
+                </p>
               </div>
             </div>
-          </Card>
-        </Col>
-      </Row>
-    </div>
+          </div>
+        </div>
+      </div>
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <p className="text-sm text-gray-500">
+          Updated: {formatDate(purchaseOrder?.updatedAt)}
+        </p>
+      </div>
+    </section>
   );
-};
-
-export default OverviewTab;
+}

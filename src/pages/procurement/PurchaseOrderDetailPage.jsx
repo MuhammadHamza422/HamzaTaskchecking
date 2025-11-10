@@ -79,7 +79,7 @@ const PurchaseOrderDetailPage = () => {
   const [hasUnsavedProducts, setHasUnsavedProducts] = useState(false);
   const [shippingDetails, setShippingDetails] = useState(null);
   const productsTabValidateRef = React.useRef(null);
-  
+
   // Use shared dropdown data from context
   const { vendors, companies, buyers } = useProcurementData();
 
@@ -174,14 +174,22 @@ const PurchaseOrderDetailPage = () => {
 
   // Enrich purchase order with names from IDs - memoized to avoid unnecessary recalculations
   const enrichedPO = useMemo(() => {
-    if (!purchaseOrder || vendors.length === 0 || companies.length === 0 || buyers.length === 0) {
+    if (
+      !purchaseOrder ||
+      vendors.length === 0 ||
+      companies.length === 0 ||
+      buyers.length === 0
+    ) {
       return purchaseOrder;
     }
 
     const enriched = { ...purchaseOrder };
 
     // Enrich vendor
-    if (purchaseOrder.vendor && (purchaseOrder.vendor.id || purchaseOrder.vendor._id)) {
+    if (
+      purchaseOrder.vendor &&
+      (purchaseOrder.vendor.id || purchaseOrder.vendor._id)
+    ) {
       const vendorId = purchaseOrder.vendor.id || purchaseOrder.vendor._id;
       const vendor = vendors.find(
         (v) => v.id === vendorId || v._id === vendorId
@@ -198,7 +206,10 @@ const PurchaseOrderDetailPage = () => {
     }
 
     // Enrich company
-    if (purchaseOrder.company && (purchaseOrder.company.id || purchaseOrder.company._id)) {
+    if (
+      purchaseOrder.company &&
+      (purchaseOrder.company.id || purchaseOrder.company._id)
+    ) {
       const companyId = purchaseOrder.company.id || purchaseOrder.company._id;
       const company = companies.find(
         (c) => c.id === companyId || c._id === companyId
@@ -212,7 +223,10 @@ const PurchaseOrderDetailPage = () => {
     }
 
     // Enrich buyer
-    if (purchaseOrder.buyer && (purchaseOrder.buyer.id || purchaseOrder.buyer._id)) {
+    if (
+      purchaseOrder.buyer &&
+      (purchaseOrder.buyer.id || purchaseOrder.buyer._id)
+    ) {
       const buyerId = purchaseOrder.buyer.id || purchaseOrder.buyer._id;
       const buyer = buyers.find((b) => b.id === buyerId || b._id === buyerId);
       if (buyer) {
@@ -265,7 +279,9 @@ const PurchaseOrderDetailPage = () => {
         }`
       );
       // Update local state instead of full refetch
-      setPurchaseOrder((prev) => prev ? { ...prev, status: newStatus } : null);
+      setPurchaseOrder((prev) =>
+        prev ? { ...prev, status: newStatus } : null
+      );
       // Reload shipping details in case they were updated
       await loadShippingDetails();
     } catch (error) {
@@ -449,9 +465,9 @@ const PurchaseOrderDetailPage = () => {
         <div className="mb-4">
           <button
             onClick={() => navigate("/procurement/orders")}
-            className="mb-2 bg-black text-white hover:bg-black flex items-center gap-2 p-1.5 rounded"
+            className="mb-2 bg-black text-white hover:bg-black flex items-center gap-2 p-1.5 rounded-md text-sm"
           >
-            <ArrowLeft />
+            <ArrowLeft size={18} />
             Back
           </button>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
@@ -548,312 +564,359 @@ const PurchaseOrderDetailPage = () => {
               </>
             ) : (
               <>
-            {/* Status Workflow */}
-            <Card 
-              size="small" 
-              className="mb-4 shadow-md border"
-              style={{
-                background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
-                borderColor: currentStatus === PO_STATUS.CANCELLED ? '#ef4444' : '#e2e8f0'
-              }}
-            >
-              <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-800 mb-1">Order Status</h3>
-                <div className="text-xs text-gray-500">Track the progress of your purchase order</div>
-              </div>
-
-              {/* Desktop Horizontal View - Improved */}
-              <div className="hidden lg:block">
-                <div className="flex items-center justify-between py-4 px-2">
-                  {statusFlow.map((status, index) => {
-                    const isActive = po?.status === status;
-                    const isCompleted = currentIndex > index;
-                    const isPending = currentIndex < index;
-                    const lineCompleted = currentIndex > index;
-
-                    return (
-                      <React.Fragment key={status}>
-                        <div className="flex flex-col items-center flex-1 min-w-0 relative z-10">
-                          {/* Status Circle */}
-                          <div
-                            className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-sm font-semibold shrink-0 transition-all relative ${
-                              isActive
-                                ? "border-blue-600 bg-blue-50 text-blue-700 shadow-lg scale-110 ring-4 ring-blue-100"
-                                : isCompleted
-                                ? "border-green-600 bg-green-50 text-green-700 shadow-md"
-                                : "border-gray-300 bg-white text-gray-400"
-                            }`}
-                            style={{ borderWidth: '3px' }}
-                          >
-                            {isCompleted ? (
-                              <CheckCircle size={20} className="text-green-600" />
-                            ) : (
-                              <span className={isActive ? "text-blue-700" : ""}>{index + 1}</span>
-                            )}
-                          </div>
-                          {/* Status Label */}
-                          <div className={`mt-2 text-center ${
-                            isActive
-                              ? "text-blue-700 font-semibold"
-                              : isCompleted
-                              ? "text-green-700 font-medium"
-                              : "text-gray-500"
-                          }`}>
-                            <div className="text-xs font-medium whitespace-nowrap">
-                              {PO_STATUS_LABELS[status] || status.replace("_", " ")}
-                            </div>
-                          </div>
-                        </div>
-                        {/* Connecting Line - Much More Prominent */}
-                        {index < statusFlow.length - 1 && (
-                          <div className="flex-1 mx-2 relative" style={{ minWidth: '40px', maxWidth: '120px' }}>
-                            <div className="relative h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                              {/* Progress Fill */}
-                              <div
-                                className={`absolute top-0 left-0 h-full rounded-full transition-all duration-500 ${
-                                  lineCompleted
-                                    ? "bg-gradient-to-r from-green-500 to-green-600 w-full"
-                                    : isActive
-                                    ? "bg-gradient-to-r from-blue-400 to-blue-500 w-1/2"
-                                    : "bg-gray-300 w-0"
-                                }`}
-                                style={{
-                                  boxShadow: lineCompleted 
-                                    ? '0 2px 8px rgba(34, 197, 94, 0.4)' 
-                                    : isActive 
-                                    ? '0 2px 8px rgba(59, 130, 246, 0.4)' 
-                                    : 'none'
-                                }}
-                              />
-                              {/* Animated Shine Effect for Active */}
-                              {isActive && (
-                                <div 
-                                  className="absolute top-0 left-0 h-full w-full bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-50 animate-pulse"
-                                />
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Tablet/Medium Screen View */}
-              <div className="hidden md:block lg:hidden">
-                <div className="flex items-center justify-between py-3 px-1">
-                  {statusFlow.map((status, index) => {
-                    const isActive = po?.status === status;
-                    const isCompleted = currentIndex > index;
-                    const lineCompleted = currentIndex > index;
-
-                    return (
-                      <React.Fragment key={status}>
-                        <div className="flex flex-col items-center flex-1 min-w-0 relative z-10">
-                          <div
-                            className={`w-10 h-10 rounded-full border-3 flex items-center justify-center text-xs font-bold shrink-0 transition-all ${
-                              isActive
-                                ? "border-blue-600 bg-blue-50 text-blue-700 shadow-lg scale-110 ring-4 ring-blue-100"
-                                : isCompleted
-                                ? "border-green-600 bg-green-50 text-green-700 shadow-md"
-                                : "border-gray-300 bg-white text-gray-400"
-                            }`}
-                            style={{ borderWidth: '3px' }}
-                          >
-                            {isCompleted ? (
-                              <CheckCircle size={18} className="text-green-600" />
-                            ) : (
-                              index + 1
-                            )}
-                          </div>
-                          <div className={`mt-1.5 text-center ${
-                            isActive ? "text-blue-700 font-semibold" : isCompleted ? "text-green-700" : "text-gray-500"
-                          }`}>
-                            <div className="text-xs font-medium leading-tight">
-                              {PO_STATUS_LABELS[status]?.split(' ')[0] || status.replace("_", " ")}
-                            </div>
-                          </div>
-                        </div>
-                        {index < statusFlow.length - 1 && (
-                          <div className="flex-1 mx-1.5 relative" style={{ minWidth: '20px' }}>
-                            <div className="relative h-2 bg-gray-200 rounded-full overflow-hidden">
-                              <div
-                                className={`absolute top-0 left-0 h-full rounded-full transition-all duration-500 ${
-                                  lineCompleted
-                                    ? "bg-gradient-to-r from-green-500 to-green-600 w-full"
-                                    : isActive
-                                    ? "bg-gradient-to-r from-blue-400 to-blue-500 w-1/2"
-                                    : "bg-gray-300 w-0"
-                                }`}
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Mobile Vertical View - Improved */}
-              <div className="md:hidden">
-                <div className="space-y-2">
-                  {statusFlow.map((status, index) => {
-                    const isActive = po?.status === status;
-                    const isCompleted = currentIndex > index;
-                    const hasNext = index < statusFlow.length - 1;
-
-                    return (
-                      <React.Fragment key={status}>
-                        <div className="flex items-start gap-3 relative">
-                          {/* Vertical Line */}
-                          {hasNext && (
-                            <div className="absolute left-5 top-12 bottom-0 w-0.5 z-0">
-                              <div className={`h-full w-full rounded-full ${
-                                isCompleted ? "bg-green-500" : "bg-gray-300"
-                              }`} />
-                            </div>
-                          )}
-                          {/* Status Circle */}
-                          <div
-                            className={`w-10 h-10 rounded-full border-3 flex items-center justify-center text-sm font-bold shrink-0 transition-all relative z-10 ${
-                              isActive
-                                ? "border-blue-600 bg-blue-50 text-blue-700 shadow-lg ring-4 ring-blue-100"
-                                : isCompleted
-                                ? "border-green-600 bg-green-50 text-green-700 shadow-md"
-                                : "border-gray-300 bg-white text-gray-400"
-                            }`}
-                            style={{ borderWidth: '3px' }}
-                          >
-                            {isCompleted ? (
-                              <CheckCircle size={18} className="text-green-600" />
-                            ) : (
-                              index + 1
-                            )}
-                          </div>
-                          {/* Status Content */}
-                          <div className="flex-1 pt-1 pb-4">
-                            <div
-                              className={`text-sm font-medium ${
-                                isActive
-                                  ? "text-blue-700 font-semibold"
-                                  : isCompleted
-                                  ? "text-green-700"
-                                  : "text-gray-500"
-                              }`}
-                            >
-                              {PO_STATUS_LABELS[status] || status.replace("_", " ")}
-                            </div>
-                            {isActive && (
-                              <div className="text-xs text-blue-600 mt-0.5 font-medium">
-                                Current Status
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </React.Fragment>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Shipping Details Warning */}
-              {currentStatus === PO_STATUS.CONFIRMED &&
-                nextStatus === PO_STATUS.PICKUP_SCHEDULED &&
-                !hasShippingDetails() && (
-                  <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                    <div className="flex items-start gap-2">
-                      <span className="text-yellow-600 text-lg">⚠️</span>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-yellow-800 mb-1">
-                          Shipping Details Required
-                        </p>
-                        <p className="text-xs text-yellow-700">
-                          Please add shipping details (booking date, tracking ID, etc.) in the{" "}
-                          <button
-                            onClick={() => setActiveTab("shipping")}
-                            className="text-yellow-800 underline font-medium hover:text-yellow-900"
-                          >
-                            Shipping & Receipt
-                          </button>{" "}
-                          tab before scheduling pickup.
-                        </p>
-                      </div>
+                {/* Status Workflow */}
+                <Card
+                  size="small"
+                  className="mb-4 shadow-md border"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)",
+                    borderColor:
+                      currentStatus === PO_STATUS.CANCELLED
+                        ? "#ef4444"
+                        : "#e2e8f0",
+                  }}
+                >
+                  <div className="mb-4">
+                    <h3 className="text-base font-semibold text-gray-800 mb-1">
+                      Order Status
+                    </h3>
+                    <div className="text-xs text-gray-500">
+                      Track the progress of your purchase order
                     </div>
                   </div>
-                )}
 
-              {/* Next Step Button */}
-              {allowedNextStatuses.length > 0 &&
-                currentStatus !== PO_STATUS.RECEIVED &&
-                currentStatus !== PO_STATUS.CANCELLED && (
-                  <div className="mt-4 pt-4 border-t border-gray-200">
-                    <Space direction="vertical" style={{ width: "100%" }}>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {nextStatus && nextStatus !== PO_STATUS.CANCELLED && (
-                          <Popconfirm
-                            title={`Move to ${PO_STATUS_LABELS[nextStatus]}?`}
-                            description={`This will update the order status from "${
-                              PO_STATUS_LABELS[currentStatus] || currentStatus
-                            }" to "${PO_STATUS_LABELS[nextStatus]}"`}
-                            onConfirm={() => handleStatusChange(nextStatus)}
-                            okText="Yes, Update"
-                            cancelText="Cancel"
-                          >
-                            <Button
-                              type="primary"
-                              icon={<ArrowRight size={16} />}
-                              loading={updatingStatus}
-                              size="small"
-                            >
-                              {getStatusButtonLabel(nextStatus)}
-                            </Button>
-                          </Popconfirm>
-                        )}
-                        {allowedNextStatuses.includes(PO_STATUS.CANCELLED) && (
-                          <Popconfirm
-                            title="Cancel this order?"
-                            description="This will cancel the purchase order. This action cannot be undone."
-                            onConfirm={() =>
-                              handleStatusChange(PO_STATUS.CANCELLED)
-                            }
-                            okText="Yes, Cancel"
-                            cancelText="No"
-                            okButtonProps={{ danger: true }}
-                          >
-                            <Button
-                              danger
-                              icon={<XCircle size={16} />}
-                              loading={updatingStatus}
-                              size="small"
-                            >
-                              Cancel Order
-                            </Button>
-                          </Popconfirm>
-                        )}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        Current:{" "}
-                        <strong>
-                          {PO_STATUS_LABELS[currentStatus] || currentStatus}
-                        </strong>
-                        {nextStatus &&
-                          ` → Next: ${PO_STATUS_LABELS[nextStatus]}`}
-                      </div>
-                    </Space>
+                  {/* Desktop Horizontal View - Improved */}
+                  <div className="hidden lg:block">
+                    <div className="flex items-center justify-between py-4 px-2">
+                      {statusFlow.map((status, index) => {
+                        const isActive = po?.status === status;
+                        const isCompleted = currentIndex > index;
+                        const isPending = currentIndex < index;
+                        const lineCompleted = currentIndex > index;
+
+                        return (
+                          <React.Fragment key={status}>
+                            <div className="flex flex-col items-center flex-1 min-w-0 relative z-10">
+                              {/* Status Circle */}
+                              <div
+                                className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-sm font-semibold shrink-0 transition-all relative ${
+                                  isActive
+                                    ? "border-blue-600 bg-blue-50 text-blue-700 shadow-lg scale-110 ring-4 ring-blue-100"
+                                    : isCompleted
+                                    ? "border-green-600 bg-green-50 text-green-700 shadow-md"
+                                    : "border-gray-300 bg-white text-gray-400"
+                                }`}
+                                style={{ borderWidth: "3px" }}
+                              >
+                                {isCompleted ? (
+                                  <CheckCircle
+                                    size={20}
+                                    className="text-green-600"
+                                  />
+                                ) : (
+                                  <span
+                                    className={isActive ? "text-blue-700" : ""}
+                                  >
+                                    {index + 1}
+                                  </span>
+                                )}
+                              </div>
+                              {/* Status Label */}
+                              <div
+                                className={`mt-2 text-center ${
+                                  isActive
+                                    ? "text-blue-700 font-semibold"
+                                    : isCompleted
+                                    ? "text-green-700 font-medium"
+                                    : "text-gray-500"
+                                }`}
+                              >
+                                <div className="text-xs font-medium whitespace-nowrap">
+                                  {PO_STATUS_LABELS[status] ||
+                                    status.replace("_", " ")}
+                                </div>
+                              </div>
+                            </div>
+                            {/* Connecting Line - Much More Prominent */}
+                            {index < statusFlow.length - 1 && (
+                              <div
+                                className="flex-1 mx-2 relative"
+                                style={{ minWidth: "40px", maxWidth: "120px" }}
+                              >
+                                <div className="relative h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                  {/* Progress Fill */}
+                                  <div
+                                    className={`absolute top-0 left-0 h-full rounded-full transition-all duration-500 ${
+                                      lineCompleted
+                                        ? "bg-gradient-to-r from-green-500 to-green-600 w-full"
+                                        : isActive
+                                        ? "bg-gradient-to-r from-blue-400 to-blue-500 w-1/2"
+                                        : "bg-gray-300 w-0"
+                                    }`}
+                                    style={{
+                                      boxShadow: lineCompleted
+                                        ? "0 2px 8px rgba(34, 197, 94, 0.4)"
+                                        : isActive
+                                        ? "0 2px 8px rgba(59, 130, 246, 0.4)"
+                                        : "none",
+                                    }}
+                                  />
+                                  {/* Animated Shine Effect for Active */}
+                                  {isActive && (
+                                    <div className="absolute top-0 left-0 h-full w-full bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-50 animate-pulse" />
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
                   </div>
-                )}
-            </Card>
 
-            {/* Action Buttons */}
-            {/* 
+                  {/* Tablet/Medium Screen View */}
+                  <div className="hidden md:block lg:hidden">
+                    <div className="flex items-center justify-between py-3 px-1">
+                      {statusFlow.map((status, index) => {
+                        const isActive = po?.status === status;
+                        const isCompleted = currentIndex > index;
+                        const lineCompleted = currentIndex > index;
+
+                        return (
+                          <React.Fragment key={status}>
+                            <div className="flex flex-col items-center flex-1 min-w-0 relative z-10">
+                              <div
+                                className={`w-10 h-10 rounded-full border-3 flex items-center justify-center text-xs font-bold shrink-0 transition-all ${
+                                  isActive
+                                    ? "border-blue-600 bg-blue-50 text-blue-700 shadow-lg scale-110 ring-4 ring-blue-100"
+                                    : isCompleted
+                                    ? "border-green-600 bg-green-50 text-green-700 shadow-md"
+                                    : "border-gray-300 bg-white text-gray-400"
+                                }`}
+                                style={{ borderWidth: "3px" }}
+                              >
+                                {isCompleted ? (
+                                  <CheckCircle
+                                    size={18}
+                                    className="text-green-600"
+                                  />
+                                ) : (
+                                  index + 1
+                                )}
+                              </div>
+                              <div
+                                className={`mt-1.5 text-center ${
+                                  isActive
+                                    ? "text-blue-700 font-semibold"
+                                    : isCompleted
+                                    ? "text-green-700"
+                                    : "text-gray-500"
+                                }`}
+                              >
+                                <div className="text-xs font-medium leading-tight">
+                                  {PO_STATUS_LABELS[status]?.split(" ")[0] ||
+                                    status.replace("_", " ")}
+                                </div>
+                              </div>
+                            </div>
+                            {index < statusFlow.length - 1 && (
+                              <div
+                                className="flex-1 mx-1.5 relative"
+                                style={{ minWidth: "20px" }}
+                              >
+                                <div className="relative h-2 bg-gray-200 rounded-full overflow-hidden">
+                                  <div
+                                    className={`absolute top-0 left-0 h-full rounded-full transition-all duration-500 ${
+                                      lineCompleted
+                                        ? "bg-gradient-to-r from-green-500 to-green-600 w-full"
+                                        : isActive
+                                        ? "bg-gradient-to-r from-blue-400 to-blue-500 w-1/2"
+                                        : "bg-gray-300 w-0"
+                                    }`}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Mobile Vertical View - Improved */}
+                  <div className="md:hidden">
+                    <div className="space-y-2">
+                      {statusFlow.map((status, index) => {
+                        const isActive = po?.status === status;
+                        const isCompleted = currentIndex > index;
+                        const hasNext = index < statusFlow.length - 1;
+
+                        return (
+                          <React.Fragment key={status}>
+                            <div className="flex items-start gap-3 relative">
+                              {/* Vertical Line */}
+                              {hasNext && (
+                                <div className="absolute left-5 top-12 bottom-0 w-0.5 z-0">
+                                  <div
+                                    className={`h-full w-full rounded-full ${
+                                      isCompleted
+                                        ? "bg-green-500"
+                                        : "bg-gray-300"
+                                    }`}
+                                  />
+                                </div>
+                              )}
+                              {/* Status Circle */}
+                              <div
+                                className={`w-10 h-10 rounded-full border-3 flex items-center justify-center text-sm font-bold shrink-0 transition-all relative z-10 ${
+                                  isActive
+                                    ? "border-blue-600 bg-blue-50 text-blue-700 shadow-lg ring-4 ring-blue-100"
+                                    : isCompleted
+                                    ? "border-green-600 bg-green-50 text-green-700 shadow-md"
+                                    : "border-gray-300 bg-white text-gray-400"
+                                }`}
+                                style={{ borderWidth: "3px" }}
+                              >
+                                {isCompleted ? (
+                                  <CheckCircle
+                                    size={18}
+                                    className="text-green-600"
+                                  />
+                                ) : (
+                                  index + 1
+                                )}
+                              </div>
+                              {/* Status Content */}
+                              <div className="flex-1 pt-1 pb-4">
+                                <div
+                                  className={`text-sm font-medium ${
+                                    isActive
+                                      ? "text-blue-700 font-semibold"
+                                      : isCompleted
+                                      ? "text-green-700"
+                                      : "text-gray-500"
+                                  }`}
+                                >
+                                  {PO_STATUS_LABELS[status] ||
+                                    status.replace("_", " ")}
+                                </div>
+                                {isActive && (
+                                  <div className="text-xs text-blue-600 mt-0.5 font-medium">
+                                    Current Status
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Shipping Details Warning */}
+                  {currentStatus === PO_STATUS.CONFIRMED &&
+                    nextStatus === PO_STATUS.PICKUP_SCHEDULED &&
+                    !hasShippingDetails() && (
+                      <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <div className="flex items-start gap-2">
+                          <span className="text-yellow-600 text-lg">⚠️</span>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-yellow-800 mb-1">
+                              Shipping Details Required
+                            </p>
+                            <p className="text-xs text-yellow-700">
+                              Please add shipping details (booking date,
+                              tracking ID, etc.) in the{" "}
+                              <button
+                                onClick={() => setActiveTab("shipping")}
+                                className="text-yellow-800 underline font-medium hover:text-yellow-900"
+                              >
+                                Shipping & Receipt
+                              </button>{" "}
+                              tab before scheduling pickup.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                  {/* Next Step Button */}
+                  {allowedNextStatuses.length > 0 &&
+                    currentStatus !== PO_STATUS.RECEIVED &&
+                    currentStatus !== PO_STATUS.CANCELLED && (
+                      <div className="mt-4 pt-4 border-t border-gray-200">
+                        <Space direction="vertical" style={{ width: "100%" }}>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {nextStatus &&
+                              nextStatus !== PO_STATUS.CANCELLED && (
+                                <Popconfirm
+                                  title={`Move to ${PO_STATUS_LABELS[nextStatus]}?`}
+                                  description={`This will update the order status from "${
+                                    PO_STATUS_LABELS[currentStatus] ||
+                                    currentStatus
+                                  }" to "${PO_STATUS_LABELS[nextStatus]}"`}
+                                  onConfirm={() =>
+                                    handleStatusChange(nextStatus)
+                                  }
+                                  okText="Yes, Update"
+                                  cancelText="Cancel"
+                                >
+                                  <Button
+                                    type="primary"
+                                    icon={<ArrowRight size={16} />}
+                                    loading={updatingStatus}
+                                    size="small"
+                                  >
+                                    {getStatusButtonLabel(nextStatus)}
+                                  </Button>
+                                </Popconfirm>
+                              )}
+                            {allowedNextStatuses.includes(
+                              PO_STATUS.CANCELLED
+                            ) && (
+                              <Popconfirm
+                                title="Cancel this order?"
+                                description="This will cancel the purchase order. This action cannot be undone."
+                                onConfirm={() =>
+                                  handleStatusChange(PO_STATUS.CANCELLED)
+                                }
+                                okText="Yes, Cancel"
+                                cancelText="No"
+                                okButtonProps={{ danger: true }}
+                              >
+                                <Button
+                                  danger
+                                  icon={<XCircle size={16} />}
+                                  loading={updatingStatus}
+                                  size="small"
+                                >
+                                  Cancel Order
+                                </Button>
+                              </Popconfirm>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            Current:{" "}
+                            <strong>
+                              {PO_STATUS_LABELS[currentStatus] || currentStatus}
+                            </strong>
+                            {nextStatus &&
+                              ` → Next: ${PO_STATUS_LABELS[nextStatus]}`}
+                          </div>
+                        </Space>
+                      </div>
+                    )}
+                </Card>
+
+                {/* Action Buttons */}
+                {/* 
               Action Buttons Purpose:
               - Receive Products: Marks items as physically received, updates inventory, triggers payment processing
               - Cancel: Terminates purchase order, prevents further processing, updates order status to cancelled
               - Lock: Prevents further modifications once order is finalized/sent to vendor, ensures data integrity
             */}
-            {/* <Card size="small" className="mb-4">
+                {/* <Card size="small" className="mb-4">
               <Space wrap>
                 {po?.receiptStatus === "ready_to_receive" && (
                   <Button
@@ -896,15 +959,15 @@ const PurchaseOrderDetailPage = () => {
               </Space>
             </Card> */}
 
-            {/* Tabs */}
-            <Card size="small">
-              <Tabs
-                activeKey={activeTab}
-                onChange={setActiveTab}
-                items={tabItems}
-                size="small"
-              />
-            </Card>
+                {/* Tabs */}
+                <Card size="small">
+                  <Tabs
+                    activeKey={activeTab}
+                    onChange={setActiveTab}
+                    items={tabItems}
+                    size="small"
+                  />
+                </Card>
               </>
             )}
           </Col>
