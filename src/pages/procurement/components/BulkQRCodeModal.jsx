@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Modal, Button, Row, Col, InputNumber, Slider, Space, Spin, message, Radio } from "antd";
+import { Modal, Button, Row, Col, InputNumber, Slider, Space, Spin, message, Radio, Checkbox, Divider } from "antd";
 import { Printer, Download } from "lucide-react";
 import html2canvas from "html2canvas-pro";
 import jsPDF from "jspdf";
@@ -17,6 +17,18 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
   const [qrSize, setQrSize] = useState(200); // Default QR code size in pixels
   const [unit, setUnit] = useState("mm"); // "in" or "mm" - default to mm
   const [labelsPerRow, setLabelsPerRow] = useState(2); // Number of labels per row
+  
+  // Font size states (in pixels)
+  const [boxNameFontSize, setBoxNameFontSize] = useState(14);
+  const [boxIdFontSize, setBoxIdFontSize] = useState(12);
+  const [skuFontSize, setSkuFontSize] = useState(12);
+  const [productNameFontSize, setProductNameFontSize] = useState(14);
+  
+  // Show/hide states
+  const [showBoxName, setShowBoxName] = useState(true);
+  const [showBoxId, setShowBoxId] = useState(true);
+  const [showSku, setShowSku] = useState(true);
+  const [showProductName, setShowProductName] = useState(false);
   
   // Default values: reasonable label sizes
   // 2.7 inches = ~68.58mm, 2.8 inches = ~71.12mm
@@ -98,6 +110,16 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
         lastHeightRef.current = defaultHeightIn;
       }
       setQrSize(200); // Reset QR size to default
+      // Reset font sizes to defaults
+      setBoxNameFontSize(14);
+      setBoxIdFontSize(12);
+      setSkuFontSize(12);
+      setProductNameFontSize(14);
+      // Reset show/hide to defaults
+      setShowBoxName(true);
+      setShowBoxId(true);
+      setShowSku(true);
+      setShowProductName(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]); // Only depend on visible, not unit (unit change is handled separately
@@ -235,6 +257,18 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
     }
   };
 
+  // Get product name
+  const getProductName = (item) => {
+    if (!item || item.type === "box") return "";
+    return item.product?.name || item.product?.pro_title || item.qrData?.product?.name || item.name || "";
+  };
+
+  // Get SKU
+  const getSku = (item) => {
+    if (!item || item.type === "box") return "";
+    return item.qrData?.sku || item.product?.sku || item.sku || "";
+  };
+
   // Generate PDF - 2 labels per row with proper gaps
   const generatePDF = async () => {
     if (!printRef.current || qrCodes.length === 0) {
@@ -302,25 +336,27 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
           ? (() => {
               const boxName = getBoxName(item);
               const boxId = getBoxId(item);
-              if (boxName && boxId) {
-                return `<div style="margin-top: 8px; font-size: 10px; text-align: center; word-break: break-word;">
-                  <div style="font-weight: bold; font-size: 11px; margin-bottom: 2px;">${boxName}</div>
-                  <div style="font-size: 9px; color: #666;">${boxId}</div>
-                </div>`;
-              } else if (boxName) {
-                return `<div style="margin-top: 8px; font-size: 10px; text-align: center; word-break: break-word;">
-                  <div style="font-weight: bold; font-size: 11px;">${boxName}</div>
-                </div>`;
-              } else if (boxId) {
-                return `<div style="margin-top: 8px; font-size: 10px; text-align: center; word-break: break-word;">
-                  <div style="font-size: 11px;">${boxId}</div>
-                </div>`;
+              let html = '<div style="margin-top: 8px; text-align: center; word-break: break-word;">';
+              if (showBoxName && boxName) {
+                html += `<div style="font-weight: bold; font-size: ${boxNameFontSize}px; margin-bottom: 2px;">${boxName}</div>`;
               }
-              return "";
+              if (showBoxId && boxId) {
+                html += `<div style="font-size: ${boxIdFontSize}px; color: #666;">${boxId}</div>`;
+              }
+              html += '</div>';
+              return html;
             })()
-          : `<div style="margin-top: 8px; font-size: 10px; text-align: center; word-break: break-word; white-space: pre-line;">
-              ${getLabelText(item, i)}
-            </div>`;
+          : (() => {
+              let html = '<div style="margin-top: 8px; text-align: center; word-break: break-word;">';
+              if (showProductName && getProductName(item)) {
+                html += `<div style="font-weight: bold; font-size: ${productNameFontSize}px; margin-bottom: 2px;">${getProductName(item)}</div>`;
+              }
+              if (showSku && getSku(item)) {
+                html += `<div style="font-size: ${skuFontSize}px; color: #666;">${getSku(item)}</div>`;
+              }
+              html += '</div>';
+              return html;
+            })();
         
         // Calculate max QR code size to fit within label (leave space for text)
         const paddingPx = 20; // Padding inside label
@@ -412,25 +448,27 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
             ? (() => {
                 const boxName = getBoxName(item);
                 const boxId = getBoxId(item);
-                if (boxName && boxId) {
-                  return `<div style="margin-top: 8px; font-size: 14px; text-align: center; word-break: break-word;">
-                    <div style="font-weight: bold; font-size: 14px; margin-bottom: 2px;">${boxName}</div>
-                    <div style="font-size: 12px; color: #666;">${boxId}</div>
-                  </div>`;
-                } else if (boxName) {
-                  return `<div style="margin-top: 8px; font-size: 14px; text-align: center; word-break: break-word;">
-                    <div style="font-weight: bold; font-size: 14px;">${boxName}</div>
-                  </div>`;
-                } else if (boxId) {
-                  return `<div style="margin-top: 8px; font-size: 14px; text-align: center; word-break: break-word;">
-                    <div style="font-size: 14px;">${boxId}</div>
-                  </div>`;
+                let html = '<div style="margin-top: 8px; text-align: center; word-break: break-word;">';
+                if (showBoxName && boxName) {
+                  html += `<div style="font-weight: bold; font-size: ${boxNameFontSize}px; margin-bottom: 2px;">${boxName}</div>`;
                 }
-                return "";
+                if (showBoxId && boxId) {
+                  html += `<div style="font-size: ${boxIdFontSize}px; color: #666;">${boxId}</div>`;
+                }
+                html += '</div>';
+                return html;
               })()
-            : `<div style="margin-top: 8px; font-size: 14px; text-align: center; word-break: break-word; white-space: pre-line;">
-                ${getLabelText(item, index)}
-              </div>`;
+            : (() => {
+                let html = '<div style="margin-top: 8px; text-align: center; word-break: break-word;">';
+                if (showProductName && getProductName(item)) {
+                  html += `<div style="font-weight: bold; font-size: ${productNameFontSize}px; margin-bottom: 2px;">${getProductName(item)}</div>`;
+                }
+                if (showSku && getSku(item)) {
+                  html += `<div style="font-size: ${skuFontSize}px; color: #666;">${getSku(item)}</div>`;
+                }
+                html += '</div>';
+                return html;
+              })();
           
           // Calculate max QR code size to fit within label (leave space for text)
           const paddingPx = 20; // Padding inside label
@@ -673,6 +711,106 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
               </div>
             </Col>
           </Row>
+          
+          {/* Text Customization - Compact Layout */}
+          <Row gutter={16}>
+            <Col span={12}>
+              <div>
+                <label className="text-sm font-medium mb-1 block">Show/Hide</label>
+                <Space direction="vertical" size="small" style={{ width: "100%" }}>
+                  {qrCodes.length > 0 && qrCodes[0]?.type === "box" ? (
+                    <>
+                      <Checkbox checked={showBoxName} onChange={(e) => setShowBoxName(e.target.checked)} size="small">
+                        Box Name
+                      </Checkbox>
+                      <Checkbox checked={showBoxId} onChange={(e) => setShowBoxId(e.target.checked)} size="small">
+                        Box ID
+                      </Checkbox>
+                    </>
+                  ) : (
+                    <>
+                      <Checkbox checked={showProductName} onChange={(e) => setShowProductName(e.target.checked)} size="small">
+                        Product Name
+                      </Checkbox>
+                      <Checkbox checked={showSku} onChange={(e) => setShowSku(e.target.checked)} size="small">
+                        SKU
+                      </Checkbox>
+                    </>
+                  )}
+                </Space>
+              </div>
+            </Col>
+            <Col span={12}>
+              <div>
+                <label className="text-sm font-medium mb-1 block">Font Sizes</label>
+                <div className="space-y-2">
+                  {qrCodes.length > 0 && qrCodes[0]?.type === "box" ? (
+                    <>
+                      <div>
+                        <div className="flex items-center justify-between mb-0.5">
+                          <span className="text-xs">Name: {boxNameFontSize}px</span>
+                        </div>
+                        <Slider
+                          min={8}
+                          max={24}
+                          value={boxNameFontSize}
+                          onChange={setBoxNameFontSize}
+                          step={1}
+                          disabled={!showBoxName}
+                          style={{ margin: "4px 0" }}
+                        />
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-0.5">
+                          <span className="text-xs">ID: {boxIdFontSize}px</span>
+                        </div>
+                        <Slider
+                          min={8}
+                          max={20}
+                          value={boxIdFontSize}
+                          onChange={setBoxIdFontSize}
+                          step={1}
+                          disabled={!showBoxId}
+                          style={{ margin: "4px 0" }}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <div className="flex items-center justify-between mb-0.5">
+                          <span className="text-xs">Name: {productNameFontSize}px</span>
+                        </div>
+                        <Slider
+                          min={8}
+                          max={24}
+                          value={productNameFontSize}
+                          onChange={setProductNameFontSize}
+                          step={1}
+                          disabled={!showProductName}
+                          style={{ margin: "4px 0" }}
+                        />
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-0.5">
+                          <span className="text-xs">SKU: {skuFontSize}px</span>
+                        </div>
+                        <Slider
+                          min={8}
+                          max={20}
+                          value={skuFontSize}
+                          onChange={setSkuFontSize}
+                          step={1}
+                          disabled={!showSku}
+                          style={{ margin: "4px 0" }}
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </Col>
+          </Row>
         </Space>
       </div>
 
@@ -730,20 +868,21 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
                     />
                     {item.type === "box" ? (
                       <div className="mt-2 text-center">
-                        {getBoxName(item) && getBoxId(item) ? (
-                          <>
-                            <div className="text-lg font-bold mb-0">{getBoxName(item)}</div>
-                            <div className="text-xs text-gray-600 mb-0">{getBoxId(item)}</div>
-                          </>
-                        ) : getBoxName(item) ? (
-                          <div className="text-xs font-bold mb-0">{getBoxName(item)}</div>
-                        ) : getBoxId(item) ? (
-                          <div className="text-base mb-0">{getBoxId(item)}</div>
-                        ) : null}
+                        {showBoxName && getBoxName(item) && (
+                          <div className="font-bold mb-1" style={{ fontSize: `${boxNameFontSize}px` }}>{getBoxName(item)}</div>
+                        )}
+                        {showBoxId && getBoxId(item) && (
+                          <div className="mb-0" style={{ fontSize: `${boxIdFontSize}px`, color: '#666' }}>{getBoxId(item)}</div>
+                        )}
                       </div>
                     ) : (
-                      <div className="mt-2 text-xs text-center text-gray-600 whitespace-pre-line">
-                        {getLabelText(item, index)}
+                      <div className="mt-2 text-center">
+                        {showProductName && getProductName(item) && (
+                          <div className="font-bold mb-1" style={{ fontSize: `${productNameFontSize}px` }}>{getProductName(item)}</div>
+                        )}
+                        {showSku && getSku(item) && (
+                          <div className="mb-0" style={{ fontSize: `${skuFontSize}px`, color: '#666' }}>{getSku(item)}</div>
+                        )}
                       </div>
                     )}
                   </div>

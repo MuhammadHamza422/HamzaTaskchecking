@@ -58,6 +58,8 @@ const PackingListTab = ({ purchaseOrder, poId, onReload, onUnsavedChangesChange 
   const [form] = Form.useForm();
   const [editForm] = Form.useForm();
 
+  const isDraft = purchaseOrder?.status === "draft";
+
   // Sync unsaved changes with parent
   useEffect(() => {
     if (onUnsavedChangesChange) {
@@ -89,6 +91,7 @@ const PackingListTab = ({ purchaseOrder, poId, onReload, onUnsavedChangesChange 
 
   const handleCreateBox = async (values) => {
     setCreatingBox(true);
+    setLoading(true); // Show loading in this tab
     try {
       // Call createBox API immediately
       await createBox(poId, {
@@ -96,17 +99,26 @@ const PackingListTab = ({ purchaseOrder, poId, onReload, onUnsavedChangesChange 
         items: values.items,
       });
       
-      message.success("Box created successfully");
+      Swal.fire({
+        icon: "success",
+        title: "Box Created",
+        text: "Box has been created successfully",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+      });
       setModalVisible(false);
       form.resetFields();
       
-      // Reload boxes from server to get the box ID and latest data
-      await loadBoxes();
-      
-      // Automatically reload PO to update product quantities
+      // Automatically reload PO to update product quantities (this will also refresh boxes if PO includes them)
       if (onReload) {
         await onReload();
       }
+      
+      // Reload boxes from server to get the box ID and latest data
+      await loadBoxes();
       
       // Clear unsaved changes since we auto-updated PO
       setHasUnsavedChanges(false);
@@ -133,6 +145,7 @@ const PackingListTab = ({ purchaseOrder, poId, onReload, onUnsavedChangesChange 
       });
     } finally {
       setCreatingBox(false);
+      setLoading(false); // Clear loading in this tab
     }
   };
 
@@ -162,7 +175,16 @@ const PackingListTab = ({ purchaseOrder, poId, onReload, onUnsavedChangesChange 
         name: values.name,
         items: values.items,
       });
-      message.success("Box updated successfully");
+      Swal.fire({
+        icon: "success",
+        title: "Box Updated",
+        text: "Box has been updated successfully",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+      });
       setEditModalVisible(false);
       setEditingBox(null);
       editForm.resetFields();
@@ -199,6 +221,7 @@ const PackingListTab = ({ purchaseOrder, poId, onReload, onUnsavedChangesChange 
       });
     } finally {
       setUpdatingBox(false);
+      setLoading(false); // Clear loading in this tab
     }
   };
 
@@ -218,15 +241,27 @@ const PackingListTab = ({ purchaseOrder, poId, onReload, onUnsavedChangesChange 
     });
 
     if (result.isConfirmed) {
+      setLoading(true); // Show loading in this tab
       try {
         await deleteBox(boxId);
-        message.success("Box deleted successfully");
-        await loadBoxes();
+        Swal.fire({
+          icon: "success",
+          title: "Box Deleted",
+          text: "Box has been deleted successfully",
+          toast: true,
+          position: "top-end",
+          showConfirmButton: false,
+          timer: 3000,
+          timerProgressBar: true,
+        });
         
         // Automatically reload PO to update product quantities
         if (onReload) {
           await onReload();
         }
+        
+        // Reload boxes
+        await loadBoxes();
         
         // Clear unsaved changes since we auto-updated PO
         setHasUnsavedChanges(false);
@@ -240,6 +275,8 @@ const PackingListTab = ({ purchaseOrder, poId, onReload, onUnsavedChangesChange 
           title: "Delete Failed",
           text: errorMessage,
         });
+      } finally {
+        setLoading(false); // Clear loading in this tab
       }
     }
   };
@@ -423,6 +460,7 @@ const PackingListTab = ({ purchaseOrder, poId, onReload, onUnsavedChangesChange 
               </Space>
             ),
             onClick: () => handleEditBox(record.boxId),
+            disabled: !isDraft, // Disable edit when not draft
           },
           {
             key: "qrCode",
@@ -434,16 +472,16 @@ const PackingListTab = ({ purchaseOrder, poId, onReload, onUnsavedChangesChange 
             ),
             onClick: () => handleShowQRCode(record.boxId),
           },
-          {
-            key: "print",
-            label: (
-              <Space>
-                <Printer size={14} />
-                <span>Print Labels</span>
-              </Space>
-            ),
-            onClick: () => handlePrintLabels([record.boxId]),
-          },
+          // {
+          //   key: "print",
+          //   label: (
+          //     <Space>
+          //       <Printer size={14} />
+          //       <span>Print Labels</span>
+          //     </Space>
+          //   ),
+          //   onClick: () => handlePrintLabels([record.boxId]),
+          // },
           {
             type: "divider",
           },
@@ -457,6 +495,7 @@ const PackingListTab = ({ purchaseOrder, poId, onReload, onUnsavedChangesChange 
             ),
             danger: true,
             onClick: () => handleDeleteBox(record.boxId),
+            disabled: !isDraft, // Disable delete when not draft
           },
         ];
 
@@ -491,6 +530,7 @@ const PackingListTab = ({ purchaseOrder, poId, onReload, onUnsavedChangesChange 
           onClick={() => setModalVisible(true)}
           size="middle"
           className="w-full sm:w-auto"
+          disabled={!isDraft} // Disable create box when not draft
         >
           Add Box
         </Button>
@@ -531,6 +571,7 @@ const PackingListTab = ({ purchaseOrder, poId, onReload, onUnsavedChangesChange 
             onClick={() => setModalVisible(true)}
             className="mt-4"
             size="middle"
+            disabled={!isDraft} // Disable create box when not draft
           >
             Create First Box
           </Button>
@@ -665,16 +706,16 @@ const PackingListTab = ({ purchaseOrder, poId, onReload, onUnsavedChangesChange 
                             ),
                             onClick: () => handleShowQRCode(box.boxId),
                           },
-                          {
-                            key: "print",
-                            label: (
-                              <Space>
-                                <Printer size={14} />
-                                <span>Print Labels</span>
-                              </Space>
-                            ),
-                            onClick: () => handlePrintLabels([box.boxId]),
-                          },
+                          // {
+                          //   key: "print",
+                          //   label: (
+                          //     <Space>
+                          //       <Printer size={14} />
+                          //       <span>Print Labels</span>
+                          //     </Space>
+                          //   ),
+                          //   onClick: () => handlePrintLabels([box.boxId]),
+                          // },
                           {
                             type: "divider",
                           },

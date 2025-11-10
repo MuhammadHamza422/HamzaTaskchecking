@@ -273,11 +273,16 @@ const PurchaseOrderDetailPage = () => {
     try {
       setUpdatingStatus(true);
       await updatePurchaseOrderStatus(poId, newStatus);
-      message.success(
-        `Status updated to ${
-          PO_STATUS_LABELS[newStatus] || newStatus.replace("_", " ")
-        }`
-      );
+      Swal.fire({
+        icon: "success",
+        title: "Status Updated",
+        text: `Status updated to ${PO_STATUS_LABELS[newStatus] || newStatus.replace("_", " ")}`,
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+      });
       // Update local state instead of full refetch
       setPurchaseOrder((prev) =>
         prev ? { ...prev, status: newStatus } : null
@@ -365,13 +370,7 @@ const PurchaseOrderDetailPage = () => {
           <span>Overview</span>
         </Space>
       ),
-      children: loadingPO ? (
-        <Card size="small">
-          <Skeleton active paragraph={{ rows: 6 }} />
-        </Card>
-      ) : (
-        <OverviewTab purchaseOrder={po} />
-      ),
+      children: <OverviewTab purchaseOrder={po} isLoading={loadingPO} />,
     },
     {
       key: "products",
@@ -381,17 +380,14 @@ const PurchaseOrderDetailPage = () => {
           <span>Products</span>
         </Space>
       ),
-      children: loadingPO ? (
-        <Card size="small">
-          <Skeleton active paragraph={{ rows: 6 }} />
-        </Card>
-      ) : (
+      children: (
         <ProductsTab
           purchaseOrder={po}
           poId={poId}
           onReload={loadPurchaseOrderOnly}
           onValidate={productsTabValidateRef}
           onUnsavedChangesChange={setHasUnsavedProducts}
+          isLoading={loadingPO}
         />
       ),
     },
@@ -403,11 +399,7 @@ const PurchaseOrderDetailPage = () => {
           <span>Packing List</span>
         </Space>
       ),
-      children: loadingPO ? (
-        <Card size="small">
-          <Skeleton active paragraph={{ rows: 6 }} />
-        </Card>
-      ) : (
+      children: (
         <PackingListTab
           purchaseOrder={po}
           poId={poId}
@@ -491,7 +483,7 @@ const PurchaseOrderDetailPage = () => {
               />
             </div>
             <Space className="flex-wrap" size={[8, 8]}>
-              {hasUnsavedProducts && (
+              {/* {hasUnsavedProducts && (
                 <Button
                   type="primary"
                   onClick={async () => {
@@ -505,7 +497,7 @@ const PurchaseOrderDetailPage = () => {
                 >
                   Validate & Save
                 </Button>
-              )}
+              )} */}
               <Button
                 type="default"
                 icon={<Printer size={16} />}
@@ -552,20 +544,9 @@ const PurchaseOrderDetailPage = () => {
         <Row gutter={16}>
           {/* Main Content */}
           <Col xs={24} lg={16}>
-            {/* Show skeleton only for PO-related sections when loadingPO is true */}
-            {loadingPO ? (
-              <>
-                <Card size="small" className="mb-4">
-                  <Skeleton active paragraph={{ rows: 4 }} />
-                </Card>
-                <Card size="small">
-                  <Skeleton active paragraph={{ rows: 6 }} />
-                </Card>
-              </>
-            ) : (
-              <>
-                {/* Status Workflow */}
-                <Card
+            {/* Status Workflow - Never show loading here, status doesn't change when boxes/products are updated */}
+            {/* Status Workflow */}
+            <Card
                   size="small"
                   className="mb-4 shadow-md border"
                   style={{
@@ -959,17 +940,15 @@ const PurchaseOrderDetailPage = () => {
               </Space>
             </Card> */}
 
-                {/* Tabs */}
-                <Card size="small">
-                  <Tabs
-                    activeKey={activeTab}
-                    onChange={setActiveTab}
-                    items={tabItems}
-                    size="small"
-                  />
-                </Card>
-              </>
-            )}
+            {/* Tabs */}
+            <Card size="small">
+              <Tabs
+                activeKey={activeTab}
+                onChange={setActiveTab}
+                items={tabItems}
+                size="small"
+              />
+            </Card>
           </Col>
 
           {/* Activity Sidebar */}

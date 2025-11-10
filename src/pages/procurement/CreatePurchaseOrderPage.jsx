@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate, Link, useParams } from "react-router-dom";
 import {
   Card,
@@ -26,6 +26,9 @@ import {
   createPurchaseOrder,
   updatePurchaseOrder,
   getPurchaseOrder,
+  getDeliverToOptions,
+  createDeliverTo,
+  deleteDeliverTo,
 } from "../../api/procurement";
 import { useProcurementData } from "../../contexts/ProcurementDataContext";
 import apiClient from "../../api/client";
@@ -56,6 +59,13 @@ const CreatePurchaseOrderPage = () => {
   const [productSearch, setProductSearch] = useState("");
   const [searchingProducts, setSearchingProducts] = useState(false);
 
+  // DeliverTo states
+  const [deliverToOptions, setDeliverToOptions] = useState([]);
+  const [deliverToLoading, setDeliverToLoading] = useState(false);
+  const [deliverToSearch, setDeliverToSearch] = useState("");
+  const [deliverToCreating, setDeliverToCreating] = useState(false);
+  const lastDeliverToQuery = useRef("");
+
   // Selected products (can be standalone products or kits)
   const [selectedProducts, setSelectedProducts] = useState([]);
 
@@ -80,6 +90,111 @@ const CreatePurchaseOrderPage = () => {
       setProducts([]);
     }
   }, [productSearch]);
+
+  // Load deliverTo options on mount
+  useEffect(() => {
+    loadDeliverToOptions();
+  }, []);
+
+  // Debounced deliverTo search
+  useEffect(() => {
+    if (deliverToSearch !== undefined) {
+      lastDeliverToQuery.current = deliverToSearch;
+      const timeoutId = setTimeout(() => {
+        loadDeliverToOptions(deliverToSearch);
+      }, 300);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [deliverToSearch]);
+
+  // Delete deliverTo
+  const handleDeleteDeliverTo = async (deliverToId, e) => {
+    e.stopPropagation(); // Prevent dropdown from closing
+    
+    try {
+      await deleteDeliverTo(deliverToId);
+      
+      // Remove from options
+      setDeliverToOptions((prev) => prev.filter((opt) => (opt._id || opt.id) !== deliverToId));
+      
+      // Remove from form value if selected
+      const currentValue = form.getFieldValue("deliverTo");
+      if (currentValue === deliverToId) {
+        form.setFieldsValue({
+          deliverTo: undefined,
+        });
+      }
+
+      Swal.fire({
+        icon: "success",
+        title: "Delivery Location Deleted",
+        text: "Delivery location has been deleted successfully",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+      });
+    } catch (error) {
+      console.error("Failed to delete deliverTo:", error);
+      const errorMessage = error?.response?.data?.error?.message || "Failed to delete delivery location";
+      Swal.fire({
+        icon: "error",
+        title: "Deletion Failed",
+        text: errorMessage,
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+      });
+    }
+  };
+
+  // DeliverTo options with create option
+  const deliverToOptionsWithCreate = useMemo(() => {
+    const q = String(deliverToSearch || "").trim();
+    
+    const baseOptions = deliverToOptions.map((option) => ({
+      label: (
+        <div className="flex items-center justify-between w-full">
+          <span className="flex-1">{option.name || option.label}</span>
+          <Button
+            type="text"
+            danger
+            size="small"
+            icon={<Trash2 size={12} />}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              handleDeleteDeliverTo(option._id || option.id, e);
+            }}
+            className="ml-2 opacity-70 hover:opacity-100 shrink-0"
+          />
+        </div>
+      ),
+      value: option._id || option.id,
+    }));
+    
+    if (!q) {
+      return baseOptions;
+    }
+    
+    // Check if exact match exists
+    const exists = deliverToOptions.some(
+      (o) => (o.name || "").toLowerCase() === q.toLowerCase()
+    );
+    
+    return exists
+      ? baseOptions
+      : [
+          ...baseOptions,
+          {
+            label: `Create "${q}"`,
+            value: "__CREATE__",
+          },
+        ];
+  }, [deliverToOptions, deliverToSearch]);
 
   const loadOrderData = async () => {
     if (!poId) return;
@@ -112,11 +227,15 @@ const CreatePurchaseOrderPage = () => {
           ? dayjs(order.orderDeadline)
           : undefined,
         shippingMethod: order.shippingMethod || undefined,
-        deliverTo: Array.isArray(order.deliverTo)
-          ? order.deliverTo
-          : order.deliverTo
-          ? [order.deliverTo]
-          : [],
+        deliverTo: order.deliverTo
+          ? (Array.isArray(order.deliverTo) && order.deliverTo.length > 0
+              ? (typeof order.deliverTo[0] === "object" && order.deliverTo[0] !== null
+                  ? (order.deliverTo[0]._id || order.deliverTo[0].id || order.deliverTo[0])
+                  : order.deliverTo[0])
+              : typeof order.deliverTo === "object" && order.deliverTo !== null
+              ? (order.deliverTo._id || order.deliverTo.id || order.deliverTo)
+              : order.deliverTo)
+          : undefined,
         currency: order.currency || "USD",
         vendorReference: Array.isArray(order.vendorReference)
           ? order.vendorReference
@@ -198,6 +317,86 @@ const CreatePurchaseOrderPage = () => {
       setProducts([]);
     } finally {
       setSearchingProducts(false);
+    }
+  };
+
+  // Load deliverTo options
+  const loadDeliverToOptions = async (search = "") => {
+    setDeliverToLoading(true);
+    try {
+      const response = await getDeliverToOptions({
+        search,
+        page: 1,
+        limit: 50,
+      });
+      const options = Array.isArray(response?.data) 
+        ? response.data 
+        : Array.isArray(response) 
+        ? response 
+        : [];
+      setDeliverToOptions(options);
+    } catch (error) {
+      console.error("Failed to load deliverTo options:", error);
+      setDeliverToOptions([]);
+    } finally {
+      setDeliverToLoading(false);
+    }
+  };
+
+  // Handle deliverTo selection (including create)
+  const handleDeliverToSelect = async (value, option) => {
+    const id = value;
+    if (id === "__CREATE__") {
+      const name = option?.meta?.createName || lastDeliverToQuery.current || "Delivery Location";
+      setDeliverToCreating(true);
+      try {
+        const response = await createDeliverTo({ name: name.trim() });
+        const newOption = response?.data || response;
+        const newId = newOption._id || newOption.id;
+        
+        // Add to options list
+        setDeliverToOptions((prev) => {
+          // Check if already exists
+          if (prev.some((opt) => (opt._id || opt.id) === newId)) {
+            return prev;
+          }
+          return [newOption, ...prev];
+        });
+
+        // Set form value to the newly created option
+        form.setFieldsValue({
+          deliverTo: newId,
+        });
+
+        // Clear search
+        setDeliverToSearch("");
+
+        Swal.fire({
+          icon: "success",
+          title: "Delivery Location Created",
+          text: `${name} has been created successfully`,
+          toast: true,
+          position: "top-end",
+          showConfirmButton: false,
+          timer: 3000,
+          timerProgressBar: true,
+        });
+      } catch (error) {
+        console.error("Failed to create deliverTo:", error);
+        const errorMessage = error?.response?.data?.error?.message || "Failed to create delivery location";
+        Swal.fire({
+          icon: "error",
+          title: "Creation Failed",
+          text: errorMessage,
+          toast: true,
+          position: "top-end",
+          showConfirmButton: false,
+          timer: 3000,
+          timerProgressBar: true,
+        });
+      } finally {
+        setDeliverToCreating(false);
+      }
     }
   };
 
@@ -401,9 +600,7 @@ const CreatePurchaseOrderPage = () => {
           ? dayjs(values.orderDeadline).toISOString()
           : undefined,
         shippingMethod: values.shippingMethod || undefined,
-        deliverTo: Array.isArray(values.deliverTo)
-          ? values.deliverTo.filter(Boolean)
-          : values.deliverTo
+        deliverTo: values.deliverTo && values.deliverTo !== "__CREATE__"
           ? [values.deliverTo]
           : [],
         currency: values.currency || "USD",
@@ -422,9 +619,13 @@ const CreatePurchaseOrderPage = () => {
         const response = await updatePurchaseOrder(poId, payload);
         Swal.fire({
           icon: "success",
-          title: "Success!",
-          text: "Draft updated successfully",
-          showConfirmButton: true,
+          title: "Order Updated",
+          text: "Purchase order has been updated successfully",
+          toast: true,
+          position: "top-end",
+          showConfirmButton: false,
+          timer: 3000,
+          timerProgressBar: true,
         }).then(() => {
           navigate(`/procurement/orders/${poId}`);
         });
@@ -433,9 +634,13 @@ const CreatePurchaseOrderPage = () => {
         const response = await createPurchaseOrder(payload);
         Swal.fire({
           icon: "success",
-          title: "Success!",
-          text: "Draft created successfully. You can now add products in the Products tab.",
-          showConfirmButton: true,
+          title: "Order Created",
+          text: "Purchase order has been created successfully",
+          toast: true,
+          position: "top-end",
+          showConfirmButton: false,
+          timer: 3000,
+          timerProgressBar: true,
         }).then(() => {
           navigate(`/procurement/orders/${response._id || response.id}`);
         });
@@ -840,44 +1045,27 @@ const CreatePurchaseOrderPage = () => {
                 </Form.Item>
               </Col>
               <Col xs={24} sm={12} md={8}>
-                <Form.Item name="deliverTo" label="Deliver To (Tags)">
+                <Form.Item name="deliverTo" label="Deliver To">
                   <Select
-                    mode="tags"
-                    placeholder="Add delivery locations (press Enter to add)"
-                    tokenSeparators={[","]}
+                    showSearch
+                    placeholder="Search or select delivery location"
                     style={{ width: "100%" }}
                     size="middle"
-                    tagRender={(props) => {
-                      const { label, value, closable, onClose } = props;
-                      // Generate random color for each tag
-                      const colors = [
-                        "blue",
-                        "green",
-                        "orange",
-                        "red",
-                        "purple",
-                        "cyan",
-                        "magenta",
-                        "geekblue",
-                        "volcano",
-                        "gold",
-                      ];
-                      const colorIndex = value
-                        ? value.toString().length % colors.length
-                        : 0;
-                      const color = colors[colorIndex];
-
-                      return (
-                        <Tag
-                          color={color}
-                          closable={closable}
-                          onClose={onClose}
-                          style={{ marginRight: 3 }}
-                        >
-                          {label}
-                        </Tag>
-                      );
-                    }}
+                    loading={deliverToLoading}
+                    filterOption={false}
+                    onSearch={setDeliverToSearch}
+                    onSelect={handleDeliverToSelect}
+                    options={deliverToOptionsWithCreate.map((option) => {
+                      if (option.value === "__CREATE__") {
+                        return {
+                          ...option,
+                          meta: { createName: deliverToSearch.trim() },
+                        };
+                      }
+                      return option;
+                    })}
+                    notFoundContent={deliverToLoading ? "Loading..." : "No delivery locations found"}
+                    allowClear
                   />
                 </Form.Item>
               </Col>
