@@ -13,9 +13,27 @@ const ReceiptFinancialSummary = ({
   const formatCurrencyFn = formatCurrencyProp || formatCurrency;
 
   return (
-    <div className="flex justify-end mb-10">
-      <div className="w-96 text-sm">
-        <div className="flex justify-between py-3 border-b-2 border-gray-300">
+    <div 
+      className="flex justify-end mb-10 receipt-financial-summary"
+      style={{ 
+        pageBreakInside: "avoid",
+        breakInside: "avoid",
+      }}
+    >
+      <div 
+        className="w-96 text-sm"
+        style={{
+          pageBreakInside: "avoid",
+          breakInside: "avoid",
+        }}
+      >
+        <div 
+          className="flex justify-between py-3 border-b-2 border-gray-300"
+          style={{
+            pageBreakInside: "avoid",
+            breakInside: "avoid",
+          }}
+        >
           <span className="text-gray-900 font-semibold text-base">
             Untaxed Amount
           </span>
@@ -26,7 +44,13 @@ const ReceiptFinancialSummary = ({
             )}
           </span>
         </div>
-        <div className="flex justify-between py-4 mt-2">
+        <div 
+          className="flex justify-between py-4 mt-2"
+          style={{
+            pageBreakInside: "avoid",
+            breakInside: "avoid",
+          }}
+        >
           <span className="text-blue-600 font-bold text-xl">Total</span>
           <span className="text-blue-600 font-bold text-xl">
             {formatCurrencyFn(financialSummary?.total || 0, currency)}

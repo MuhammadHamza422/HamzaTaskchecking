@@ -1,16 +1,12 @@
 import React from "react";
 
-/**
- * Receipt Header Component
- * Displays company logo and information
- */
 const ReceiptHeader = ({ company }) => {
   // Use dynamic logo from API response, fallback to static logo
   const logoUrl = company?.logo || "/Retro vGame_logo.png";
   const logoAlt = company?.name ? `${company.name} Logo` : "Retro vGame Logo";
 
   return (
-    <div className="mb-10">
+    <div className="mb-4">
       <div className="flex items-start gap-4 mb-4">
         {/* Logo Container */}
         <div className="rounded w-[150px] h-auto flex flex-col items-center justify-center p-2 shrink-0">
