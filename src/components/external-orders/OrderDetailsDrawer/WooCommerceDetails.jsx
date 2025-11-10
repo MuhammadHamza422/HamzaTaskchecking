@@ -3,6 +3,11 @@ import { Card, Row, Col, Tag, Button, Checkbox, message } from "antd";
 import apiClient from "../../../api/client";
 import Swal from "sweetalert2";
 
+const sanitizeMetaValue = (value) => {
+  if (typeof value !== "string") return value;
+  return value.replace(/<[^>]*>/g, "").trim();
+};
+
 export default function WooCommerceDetails({
   order,
   selectedOrder,
@@ -540,12 +545,6 @@ export default function WooCommerceDetails({
       : []),
     ...localMergedIds.map((id) => id?.toString()),
   ]);
-  const mergedLineItems = Array.isArray(order?.line_items)
-    ? order.line_items.filter((item) =>
-        mergedLineItemIds.has((item?.id)?.toString())
-      )
-    : [];
-
   return (
     <div className="space-y-6">
       {/* Order Summary */}
@@ -840,6 +839,27 @@ export default function WooCommerceDetails({
           ).map((item) => {
             const itemId = item?.id;
             const isSelected = selectedItems.includes(itemId);
+            const displayMeta =
+              (item?.meta_data || [])
+                .map((meta) => {
+                  const label = (meta?.display_key || meta?.key || "").trim();
+                  const rawValue =
+                    meta?.display_value ?? meta?.value ?? meta?.displayValue;
+                  const value = sanitizeMetaValue(rawValue);
+
+                  if (!label || label.startsWith("_")) return null;
+                  if (label.toLowerCase().includes("estimated shipping date"))
+                    return null;
+                  if (
+                    value === undefined ||
+                    value === null ||
+                    String(value).trim() === ""
+                  )
+                    return null;
+
+                  return { label, value };
+                })
+                .filter(Boolean) || [];
 
             return (
               <div
@@ -866,6 +886,21 @@ export default function WooCommerceDetails({
                     <div className="text-sm text-gray-600">
                       SKU: {item?.sku} | Qty: {item?.quantity}
                     </div>
+                  {displayMeta.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {displayMeta.map((meta) => (
+                        <div
+                          key={`${item?.id}-${meta.label}`}
+                          className="px-2 py-1 bg-white border border-gray-200 text-xs rounded-md text-gray-700 shadow-sm"
+                        >
+                          <span className="font-medium text-gray-900">
+                            {meta.label}:
+                          </span>{" "}
+                          <span className="text-gray-700">{meta.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                     {item?.image?.src && (
                       <img
                         src={item.image.src}
