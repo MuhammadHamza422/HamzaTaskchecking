@@ -28,10 +28,6 @@ const PurchaseOrderReceiptModal = ({ visible, onCancel, poId }) => {
     setLoading(true);
     try {
       const res = await getPurchaseOrderReceipt(poId);
-      console.log("raw API response:", res);
-  
-      // The API function already unwraps axios response, so res is { success: true, data: {...} }
-      // Normalize payload: extract the actual data object
       let receiptData = null;
 
       if (res && typeof res === "object") {
@@ -43,18 +39,15 @@ const PurchaseOrderReceiptModal = ({ visible, onCancel, poId }) => {
             throw new Error(res.error?.message || "API reported failure");
           }
         }
-        // If response is already the data object (unwrapped)
         else if (
           res.hasOwnProperty("company") ||
           res.hasOwnProperty("purchaseOrder")
         ) {
           receiptData = res;
         }
-        // Fallback: try res.data if it exists
         else if (res.data) {
           receiptData = res.data;
         }
-        // Last resort: use res as-is
         else {
           receiptData = res;
         }
@@ -63,13 +56,6 @@ const PurchaseOrderReceiptModal = ({ visible, onCancel, poId }) => {
       if (!receiptData) {
         throw new Error("Empty response data");
       }
-  
-      console.log("Normalized receipt data:", receiptData);
-      console.log("allLineItems:", receiptData.allLineItems);
-      console.log("boxesSummary:", receiptData.boxesSummary);
-      console.log("looseLineItems:", receiptData.looseLineItems);
-      console.log("lineItems:", receiptData.lineItems);
-
       setReceiptData(receiptData);
     } catch (error) {
       console.error("Failed to load receipt:", error);
@@ -84,6 +70,67 @@ const PurchaseOrderReceiptModal = ({ visible, onCancel, poId }) => {
     }
   };
   
+
+  // Helper function to load image and convert to base64
+  const loadImageAsBase64 = (url) => {
+    return new Promise((resolve, reject) => {
+      // If it's a data URL or base64, return as is
+      if (url.startsWith("data:") || url.startsWith("blob:")) {
+        resolve(url);
+        return;
+      }
+      
+      const img = new Image();
+      // Try with CORS first
+      img.crossOrigin = "anonymous";
+      
+      img.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0);
+          const base64 = canvas.toDataURL("image/png");
+          resolve(base64);
+        } catch (e) {
+          // If canvas fails, try fallback
+          if (url !== "/Retro vGame_logo.png") {
+            loadImageAsBase64("/Retro vGame_logo.png").then(resolve).catch(reject);
+          } else {
+            reject(e);
+          }
+        }
+      };
+      
+      img.onerror = () => {
+        // Try fallback logo
+        if (url !== "/Retro vGame_logo.png") {
+          loadImageAsBase64("/Retro vGame_logo.png").then(resolve).catch(reject);
+        } else {
+          // If fallback also fails, try without CORS
+          const img2 = new Image();
+          img2.onload = () => {
+            try {
+              const canvas = document.createElement("canvas");
+              canvas.width = img2.width;
+              canvas.height = img2.height;
+              const ctx = canvas.getContext("2d");
+              ctx.drawImage(img2, 0, 0);
+              const base64 = canvas.toDataURL("image/png");
+              resolve(base64);
+            } catch (e) {
+              reject(e);
+            }
+          };
+          img2.onerror = () => reject(new Error("Failed to load logo"));
+          img2.src = "/Retro vGame_logo.png";
+        }
+      };
+      
+      img.src = url;
+    });
+  };
 
   // Generate PDF with proper page breaks - static content starts on page 2
   const generatePDF = async () => {
@@ -101,27 +148,65 @@ const PurchaseOrderReceiptModal = ({ visible, onCancel, poId }) => {
         orientation: "portrait",
         unit: "mm",
         format: "a4",
+        compress: true, // Enable PDF compression for smaller file size
       });
 
       // A4 dimensions in mm
       const pageWidth = 210;
       const pageHeight = 297;
       const margin = 10;
+      const logoHeaderHeight = 30; // Space reserved for logo header (height of logo)
+      const headerContentSpacing = 15; // 50px spacing between header and content (50px ≈ 15mm)
       const contentWidth = pageWidth - 2 * margin;
-      const contentHeight = pageHeight - 2 * margin;
+      const contentHeight = pageHeight - 2 * margin - logoHeaderHeight - headerContentSpacing; // Reserve space for logo and spacing
+      
+      // Load logo image
+      const logoUrl = receiptData?.company?.logo || "/Retro vGame_logo.png";
+      let logoBase64 = null;
+      try {
+        logoBase64 = await loadImageAsBase64(logoUrl);
+      } catch (error) {
+        console.warn("Failed to load logo, continuing without it:", error);
+      }
+      
+      // Function to add logo header to a page (synchronous for simplicity)
+      const addLogoHeader = (pdfPage) => {
+        if (logoBase64) {
+          try {
+            // Use PNG as-is for logo (small file, already loaded)
+            // Logo is small so compression impact is minimal
+            pdfPage.addImage(
+              logoBase64,
+              "PNG",
+              margin,
+              3, // top margin
+              50, // logo width in mm
+              30  // logo height in mm
+            );
+          } catch (error) {
+            console.warn("Failed to add logo to page:", error);
+          }
+        }
+      };
 
       // Find the main content and terms sections to split content
       const receiptElement = printRef.current;
       const mainContentElement = receiptElement.querySelector(".main-content");
       const termsElement = receiptElement.querySelector(".terms-section");
       
+      // Hide main header logo for PDF generation (we use small header logo instead)
+      const mainHeader = receiptElement.querySelector(".receipt-main-header");
+      const originalMainHeaderDisplay = mainHeader?.style.display;
+      if (mainHeader) {
+        mainHeader.style.display = "none";
+      }
+      
       // Create two separate canvases: one for main content, one for terms
       let mainCanvas, termsCanvas;
       
-      // Capture main content (everything before terms)
       if (mainContentElement) {
         mainCanvas = await html2canvas(mainContentElement, {
-          scale: 2,
+          scale: 2, 
           useCORS: true,
           logging: false,
           backgroundColor: "#ffffff",
@@ -138,6 +223,15 @@ const PurchaseOrderReceiptModal = ({ visible, onCancel, poId }) => {
           width: receiptElement.scrollWidth,
           height: receiptElement.scrollHeight,
         });
+      }
+      
+      // Restore main header display after capture
+      if (mainHeader) {
+        if (originalMainHeaderDisplay) {
+          mainHeader.style.display = originalMainHeaderDisplay;
+        } else {
+          mainHeader.style.display = "";
+        }
       }
       
       // Capture terms content separately
@@ -163,6 +257,9 @@ const PurchaseOrderReceiptModal = ({ visible, onCancel, poId }) => {
           if (pageIndex > 0) {
             pdf.addPage();
           }
+
+          // Add logo header to every page
+          addLogoHeader(pdf);
 
           const sourceY =
             (pageIndex * contentHeight * mainCanvas.width) / contentWidth;
@@ -191,24 +288,25 @@ const PurchaseOrderReceiptModal = ({ visible, onCancel, poId }) => {
             sourceHeight
           );
 
-          const pageImgData = pageCanvas.toDataURL("image/png", 0.95);
+          // Use JPEG format with compression for much smaller file size
+          const pageImgData = pageCanvas.toDataURL("image/jpeg", 0.80); // JPEG at 80% quality
           const pageSliceHeight = Math.min(
             contentHeight,
             mainImgHeight - pageIndex * contentHeight
           );
 
+          // Add content below logo header with spacing (logo + spacing)
           pdf.addImage(
             pageImgData,
-            "PNG",
+            "JPEG",
             margin,
-            margin,
+            margin + logoHeaderHeight + headerContentSpacing, 
             contentWidth,
             pageSliceHeight
           );
         }
       }
 
-      // Add terms content starting on a new page (page 2+)
       if (termsCanvas) {
         const termsImgWidth = contentWidth;
         const termsImgHeight =
@@ -216,8 +314,9 @@ const PurchaseOrderReceiptModal = ({ visible, onCancel, poId }) => {
         const termsPages = Math.ceil(termsImgHeight / contentHeight);
 
         for (let pageIndex = 0; pageIndex < termsPages; pageIndex++) {
-          // Always start terms on a new page
           pdf.addPage();
+
+          addLogoHeader(pdf);
 
           const sourceY =
             (pageIndex * contentHeight * termsCanvas.width) / contentWidth;
@@ -246,17 +345,19 @@ const PurchaseOrderReceiptModal = ({ visible, onCancel, poId }) => {
             sourceHeight
           );
 
-          const pageImgData = pageCanvas.toDataURL("image/png", 0.95);
+          // Use JPEG format with compression for much smaller file size
+          const pageImgData = pageCanvas.toDataURL("image/jpeg", 0.80);
           const pageSliceHeight = Math.min(
             contentHeight,
             termsImgHeight - pageIndex * contentHeight
           );
 
+          // Add content below logo header with spacing (logo + spacing)
           pdf.addImage(
             pageImgData,
-            "PNG",
+            "JPEG", 
             margin,
-            margin,
+            margin + logoHeaderHeight + headerContentSpacing, 
             contentWidth,
             pageSliceHeight
           );
@@ -273,7 +374,7 @@ const PurchaseOrderReceiptModal = ({ visible, onCancel, poId }) => {
         icon: "success",
         title: "PDF Generated!",
         text: "Receipt PDF has been downloaded",
-        timer: 2000,
+        timer: 1000,
         showConfirmButton: false,
       });
     } catch (error) {
@@ -291,6 +392,7 @@ const PurchaseOrderReceiptModal = ({ visible, onCancel, poId }) => {
   // Handle print
   const handlePrint = () => {
     if (!printRef.current) return;
+    const logoUrl = receiptData?.company?.logo || "/Retro vGame_logo.png";
     const printWindow = window.open("", "_blank");
     printWindow.document.write(`
       <html>
@@ -299,10 +401,92 @@ const PurchaseOrderReceiptModal = ({ visible, onCancel, poId }) => {
             receiptData?.purchaseOrder?.reference || ""
           }</title>
           <style>
-            body { margin: 0; padding: 0; }
+            body { 
+              margin: 0; 
+              padding: 0; 
+              font-family: Arial, sans-serif;
+            }
             @media print {
-              @page { margin: 0; }
-              body { margin: 0; padding: 0; }
+              @page { 
+                margin: 0; 
+                size: A4;
+              }
+              body { 
+                margin: 0; 
+                padding: 0; 
+              }
+              
+              /* Print header with logo - appears on every page */
+              .print-logo-header {
+                position: fixed;
+                top: 5mm;
+                left: 10mm;
+                z-index: 1001;
+                height: 220px;
+              }
+              
+              .print-logo-header img {
+                height:150px;
+                width: auto;
+                object-fit: contain;
+              }
+              
+              /* Prevent content from being cut */
+              .receipt-content {
+                page-break-inside: avoid;
+              }
+              
+              .main-content {
+                page-break-inside: avoid;
+              }
+              
+              .receipt-section {
+                page-break-inside: avoid;
+                page-break-after: auto;
+              }
+              
+              table {
+                page-break-inside: auto;
+              }
+              
+              tr {
+                page-break-inside: avoid;
+                page-break-after: auto;
+              }
+              
+              thead {
+                display: table-header-group;
+              }
+              
+              tfoot {
+                display: table-footer-group;
+              }
+              
+              .terms-section {
+                page-break-before: always;
+              }
+              
+              .terms-section > div {
+                page-break-inside: avoid;
+              }
+              
+              h3 {
+                page-break-after: avoid;
+                page-break-inside: avoid;
+              }
+              
+              ul {
+                page-break-inside: avoid;
+              }
+              
+              li {
+                page-break-inside: avoid;
+              }
+            }
+            
+            /* Screen styles */
+            .print-logo-header {
+              display: block;
             }
           </style>
         </head>

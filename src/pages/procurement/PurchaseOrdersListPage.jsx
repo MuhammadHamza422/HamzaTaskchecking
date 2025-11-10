@@ -349,7 +349,9 @@ const PurchaseOrdersListPage = () => {
       key: "receiptStatus",
       width: 130,
       render: (status, record) => {
-        // Show "Ready to Receive" badge only when status is "in_transit"
+        if (record.status === "received") {
+          return <ReceiptBadge status="fully_received" />;
+        }
         if (record.status === "in_transit") {
           return <ReceiptBadge status="ready_to_receive" />;
         }
