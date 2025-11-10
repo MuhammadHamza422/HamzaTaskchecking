@@ -112,7 +112,11 @@ const CreatePurchaseOrderPage = () => {
           ? dayjs(order.orderDeadline)
           : undefined,
         shippingMethod: order.shippingMethod || undefined,
-        deliverTo: order.deliverTo || undefined,
+        deliverTo: Array.isArray(order.deliverTo)
+          ? order.deliverTo
+          : order.deliverTo
+          ? [order.deliverTo]
+          : [],
         currency: order.currency || "USD",
         vendorReference: Array.isArray(order.vendorReference)
           ? order.vendorReference
@@ -397,7 +401,11 @@ const CreatePurchaseOrderPage = () => {
           ? dayjs(values.orderDeadline).toISOString()
           : undefined,
         shippingMethod: values.shippingMethod || undefined,
-        deliverTo: values.deliverTo || undefined,
+        deliverTo: Array.isArray(values.deliverTo)
+          ? values.deliverTo.filter(Boolean)
+          : values.deliverTo
+          ? [values.deliverTo]
+          : [],
         currency: values.currency || "USD",
         vendorReference: Array.isArray(values.vendorReference)
           ? values.vendorReference.filter(Boolean)
@@ -832,21 +840,45 @@ const CreatePurchaseOrderPage = () => {
                 </Form.Item>
               </Col>
               <Col xs={24} sm={12} md={8}>
-                <Form.Item name="deliverTo" label="Deliver To">
+                <Form.Item name="deliverTo" label="Deliver To (Tags)">
                   <Select
-                    placeholder="Select Country"
+                    mode="tags"
+                    placeholder="Add delivery locations (press Enter to add)"
+                    tokenSeparators={[","]}
+                    style={{ width: "100%" }}
                     size="middle"
-                    showSearch
-                    filterOption={(input, option) =>
-                      (option?.label ?? "")
-                        .toLowerCase()
-                        .includes(input.toLowerCase())
-                    }
-                  >
-                    <Option value="USA">USA</Option>
-                    <Option value="Colombia">Colombia</Option>
-                    <Option value="Japan">Japan</Option>
-                  </Select>
+                    tagRender={(props) => {
+                      const { label, value, closable, onClose } = props;
+                      // Generate random color for each tag
+                      const colors = [
+                        "blue",
+                        "green",
+                        "orange",
+                        "red",
+                        "purple",
+                        "cyan",
+                        "magenta",
+                        "geekblue",
+                        "volcano",
+                        "gold",
+                      ];
+                      const colorIndex = value
+                        ? value.toString().length % colors.length
+                        : 0;
+                      const color = colors[colorIndex];
+
+                      return (
+                        <Tag
+                          color={color}
+                          closable={closable}
+                          onClose={onClose}
+                          style={{ marginRight: 3 }}
+                        >
+                          {label}
+                        </Tag>
+                      );
+                    }}
+                  />
                 </Form.Item>
               </Col>
             </Row>

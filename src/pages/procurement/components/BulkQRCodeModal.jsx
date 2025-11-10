@@ -413,22 +413,22 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
                 const boxName = getBoxName(item);
                 const boxId = getBoxId(item);
                 if (boxName && boxId) {
-                  return `<div style="margin-top: 8px; font-size: 10px; text-align: center; word-break: break-word;">
-                    <div style="font-weight: bold; font-size: 11px; margin-bottom: 2px;">${boxName}</div>
-                    <div style="font-size: 9px; color: #666;">${boxId}</div>
+                  return `<div style="margin-top: 8px; font-size: 14px; text-align: center; word-break: break-word;">
+                    <div style="font-weight: bold; font-size: 14px; margin-bottom: 2px;">${boxName}</div>
+                    <div style="font-size: 12px; color: #666;">${boxId}</div>
                   </div>`;
                 } else if (boxName) {
-                  return `<div style="margin-top: 8px; font-size: 10px; text-align: center; word-break: break-word;">
-                    <div style="font-weight: bold; font-size: 11px;">${boxName}</div>
+                  return `<div style="margin-top: 8px; font-size: 14px; text-align: center; word-break: break-word;">
+                    <div style="font-weight: bold; font-size: 14px;">${boxName}</div>
                   </div>`;
                 } else if (boxId) {
-                  return `<div style="margin-top: 8px; font-size: 10px; text-align: center; word-break: break-word;">
-                    <div style="font-size: 11px;">${boxId}</div>
+                  return `<div style="margin-top: 8px; font-size: 14px; text-align: center; word-break: break-word;">
+                    <div style="font-size: 14px;">${boxId}</div>
                   </div>`;
                 }
                 return "";
               })()
-            : `<div style="margin-top: 8px; font-size: 10px; text-align: center; word-break: break-word; white-space: pre-line;">
+            : `<div style="margin-top: 8px; font-size: 14px; text-align: center; word-break: break-word; white-space: pre-line;">
                 ${getLabelText(item, index)}
               </div>`;
           
@@ -442,7 +442,7 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
           const constrainedQrSize = Math.min(qrSize, maxQrWidth, maxQrHeight);
           
           return `
-      <div class="label-page" style="width: ${widthIn}in; height: ${heightIn}in; padding: 10px; margin: 0; page-break-after: always; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px solid #ddd; box-sizing: border-box;">
+      <div class="label-page" style="width: ${widthIn}in; height: ${heightIn}in; padding: 10px; margin: 0; page-break-after: always; display: flex; flex-direction: column; align-items: center; justify-content: center; box-sizing: border-box;">
         <img src="${item.qrCode}" alt="QR Code" style="width: ${constrainedQrSize}px; height: ${constrainedQrSize}px; max-width: 100%; max-height: 70%; object-fit: contain;" />
         ${labelContent}
       </div>
@@ -724,7 +724,7 @@ const BulkQRCodeModal = ({ visible, onCancel, items, poId, getQRCodeFunction, is
                         width: `${constrainedQrSize}px`, 
                         height: `${constrainedQrSize}px`,
                         maxWidth: "100%",
-                        maxHeight: "70%",
+                        maxHeight: "100%",
                         objectFit: "contain",
                       }}
                     />

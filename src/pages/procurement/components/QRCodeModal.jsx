@@ -303,17 +303,17 @@ const QRCodeModal = ({ visible, onCancel, qrData }) => {
             }
             .label-info {
               margin-top: 5px;
-              font-size: 10px;
+              font-size: 14px;
               text-align: center;
               word-break: break-word;
             }
             .box-name {
               font-weight: bold;
-              font-size: 11px;
+              font-size: 14px;
               margin-bottom: 2px;
             }
             .box-id {
-              font-size: 9px;
+              font-size: 14px;
               color: #666;
             }
             .label-text {
@@ -491,7 +491,7 @@ const QRCodeModal = ({ visible, onCancel, qrData }) => {
               height: `${displayHeightPx}px`,
             }}
           >
-            <div className="print-page w-full h-full flex flex-col items-center justify-center">
+            <div className="w-full h-full flex flex-col items-center justify-center p-2">
               <Image
                 src={qrData.qrCode}
                 alt="QR Code"
@@ -499,7 +499,7 @@ const QRCodeModal = ({ visible, onCancel, qrData }) => {
                   width: `${constrainedQrSize}px`,
                   height: `${constrainedQrSize}px`,
                   maxWidth: "100%",
-                  maxHeight: "70%",
+                  maxHeight: "100%",
                   objectFit: "contain",
                 }}
                 preview={false}
