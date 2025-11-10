@@ -6,6 +6,7 @@ import QRCodeModal from "../QRCodeModal";
 import BulkQRCodeModal from "../BulkQRCodeModal";
 import apiClient from "../../../../api/client";
 import Swal from "sweetalert2";
+import { PO_STATUS_LABELS } from "../../constants/procurementConstants";
 
 /**
  * Products Tab Component
@@ -843,6 +844,17 @@ const ProductsTab = ({ purchaseOrder, poId, onReload, onValidate, onUnsavedChang
           <h3 className="text-lg font-medium text-gray-700 mb-2">No Products Added</h3>
           <p className="text-sm text-gray-500 mb-4">
             Start by searching and adding products to this purchase order
+          </p>
+        </Card>
+      )}
+
+      {/* Empty State for Non-Draft Orders */}
+      {!isDraft && products.length === 0 && (
+        <Card size="small" className="text-center py-8">
+          <Package size={48} className="text-gray-300 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-700 mb-2">No Products in This Order</h3>
+          <p className="text-sm text-gray-500 mb-4">
+            This purchase order was moved to "{PO_STATUS_LABELS[purchaseOrder?.status] || purchaseOrder?.status || "Confirmed"}" status without any products added.
           </p>
         </Card>
       )}

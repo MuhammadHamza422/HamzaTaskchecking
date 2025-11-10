@@ -191,7 +191,11 @@ const OverviewTab = ({ purchaseOrder }) => {
             <InfoItem
               icon={<EnvironmentOutlined />}
               label="Deliver To"
-              value={purchaseOrder?.deliverTo || "-"}
+              value={
+                Array.isArray(purchaseOrder?.deliverTo)
+                  ? purchaseOrder.deliverTo.join(", ")
+                  : purchaseOrder?.deliverTo || "-"
+              }
             />
             {purchaseOrder?.askConfirmation && (
               <InfoItem
