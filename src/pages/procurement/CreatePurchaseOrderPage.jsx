@@ -725,9 +725,9 @@ const CreatePurchaseOrderPage = () => {
                   : "/procurement/orders"
               )
             }
-            className="mb-2 bg-black text-white hover:bg-black flex items-center gap-2 p-1.5 rounded"
+            className="mb-2 bg-black text-white hover:bg-black flex items-center gap-2 p-1.5 rounded-md text-sm"
           >
-            <ArrowLeft />
+            <ArrowLeft size={18} />
             Back
           </button>
           <Title level={3} className="mb-1">

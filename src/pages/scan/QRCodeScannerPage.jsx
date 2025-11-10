@@ -636,9 +636,9 @@ const QRCodeScannerPage = () => {
       <div className="mt-4 p-4 bg-gray-50 rounded-lg">
         <p className="font-semibold mb-2 text-sm">Supported ID formats:</p>
         <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
-          <li><strong>Box:</strong> P00021-box-1 or MongoDB ObjectId</li>
+          <li><strong>Box:</strong> P00021-box-1</li>
           <li><strong>Kit:</strong> KIT-P00021-1</li>
-          <li><strong>Product:</strong> MongoDB ObjectId (24 hex characters)</li>
+          <li><strong>Product:</strong> GAM-MSF-X360-INA-STD-U-410380</li>
         </ul>
       </div>
     </div>

@@ -395,9 +395,9 @@ const PurchaseOrdersListPage = () => {
         {/* Filters - Always Visible */}
         <Card size="small" className="mb-4 bg-gray-100">
           <Row gutter={[12, 12]}>
-            <Col xs={24} sm={12} md={8} lg={6}>
+            <Col xs={24} sm={12} md={8} lg={8}>
               <Search
-                placeholder="Search PO ID, vendor, company..."
+                placeholder="Search by PO ID..."
                 allowClear
                 value={filters.search}
                 onChange={(e) => setFilters({ ...filters, search: e.target.value })}
@@ -437,7 +437,7 @@ const PurchaseOrdersListPage = () => {
                 options={vendors.map((v) => ({ value: v.id, label: v.name }))}
               />
             </Col>
-            <Col xs={24} sm={12} md={8} lg={5}>
+            <Col xs={24} sm={12} md={8} lg={6}>
               <Select
                 allowClear
                 showSearch
@@ -452,7 +452,7 @@ const PurchaseOrdersListPage = () => {
                 options={companies.map((c) => ({ value: c.id, label: c.name }))}
               />
             </Col>
-            <Col xs={24} sm={12} md={8} lg={4}>
+            <Col xs={24} sm={12} md={8} lg={8}>
               <RangePicker
                 allowClear
                 value={filters.dateRange}
@@ -462,7 +462,7 @@ const PurchaseOrdersListPage = () => {
                 format="MM/DD/YYYY"
               />
             </Col>
-            <Col xs={24} sm={12} md={8} lg={3}>
+            <Col xs={24} sm={12} md={8} lg={5}>
               <Select
                 allowClear
                 placeholder="Favorites"

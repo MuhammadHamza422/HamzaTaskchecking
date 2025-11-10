@@ -203,9 +203,9 @@ const MainLayout = () => {
         hasAppAccess(user, link.app) &&
         // Context-specific filtering
         ((pathName.startsWith("/admin") &&
-          ["Users", "Dashboard"].includes(link.label)) ||
+          (link.label === "Users" || (link.label === "Dashboard" && link.to === "/"))) ||
           (pathName.startsWith("/product") &&
-            ["Products", "Dashboard"].includes(link.label)) ||
+            ["Products", "Dashboard"].includes(link.label) && link.to === "/") ||
           (pathName.startsWith("/orders") &&
             [
               "Dashboard",
@@ -215,7 +215,7 @@ const MainLayout = () => {
               "Pending Orders",
               "Processed Orders",
               "Manual Orders",
-            ].includes(link.label)) ||
+            ].includes(link.label) && (link.label !== "Dashboard" || link.to === "/")) ||
           (pathName.startsWith("/attendance") &&
             ["Attendance", "Attendance Activity"].includes(link.label)))) ||
       // Sourcing context
@@ -234,7 +234,8 @@ const MainLayout = () => {
           "My Listings",
           "Returned",   
         ].includes(link.label) &&
-        (link.app === "purchasing" || link.to.startsWith("/purchaser"))) ||
+        (link.app === "purchasing" || link.to.startsWith("/purchaser")) &&
+        (link.label !== "Dashboard" || link.to === "/purchaser/dashboard")) ||
       // Purchasing context
       (isPurchasingCtx &&
         [
@@ -246,7 +247,8 @@ const MainLayout = () => {
         ].includes(link.label) &&
         (link.app === "purchasing" ||
           link.to.startsWith("/purchaser") ||
-          link.to.startsWith("/requests"))) ||
+          link.to.startsWith("/requests")) &&
+        (link.label !== "Dashboard" || link.to === "/purchaser/dashboard")) ||
       // Show attendance links only on attendance pages
       (pathName.startsWith("/attendance") &&
         link.roles?.includes(user.roles.role) &&
@@ -257,7 +259,8 @@ const MainLayout = () => {
         link.app === "procurement" &&
         link.roles?.includes(user.roles.role) &&
         hasAppAccess(user, link.app) &&
-        hasMenuAccess(user, link.app, link.menuItem)) ||
+        hasMenuAccess(user, link.app, link.menuItem) &&
+        (link.label !== "Dashboard" || link.to === "/procurement")) ||
       // Scan context
       (pathName.startsWith("/scan") &&
         link.app === "scan" &&
