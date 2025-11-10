@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Table, Button, Tag, Checkbox, Space, Card, Input, InputNumber, message, Select, Dropdown } from "antd";
+import { Table, Button, Tag, Checkbox, Space, Card, Input, InputNumber, message, Select, Dropdown, Skeleton } from "antd";
 import { Package, QrCode, Printer, Search, Plus, Trash2, MoreVertical } from "lucide-react";
 import { getProductQRCode, updatePurchaseOrder } from "../../../../api/procurement";
 import QRCodeModal from "../QRCodeModal";
@@ -13,7 +13,7 @@ import { PO_STATUS_LABELS } from "../../constants/procurementConstants";
  * Shows products and kits with checkboxes and QR code buttons
  * Allows adding/removing products when order is in draft status
  */
-const ProductsTab = ({ purchaseOrder, poId, onReload, onValidate, onUnsavedChangesChange }) => {
+const ProductsTab = ({ purchaseOrder, poId, onReload, onValidate, onUnsavedChangesChange, isLoading = false }) => {
   const [selectedProductIndices, setSelectedProductIndices] = useState([]);
   const [qrModalVisible, setQrModalVisible] = useState(false);
   const [qrData, setQrData] = useState(null);
@@ -26,8 +26,17 @@ const ProductsTab = ({ purchaseOrder, poId, onReload, onValidate, onUnsavedChang
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false); // Track if there are unsaved changes
+  const [productType, setProductType] = useState(""); // Product type filter
 
   const isDraft = purchaseOrder?.status === "draft";
+
+  // Product types for filtering
+  const productTypes = [
+    { label: "Consoles", code: "CON" },
+    { label: "Handhelds", code: "HAN" },
+    { label: "Accessories", code: "ACC" },
+    { label: "Games", code: "GAM" },
+  ];
 
   // Sync unsaved changes with parent
   useEffect(() => {
@@ -101,7 +110,18 @@ const ProductsTab = ({ purchaseOrder, poId, onReload, onValidate, onUnsavedChang
       // Clear unsaved changes flag after successful save
       setHasUnsavedChanges(false);
       
-      message.success("Products updated successfully");
+      Swal.fire({
+        icon: "success",
+        title: "Products Updated",
+        text: "Products have been updated successfully",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+      });
+      
+      // Don't use loadingProducts - isLoading prop handles loading state
     } catch (error) {
       console.error("Failed to save products:", error);
       
@@ -170,21 +190,31 @@ const ProductsTab = ({ purchaseOrder, poId, onReload, onValidate, onUnsavedChang
 
   // Search products
   useEffect(() => {
-    if (productSearch.trim().length >= 2) {
+    if (productSearch.trim().length >= 2 && productType) {
       const timeoutId = setTimeout(() => {
-        searchProducts(productSearch);
+        searchProducts(productSearch, productType);
       }, 300);
       return () => clearTimeout(timeoutId);
     } else {
       setSearchResults([]);
     }
-  }, [productSearch]);
+  }, [productSearch, productType]);
 
-  const searchProducts = async (search) => {
+  const searchProducts = async (search, type) => {
+    if (!type) {
+      setSearchResults([]);
+      return;
+    }
+    
     setSearching(true);
     try {
       const { data } = await apiClient.get("/api/v1/products/all", {
-        params: { page: 1, limit: 50, search },
+        params: { 
+          page: 1, 
+          limit: 50, 
+          search,
+          type: type, // Filter by product type
+        },
       });
       setSearchResults(Array.isArray(data?.products) ? data.products : []);
     } catch (error) {
@@ -203,6 +233,10 @@ const ProductsTab = ({ purchaseOrder, poId, onReload, onValidate, onUnsavedChang
       message.warning("Product already added");
       return;
     }
+
+    // Close dropdown immediately by clearing search
+    setProductSearch("");
+    setSearchResults([]);
 
     const newProduct = {
       type: "product",
@@ -229,9 +263,17 @@ const ProductsTab = ({ purchaseOrder, poId, onReload, onValidate, onUnsavedChang
     setSaving(true);
     try {
       await saveProducts(updated);
-      message.success("Product added successfully");
-      setProductSearch("");
-      setSearchResults([]);
+      Swal.fire({
+        icon: "success",
+        title: "Product Added",
+        text: "Product has been added successfully",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+      });
+      // Don't set loadingProducts here - let the table show its own loading if needed
     } catch (error) {
       console.error("Failed to add product:", error);
       // Revert on error
@@ -271,7 +313,17 @@ const ProductsTab = ({ purchaseOrder, poId, onReload, onValidate, onUnsavedChang
     setSaving(true);
     try {
       await saveProducts(updated);
-      message.success("Product removed successfully");
+      Swal.fire({
+        icon: "success",
+        title: "Product Removed",
+        text: "Product has been removed successfully",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+      });
+      // Don't set loadingProducts - table's loading prop handles it
     } catch (error) {
       console.error("Failed to remove product:", error);
       // Revert on error
@@ -757,43 +809,95 @@ const ProductsTab = ({ purchaseOrder, poId, onReload, onValidate, onUnsavedChang
 
   return (
     <>
-      {/* Product Search - Only for draft orders */}
+      {/* Product Search - Only for draft orders - Always visible, never shows loading */}
       {isDraft && (
         <Card size="small" className="mb-4 bg-gray-100">
+          {/* Product Type Selection */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Product Type
+            </label>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {productTypes.map((type) => (
+                <button
+                  key={type.code}
+                  type="button"
+                  onClick={() => {
+                    // Toggle selection - if clicking same type, deselect it
+                    if (productType === type.code) {
+                      setProductType("");
+                      setProductSearch("");
+                      setSearchResults([]);
+                    } else {
+                      setProductType(type.code);
+                      setProductSearch("");
+                      setSearchResults([]);
+                    }
+                  }}
+                  className={`
+                    p-2 rounded-lg border text-sm font-medium transition-all duration-200
+                    ${
+                      productType === type.code
+                        ? "border-blue-500 bg-blue-50 text-blue-700 shadow-xl"
+                        : "bg-white border-gray-200 hover:border-gray-300 hover:bg-gray-50 shadow-md"
+                    }
+                  `}
+                >
+                  {type.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Product Search Input - Only enabled when type is selected */}
           <div className="mb-4">
             <Input
-              placeholder="Search products by name or SKU..."
+              placeholder={productType ? "Search products by name or SKU..." : "Please select a product type first"}
               prefix={<Search size={16} />}
+              suffix={searching ? <span className="text-gray-400 text-xs">Loading...</span> : null}
               value={productSearch}
               onChange={(e) => setProductSearch(e.target.value)}
               size="large"
               allowClear
-              loading={searching}
+              disabled={!productType}
             />
 
-            {productSearch.trim().length > 1 && searchResults.length > 0 && (
+            {productSearch.trim().length >= 2 && productType && (
               <Card className="mt-2 shadow-lg bg-gray-100" size="small">
-                <div className="max-h-60 overflow-y-auto space-y-2">
-                  {searchResults.map((product) => (
-                    <div
-                      key={product._id || product.id}
-                      onClick={() => handleAddProduct(product)}
-                      className="p-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition-colors rounded"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <p className="font-medium text-sm mb-0">
-                            {product.pro_title || product.name || "Unknown Product"}
-                          </p>
-                          <p className="text-xs text-gray-500 mb-0">
-                            SKU: {product.sku || "N/A"}
-                          </p>
-                        </div>
-                        <Plus className="text-blue-600" size={16} />
-                      </div>
+                {searching ? (
+                  <div className="p-4 text-center">
+                    <div className="flex items-center justify-center gap-2 text-gray-500">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                      <span className="text-sm">Searching products...</span>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ) : searchResults.length > 0 ? (
+                  <div className="max-h-60 overflow-y-auto space-y-2">
+                    {searchResults.map((product) => (
+                      <div
+                        key={product._id || product.id}
+                        onClick={() => handleAddProduct(product)}
+                        className="p-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition-colors rounded"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <p className="font-medium text-sm mb-0">
+                              {product.pro_title || product.name || "Unknown Product"}
+                            </p>
+                            <p className="text-xs text-gray-500 mb-0">
+                              SKU: {product.sku || "N/A"}
+                            </p>
+                          </div>
+                          <Plus className="text-blue-600" size={16} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-4 text-center text-gray-500">
+                    <p className="text-sm mb-0">No product match this search</p>
+                  </div>
+                )}
               </Card>
             )}
           </div>
@@ -817,6 +921,27 @@ const ProductsTab = ({ purchaseOrder, poId, onReload, onValidate, onUnsavedChang
             </div>
           )}
         </Card>
+      )}
+
+      {/* Validate & Save Button - Only for draft orders with unsaved changes */}
+      {isDraft && hasUnsavedChanges && (
+        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+          <span className="text-sm font-medium text-yellow-900">
+            You have unsaved changes
+          </span>
+          <Button
+            type="primary"
+            onClick={async () => {
+              await handleValidate();
+            }}
+            size="small"
+            loading={saving}
+            disabled={saving}
+            className="w-full sm:w-auto"
+          >
+            Validate & Save
+          </Button>
+        </div>
       )}
 
       {/* Bulk Actions Bar */}
@@ -869,13 +994,30 @@ const ProductsTab = ({ purchaseOrder, poId, onReload, onValidate, onUnsavedChang
           pagination={false}
           size="small"
           scroll={{ x: 710 }}
+          loading={saving || isLoading}
         />
       </div>
+      )}
+      
+      {/* Show loading skeleton only for table area when PO is being reloaded and no products yet */}
+      {isLoading && products.length === 0 && (
+        <>
+          <div className="hidden md:block">
+            <Card size="small">
+              <Skeleton active paragraph={{ rows: 6 }} />
+            </Card>
+          </div>
+          <div className="md:hidden">
+            <Card size="small">
+              <Skeleton active paragraph={{ rows: 6 }} />
+            </Card>
+          </div>
+        </>
       )}
 
       {/* Mobile Card View */}
       {products.length > 0 && (
-      <div className="md:hidden space-y-3">
+      <div className={`md:hidden space-y-3 ${(saving || isLoading) ? 'opacity-50 pointer-events-none' : ''}`}>
         {products.map((product, index) => (
           <Card
             key={product.productId || product.kitId || product._id || index}
@@ -944,7 +1086,7 @@ const ProductsTab = ({ purchaseOrder, poId, onReload, onValidate, onUnsavedChang
                 <div className="font-medium text-gray-900">{product.quantity || 0}</div>
                 )}
               </div>
-              <div>
+              {/* <div>
                 <div className="text-gray-400 text-xs mb-1">UoM</div>
                 {isDraft ? (
                   (() => {
@@ -984,7 +1126,7 @@ const ProductsTab = ({ purchaseOrder, poId, onReload, onValidate, onUnsavedChang
                 ) : (
                 <div className="font-medium text-gray-900">{product.uom || "-"}</div>
                 )}
-              </div>
+              </div> */}
               <div>
                 <div className="text-gray-400 text-xs mb-1">Unit Price</div>
                 {isDraft ? (
@@ -1070,7 +1212,7 @@ const ProductsTab = ({ purchaseOrder, poId, onReload, onValidate, onUnsavedChang
                   })()}
                   </div>
                 </div>
-              <div className="col-span-2 flex justify-end items-center gap-2 pt-2 border-t">
+              <div className="col-span-2 ml-auto size-8 bg-gray-300 rounded-md flex justify-center items-center gap-2 border-t">
                 <Dropdown
                   menu={{
                     items: [

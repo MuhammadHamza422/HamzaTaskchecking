@@ -704,3 +704,37 @@ export const getDashboardStats = async (params = {}) => {
   });
   return data;
 };
+
+// ==================== Deliver To ====================
+
+/**
+ * Get all deliverTo options
+ * @param {Object} params - Query parameters (search, page, limit)
+ * @returns {Promise} DeliverTo list
+ */
+export const getDeliverToOptions = async (params = {}) => {
+  const { data } = await apiClient.get("/api/v1/procurement/deliver-to", {
+    params,
+  });
+  return data;
+};
+
+/**
+ * Create a new deliverTo option
+ * @param {Object} deliverToData - DeliverTo data { name: string }
+ * @returns {Promise} Created deliverTo
+ */
+export const createDeliverTo = async (deliverToData) => {
+  const { data } = await apiClient.post("/api/v1/procurement/deliver-to", deliverToData);
+  return data;
+};
+
+/**
+ * Delete a deliverTo option
+ * @param {string} deliverToId - DeliverTo ID
+ * @returns {Promise} Deletion result
+ */
+export const deleteDeliverTo = async (deliverToId) => {
+  const { data } = await apiClient.delete(`/api/v1/procurement/deliver-to/${deliverToId}`);
+  return data;
+};

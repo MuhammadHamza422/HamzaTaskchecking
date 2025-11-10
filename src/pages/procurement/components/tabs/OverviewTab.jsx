@@ -1,4 +1,5 @@
 import React from "react";
+import { Card, Skeleton } from "antd";
 import {
   CalendarOutlined,
   ShopOutlined,
@@ -10,7 +11,7 @@ import { SHIPPING_METHODS } from "../../constants/procurementConstants";
 import StatusBadge from "../StatusBadge";
 
 // Tailwind-based, modern replacement for OverviewTab
-export default function OverviewTab({ purchaseOrder = {} }) {
+export default function OverviewTab({ purchaseOrder = {}, isLoading = false }) {
   const formatDate = (dateString) => {
     if (!dateString) return "-";
     try {
@@ -122,6 +123,14 @@ export default function OverviewTab({ purchaseOrder = {} }) {
       </div>
     </div>
   );
+
+  if (isLoading) {
+    return (
+      <Card size="small">
+        <Skeleton active paragraph={{ rows: 6 }} />
+      </Card>
+    );
+  }
 
   return (
     <section className="space-y-6">

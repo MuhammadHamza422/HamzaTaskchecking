@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Card, Input, Button, Space, List, Avatar, Skeleton, message } from "antd";
+import Swal from "sweetalert2";
 import {
   MessageOutlined,
   FileTextOutlined,
@@ -75,7 +76,16 @@ const ActivityLog = ({ poId, purchaseOrder }) => {
         type: "note",
         message: noteMessage,
       });
-      message.success("Note added successfully");
+      Swal.fire({
+        icon: "success",
+        title: "Note Added",
+        text: "Note has been added successfully",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+      });
       setNoteMessage("");
       setShowNoteForm(false);
       // Clear cache and reload activities
@@ -236,7 +246,7 @@ const ActivityLog = ({ poId, purchaseOrder }) => {
                     <Avatar
                       src={activity.user?.avatar}
                       style={{
-                        backgroundColor: color.primary,
+                        backgroundColor: `#3b82f6`,
                         border: `2px solid ${color.primary}40`,
                       }}
                     >
@@ -247,13 +257,13 @@ const ActivityLog = ({ poId, purchaseOrder }) => {
                     <div className="flex items-center justify-between">
                       <span 
                         className="text-sm font-medium"
-                        style={{ color: isNote ? color.text : "#1f2937" }}
+                        style={{ color: "#1f2937" }}
                       >
                         {activity.user?.name || "System"}
                       </span>
                       <span 
                         className="text-xs"
-                        style={{ color: isNote ? color.text : "#9ca3af" }}
+                        style={{ color: "#9ca3af" }}
                       >
                         {formatDate(
                           activity.createdAt ||
@@ -268,7 +278,7 @@ const ActivityLog = ({ poId, purchaseOrder }) => {
                       <div 
                         className="text-sm mb-1 flex items-center gap-2"
                         style={{ 
-                          color: isNote ? color.text : "#374151",
+                          color: "#374151",
                           fontWeight: isNote ? "500" : "400"
                         }}
                       >
