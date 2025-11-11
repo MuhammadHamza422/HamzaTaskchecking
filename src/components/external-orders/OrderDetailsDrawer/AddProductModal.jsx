@@ -332,6 +332,48 @@ export default function AddProductModal({
     return Number.isFinite(lineItemTotal) ? lineItemTotal : 0;
   };
 
+  const getOriginalLineTitle = () => {
+    try {
+      if (activeTab === "woocommerce") {
+        const order = orderDetails?.order;
+        const lineItem = order?.line_items?.find(
+          (item) =>
+            String(item?.id) === String(selectedLineItemId) ||
+            String(item?.product_id) === String(selectedLineItemId)
+        );
+        return lineItem?.name?.trim();
+      }
+
+      if (activeTab === "walmart") {
+        const order = orderDetails?.order?.order;
+        const lineItem = order?.orderLines?.orderLine?.find(
+          (line) =>
+            String(line?.lineNumber || line?.orderLineId) ===
+            String(selectedLineItemId)
+        );
+        const candidate =
+          lineItem?.item?.productName ||
+          lineItem?.item?.name ||
+          lineItem?.item?.productTitle ||
+          lineItem?.item?.sku;
+        return candidate ? candidate.toString().trim() : undefined;
+      }
+
+      if (activeTab === "shopify") {
+        const order = orderDetails?.order;
+        const node = order?.lineItems?.edges?.find(
+          (edge) => String(edge?.node?.id) === String(selectedLineItemId)
+        )?.node;
+        const candidate =
+          node?.title || node?.name || node?.sku || node?.product?.title;
+        return candidate ? candidate.toString().trim() : undefined;
+      }
+    } catch (err) {
+      console.error("Failed to resolve original line title", err);
+    }
+    return undefined;
+  };
+
   const handlePrice = (sale_price) => {
     const price = sale_price || 0;
 
@@ -506,10 +548,11 @@ export default function AddProductModal({
 
     setIsSubmitting(true);
     try {
-      const timestamp = new Date().getTime();
-      const uniqueProductTitle = `${
-        selectedProducts[0]?.pro_title || "Product"
-      } - ${timestamp}`;
+      const originalLineTitle = getOriginalLineTitle();
+      const uniqueProductTitle =
+        originalLineTitle ||
+        selectedProducts[0]?.pro_title?.trim() ||
+        "Product";
 
       let productIdToSend = selectedLineItemId;
       if (activeTab === "walmart") {

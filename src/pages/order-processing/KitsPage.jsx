@@ -122,26 +122,26 @@ export default function KitsPage() {
       ),
       width: 300,
     },
-    {
-      title: "Platform",
-      dataIndex: ["plateform_id", "plt_name"],
-      key: "platform",
-      render: (platformName, record) => (
-        <div>
-          <Tag title={platformName} color="green" className="text-xs">
-            {platformName}
-          </Tag>
-          <div
-            title={record.plateform_id?.plt_prefix}
-            className="text-sm text-gray-700 mt-1"
-          >
-            <span className="text-[10px] text-gray-500 mt-1">plt_id:</span>
-            <span className="pl-1">{record.plateform_id?.plt_prefix}</span>
-          </div>
-        </div>
-      ),
-      width: 200,
-    },
+    // {
+    //   title: "Platform",
+    //   dataIndex: ["plateform_id", "plt_name"],
+    //   key: "platform",
+    //   render: (platformName, record) => (
+    //     <div>
+    //       <Tag title={platformName} color="green" className="text-xs">
+    //         {platformName}
+    //       </Tag>
+    //       <div
+    //         title={record.plateform_id?.plt_prefix}
+    //         className="text-sm text-gray-700 mt-1"
+    //       >
+    //         <span className="text-[10px] text-gray-500 mt-1">plt_id:</span>
+    //         <span className="pl-1">{record.plateform_id?.plt_prefix}</span>
+    //       </div>
+    //     </div>
+    //   ),
+    //   width: 200,
+    // },
     {
       title: "Products",
       key: "products",
