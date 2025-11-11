@@ -31,6 +31,7 @@ export default function OrderTable({
   onOrderSelect = null, // Handle individual order selection
   selectAll = false, // Select all state
   onSelectAll = null, // Handle select all
+  fetchProcessedOrders = () => {},
 }) {
   const isMobile = useMediaQuery({ maxWidth: 768 });
   const isTablet = useMediaQuery({ minWidth: 769, maxWidth: 1024 });
@@ -123,7 +124,11 @@ export default function OrderTable({
         key: "actions",
         render: (_, record) => (
           <div className="flex items-center gap-2">
-            <AddLabelModal order={record} activeTab={activeTab} />
+            <AddLabelModal
+              order={record}
+              activeTab={activeTab}
+              fetchProcessedOrders={fetchProcessedOrders}
+            />
             <Button
               type="link"
               onClick={(e) => {
@@ -732,7 +737,11 @@ export default function OrderTable({
             </div>
           </div>
           <div className="flex justify-between items-center pt-2 border-t border-gray-100">
-            <AddLabelModal order={order} activeTab={activeTab} />
+            <AddLabelModal
+              order={order}
+              activeTab={activeTab}
+              fetchProcessedOrders={fetchProcessedOrders}
+            />
             <Button
               size="small"
               type="link"

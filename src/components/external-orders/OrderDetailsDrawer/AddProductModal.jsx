@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Modal, Input, Select, Button, Spin, Space } from "antd";
+import { Modal, Input, Select, Button, Spin, Form, message } from "antd";
 import {
   SearchOutlined,
   CheckOutlined,
@@ -7,7 +7,7 @@ import {
   MinusOutlined,
   DeleteOutlined,
 } from "@ant-design/icons";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import apiClient from "../../../api/client";
 import Swal from "sweetalert2";
 import useFullscreen from "../../useFullscreen";
@@ -49,8 +49,12 @@ export default function AddProductModal({
   const [mergedProducts, setMergedProducts] = useState([]);
   const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
   const [productType, setProductType] = useState("");
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [createLoading, setCreateLoading] = useState(false);
+  const [createForm] = Form.useForm();
 
   const debouncedSearchTerm = useDebounce(searchQuery, 500);
+  const queryClient = useQueryClient();
 
   const productTypes = [
     { label: "Consoles", code: "CON" },
@@ -193,6 +197,62 @@ export default function AddProductModal({
       ((debouncedSearchTerm && debouncedSearchTerm.length > 0) ||
         !!productType),
   });
+
+  const openCreateModal = () => {
+    createForm.resetFields();
+    createForm.setFieldsValue({
+      uid: selectedOrder?.orderId || "",
+      pro_title: searchQuery || "",
+    });
+    setCreateModalOpen(true);
+  };
+
+  const handleCreateProduct = async () => {
+    try {
+      const values = await createForm.validateFields();
+      setCreateLoading(true);
+
+      const payload = {
+        uid: values.uid.trim(),
+        pro_title: values.pro_title.trim(),
+        sku: values.sku ? values.sku.trim() : undefined,
+      };
+
+      const { data } = await apiClient.post(
+        "/api/v1/products/quick-create",
+        payload
+      );
+
+      if (data?.success && data?.product) {
+        message.success("Product created successfully!");
+        setCreateModalOpen(false);
+
+        const newProduct = data.product;
+        queryClient.invalidateQueries(["products"]);
+        setSelectedProducts((prev) => [
+          ...prev,
+          {
+            _id: newProduct._id,
+            pro_title: newProduct.pro_title,
+            sale_price: newProduct.sale_price || 0,
+            quantity: 1,
+          },
+        ]);
+        setSearchQuery("");
+      }
+    } catch (error) {
+      if (error?.errorFields) {
+        return;
+      }
+      const msg =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Failed to create product";
+      message.error(msg);
+    } finally {
+      setCreateLoading(false);
+    }
+  };
 
   // Handle product selection
   const handleProductSelect = (product) => {
@@ -792,8 +852,18 @@ export default function AddProductModal({
                     })}
                   </div>
                 ) : (
-                  <div className="p-4 text-center text-gray-500">
-                    No products found
+                  <div className="p-4 text-center text-gray-500 space-y-3">
+                    <div>No products found</div>
+                    <Button
+                      type="primary"
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openCreateModal();
+                      }}
+                    >
+                      Create and use new product
+                    </Button>
                   </div>
                 )}
               </div>
@@ -870,6 +940,36 @@ export default function AddProductModal({
             </div>
           )}
         </div>
+      </Modal>
+
+      <Modal
+        title="Create Product"
+        open={createModalOpen}
+        onCancel={() => setCreateModalOpen(false)}
+        confirmLoading={createLoading}
+        onOk={handleCreateProduct}
+        okText="Create & Select"
+        destroyOnClose
+      >
+        <Form layout="vertical" form={createForm}>
+          <Form.Item
+            label="UID"
+            name="uid"
+            rules={[{ required: true, message: "Please enter UID" }]}
+          >
+            <Input placeholder="Enter UID" />
+          </Form.Item>
+          <Form.Item
+            label="Product Title"
+            name="pro_title"
+            rules={[{ required: true, message: "Please enter product title" }]}
+          >
+            <Input placeholder="Enter product title" />
+          </Form.Item>
+          <Form.Item label="SKU (optional)" name="sku">
+            <Input placeholder="Auto-generated if left blank" />
+          </Form.Item>
+        </Form>
       </Modal>
     </div>
   );

@@ -1,7 +1,6 @@
 import React, {
   useState,
   useEffect,
-  useCallback,
   useRef,
   useMemo,
 } from "react";
@@ -22,11 +21,10 @@ import {
   Switch,
   Space,
 } from "antd";
-import { debounce, set } from "lodash";
-import { motion } from "framer-motion";
+import { debounce } from "lodash";
+import { motion as Motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import Swal from "sweetalert2";
-import { useMediaQuery } from "react-responsive";
 import { importCSV } from "../../api/products";
 import {
   getProducts,
@@ -36,6 +34,7 @@ import {
 } from "../../api/warehouse";
 import useFullscreen from "../../components/useFullscreen";
 import CreatableSelect from "react-select/creatable";
+import apiClient from "../../api/client";
 
 const { Search } = Input;
 const { Title, Text } = Typography;
@@ -247,8 +246,6 @@ const ColorCode2 = [
 ];
 
 const AdminProductsPage = () => {
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
   const [search, setSearch] = useState("");
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
@@ -261,6 +258,9 @@ const AdminProductsPage = () => {
   const [form] = Form.useForm();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [colorCode, setColorCode] = useState(null);
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+  const [quickCreateLoading, setQuickCreateLoading] = useState(false);
+  const [quickForm] = Form.useForm();
 
   const options = ColorCode2.map((color) => ({
     value: color,
@@ -274,17 +274,21 @@ const AdminProductsPage = () => {
     type: null,
   });
 
-  // Responsive breakpoint
-  const isMobile = useMediaQuery({ maxWidth: 768 });
-
   // Create debounced search function
-  const debouncedSearch = useCallback(
-    debounce((searchValue) => {
-      setSearch(searchValue);
-      setPage(1); // Reset to first page when searching
-    }, 300),
-    []
+  const debouncedSearch = useMemo(
+    () =>
+      debounce((searchValue) => {
+        setSearch(searchValue);
+        setPage(1); // Reset to first page when searching
+      }, 300),
+    [setSearch, setPage]
   );
+
+  useEffect(() => {
+    return () => {
+      debouncedSearch.cancel();
+    };
+  }, [debouncedSearch]);
 
   // Handle search change
   const handleSearchChange = (e) => {
@@ -351,6 +355,53 @@ const AdminProductsPage = () => {
       type: null,
     });
     setPage(1);
+  };
+
+  const handleOpenQuickCreate = () => {
+    quickForm.resetFields();
+    quickForm.setFieldsValue({
+      uid: "",
+      pro_title: search || "",
+    });
+    setQuickCreateOpen(true);
+  };
+
+  const handleQuickCreate = async () => {
+    try {
+      const values = await quickForm.validateFields();
+      setQuickCreateLoading(true);
+
+      const payload = {
+        uid: values.uid.trim(),
+        pro_title: values.pro_title.trim(),
+        sku: values.sku ? values.sku.trim() : undefined,
+      };
+
+      const { data: response } = await apiClient.post(
+        "/api/v1/products/quick-create",
+        payload
+      );
+
+      if (response?.success) {
+        message.success("Product created successfully!");
+        setQuickCreateOpen(false);
+        quickForm.resetFields();
+        setSearch(values.pro_title.trim());
+        setPage(1);
+        await refetch();
+      }
+    } catch (error) {
+      if (error?.errorFields) {
+        return;
+      }
+      const msg =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Failed to create product";
+      message.error(msg);
+    } finally {
+      setQuickCreateLoading(false);
+    }
   };
 
   // Handle CSV file upload
@@ -776,7 +827,7 @@ const AdminProductsPage = () => {
 
   return (
     <>
-      <motion.div
+      <Motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
@@ -919,10 +970,12 @@ const AdminProductsPage = () => {
             pagination={false}
             locale={{
               emptyText: (
-                <Empty
-                  description="No products found"
-                  className="py-12 text-xl font-semibold text-gray-500"
-                />
+                <div className="py-12 text-center space-y-4">
+                  <Empty description="No products found" />
+                  <Button type="primary" onClick={handleOpenQuickCreate}>
+                    Quick Create Product
+                  </Button>
+                </div>
               ),
             }}
             className="w-full overflow-x-auto"
@@ -1185,7 +1238,7 @@ const AdminProductsPage = () => {
           onChange={handleCSVUpload}
           style={{ display: "none" }}
         />
-      </motion.div>
+      </Motion.div>
       <div ref={fullscreenRef}>
         <Modal
           getContainer={getContainer}
@@ -1518,6 +1571,35 @@ const AdminProductsPage = () => {
           </Form>
         </Modal>
       </div>
+      <Modal
+        title="Quick Create Product"
+        open={quickCreateOpen}
+        onCancel={() => setQuickCreateOpen(false)}
+        confirmLoading={quickCreateLoading}
+        onOk={handleQuickCreate}
+        okText="Create"
+        destroyOnClose
+      >
+        <Form layout="vertical" form={quickForm}>
+          <Form.Item
+            label="UID"
+            name="uid"
+            rules={[{ required: true, message: "Please enter UID" }]}
+          >
+            <Input placeholder="Enter UID" />
+          </Form.Item>
+          <Form.Item
+            label="Product Title"
+            name="pro_title"
+            rules={[{ required: true, message: "Please enter product title" }]}
+          >
+            <Input placeholder="Enter product title" />
+          </Form.Item>
+          <Form.Item label="SKU (optional)" name="sku">
+            <Input placeholder="Auto-generated if left blank" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </>
   );
 };

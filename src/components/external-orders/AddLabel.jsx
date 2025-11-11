@@ -49,7 +49,7 @@ const CACHE_DURATION = 5 * 60 * 1000;
 export default function AddLabelModal({
   order,
   activeTab,
-  fetchProcessedOrders,
+  fetchProcessedOrders = () => {},
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -291,7 +291,9 @@ export default function AddLabelModal({
         });
 
         handleClose();
-        fetchProcessedOrders();
+        if (typeof fetchProcessedOrders === "function") {
+          fetchProcessedOrders();
+        }
       }
     } catch (err) {
       const errorMessage =

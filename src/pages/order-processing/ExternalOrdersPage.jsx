@@ -455,21 +455,42 @@ export default function ExternalOrdersPage() {
 
     let filteredOrders = [...ordersData.orders];
 
-    // Filter by search (order ID)
-    // if (filters.search) {
-    //   filteredOrders = filteredOrders.filter((order) => {
-    //     let orderIdToSearch = order.orderId?.toString() || "";
+    // Filter by search across multiple fields
+    if (filters.search) {
+      const q = String(filters.search).trim().toLowerCase();
+      if (q) {
+        filteredOrders = filteredOrders.filter((order) => {
+          const fields = [
+            order.orderId,
+            order.order_key,
+            order.customerOrderId,
+            order.amazonOrderId,
+            order.user_name,
+            order.tracking_number,
+            order.shipStation_OrderId,
+            order.status,
+            order.wc_status,
+            order.wm_status,
+            order.sf_status,
+            order.app_id,
+            order.packageCode,
+            order.packageName,
+            order.shopifyDetails?.name,
+            order.shopifyDetails?.email,
+            order.shopifyDetails?.order_number,
+            order.shopifyDetails?.order_key,
+            order.shopifyDetails?.source_name,
+            Array.isArray(order.shopifyDetails?.tags)
+              ? order.shopifyDetails.tags.join(", ")
+              : order.shopifyDetails?.tags,
+          ].filter(Boolean);
 
-    //     // For Shopify, also search in the numeric part of the GID
-    //     if (activeTab === "shopify") {
-    //       const numericId = orderIdToSearch.replace('gid://shopify/Order/', '');
-    //       return orderIdToSearch.toLowerCase().includes(filters.search.toLowerCase()) ||
-    //              numericId.toLowerCase().includes(filters.search.toLowerCase());
-    //     }
-
-    //     return orderIdToSearch.toLowerCase().includes(filters.search.toLowerCase());
-    //   });
-    // }
+          return fields.some((field) =>
+            String(field).toLowerCase().includes(q)
+          );
+        });
+      }
+    }
 
     // Filter by date range
     if (filters.dateRange && filters.dateRange.length === 2) {

@@ -168,7 +168,7 @@ export default function ProcessedOrdersPage() {
         params.append("search", search);
       }
       if (wmStatus) {
-        params.append("wm_status", wmStatus); // Use wm_status for Walmart
+        params.append("wm_status", wmStatus); 
       }
       if (dateRange && dateRange.length === 2) {
         params.append("start_date", dateRange[0].format("YYYY-MM-DD"));
@@ -180,13 +180,13 @@ export default function ProcessedOrdersPage() {
       const params = new URLSearchParams({
         limit: limit.toString(),
         page: page.toString(),
-        status: "processed", // Always fetch processed orders
+        status: "processed", 
       });
       if (search) {
         params.append("search", search);
       }
       if (sfStatus) {
-        params.append("sf_status", sfStatus); // Shopify uses wc_status field
+        params.append("sf_status", sfStatus); 
       }
       if (dateRange && dateRange.length === 2) {
         params.append("start_date", dateRange[0].format("YYYY-MM-DD"));
@@ -481,10 +481,39 @@ export default function ProcessedOrdersPage() {
     if (!ordersData?.orders) return [];
     let filtered = ordersData.orders;
     if (filters.search) {
-      const q = String(filters.search).toLowerCase();
-      filtered = filtered.filter((order) =>
-        order.orderId?.toString().toLowerCase().includes(q)
-      );
+      const q = String(filters.search).trim().toLowerCase();
+      if (q) {
+        filtered = filtered.filter((order) => {
+          const fields = [
+            order.orderId,
+            order.order_key,
+            order.customerOrderId,
+            order.amazonOrderId,
+            order.user_name,
+            order.tracking_number,
+            order.shipStation_OrderId,
+            order.status,
+            order.wc_status,
+            order.wm_status,
+            order.sf_status,
+            order.app_id,
+            order.packageCode,
+            order.packageName,
+            order.shopifyDetails?.name,
+            order.shopifyDetails?.email,
+            order.shopifyDetails?.order_number,
+            order.shopifyDetails?.order_key,
+            order.shopifyDetails?.source_name,
+            Array.isArray(order.shopifyDetails?.tags)
+              ? order.shopifyDetails.tags.join(", ")
+              : order.shopifyDetails?.tags,
+          ].filter(Boolean);
+
+          return fields.some((field) =>
+            String(field).toLowerCase().includes(q)
+          );
+        });
+      }
     }
     if (filters.dateRange && filters.dateRange.length === 2) {
       const startDate = new Date(filters.dateRange[0]);
