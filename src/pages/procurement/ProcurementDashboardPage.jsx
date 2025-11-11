@@ -273,42 +273,6 @@ export default function ProcurementDashboardPage() {
     },
   ];
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-[1480px] mx-auto">
-          <Skeleton height={32} width={300} style={{ marginBottom: 24 }} />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Card key={i} size="small">
-                <div className="flex items-center justify-between mb-4">
-                  <Skeleton height={48} width={48} circle />
-                  <Skeleton height={20} width={60} />
-                </div>
-                <Skeleton height={20} width={150} style={{ marginBottom: 8 }} />
-                <Skeleton height={32} width={100} />
-              </Card>
-            ))}
-          </div>
-          <Row gutter={16}>
-            <Col xs={24} lg={12}>
-              <Card size="small">
-                <Skeleton height={40} style={{ marginBottom: 16 }} />
-                <Skeleton height={200} />
-              </Card>
-            </Col>
-            <Col xs={24} lg={12}>
-              <Card size="small">
-                <Skeleton height={40} style={{ marginBottom: 16 }} />
-                <Skeleton height={200} />
-              </Card>
-            </Col>
-          </Row>
-        </div>
-      </div>
-    );
-  }
-
   if (error && !stats) {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
@@ -422,32 +386,66 @@ export default function ProcurementDashboardPage() {
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {statsCards.map((stat, index) => (
-            <Card
-              key={index}
-              className={`${stat.bgColor} ${stat.borderColor} border-2`}
-              size="small"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <div
-                  className={`${stat.color} p-3 rounded-lg bg-white shadow-sm`}
+          {loading && !stats
+            ? Array.from({ length: 4 }).map((_, index) => (
+                <Card
+                  key={index}
+                  className="bg-gray-50 border-gray-200 border-2"
+                  size="small"
                 >
-                  <stat.icon className="w-6 h-6" />
-                </div>
-                {getChangeIndicator(stat.changeType, stat.change)}
-              </div>
-              <h3 className="text-sm font-medium text-gray-600 mb-1">
-                {stat.title}
-              </h3>
-              <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
-              {stat.changePercentage && (
-                <p className="text-xs text-gray-500 mt-1">
-                  {stat.changePercentage > 0 ? "+" : ""}
-                  {stat.changePercentage}% from previous period
-                </p>
-              )}
-            </Card>
-          ))}
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="text-gray-400 p-3 rounded-lg bg-white shadow-sm">
+                      <FileText className="w-6 h-6" />
+                    </div>
+                    <Skeleton height={20} width={60} />
+                  </div>
+                  <h3 className="text-sm font-medium text-gray-600 mb-1">
+                    <Skeleton height={16} width={120} />
+                  </h3>
+                  <p className="text-2xl font-bold text-gray-400">
+                    <Skeleton height={32} width={100} />
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    <Skeleton height={12} width={150} />
+                  </p>
+                </Card>
+              ))
+            : statsCards.map((stat, index) => (
+                <Card
+                  key={index}
+                  className={`${stat.bgColor} ${stat.borderColor} border-2`}
+                  size="small"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div
+                      className={`${stat.color} p-3 rounded-lg bg-white shadow-sm`}
+                    >
+                      <stat.icon className="w-6 h-6" />
+                    </div>
+                    {getChangeIndicator(stat.changeType, stat.change)}
+                  </div>
+                  <h3 className="text-sm font-medium text-gray-600 mb-1">
+                    {stat.title}
+                  </h3>
+                  {loading ? (
+                    <Skeleton height={32} width={100} />
+                  ) : (
+                    <p className={`text-2xl font-bold ${stat.color}`}>
+                      {stat.value}
+                    </p>
+                  )}
+                  {loading ? (
+                    <Skeleton height={12} width={150} className="mt-1" />
+                  ) : (
+                    stat.changePercentage && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        {stat.changePercentage > 0 ? "+" : ""}
+                        {stat.changePercentage}% from previous period
+                      </p>
+                    )
+                  )}
+                </Card>
+              ))}
         </div>
 
         {/* Two Column Layout */}
@@ -470,7 +468,20 @@ export default function ProcurementDashboardPage() {
             }
             size="small"
           >
-            {stats?.recentOrders && stats.recentOrders.length > 0 ? (
+            {loading && !stats ? (
+              <div className="overflow-x-auto -mx-4 px-4">
+                <Table
+                  className="[&_.ant-table-thead>tr>th]:bg-white"
+                  columns={recentOrdersColumns}
+                  dataSource={[]}
+                  rowKey={() => Math.random()}
+                  pagination={false}
+                  size="small"
+                  scroll={{ x: "max-content" }}
+                  loading={true}
+                />
+              </div>
+            ) : stats?.recentOrders && stats.recentOrders.length > 0 ? (
               <div className="overflow-x-auto -mx-4 px-4">
                 <Table
                   className="[&_.ant-table-thead>tr>th]:bg-white"
@@ -522,8 +533,21 @@ export default function ProcurementDashboardPage() {
             }
             size="small"
           >
-            {stats?.overdueOrders?.orders &&
-            stats.overdueOrders.orders.length > 0 ? (
+            {loading && !stats ? (
+              <div className="overflow-x-auto -mx-4 px-4">
+                <Table
+                  className="[&_.ant-table-thead>tr>th]:bg-white"
+                  columns={overdueOrdersColumns}
+                  dataSource={[]}
+                  rowKey={() => Math.random()}
+                  pagination={false}
+                  size="small"
+                  scroll={{ x: "max-content" }}
+                  loading={true}
+                />
+              </div>
+            ) : stats?.overdueOrders?.orders &&
+              stats.overdueOrders.orders.length > 0 ? (
               <div className="overflow-x-auto -mx-4 px-4">
                 <Table
                   className="[&_.ant-table-thead>tr>th]:bg-white"

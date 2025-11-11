@@ -140,7 +140,7 @@ export default function OverviewTab({ purchaseOrder = {}, isLoading = false }) {
         <div className="bg-gradient-to-br from-white to-slate-50 rounded-2xl shadow-md p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-gradient-to-br from-indigo-600 to-blue-500 text-white shadow">
+              <div className="w-9 h-9 flex items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-blue-500 text-white shadow shrink-0">
                 <ShopOutlined />
               </div>
               <h3 className="text-lg font-semibold text-gray-900">
@@ -169,14 +169,19 @@ export default function OverviewTab({ purchaseOrder = {}, isLoading = false }) {
         <div className="bg-gradient-to-br from-white to-slate-50 rounded-2xl shadow-md p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-gradient-to-br from-emerald-600 to-green-500 text-white shadow">
+              <div className="w-9 h-9 flex items-center justify-center rounded-lg bg-gradient-to-br from-emerald-600 to-green-500 text-white shadow">
                 <CalendarOutlined />
               </div>
               <h3 className="text-lg font-semibold text-gray-900">
                 Dates & Timeline
               </h3>
             </div>
-            <div className="text-sm text-gray-500">{purchaseOrder?.status}</div>
+            <div className="flex items-center gap-2">
+              <StatusBadge status={purchaseOrder?.status} />
+              {additionalTags.length > 0 && (
+                <p className="flex gap-2">{additionalTags}</p>
+              )}
+            </div>
           </div>
 
           <div className="mt-2">
@@ -208,7 +213,7 @@ export default function OverviewTab({ purchaseOrder = {}, isLoading = false }) {
         <div className="bg-gradient-to-br from-white to-slate-50 rounded-2xl shadow-md p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-gradient-to-br from-yellow-600 to-orange-400 text-white shadow">
+              <div className="w-9 h-9 flex items-center justify-center rounded-lg bg-gradient-to-br from-yellow-600 to-orange-400 text-white shadow">
                 <CarOutlined />
               </div>
               <h3 className="text-lg font-semibold text-gray-900">
@@ -217,7 +222,7 @@ export default function OverviewTab({ purchaseOrder = {}, isLoading = false }) {
             </div>
             <div className="text-sm text-gray-500">{shippingMethod}</div>
           </div>
-
+          
           <div className="mt-2">
             <InfoItem
               icon={<CarOutlined />}
@@ -229,7 +234,18 @@ export default function OverviewTab({ purchaseOrder = {}, isLoading = false }) {
               label="Deliver To"
               value={
                 Array.isArray(purchaseOrder?.deliverTo)
-                  ? purchaseOrder.deliverTo.join(", ")
+                  ? purchaseOrder.deliverTo
+                      .map((item) =>
+                        typeof item === "object" && item !== null
+                          ? item.name || item.label || "-"
+                          : item
+                      )
+                      .join(", ")
+                  : typeof purchaseOrder?.deliverTo === "object" &&
+                    purchaseOrder?.deliverTo !== null
+                  ? purchaseOrder.deliverTo.name ||
+                    purchaseOrder.deliverTo.label ||
+                    "-"
                   : purchaseOrder?.deliverTo || "-"
               }
             />
@@ -247,7 +263,7 @@ export default function OverviewTab({ purchaseOrder = {}, isLoading = false }) {
         <div className="bg-gradient-to-br from-white to-slate-50 rounded-2xl shadow-md p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-gradient-to-br from-sky-600 to-indigo-500 text-white shadow">
+              <div className="w-9 h-9 flex items-center justify-center rounded-lg bg-gradient-to-br from-sky-600 to-indigo-500 text-white shadow">
                 <DollarOutlined />
               </div>
               <h3 className="text-lg font-semibold text-gray-900">
@@ -284,7 +300,7 @@ export default function OverviewTab({ purchaseOrder = {}, isLoading = false }) {
 
             <div className="border-t pt-3">
               <div className="flex justify-between items-center bg-gradient-to-r from-white/60 to-slate-50 p-3 rounded-lg">
-                <p  className="text-base font-semibold text-gray-700">
+                <p className="text-base font-semibold text-gray-700">
                   Total Amount
                 </p>
                 <p className="text-2xl font-bold text-indigo-600">
