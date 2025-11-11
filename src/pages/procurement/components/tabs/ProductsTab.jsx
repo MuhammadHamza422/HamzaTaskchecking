@@ -960,7 +960,7 @@ const ProductsTab = ({
               size="middle"
               className="w-full sm:w-auto bg-blue-500 text-white hover:bg-blue-600 border border-blue-200 rounded-lg"
             >
-              Add Kit from Order Processing
+             Add existing kits
             </Button>
           </div>
         </Card>

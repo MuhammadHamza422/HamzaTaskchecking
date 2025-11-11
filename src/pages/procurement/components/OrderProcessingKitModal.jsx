@@ -379,7 +379,7 @@ const OrderProcessingKitModal = ({ visible, onCancel, poId, onSuccess, isDraft }
       title={
         <div className="flex items-center gap-2">
           <Package size={20} className="text-blue-600" />
-          <span>Add Kit from Order Processing</span>
+          <span>Add existing kits</span>
         </div>
       }
       closeIcon={<X size={20} />}
