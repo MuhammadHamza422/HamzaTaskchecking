@@ -182,7 +182,8 @@ export default function ProcurementDashboardPage() {
       title: "Vendor Reference",
       key: "vendorReference",
       width: 150,
-      render: (_, record) => record.vendorReference?.join(", ") || "-",
+      render: (_, record) => record.vendorReference?.slice(0, 3).join(", ") + (record.vendorReference?.length > 3 ? "..." : "") || "-",
+      ellipsis: true,
     },
     {
       title: "Status",
@@ -238,7 +239,8 @@ export default function ProcurementDashboardPage() {
       title: "Vendor Reference",
       key: "vendorReference",
       width: 150,
-      render: (_, record) => record.vendorReference?.join(", ") || "-",
+      ellipsis: true,
+      render: (_, record) => record.vendorReference?.slice(0, 3).join(", ") + (record.vendorReference?.length > 3 ? "..." : "") || "-",
     },
     {
       title: "Deadline",
