@@ -300,6 +300,31 @@ export const applyKitToProducts = async (poId, applyData) => {
   return data;
 };
 
+// ==================== Order Processing Kits ====================
+
+/**
+ * Get all order processing kits
+ * @returns {Promise} List of all order processing kits
+ */
+export const getOrderProcessingKits = async () => {
+  const { data } = await apiClient.get("/api/v1/kit/all");
+  return data;
+};
+
+/**
+ * Add order processing kit to purchase order
+ * @param {string} poId - Purchase Order ID
+ * @param {Object} kitData - Kit data { orderProcessingKitId, kitQuantity, kitUnitPrice, kitTaxes?, kitProducts?[] }
+ * @returns {Promise} Success response with added kit details
+ */
+export const addOrderProcessingKitToPO = async (poId, kitData) => {
+  const { data } = await apiClient.post(
+    `/api/v1/procurement/orders/${poId}/add-order-processing-kit`,
+    kitData
+  );
+  return data;
+};
+
 // ==================== Boxes ====================
 
 /**

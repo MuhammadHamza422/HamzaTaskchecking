@@ -16,32 +16,15 @@ const ReceiptLineItemsTable = ({
 }) => {
   const formatCurrencyFn = formatCurrencyProp || formatCurrency;
 
-  // Debug logging
-  // React.useEffect(() => {
-  //   console.log("=== ReceiptLineItemsTable Debug ===");
-  //   console.log("allLineItems:", allLineItems);
-  //   console.log("allLineItems type:", typeof allLineItems);
-  //   console.log("allLineItems isArray:", Array.isArray(allLineItems));
-  //   console.log("allLineItems length:", allLineItems?.length);
-  //   console.log("boxesSummary:", boxesSummary);
-  //   console.log("boxesSummary.boxes:", boxesSummary?.boxes);
-  //   console.log("looseLineItems:", looseLineItems);
-  //   console.log("looseLineItems length:", looseLineItems?.length);
-  //   console.log("lineItems:", lineItems);
-  //   console.log("lineItems length:", lineItems?.length);
-  //   console.log("================================");
-  // }, [allLineItems, boxesSummary, looseLineItems, lineItems]);
-
   // Group items by box for rendering
   const groupedItems = useMemo(() => {
-    // console.log("groupedItems useMemo - allLineItems:", allLineItems);
-    
-    if (!allLineItems || !Array.isArray(allLineItems) || allLineItems.length === 0) {
-      // console.log("groupedItems useMemo - returning null (no allLineItems)");
+    if (
+      !allLineItems ||
+      !Array.isArray(allLineItems) ||
+      allLineItems.length === 0
+    ) {
       return null;
     }
-
-    // console.log("groupedItems useMemo - processing", allLineItems.length, "items");
 
     // First, separate loose items and box items
     const looseItems = [];
@@ -52,16 +35,8 @@ const ReceiptLineItemsTable = ({
       const itemBoxName = item.boxName || null;
       const isLoose = item.source === "loose" || !itemBoxId;
 
-        // console.log(`Processing item ${index}:`, {
-        //   name: item.name,
-        //   source: item.source,
-        //   boxId: itemBoxId,
-        //   isLoose
-        // });
-
       if (isLoose) {
         looseItems.push(item);
-        // console.log(`Added to looseItems. Total loose items: ${looseItems.length}`);
       } else {
         // Group by boxId
         if (!boxItemsMap.has(itemBoxId)) {
@@ -70,15 +45,11 @@ const ReceiptLineItemsTable = ({
             boxName: itemBoxName,
             items: [],
           });
-          // console.log(`Created new box group for boxId: ${itemBoxId}`);
         }
         boxItemsMap.get(itemBoxId).items.push(item);
-        // console.log(`Added to box ${itemBoxId}. Items in box: ${boxItemsMap.get(itemBoxId).items.length}`);
       }
     });
 
-    // console.log("After processing - looseItems count:", looseItems.length);
-    // console.log("After processing - boxItemsMap size:", boxItemsMap.size);
     boxItemsMap.forEach((value, key) => {
       console.log(`Box ${key} has ${value.items.length} items`);
     });
@@ -132,10 +103,12 @@ const ReceiptLineItemsTable = ({
 
   // Use new structure if available
   if (groupedItems && groupedItems.length > 0) {
-    const hasAnyItems = groupedItems.some(group => group.items && group.items.length > 0);
-    
+    const hasAnyItems = groupedItems.some(
+      (group) => group.items && group.items.length > 0
+    );
+
     return (
-      <div 
+      <div
         className="mb-10"
         style={{
           display: "block",
@@ -146,7 +119,7 @@ const ReceiptLineItemsTable = ({
           zIndex: 1,
         }}
       >
-        <table 
+        <table
           className="w-full border-collapse text-sm"
           style={{
             display: "table",
@@ -184,12 +157,18 @@ const ReceiptLineItemsTable = ({
           <tbody style={{ display: "table-row-group" }}>
             {hasAnyItems ? (
               groupedItems
-                .filter(group => group.items && group.items.length > 0)
+                .filter((group) => group.items && group.items.length > 0)
                 .map((group, groupIndex) => {
                   return (
-                    <React.Fragment key={group.type === "box" ? group.boxId : `loose-${groupIndex}`}>
+                    <React.Fragment
+                      key={
+                        group.type === "box"
+                          ? group.boxId
+                          : `loose-${groupIndex}`
+                      }
+                    >
                       {/* Group Header Row */}
-                      <tr 
+                      <tr
                         className="bg-gray-100 border-b border-gray-300"
                         style={{
                           display: "table-row",
@@ -206,11 +185,21 @@ const ReceiptLineItemsTable = ({
                             padding: "8px 16px",
                           }}
                         >
-                          {group.type === "box"
-                            ? group.boxName
-                              ? `Box # ${group.boxIndex}: ${group.boxName}`
-                              : `Box # ${group.boxIndex}`
-                            : "Loose Items"}
+                          {group.type === "box" ? (
+                            <span>
+                              <span className="font-bold">{group.boxId}</span>
+                              {group.boxName && (
+                                <>
+                                  :{" "}
+                                  <span className="font-normal">
+                                    {group.boxName}
+                                  </span>
+                                </>
+                              )}
+                            </span>
+                          ) : (
+                            "Loose Items"
+                          )}
                         </td>
                       </tr>
 
@@ -218,7 +207,9 @@ const ReceiptLineItemsTable = ({
                       {group.items.map((item, itemIndex) => {
                         return (
                           <ReceiptLineItemRow
-                            key={`${group.type === "box" ? group.boxId : "loose"}-${itemIndex}-${item.productId || itemIndex}`}
+                            key={`${
+                              group.type === "box" ? group.boxId : "loose"
+                            }-${itemIndex}-${item.productId || itemIndex}`}
                             item={item}
                             currency={currency}
                             formatCurrency={formatCurrencyFn}
@@ -230,10 +221,7 @@ const ReceiptLineItemsTable = ({
                 })
             ) : (
               <tr>
-                <td
-                  colSpan={6}
-                  className="py-8 text-center text-gray-500"
-                >
+                <td colSpan={6} className="py-8 text-center text-gray-500">
                   No items found
                 </td>
               </tr>
@@ -276,10 +264,7 @@ const ReceiptLineItemsTable = ({
               <React.Fragment key={box.boxId || boxIndex}>
                 {/* Box Header Row */}
                 <tr className="bg-gray-100 border-b-2 border-gray-300">
-                  <td
-                    colSpan={6}
-                    className="py-2 px-4 font-bold text-gray-900"
-                  >
+                  <td colSpan={6} className="py-2 px-4 font-bold text-gray-900">
                     {box.name
                       ? `Box # ${boxIndex + 1}: ${box.name}`
                       : `Box # ${boxIndex + 1}`}
@@ -307,10 +292,7 @@ const ReceiptLineItemsTable = ({
             <>
               {/* Loose Items Header Row */}
               <tr className="bg-gray-100 border-b-2 border-gray-300">
-                <td
-                  colSpan={6}
-                  className="py-2 px-4 font-bold text-gray-900"
-                >
+                <td colSpan={6} className="py-2 px-4 font-bold text-gray-900">
                   Loose Items
                 </td>
               </tr>
@@ -340,10 +322,7 @@ const ReceiptLineItemsTable = ({
                 ))
               ) : (
                 <tr>
-                  <td
-                    colSpan={6}
-                    className="py-8 text-center text-gray-500"
-                  >
+                  <td colSpan={6} className="py-8 text-center text-gray-500">
                     No items found
                   </td>
                 </tr>
@@ -354,10 +333,7 @@ const ReceiptLineItemsTable = ({
           {/* Show empty state if nothing was rendered */}
           {!hasBoxes && !hasLooseItems && !hasLineItems && (
             <tr>
-              <td
-                colSpan={6}
-                className="py-8 text-center text-gray-500"
-              >
+              <td colSpan={6} className="py-8 text-center text-gray-500">
                 No items found
               </td>
             </tr>
@@ -369,4 +345,3 @@ const ReceiptLineItemsTable = ({
 };
 
 export default ReceiptLineItemsTable;
-
