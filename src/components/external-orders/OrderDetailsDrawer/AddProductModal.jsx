@@ -52,8 +52,13 @@ export default function AddProductModal({
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [createForm] = Form.useForm();
+  const [kitSearch, setKitSearch] = useState("");
+  const [kitResults, setKitResults] = useState([]);
+  const [kitLoading, setKitLoading] = useState(false);
+  const [selectedKitTitle, setSelectedKitTitle] = useState("");
 
   const debouncedSearchTerm = useDebounce(searchQuery, 500);
+  const debouncedKitSearch = useDebounce(kitSearch, 500);
   const queryClient = useQueryClient();
 
   const productTypes = [
@@ -198,6 +203,45 @@ export default function AddProductModal({
         !!productType),
   });
 
+  useEffect(() => {
+    if (!visible) return;
+    if (!debouncedKitSearch) {
+      setKitResults([]);
+      setKitLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const fetchKits = async () => {
+      try {
+        setKitLoading(true);
+        const response = await apiClient.get("/api/v1/kit/search", {
+          params: { title: debouncedKitSearch },
+        });
+        if (!cancelled) {
+          const kits = Array.isArray(response.data?.kits)
+            ? response.data.kits
+            : [];
+          setKitResults(kits);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Error searching kits:", error);
+          setKitResults([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setKitLoading(false);
+        }
+      }
+    };
+
+    fetchKits();
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedKitSearch, visible]);
+
   const openCreateModal = () => {
     createForm.resetFields();
     createForm.setFieldsValue({
@@ -282,6 +326,45 @@ export default function AddProductModal({
     setSelectedProducts((prev) =>
       prev.filter((product) => product._id !== productId)
     );
+  };
+
+  const handleKitSelect = (kit) => {
+    if (!kit) return;
+    setSelectedKitTitle(kit.product_title || "");
+    const platformId =
+      kit?.plateform_id?._id || kit?.plateform_id || selectedPlatformId;
+    if (platformId) {
+      setSelectedPlatformId(platformId);
+    }
+
+    const formattedProducts = (kit?.skus || [])
+      .map((sku) => {
+        const product = sku?.pId || {};
+        const priceFromSku = Number.parseFloat(sku?.price);
+        return {
+          _id: product?._id || sku?.pId,
+          pro_title: product?.pro_title || kit.product_title,
+          quantity: Number(sku?.quantity) || 1,
+          sale_price:
+            Number(product?.sale_price) ||
+            (Number.isFinite(priceFromSku) ? priceFromSku : 0),
+        };
+      })
+      .filter((item) => item?._id);
+
+    if (formattedProducts.length > 0) {
+      setSelectedProducts(formattedProducts);
+    } else {
+      setSelectedProducts([]);
+    }
+    setSearchQuery("");
+    setKitSearch("");
+  };
+
+  const clearKitSelection = () => {
+    setSelectedKitTitle("");
+    setKitSearch("");
+    setKitResults([]);
   };
 
   // Handle platform change
@@ -735,6 +818,9 @@ export default function AddProductModal({
     setSelectedProducts([]);
     setSearchQuery("");
     setSelectedPlatformId("");
+    setKitSearch("");
+    setKitResults([]);
+    setSelectedKitTitle("");
     onCancel();
   };
 
@@ -815,6 +901,89 @@ export default function AddProductModal({
                 </Option>
               ))}
             </Select>
+          </div>
+
+          {/* Existing Kit Selection */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              Use Existing Kit
+            </label>
+            <Search
+              placeholder="Search kits by title..."
+              value={kitSearch}
+              onChange={(e) => setKitSearch(e.target.value)}
+              allowClear
+              size="large"
+            />
+            {selectedKitTitle && (
+              <div className="flex items-center justify-between rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                <span>Using kit: {selectedKitTitle}</span>
+                <Button size="small" onClick={clearKitSelection}>
+                  Clear
+                </Button>
+              </div>
+            )}
+            {kitSearch.length > 0 && (
+              <div className="border border-gray-200 rounded-lg max-h-56 overflow-y-auto">
+                {kitLoading ? (
+                  <div className="p-4 text-center">
+                    <Spin size="small" />
+                  </div>
+                ) : kitResults.length > 0 ? (
+                  kitResults.map((kit) => (
+                    <div
+                      key={kit?._id || kit?.productId}
+                      className="p-3 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="font-medium text-gray-900">
+                            {kit?.product_title}
+                          </div>
+                          {kit?.kit_id && (
+                            <div className="text-xs text-gray-500">
+                              Kit ID: {kit.kit_id}
+                            </div>
+                          )}
+                          <div className="text-xs text-gray-500">
+                            Products: {(kit?.skus || []).length}
+                          </div>
+                        </div>
+                        <Button
+                          size="small"
+                          type="primary"
+                          onClick={() => handleKitSelect(kit)}
+                        >
+                          Use Kit
+                        </Button>
+                      </div>
+                      {Array.isArray(kit?.skus) && kit.skus.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          {kit.skus.slice(0, 3).map((sku) => (
+                            <div
+                              key={sku?._id || sku?.pId?._id}
+                              className="text-xs text-gray-600"
+                            >
+                              • {sku?.pId?.pro_title || "Product"} (Qty:{" "}
+                              {sku?.quantity || 1})
+                            </div>
+                          ))}
+                          {kit.skus.length > 3 && (
+                            <div className="text-xs text-gray-400">
+                              +{kit.skus.length - 3} more
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-4 text-center text-gray-500">
+                    No kits found
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Categories */}

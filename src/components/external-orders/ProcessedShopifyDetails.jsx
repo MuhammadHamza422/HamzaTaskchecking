@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Card, Row, Col, Tag } from "antd";
+import { Card, Row, Col, Tag, Button } from "antd";
 import apiClient from "../../api/client";
 
 export default function ProcessedShopifyDetails({
@@ -40,14 +40,6 @@ export default function ProcessedShopifyDetails({
     }
     return set;
   }, [mergedProducts]);
-
-  // Helper function to format date
-  const formatDate = (dateString) => {
-    if (!dateString) return "—";
-    return (
-      dateString.split("T")[0] + ", " + dateString.split("T")[1].split(".")[0]
-    );
-  };
 
   // Helper function to format currency
   const formatCurrency = (amount, currencyCode = "USD") => {
@@ -105,6 +97,17 @@ export default function ProcessedShopifyDetails({
   };
 
   const lineItems = (order?.lineItems?.edges || []).map((e) => e.node);
+
+  const resolveProductUrl = (node) => {
+    if (!node) return null;
+    const directUrl = node?.product?.onlineStoreUrl || node?.onlineStoreUrl;
+    if (directUrl) return directUrl;
+    const handle = node?.product?.handle || node?.handle;
+    if (handle) {
+      return `https://retrofam.com/products/${handle}`;
+    }
+    return null;
+  };
 
   const statusMessage = getOrderStatusMessage(selectedOrder);
 
@@ -310,6 +313,17 @@ export default function ProcessedShopifyDetails({
                         <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
                           Mapped
                         </span>
+                        {resolveProductUrl(firstNode) && (
+                          <Button
+                            size="small"
+                            type="link"
+                            href={resolveProductUrl(firstNode)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            View Listing
+                          </Button>
+                        )}
                         {actionId && (
                           <button
                             type="button"
@@ -364,6 +378,17 @@ export default function ProcessedShopifyDetails({
                         <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
                           Mapped
                         </span>
+                        {resolveProductUrl(node) && (
+                          <Button
+                            size="small"
+                            type="link"
+                            href={resolveProductUrl(node)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            View Listing
+                          </Button>
+                        )}
                         <button
                           type="button"
                           className="text-sm text-blue-600 p-1.5 rounded-md bg-blue-100 hover:bg-blue-200 transition-colors"
@@ -380,6 +405,17 @@ export default function ProcessedShopifyDetails({
                         <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs font-medium">
                           Not Mapped
                         </span>
+                        {resolveProductUrl(node) && (
+                          <Button
+                            size="small"
+                            type="link"
+                            href={resolveProductUrl(node)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            View Listing
+                          </Button>
+                        )}
                         <button
                           type="button"
                           className="text-sm text-gray-600 p-1.5 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
