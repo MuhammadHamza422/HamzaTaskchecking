@@ -100,12 +100,19 @@ export default function ProcessedShopifyDetails({
 
   const resolveProductUrl = (node) => {
     if (!node) return null;
-    const directUrl = node?.product?.onlineStoreUrl || node?.onlineStoreUrl;
-    if (directUrl) return directUrl;
-    const handle = node?.product?.handle || node?.handle;
+    
+    // Try to get onlineStoreUrl from product
+    if (node?.product?.onlineStoreUrl) {
+      return node.product.onlineStoreUrl;
+    }
+    
+    // Fallback: construct URL from handle
+    const handle = node?.product?.handle;
     if (handle) {
       return `https://retrofam.com/products/${handle}`;
     }
+    
+    // If product is null or doesn't have handle, return null
     return null;
   };
 

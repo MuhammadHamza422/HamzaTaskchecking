@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo } from "react";
 import {
   Table,
   Tag,
@@ -15,7 +15,7 @@ import { CloseCircleOutlined } from "@ant-design/icons";
 import { FaCheckCircle } from "react-icons/fa";
 import AddLabelModal from "./AddLabel";
 
-export default function OrderTable({
+function OrderTable({
   orders,
   loading,
   currentPage,
@@ -859,3 +859,16 @@ export default function OrderTable({
     </div>
   );
 }
+
+export default memo(OrderTable, (prevProps, nextProps) => {
+  // Custom comparison function for memo
+  return (
+    prevProps.orders === nextProps.orders &&
+    prevProps.loading === nextProps.loading &&
+    prevProps.currentPage === nextProps.currentPage &&
+    prevProps.pageSize === nextProps.pageSize &&
+    prevProps.totalOrders === nextProps.totalOrders &&
+    prevProps.selectedOrders?.length === nextProps.selectedOrders?.length &&
+    prevProps.selectAll === nextProps.selectAll
+  );
+});

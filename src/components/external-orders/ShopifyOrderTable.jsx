@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo } from "react";
 import {
   Table,
   Tag,
@@ -19,7 +19,7 @@ import {
 import { FaCheckCircle } from "react-icons/fa";
 import AddLabelModal from "./AddLabel";
 
-export default function ShopifyOrderTable({
+function ShopifyOrderTable({
   orders,
   loading,
   currentPage,
@@ -805,3 +805,16 @@ export default function ShopifyOrderTable({
     </div>
   );
 }
+
+export default memo(ShopifyOrderTable, (prevProps, nextProps) => {
+  // Custom comparison function for memo
+  return (
+    prevProps.orders === nextProps.orders &&
+    prevProps.loading === nextProps.loading &&
+    prevProps.currentPage === nextProps.currentPage &&
+    prevProps.pageSize === nextProps.pageSize &&
+    prevProps.totalOrders === nextProps.totalOrders &&
+    prevProps.selectedOrders?.length === nextProps.selectedOrders?.length &&
+    prevProps.selectAll === nextProps.selectAll
+  );
+});
