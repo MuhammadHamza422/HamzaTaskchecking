@@ -10,6 +10,7 @@ import {
   UserCheck,
   FileText,
   QrCode,
+  PackageCheck,
 } from "lucide-react";
 import { LuWarehouse } from "react-icons/lu";
 
@@ -139,6 +140,16 @@ export default function DashboardCards() {
       link: "/scan",
       bgColor: "bg-blue-50",
       border: "border-blue-500",
+    },
+    {
+      title: "Order Fulfillment",
+      icon: PackageCheck,
+      color: "text-teal-500",
+      accessKey: "fulfillment",
+      hoverColor: "group-hover:text-teal-600",
+      link: "/fulfillment",
+      bgColor: "bg-teal-50",
+      border: "border-teal-500",
     },
     // {
     //   title: "Products",

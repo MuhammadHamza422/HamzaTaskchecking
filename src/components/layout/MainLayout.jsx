@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import Swal from "sweetalert2";
 import useFullscreen from "../useFullscreen";
 import { MdAdd, MdFullscreen, MdFullscreenExit } from "react-icons/md";
+import FulfillmentTabs from "../../pages/order-fulfillment/components/common/FulfillmentTabs";
 
 const navLinks = [
   {
@@ -646,6 +647,9 @@ const MainLayout = () => {
           </motion.header>
         </>
       )}
+
+      {/* Order Fulfillment Tabs */}
+      {pathName.startsWith("/fulfillment") && <FulfillmentTabs />}
 
       {/* Main Content */}
       <main
