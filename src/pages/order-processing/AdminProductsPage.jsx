@@ -20,7 +20,9 @@ import {
   InputNumber,
   Switch,
   Space,
+  Tooltip,
 } from "antd";
+import { AlertTriangle } from "lucide-react";
 import { debounce } from "lodash";
 import { motion as Motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
@@ -308,12 +310,128 @@ const AdminProductsPage = () => {
     keepPreviousData: true,
   });
 
+  // Check if product has missing fields
+  const checkMissingFields = (product) => {
+    const missingFields = [];
+    
+    // Check required/important fields
+    if (!product?.pro_title || product.pro_title.trim() === "") {
+      missingFields.push("Product Title");
+    }
+    if (!product?.sku || product.sku.trim() === "") {
+      missingFields.push("SKU");
+    }
+    if (!product?.type_code || product.type_code.trim() === "") {
+      missingFields.push("Type Code");
+    }
+    if (!product?.brnd_code || product.brnd_code.trim() === "") {
+      missingFields.push("Brand Code");
+    }
+    if (!product?.model_code || product.model_code.trim() === "") {
+      missingFields.push("Model Code");
+    }
+    if (!product?.sale_price || product.sale_price === 0) {
+      missingFields.push("Sale Price");
+    }
+    if (!product?.cnd_code || product.cnd_code.trim() === "") {
+      missingFields.push("Condition Code");
+    }
+    
+    return missingFields;
+  };
+
+  // Check if SKU ends with XXXXX
+  const hasIncompleteSKU = (sku) => {
+    if (!sku) return false;
+    const skuStr = String(sku).toUpperCase();
+    return skuStr.endsWith("XXXXX") || skuStr.endsWith("XXXX");
+  };
+
+  // Validate SKU format: TYPE-BRAND-MODEL-STORAGE-COLOR-CONDITION-UID
+  // Example: GAM-NIN-DS-INK-STD-U-410378
+  // Format should be: TYPE-BRAND-MODEL-STORAGE-COLOR-CONDITION-UID (7 parts)
+  // Minimum acceptable: TYPE-BRAND-UID (3 parts)
+  const validateSKUFormat = (product) => {
+    if (!product?.sku || product.sku.trim() === "") {
+      return { isValid: false, reason: "SKU is missing" };
+    }
+
+    const sku = String(product.sku).trim();
+    const parts = sku.split("-");
+
+    // Check for empty parts (double hyphens or leading/trailing hyphens)
+    if (parts.some((part) => part.trim() === "")) {
+      return {
+        isValid: false,
+        reason: "SKU contains empty parts (double hyphens or leading/trailing hyphens)",
+      };
+    }
+
+    // SKU should have at least 3 parts (minimum: TYPE-BRAND-UID)
+    // Ideal format has 7 parts: TYPE-BRAND-MODEL-STORAGE-COLOR-CONDITION-UID
+    if (parts.length < 3) {
+      return {
+        isValid: false,
+        reason: `SKU has too few parts: Expected format TYPE-BRAND-MODEL-STORAGE-COLOR-CONDITION-UID (got ${parts.length} parts, minimum 3 required)`,
+      };
+    }
+
+    // Warn if SKU has more than 7 parts (might be incorrect)
+    if (parts.length > 7) {
+      return {
+        isValid: false,
+        reason: `SKU has too many parts: Expected 7 parts (TYPE-BRAND-MODEL-STORAGE-COLOR-CONDITION-UID), got ${parts.length}`,
+      };
+    }
+
+    // Validate structure: Check if first part matches type_code (if available)
+    if (product.type_code && parts[0] !== product.type_code) {
+      return {
+        isValid: false,
+        reason: `First part (${parts[0]}) should match Type Code (${product.type_code})`,
+      };
+    }
+
+    // Validate structure: Check if second part matches brand_code (if available)
+    if (product.brnd_code && parts.length > 1 && parts[1] !== product.brnd_code) {
+      return {
+        isValid: false,
+        reason: `Second part (${parts[1]}) should match Brand Code (${product.brnd_code})`,
+      };
+    }
+
+    // Validate structure: Last part should be UID (if available)
+    if (product.uid && parts.length > 0) {
+      const lastPart = parts[parts.length - 1];
+      if (lastPart !== product.uid) {
+        return {
+          isValid: false,
+          reason: `Last part (${lastPart}) should match UID (${product.uid})`,
+        };
+      }
+    }
+
+    // If SKU has 4-6 parts, it's incomplete but might be acceptable
+    // Only flag as invalid if it's clearly wrong (wrong first/last parts)
+    if (parts.length >= 3 && parts.length < 7) {
+      // This is a warning, not an error - partial SKU is acceptable
+      return { isValid: true, reason: null };
+    }
+
+    return { isValid: true, reason: null };
+  };
+
   const products = useMemo(() => {
     if (!data) return [];
     const list = Array.isArray(data?.products) ? data.products : [];
 
     return list.map((p) => {
       const rawType = String(p?.type_code || "").toUpperCase();
+      const missingFields = checkMissingFields(p);
+      const incompleteSKU = hasIncompleteSKU(p?.sku);
+      const skuValidation = validateSKUFormat(p);
+      const invalidSKUFormat = !skuValidation.isValid;
+      
       return {
         id: p._id || p?.id,
         _id: p._id || p?.id, // Ensure _id is available for rowKey
@@ -333,6 +451,11 @@ const AdminProductsPage = () => {
         cnd_code: p?.cnd_code,
         is_storable: p?.is_storable,
         seller_ids: p?.seller_ids,
+        missingFields,
+        incompleteSKU,
+        invalidSKUFormat,
+        skuValidationReason: skuValidation.reason,
+        hasWarnings: missingFields.length > 0 || incompleteSKU || invalidSKUFormat,
       };
     });
   }, [data]);
@@ -710,6 +833,69 @@ const AdminProductsPage = () => {
 
   const columns = [
     {
+      title: "Status",
+      key: "status",
+      width: 100,
+      render: (_, record) => {
+        const warningCount =
+          record.missingFields.length +
+          (record.incompleteSKU ? 1 : 0) +
+          (record.invalidSKUFormat ? 1 : 0);
+
+        return (
+          <div className="flex items-center justify-center">
+            {record?.hasWarnings ? (
+              <Tooltip
+                title={
+                  <div className="text-xs">
+                    {record.missingFields.length > 0 && (
+                      <div className="mb-1">
+                        <strong>Missing Fields:</strong>
+                        <ul className="list-disc list-inside mt-1">
+                          {record.missingFields.map((field, idx) => (
+                            <li key={idx}>{field}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {record.incompleteSKU && (
+                      <div className="mb-1">
+                        <strong>⚠️ Incomplete SKU</strong>
+                        <p className="text-gray-300 mt-0.5">
+                          SKU ends with XXXXX or XXXX
+                        </p>
+                      </div>
+                    )}
+                    {record.invalidSKUFormat && (
+                      <div className="mb-1">
+                        <strong>❌ Invalid SKU Format</strong>
+                        <p className="text-gray-300 mt-0.5 text-[10px]">
+                          {record.skuValidationReason || "SKU format is incorrect"}
+                        </p>
+                        <p className="text-gray-400 mt-1 text-[10px]">
+                          Expected: TYPE-BRAND-MODEL-STORAGE-COLOR-CONDITION-UID
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                }
+                placement="top"
+              >
+                <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-yellow-100 border border-yellow-300 cursor-pointer">
+                  <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                  <span className="text-xs font-medium text-yellow-700">
+                    {warningCount}
+                  </span>
+                </div>
+              </Tooltip>
+            ) : (
+              <div className="w-2 h-2 rounded-full bg-green-500"></div>
+            )}
+          </div>
+        );
+      },
+    },
+    {
       title: "Product Title",
       dataIndex: "pro_title",
       key: "pro_title",
@@ -717,9 +903,13 @@ const AdminProductsPage = () => {
       render: (text) => (
         <p
           title={text}
-          className="text-base w-[300px] font-semibold text-gray-900"
+          className={`text-base w-[300px] font-semibold ${
+            !text || text.trim() === ""
+              ? "text-red-600"
+              : "text-gray-900"
+          }`}
         >
-          {text || "N/A"}
+          {text || <span className="italic text-red-500">Missing Title</span>}
         </p>
       ),
       width: 400,
@@ -729,19 +919,58 @@ const AdminProductsPage = () => {
       dataIndex: "sku",
       key: "sku",
       sorter: (a, b) => (a?.sku || "").localeCompare(b?.sku || ""),
-      render: (text) => (
-        <span title={text} className="text-gray-600 text-sm whitespace-nowrap">
-          {text || "N/A"}
-        </span>
-      ),
+      render: (text, record) => {
+        const hasSKUIssue =
+          record.incompleteSKU ||
+          record.invalidSKUFormat ||
+          !text ||
+          text.trim() === "";
+
+        return (
+          <Tooltip
+            title={
+              record.invalidSKUFormat
+                ? `Invalid Format: ${record.skuValidationReason || "SKU format is incorrect"}`
+                : record.incompleteSKU
+                ? "SKU ends with XXXXX or XXXX"
+                : !text || text.trim() === ""
+                ? "SKU is missing"
+                : null
+            }
+            placement="top"
+          >
+            <span
+              title={text}
+              className={`text-sm whitespace-nowrap inline-flex items-center gap-1 px-2 py-1 rounded-full ${
+                hasSKUIssue
+                  ? "bg-red-100 text-red-700 border border-red-300"
+                  : "text-gray-600"
+              }`}
+            >
+              {text || <span className="italic text-red-500">Missing SKU</span>}
+              {hasSKUIssue && (
+                <AlertTriangle className="h-3 w-3 text-red-600" />
+              )}
+            </span>
+          </Tooltip>
+        );
+      },
     },
     {
       title: "Type",
       dataIndex: "type_code",
       key: "type_code",
       render: (text) => (
-        <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
-          {TYPE_CODE_LABELS[text] || text || "N/A"}
+        <span
+          className={`px-2 py-1 rounded text-xs font-medium ${
+            !text || text.trim() === ""
+              ? "bg-red-100 text-red-700 border border-red-300"
+              : "bg-blue-100 text-blue-800"
+          }`}
+        >
+          {TYPE_CODE_LABELS[text] || text || (
+            <span className="italic text-red-500 inline-flex">Missing Type</span>
+          )}
         </span>
       ),
     },
@@ -968,6 +1197,9 @@ const AdminProductsPage = () => {
             rowKey="_id"
             loading={isLoading}
             pagination={false}
+            rowClassName={(record) =>
+              record?.hasWarnings ? "bg-yellow-50/30" : ""
+            }
             locale={{
               emptyText: (
                 <div className="py-12 text-center space-y-4">

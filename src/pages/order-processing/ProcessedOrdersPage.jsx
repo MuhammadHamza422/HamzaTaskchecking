@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Typography, notification, Button, message } from "antd";
 import { motion } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -15,6 +15,7 @@ import OrderEditModal from "../../components/external-orders/OrderEditModal";
 import PlatformTabs, {
   PLATFORM_CONFIG,
 } from "../../components/external-orders/PlatformTabs";
+import OrderStepper from "../../components/external-orders/OrderStepper";
 
 const showRefreshSuccessToast = () => {
   Swal.fire({
@@ -90,35 +91,6 @@ export default function ProcessedOrdersPage() {
   useEffect(() => {
     localStorage.setItem("processedOrdersActiveTab", activeTab);
   }, [activeTab]);
-
-  // Auto-refetch processed orders when page becomes visible
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        // Page became visible, refetch processed orders
-        refetch();
-      }
-    };
-
-    const handleFocus = () => {
-      // Window gained focus, refetch processed orders
-      refetch();
-    };
-
-    // Listen for visibility change
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    // Listen for window focus
-    window.addEventListener("focus", handleFocus);
-
-    // Also refetch when component mounts
-    refetch();
-
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("focus", handleFocus);
-    };
-  }, [activeTab]); // Re-run when activeTab changes
 
   //  also want to add shopify orders
   const fetchProcessedOrders = async ({ queryKey }) => {
@@ -355,12 +327,35 @@ export default function ProcessedOrdersPage() {
     ],
     queryFn: fetchProcessedOrders,
     keepPreviousData: true,
-    refetchInterval: 30 * 1000, // Refetch every 30 seconds
-    refetchIntervalInBackground: true,
-    staleTime: 10 * 1000, // Consider data stale after 10 seconds
-    refetchOnWindowFocus: true, // Refetch when window gains focus
+    refetchInterval: 60 * 1000, // Refetch every 60 seconds (reduced from 30)
+    refetchIntervalInBackground: false, // Don't refetch in background to save resources
+    staleTime: 30 * 1000, // Consider data stale after 30 seconds (increased from 10)
+    refetchOnWindowFocus: false, // Disabled to prevent excessive refetches (we have visibility change handler)
     refetchOnMount: true, // Always refetch when component mounts
   });
+
+  // Auto-refetch processed orders when page becomes visible (debounced)
+  useEffect(() => {
+    let refetchTimeout;
+    
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        // Debounce refetch to avoid multiple rapid calls
+        clearTimeout(refetchTimeout);
+        refetchTimeout = setTimeout(() => {
+          refetch();
+        }, 1000); // Wait 1 second after visibility change
+      }
+    };
+
+    // Listen for visibility change
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearTimeout(refetchTimeout);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [activeTab, refetch]); // Re-run when activeTab changes
 
   // Load platforms to pull ShipStation tagIds per platform
   const { data: platformsData } = useQuery({
@@ -429,8 +424,18 @@ export default function ProcessedOrdersPage() {
     refetch();
   };
 
-  // Handle bulk selection
-  const handleSelectAll = (checked) => {
+  // Use orders directly from API (backend already handles filtering)
+  // Only do minimal client-side filtering if needed for UI-specific logic
+  const filteredOrders = useMemo(() => {
+    if (!ordersData?.orders) return [];
+    // Backend already handles search and date filtering, so just return orders
+    // Only apply additional client-side filtering if absolutely necessary
+    return ordersData.orders;
+  }, [ordersData?.orders]);
+  const totalFilteredOrders = ordersData?.totalOrders || filteredOrders.length;
+
+  // Handle bulk selection - memoized with useCallback
+  const handleSelectAll = useCallback((checked) => {
     setSelectAll(checked);
     if (checked) {
       const allOrderIds = filteredOrders
@@ -440,29 +445,29 @@ export default function ProcessedOrdersPage() {
     } else {
       setSelectedOrders([]);
     }
-  };
+  }, [filteredOrders]);
 
-  // Handle individual order selection
-  const handleOrderSelect = (orderId, checked) => {
+  // Handle individual order selection - memoized with useCallback
+  const handleOrderSelect = useCallback((orderId, checked) => {
     if (checked) {
       setSelectedOrders((prev) => [...prev, orderId]);
     } else {
       setSelectedOrders((prev) => prev.filter((id) => id !== orderId));
     }
-  };
+  }, []);
 
-  // Handle filters change
-  const handleFiltersChange = (newFilters, resetPagination = false) => {
+  // Handle filters change - memoized with useCallback
+  const handleFiltersChange = useCallback((newFilters, resetPagination = false) => {
     setFilters(newFilters);
     if (resetPagination) {
       setCurrentPage(1);
     }
     setSelectedOrders([]);
     setSelectAll(false);
-  };
+  }, []);
 
-  // Handle filters reset
-  const handleFiltersReset = () => {
+  // Handle filters reset - memoized with useCallback
+  const handleFiltersReset = useCallback(() => {
     setFilters({
       search: "",
       dateRange: null,
@@ -474,95 +479,57 @@ export default function ProcessedOrdersPage() {
     setCurrentPage(1);
     setSelectedOrders([]);
     setSelectAll(false);
-  };
+  }, []);
 
-  // Compute filtered orders with stable identity
-  const filteredOrders = useMemo(() => {
-    if (!ordersData?.orders) return [];
-    let filtered = ordersData.orders;
-    if (filters.search) {
-      const q = String(filters.search).trim().toLowerCase();
-      if (q) {
-        filtered = filtered.filter((order) => {
-          const fields = [
-            order.orderId,
-            order.order_key,
-            order.customerOrderId,
-            order.amazonOrderId,
-            order.user_name,
-            order.tracking_number,
-            order.shipStation_OrderId,
-            order.status,
-            order.wc_status,
-            order.wm_status,
-            order.sf_status,
-            order.app_id,
-            order.packageCode,
-            order.packageName,
-            order.shopifyDetails?.name,
-            order.shopifyDetails?.email,
-            order.shopifyDetails?.order_number,
-            order.shopifyDetails?.order_key,
-            order.shopifyDetails?.source_name,
-            Array.isArray(order.shopifyDetails?.tags)
-              ? order.shopifyDetails.tags.join(", ")
-              : order.shopifyDetails?.tags,
-          ].filter(Boolean);
-
-          return fields.some((field) =>
-            String(field).toLowerCase().includes(q)
-          );
-        });
-      }
-    }
-    if (filters.dateRange && filters.dateRange.length === 2) {
-      const startDate = new Date(filters.dateRange[0]);
-      startDate.setHours(0, 0, 0, 0);
-      const endDate = new Date(filters.dateRange[1]);
-      endDate.setHours(23, 59, 59, 999);
-      filtered = filtered.filter((order) => {
-        const orderDate = new Date(order.createdAt);
-        return orderDate >= startDate && orderDate <= endDate;
-      });
-    }
-    return filtered;
-  }, [ordersData?.orders, filters.search, filters.dateRange]);
-  const totalFilteredOrders = filteredOrders.length;
-
-  // Fetch kits immediately when orders are selected (single or bulk) and log results
+  // Fetch kits immediately when orders are selected (single or bulk) - optimized with batching
   useEffect(() => {
     const fetchKitsForSelection = async () => {
       if (!Array.isArray(selectedOrders) || selectedOrders.length === 0) return;
-      for (const id of selectedOrders) {
-        try {
+      
+      // Get orderIds that need to be fetched (not already cached)
+      const orderIdsToFetch = selectedOrders
+        .map((id) => {
           const ord = filteredOrders.find((o) => o._id === id);
-          const orderId = ord?.orderId;
-          if (!orderId) continue;
-          if (kitsByOrderId[orderId]) {
-            console.log(
-              "Kits already cached for selected order",
-              orderId,
-              kitsByOrderId[orderId]
-            );
-            continue;
-          }
+          return ord?.orderId;
+        })
+        .filter((orderId) => orderId && !kitsByOrderId[orderId]);
 
-          // const numericOrderId =
-          //   activeTab === "shopify"
-          //     ? String(orderId).replace("gid://shopify/Order/", "")
-          //     : orderId;
-          const res = await apiClient.get(
-            `/api/v1/kit/order/kits/${encodeURIComponent(orderId)}`
-          );
-          // console.log("Kits fetched for selected order", orderId, res?.data);
-          setKitsByOrderId((prev) => ({ ...prev, [orderId]: res?.data }));
-        } catch (e) {
-          console.error("Error fetching kits for selected order", e);
-        }
+      if (orderIdsToFetch.length === 0) return;
+
+      // Batch fetch kits (max 5 concurrent requests)
+      const BATCH_SIZE = 5;
+      const newKits = {};
+
+      for (let i = 0; i < orderIdsToFetch.length; i += BATCH_SIZE) {
+        const batch = orderIdsToFetch.slice(i, i + BATCH_SIZE);
+        const batchResults = await Promise.allSettled(
+          batch.map(async (orderId) => {
+            try {
+              const res = await apiClient.get(
+                `/api/v1/kit/order/kits/${encodeURIComponent(orderId)}`
+              );
+              return { orderId, data: res?.data };
+            } catch (e) {
+              console.error(`Error fetching kits for order ${orderId}:`, e);
+              return { orderId, data: null };
+            }
+          })
+        );
+
+        batchResults.forEach((result) => {
+          if (result.status === "fulfilled" && result.value) {
+            newKits[result.value.orderId] = result.value.data;
+          }
+        });
+      }
+
+      // Update state once with all new kits
+      if (Object.keys(newKits).length > 0) {
+        setKitsByOrderId((prev) => ({ ...prev, ...newKits }));
       }
     };
     fetchKitsForSelection();
-  }, [selectedOrders, filteredOrders, kitsByOrderId]);
+  }, [selectedOrders, filteredOrders]); // Removed kitsByOrderId from dependencies to avoid infinite loops
 
   // Helper to normalize country to 2-letter ISO code for ShipStation
   const normalizeCountryCode = (value) => {
@@ -1357,7 +1324,7 @@ export default function ProcessedOrdersPage() {
         {/* Bulk Actions */}
         {selectedOrders.length > 0 && (
           <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-3">
                 <span className="text-sm font-medium text-blue-800">
                   {selectedOrders.length} order(s) selected
@@ -1396,6 +1363,10 @@ export default function ProcessedOrdersPage() {
             selectAll={selectAll}
             onSelectAll={handleSelectAll}
             fetchProcessedOrders={refetch}
+            onDeleteSuccess={() => {
+              setSelectedOrders([]);
+              setSelectAll(false);
+            }}
           />
         ) : (
           <OrderTable
@@ -1415,6 +1386,10 @@ export default function ProcessedOrdersPage() {
             selectAll={selectAll}
             onSelectAll={handleSelectAll}
             fetchProcessedOrders={refetch}
+            onDeleteSuccess={() => {
+              setSelectedOrders([]);
+              setSelectAll(false);
+            }}
           />
         )}
       </div>
@@ -1433,16 +1408,18 @@ export default function ProcessedOrdersPage() {
         {isRefreshing && (
           <div className="absolute inset-0 bg-white bg-opacity-50 z-50 pointer-events-auto cursor-not-allowed" />
         )}
+        {/* Order Stepper */}
+        <OrderStepper />
+
         {/* Header */}
-        <div className="mb-8">
+        <div className="mb-6">
           <div className="flex sm:flex-row flex-col justify-between items-start max-md:gap-4">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-black mb-2">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
                 Processed Orders
               </h1>
-              <p className="text-gray-600">
-                View and manage processed orders from different e-commerce
-                platforms
+              <p className="text-sm text-gray-500">
+                View and manage processed orders from different e-commerce platforms
               </p>
             </div>
             <div className="flex items-center gap-4">

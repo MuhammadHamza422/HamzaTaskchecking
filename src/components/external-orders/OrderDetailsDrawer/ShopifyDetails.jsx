@@ -14,7 +14,6 @@ export default function ShopifyDetails({
 }) {
   const [selectedItems, setSelectedItems] = useState([]);
   const [isMerging, setIsMerging] = useState(false);
-  const [localMergedIds, setLocalMergedIds] = useState([]);
   const [mergedProducts, setMergedProducts] = useState([]);
 
 
@@ -113,6 +112,25 @@ export default function ShopifyDetails({
     //   };
     // }
 
+    return null;
+  };
+
+  // Helper function to resolve product URL
+  const resolveProductUrl = (node) => {
+    if (!node) return null;
+    
+    // Try to get onlineStoreUrl from product
+    if (node?.product?.onlineStoreUrl) {
+      return node.product.onlineStoreUrl;
+    }
+    
+    // Fallback: construct URL from handle
+    const handle = node?.product?.handle;
+    if (handle) {
+      return `https://retrofam.com/products/${handle}`;
+    }
+    
+    // If product is null or doesn't have handle, return null
     return null;
   };
 
@@ -398,13 +416,6 @@ export default function ShopifyDetails({
         setSelectedItems([]);
         await loadMergedProducts();
 
-        // Optimistically mark merged items locally
-        setLocalMergedIds((prev) => {
-          const next = new Set(prev.map((i) => i?.toString()));
-          selectedItems.forEach((id) => next.add(id?.toString()));
-          return Array.from(next);
-        });
-
         if (refetchOrderDetails) refetchOrderDetails();
         if (onProductMappingSuccess) onProductMappingSuccess();
       } else {
@@ -432,6 +443,12 @@ export default function ShopifyDetails({
         return total + price * quantity;
       }, 0);
   }, [selectedItems, order?.lineItems?.edges]);
+
+  // Get all line items as array
+  const lineItems = useMemo(() => {
+    if (!order?.lineItems?.edges) return [];
+    return order.lineItems.edges.map((edge) => edge.node);
+  }, [order?.lineItems?.edges]);
 
   // Get line items (excluding merged ones)
   const visibleLineItems = useMemo(() => {
@@ -695,6 +712,10 @@ export default function ShopifyDetails({
                 const actionId = String(
                   mp?.productIds?.[0] || mp?.shopify_id || ""
                 );
+                const firstProductId = mp?.productIds?.[0];
+                const firstNode = lineItems.find(
+                  (n) => String(n?.id) === String(firstProductId)
+                );
                 const hasMappedProducts =
                   !!actionId &&
                   ((Array.isArray(selectedOrder?.kit_products) &&
@@ -728,6 +749,17 @@ export default function ShopifyDetails({
                           <p className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
                             Mapped
                           </p>
+                        )}
+                        {resolveProductUrl(firstNode) && (
+                          <Button
+                            size="small"
+                            type="link"
+                            href={resolveProductUrl(firstNode)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            View Listing
+                          </Button>
                         )}
                         {actionId &&
                           (hasMappedProducts ? (
@@ -846,6 +878,17 @@ export default function ShopifyDetails({
                         <p className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
                           Mapped
                         </p>
+                      )}
+                      {resolveProductUrl(item) && (
+                        <Button
+                          size="small"
+                          type="link"
+                          href={resolveProductUrl(item)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          View Listing
+                        </Button>
                       )}
                       {hasMappedProducts || hasLocalMappedProducts ? (
                         <button

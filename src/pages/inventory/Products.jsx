@@ -2,8 +2,10 @@ import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import ProductTableSkeleton from "./components/ProductTableSkeleton";
 import { getProducts } from "../../api/warehouse";
-import { Search } from "lucide-react";
-import { Col, Row, Select, Tag } from "antd";
+import { Search, AlertTriangle } from "lucide-react";
+import { Col, Row, Select, Tag, Tooltip } from "antd";
+
+const { Option } = Select;
 
 const TYPE_CODE_LABELS = {
   CON: "Consoles",
@@ -32,11 +34,51 @@ export default function Products() {
     refetchOnMount: true,
   });
 
+  // Check if product has missing fields
+  const checkMissingFields = (product) => {
+    const missingFields = [];
+    
+    // Check required/important fields
+    if (!product?.pro_title || product.pro_title.trim() === "") {
+      missingFields.push("Product Title");
+    }
+    if (!product?.sku || product.sku.trim() === "") {
+      missingFields.push("SKU");
+    }
+    if (!product?.type_code || product.type_code.trim() === "") {
+      missingFields.push("Type Code");
+    }
+    if (!product?.brnd_code || product.brnd_code.trim() === "") {
+      missingFields.push("Brand Code");
+    }
+    if (!product?.model_code || product.model_code.trim() === "") {
+      missingFields.push("Model Code");
+    }
+    if (!product?.sale_price || product.sale_price === 0) {
+      missingFields.push("Sale Price");
+    }
+    if (!product?.cnd_code || product.cnd_code.trim() === "") {
+      missingFields.push("Condition Code");
+    }
+    
+    return missingFields;
+  };
+
+  // Check if SKU ends with XXXXX
+  const hasIncompleteSKU = (sku) => {
+    if (!sku) return false;
+    const skuStr = String(sku).toUpperCase();
+    return skuStr.endsWith("XXXXX") || skuStr.endsWith("XXXX");
+  };
+
   const products = useMemo(() => {
     if (!data) return [];
     const list = Array.isArray(data?.products) ? data.products : [];
     return list.map((p) => {
       const rawType = String(p?.type_code || "").toUpperCase();
+      const missingFields = checkMissingFields(p);
+      const incompleteSKU = hasIncompleteSKU(p?.sku);
+      
       return {
         id: p._id || p?.id,
         pro_title: p?.pro_title,
@@ -47,6 +89,9 @@ export default function Products() {
         brnd_code: p?.brnd_code,
         sale_price: p?.sale_price,
         cnd_code: p?.cnd_code,
+        missingFields,
+        incompleteSKU,
+        hasWarnings: missingFields.length > 0 || incompleteSKU,
       };
     });
   }, [data]);
@@ -134,7 +179,7 @@ export default function Products() {
           <table className="w-full table-auto">
             <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
               <tr>
-                {["Product Title", "SKU", "Type"].map((header) => (
+                {["Status", "Product Title", "SKU", "Type"].map((header) => (
                   <th
                     key={header}
                     className="px-6 py-4 text-left text-xs whitespace-nowrap font-semibold text-gray-700 uppercase tracking-wider"
@@ -154,24 +199,91 @@ export default function Products() {
                     key={p?.id}
                     className={`hover:bg-blue-50 transition-colors duration-200 ${
                       index % 2 === 0 ? "bg-white" : "bg-gray-50/50"
-                    }`}
+                    } ${p?.hasWarnings ? "bg-yellow-50/30" : ""}`}
                   >
+                    {/* Status/Warning Column */}
+                    <td className="px-6 py-3">
+                      {p?.hasWarnings ? (
+                        <Tooltip
+                          title={
+                            <div className="text-xs">
+                              {p.missingFields.length > 0 && (
+                                <div className="mb-1">
+                                  <strong>Missing Fields:</strong>
+                                  <ul className="list-disc list-inside mt-1">
+                                    {p.missingFields.map((field, idx) => (
+                                      <li key={idx}>{field}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              {p.incompleteSKU && (
+                                <div>
+                                  <strong>⚠️ Incomplete SKU</strong>
+                                </div>
+                              )}
+                            </div>
+                          }
+                          placement="top"
+                        >
+                          <div className="flex items-center justify-center">
+                            <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-yellow-100 border border-yellow-300">
+                              <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                              <span className="text-xs font-medium text-yellow-700">
+                                {p.missingFields.length + (p.incompleteSKU ? 1 : 0)}
+                              </span>
+                            </div>
+                          </div>
+                        </Tooltip>
+                      ) : (
+                        <div className="flex items-center justify-center">
+                          <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                        </div>
+                      )}
+                    </td>
                     <td className="px-6 py-3">
                       <p
                         title={p?.pro_title}
-                        className="w-[250px] text-sm font-semibold text-gray-900 line-clamp-2 leading-relaxed"
+                        className={`w-[250px] text-sm font-semibold line-clamp-2 leading-relaxed ${
+                          !p?.pro_title || p.pro_title.trim() === ""
+                            ? "text-red-600"
+                            : "text-gray-900"
+                        }`}
                       >
-                        {p?.pro_title}
+                        {p?.pro_title || (
+                          <span className="italic text-red-500">Missing Title</span>
+                        )}
                       </p>
                     </td>
                     <td className="px-6 py-3 whitespace-nowrap">
-                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                        {p?.sku}
+                      <span
+                        className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+                          p.incompleteSKU
+                            ? "bg-red-100 text-red-700 border border-red-300"
+                            : !p?.sku || p.sku.trim() === ""
+                            ? "bg-red-100 text-red-700 border border-red-300"
+                            : "bg-gray-100 text-gray-800"
+                        }`}
+                      >
+                        {p?.sku || (
+                          <span className="italic text-red-500">Missing SKU</span>
+                        )}
+                        {p.incompleteSKU && (
+                          <AlertTriangle className="h-3 w-3 ml-1 text-red-600" />
+                        )}
                       </span>
                     </td>
                     <td className="px-6 py-3 whitespace-nowrap">
-                      <span className="inline-flex uppercase items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-black">
-                        {p?.type_name}
+                      <span
+                        className={`inline-flex uppercase items-center px-3 py-1 rounded-full text-sm font-medium ${
+                          !p?.type_code || p.type_code.trim() === ""
+                            ? "bg-red-100 text-red-700 border border-red-300"
+                            : "bg-blue-100 text-black"
+                        }`}
+                      >
+                        {p?.type_name || (
+                          <span className="italic text-red-500">Missing Type</span>
+                        )}
                       </span>
                     </td>
                   </tr>
@@ -180,7 +292,7 @@ export default function Products() {
                 {products.length === 0 && (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={4}
                       className="px-6 py-12 text-center text-gray-500"
                     >
                       <div className="flex flex-col items-center justify-center">

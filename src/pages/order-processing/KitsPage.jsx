@@ -8,13 +8,18 @@ import {
   Space,
   Spin,
   Drawer,
+  Modal,
+  Form,
+  Input,
+  message,
 } from "antd";
 import { motion } from "framer-motion";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   EyeOutlined,
   ShoppingOutlined,
   CalendarOutlined,
+  EditOutlined,
 } from "@ant-design/icons";
 import Swal from "sweetalert2";
 import apiClient from "../../api/client";
@@ -43,6 +48,10 @@ const showErrorToast = (message) => {
 export default function KitsPage() {
   const [selectedKit, setSelectedKit] = useState(null);
   const [drawerVisible, setDrawerVisible] = useState(false);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editingKit, setEditingKit] = useState(null);
+  const [form] = Form.useForm();
+  const queryClient = useQueryClient();
   const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
   // Fetch kits
   const fetchKits = async () => {
@@ -54,6 +63,7 @@ export default function KitsPage() {
     data: kitsData,
     isLoading,
     error,
+    refetch,
   } = useQuery({
     queryKey: ["kits"],
     queryFn: fetchKits,
@@ -65,6 +75,92 @@ export default function KitsPage() {
   const handleViewDetails = (kit) => {
     setSelectedKit(kit);
     setDrawerVisible(true);
+  };
+
+  // Handle edit kit name
+  const handleEditKit = (kit) => {
+    setEditingKit(kit);
+    form.setFieldsValue({
+      product_title: kit.product_title,
+    });
+    setEditModalVisible(true);
+  };
+
+  // Handle update kit name
+  const handleUpdateKitName = async (values) => {
+    if (!editingKit?._id) {
+      message.error("Kit ID is required");
+      return;
+    }
+
+    try {
+      const response = await apiClient.patch(
+        `/api/v1/kit/update/${editingKit._id}`,
+        {
+          product_title: values.product_title,
+        }
+      );
+
+      if (response.data.success) {
+        Swal.fire({
+          icon: "success",
+          title: "Kit Updated",
+          text: "Kit name has been updated successfully!",
+          toast: true,
+          position: "top-end",
+          showConfirmButton: false,
+          timer: 3000,
+          timerProgressBar: true,
+          background: "#10b981",
+          color: "#fff",
+          customClass: {
+            popup: "rounded-lg",
+          },
+        });
+
+        // Invalidate and refetch kits
+        queryClient.invalidateQueries({ queryKey: ["kits"] });
+        await refetch();
+
+        // Update selected kit if it's the same one
+        if (selectedKit?._id === editingKit._id) {
+          setSelectedKit({
+            ...selectedKit,
+            product_title: values.product_title,
+          });
+        }
+
+        setEditModalVisible(false);
+        setEditingKit(null);
+        form.resetFields();
+      } else {
+        throw new Error(response.data.message || "Failed to update kit name");
+      }
+    } catch (error) {
+      console.error("Error updating kit name:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Update Failed",
+        text: error.response?.data?.message || error.message || "Failed to update kit name",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 4000,
+        timerProgressBar: true,
+        background: "#ef4444",
+        color: "#fff",
+        customClass: {
+          popup: "rounded-lg",
+        },
+      });
+    }
+  };
+
+  // Handle cancel edit
+  const handleCancelEdit = () => {
+    setEditModalVisible(false);
+    setEditingKit(null);
+    form.resetFields();
   };
 
   // Calculate total value of kit
@@ -197,17 +293,28 @@ export default function KitsPage() {
       title: "Actions",
       key: "actions",
       render: (_, record) => (
-        <Button
-          type="primary"
-          size="small"
-          icon={<EyeOutlined />}
-          onClick={() => handleViewDetails(record)}
-          className="bg-blue-600 border-blue-600 hover:bg-blue-700"
-        >
-          View Details
-        </Button>
+        <Space size="small">
+          <Button
+            type="primary"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => handleEditKit(record)}
+            className="bg-orange-500 border-orange-500 hover:bg-orange-600"
+          >
+            Edit
+          </Button>
+          <Button
+            type="primary"
+            size="small"
+            icon={<EyeOutlined />}
+            onClick={() => handleViewDetails(record)}
+            className="bg-blue-600 border-blue-600 hover:bg-blue-700"
+          >
+            View
+          </Button>
+        </Space>
       ),
-      width: 120,
+      width: 160,
       fixed: "right",
     },
   ];
@@ -269,6 +376,54 @@ export default function KitsPage() {
             />
           </div>
         </div>
+
+        {/* Edit Kit Name Modal */}
+        <Modal
+          title="Edit Kit Name"
+          open={editModalVisible}
+          onCancel={handleCancelEdit}
+          footer={null}
+          centered
+          width={500}
+        >
+          <Form
+            form={form}
+            layout="vertical"
+            onFinish={handleUpdateKitName}
+            initialValues={{
+              product_title: "",
+            }}
+          >
+            <Form.Item
+              label="Product Title"
+              name="product_title"
+              rules={[
+                {
+                  required: true,
+                  message: "Please enter product title",
+                },
+                {
+                  min: 3,
+                  message: "Product title must be at least 3 characters",
+                },
+              ]}
+            >
+              <Input.TextArea
+                placeholder="Enter product title"
+                rows={4}
+                showCount
+                maxLength={500}
+              />
+            </Form.Item>
+
+            <div className="flex justify-end gap-2 mt-4">
+              <Button onClick={handleCancelEdit}>Cancel</Button>
+              <Button type="primary" htmlType="submit">
+                Update Kit Name
+              </Button>
+            </div>
+          </Form>
+        </Modal>
 
         {/* Kit Details Drawer */}
         <div ref={fullscreenRef}>

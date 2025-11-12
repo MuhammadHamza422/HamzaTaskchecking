@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo, useState } from "react";
 import {
   Table,
   Tag,
@@ -9,13 +9,22 @@ import {
   Tooltip,
   Popover,
   Checkbox,
+  Badge,
 } from "antd";
 import { useMediaQuery } from "react-responsive";
-import { CloseCircleOutlined } from "@ant-design/icons";
+import {
+  CloseCircleOutlined,
+  DeleteOutlined,
+  ExclamationCircleOutlined,
+  CheckCircleOutlined,
+  InfoCircleOutlined,
+} from "@ant-design/icons";
 import { FaCheckCircle } from "react-icons/fa";
 import AddLabelModal from "./AddLabel";
+import apiClient from "../../api/client";
+import Swal from "sweetalert2";
 
-export default function OrderTable({
+function OrderTable({
   orders,
   loading,
   currentPage,
@@ -25,42 +34,156 @@ export default function OrderTable({
   onRowClick,
   onEditClick,
   showPagination = true,
-  activeTab = "woocommerce", // Add activeTab prop
-  showCheckboxes = false, // Add checkbox support
-  selectedOrders = [], // Selected order IDs
-  onOrderSelect = null, // Handle individual order selection
-  selectAll = false, // Select all state
-  onSelectAll = null, // Handle select all
+  activeTab = "woocommerce",
+  showCheckboxes = false,
+  selectedOrders = [],
+  onOrderSelect = null,
+  selectAll = false,
+  onSelectAll = null,
   fetchProcessedOrders = () => {},
+  onDeleteSuccess = () => {},
 }) {
   const isMobile = useMediaQuery({ maxWidth: 768 });
-  const isTablet = useMediaQuery({ minWidth: 769, maxWidth: 1024 });
+  const [isDeleting, setIsDeleting] = useState(false);
   const orderStatus = orders[0]?.status;
 
-  console.log("orders", orders);
+  // Helper function to check if label info is complete
+  const hasLabelInfo = (record) => {
+    return !!(
+      record?.warehouseId &&
+      record?.packageCode &&
+      record?.weight?.value &&
+      record?.dimensions?.length &&
+      record?.dimensions?.width &&
+      record?.dimensions?.height
+    );
+  };
 
-  // Helper function to format date
+  // Helper function to format date (compact)
   const formatDate = (createdAt) => {
     if (!createdAt) {
-      return <span className="text-sm whitespace-nowrap text-gray-400">—</span>;
+      return <span className="text-xs text-gray-400">—</span>;
+    }
+    const date = new Date(createdAt);
+    const now = new Date();
+    const diffTime = Math.abs(now - date);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 1) {
+      return (
+        <div className="text-xs leading-tight">
+          <div className="text-gray-900 font-medium">Today</div>
+          <div className="text-gray-500 text-[10px]">
+            {date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+          </div>
+        </div>
+      );
+    } else if (diffDays === 2) {
+      return (
+        <div className="text-xs leading-tight">
+          <div className="text-gray-900 font-medium">Yesterday</div>
+          <div className="text-gray-500 text-[10px]">
+            {date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+          </div>
+        </div>
+      );
+    } else {
+      const dayName = date.toLocaleDateString("en-US", { weekday: "short" });
+      return (
+        <div className="text-xs leading-tight">
+          <div className="text-gray-900 font-medium">{dayName}</div>
+          <div className="text-gray-500 text-[10px]">
+            {date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+          </div>
+        </div>
+      );
+    }
+  };
+
+  // Handle bulk delete
+  const handleBulkDelete = async () => {
+    if (selectedOrders.length === 0) {
+      Swal.fire({
+        icon: "warning",
+        title: "No Orders Selected",
+        text: "Please select at least one order to delete.",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+        background: "#f59e0b",
+        color: "#fff",
+        customClass: { popup: "rounded-lg" },
+      });
+      return;
     }
 
-    const date = new Date(createdAt);
-    const pad = (n) => String(n).padStart(2, "0");
+    const result = await Swal.fire({
+      title: "Delete Orders?",
+      text: `Are you sure you want to delete ${selectedOrders.length} order(s)? This action cannot be undone.`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#ef4444",
+      cancelButtonColor: "#6b7280",
+      confirmButtonText: "Yes, delete",
+      cancelButtonText: "Cancel",
+    });
 
-    const formatted =
-      `${date.getFullYear()}-` +
-      `${pad(date.getMonth() + 1)}-` +
-      `${pad(date.getDate())} ` +
-      `${pad(date.getHours())}:` +
-      `${pad(date.getMinutes())}:` +
-      `${pad(date.getSeconds())}`;
+    if (!result.isConfirmed) return;
 
-    return (
-      <span className="text-sm text-gray-600 whitespace-nowrap">
-        {formatted}
-      </span>
-    );
+    setIsDeleting(true);
+    try {
+      const endpoint =
+        activeTab === "woocommerce"
+          ? "/api/v1/orders/wc/orders"
+          : activeTab === "walmart"
+          ? "/api/v1/orders/wm/orders"
+          : "/api/v1/orders/shopify/orders";
+
+      const { data } = await apiClient.delete(endpoint, {
+        data: { orderIds: selectedOrders },
+      });
+
+      if (data?.success) {
+        Swal.fire({
+          icon: "success",
+          title: "Orders Deleted",
+          text: `Successfully deleted ${data.deletedCount || selectedOrders.length} order(s)`,
+          toast: true,
+          position: "top-end",
+          showConfirmButton: false,
+          timer: 3000,
+          timerProgressBar: true,
+          background: "#10b981",
+          color: "#fff",
+          customClass: { popup: "rounded-lg" },
+        });
+
+        if (onDeleteSuccess) onDeleteSuccess();
+        if (fetchProcessedOrders) fetchProcessedOrders();
+      }
+    } catch (error) {
+      console.error("Delete error:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Delete Failed",
+        text:
+          error?.response?.data?.message ||
+          error?.message ||
+          "Failed to delete orders",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 4000,
+        timerProgressBar: true,
+        background: "#ef4444",
+        color: "#fff",
+        customClass: { popup: "rounded-lg" },
+      });
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   // Platform-specific column configurations
@@ -105,25 +228,41 @@ export default function OrderTable({
 
     const baseColumns = [
       {
-        title: "Order ID",
+        title: "Order",
         dataIndex: "orderId",
         key: "orderId",
+        width: 90,
         render: (text) => (
-          <span className="font-semibold text-gray-900">{text}</span>
+          <span className="text-xs font-semibold text-gray-900">{text}</span>
         ),
       },
       {
-        title: "Created At",
+        title: "Date ↓",
         dataIndex: "createdAt",
         key: "createdAt",
+        width: 85,
         render: formatDate,
+        sorter: (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+      },
+      {
+        title: "Customer",
+        dataIndex: "user_name",
+        key: "customerName",
+        width: 110,
+        render: (name) => (
+          <span className="text-xs text-gray-700 truncate block" title={name}>
+            {name || "—"}
+          </span>
+        ),
       },
       {
         title: "Actions",
         dataIndex: "actions",
         key: "actions",
+        width: 180,
+        fixed: "right",
         render: (_, record) => (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-0.5">
             <AddLabelModal
               order={record}
               activeTab={activeTab}
@@ -131,24 +270,28 @@ export default function OrderTable({
             />
             <Button
               type="link"
+              size="small"
               onClick={(e) => {
                 e.stopPropagation();
                 onEditClick(record);
               }}
-              className="text-blue-600 hover:text-blue-800"
+              className="text-blue-600 hover:text-blue-800 p-0 h-auto text-xs"
             >
               Edit
             </Button>
             <Button
               type="link"
-              onClick={() => onRowClick(record)}
-              className="text-green-600 hover:text-green-800"
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRowClick(record);
+              }}
+              className="text-green-600 hover:text-green-800 p-0 h-auto text-xs"
             >
               View
             </Button>
           </div>
         ),
-        fixed: "right",
       },
     ];
 
@@ -156,41 +299,58 @@ export default function OrderTable({
     if (activeTab === "woocommerce") {
       return [
         ...checkboxColumn,
-        ...baseColumns.slice(0, 1), // Order ID
+        {
+          title: "Order",
+          dataIndex: "orderId",
+          key: "orderId",
+          width: 80,
+          render: (text) => (
+            <span className="text-xs font-semibold text-gray-900">{text}</span>
+          ),
+        },
         {
           title: "WC Status",
           dataIndex: "wc_status",
           key: "wc_status",
+          width: 95,
           render: (status) => {
-            let color = "default";
-            if (status === "processing") color = "blue";
-            else if (status === "completed") color = "green";
-            else if (status === "pending") color = "orange";
-            else if (status === "failed") color = "red";
-            else if (status === "cancelled") color = "red";
-            else if (status === "refunded") color = "purple";
-            else if (status === "on-hold") color = "orange";
+            const statusColors = {
+              processing: "bg-blue-100 text-blue-700 border-blue-200",
+              completed: "bg-green-100 text-green-700 border-green-200",
+              pending: "bg-orange-100 text-orange-700 border-orange-200",
+              failed: "bg-red-100 text-red-700 border-red-200",
+              cancelled: "bg-red-100 text-red-700 border-red-200",
+              refunded: "bg-purple-100 text-purple-700 border-purple-200",
+              "on-hold": "bg-yellow-100 text-yellow-700 border-yellow-200",
+            };
+            const colorClass = statusColors[status] || "bg-gray-100 text-gray-600 border-gray-200";
             return (
-              <Tag color={color} className="capitalize">
-                {status || "N/A"}
-              </Tag>
+              <span
+                className={`text-[10px] px-1.5 py-0.5 rounded border capitalize font-medium ${colorClass}`}
+              >
+                {status || "—"}
+              </span>
             );
           },
         },
         {
-          title: "Status",
+          title: "FFM Status",
           dataIndex: "status",
           key: "status",
-          render: (status) => {
-            let color = "default";
-            if (status === "processed") color = "green";
-            else if (status === "unprocessed") color = "orange";
-            return (
-              <Tag color={color} className="capitalize">
-                {status || "N/A"}
-              </Tag>
-            );
-          },
+          width: 95,
+          render: (status) => (
+            <span
+              className={`text-[10px] text-white px-2 py-0.5 rounded-full font-medium ${
+                status === "processed"
+                  ? "bg-green-600"
+                  : status === "partially processed"
+                  ? "bg-yellow-500"
+                  : "bg-red-500"
+              } capitalize`}
+            >
+              {status || "—"}
+            </span>
+          ),
         },
         ...(orderStatus === "processed"
           ? [
@@ -198,29 +358,26 @@ export default function OrderTable({
                 title: "SS Status",
                 dataIndex: "shipStation_order_status",
                 key: "shipStation_order_status",
-                width: 150,
+                width: 90,
                 render: (status, record) =>
                   record?.shipStation_OrderId ? (
-                    <Tag
-                      color={status ? "blue" : "default"}
-                      className="capitalize"
-                    >
-                      {status || "N/A"}
-                    </Tag>
+                    <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded border border-blue-200 capitalize">
+                      {status || "—"}
+                    </span>
                   ) : (
-                    <span className="text-gray-400">—</span>
+                    <span className="text-xs text-gray-400">—</span>
                   ),
               },
               {
-                title: "SS Order ID",
+                title: "SS ID",
                 dataIndex: "shipStation_OrderId",
                 key: "shipStation_OrderId",
-                width: 80,
+                width: 70,
                 render: (id, record) =>
                   record?.shipStation_OrderId ? (
-                    <span className="text-gray-900">{id}</span>
+                    <span className="text-xs text-gray-700 font-mono">{id}</span>
                   ) : (
-                    <span className="text-gray-400">—</span>
+                    <span className="text-xs text-gray-400">—</span>
                   ),
               },
             ]
@@ -229,31 +386,91 @@ export default function OrderTable({
           title: "Tracking",
           dataIndex: "tracking_number",
           key: "tracking_number",
-          render: (tracking) => (
-            <span
-              className={`whitespace-nowrap ${
-                tracking ? "text-green-600" : "text-gray-400"
-              } `}
-            >
-              {tracking || "No tracking"}
-            </span>
-          ),
+          width: 100,
+          render: (trackingNumber) => {
+            if (!trackingNumber || trackingNumber.trim() === "") {
+              return <span className="text-xs text-gray-400">—</span>;
+            }
+            return (
+              <span className="text-xs text-blue-600 font-medium truncate block" title={trackingNumber}>
+                {trackingNumber}
+              </span>
+            );
+          },
         },
         {
           title: "App ID",
           dataIndex: "app_id",
           key: "app_id",
+          width: 75,
           render: (app_id) => (
             <span
-              className={`whitespace-nowrap ${
-                app_id ? "text-green-600" : "text-gray-400"
+              className={`text-xs truncate block ${
+                app_id ? "text-green-600 font-medium" : "text-gray-400"
               }`}
+              title={app_id}
             >
-              {app_id || "No app ID"}
+              {app_id || "—"}
             </span>
           ),
         },
-        ...baseColumns.slice(1), // Created At and Actions
+        {
+          title: "Date ↓",
+          dataIndex: "createdAt",
+          key: "createdAt",
+          width: 75,
+          render: formatDate,
+          sorter: (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+        },
+        // {
+        //   title: "Customer",
+        //   dataIndex: "user_name",
+        //   key: "customerName",
+        //   width: 100,
+        //   render: (name) => (
+        //     <span className="text-xs text-gray-700 truncate block" title={name}>
+        //       {name || "—"}
+        //     </span>
+        //   ),
+        // },
+        {
+          title: "Actions",
+          dataIndex: "actions",
+          key: "actions",
+          width: 90,
+          fixed: "right",
+          render: (_, record) => (
+            <div className="flex items-center gap-0.5">
+              <AddLabelModal
+                order={record}
+                activeTab={activeTab}
+                fetchProcessedOrders={fetchProcessedOrders}
+              />
+              <Button
+                type="link"
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEditClick(record);
+                }}
+                className="text-blue-600 hover:text-blue-800 p-0 h-auto text-xs"
+              >
+                Edit
+              </Button>
+              <Button
+                type="link"
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRowClick(record);
+                }}
+                className="text-green-600 hover:text-green-800 p-0 h-auto text-xs"
+              >
+                View
+              </Button>
+            </div>
+          ),
+        },
       ];
     }
 
@@ -261,14 +478,23 @@ export default function OrderTable({
     if (activeTab === "walmart") {
       return [
         ...checkboxColumn,
-        ...baseColumns.slice(0, 1), // Order ID
         {
-          title: "Customer Order ID",
+          title: "Order",
+          dataIndex: "orderId",
+          key: "orderId",
+          width: 80,
+          render: (text) => (
+            <span className="text-xs font-semibold text-gray-900">{text}</span>
+          ),
+        },
+        {
+          title: "Cust Order ID",
           dataIndex: "customerOrderId",
           key: "customerOrderId",
+          width: 100,
           render: (text) => (
-            <span className="text-sm text-gray-600 font-mono">
-              {text || "N/A"}
+            <span className="text-xs text-gray-600 font-mono truncate block" title={text}>
+              {text || "—"}
             </span>
           ),
         },
@@ -276,18 +502,22 @@ export default function OrderTable({
           title: "WM Status",
           dataIndex: "wm_status",
           key: "wm_status",
+          width: 95,
           render: (status) => {
-            let color = "default";
-            if (status === "Acknowledged") color = "blue";
-            else if (status === "Shipped") color = "green";
-            else if (status === "Pending") color = "orange";
-            else if (status === "Cancelled") color = "red";
-            else if (status === "Delivered") color = "green";
-
+            const statusColors = {
+              Acknowledged: "bg-blue-100 text-blue-700 border-blue-200",
+              Shipped: "bg-green-100 text-green-700 border-green-200",
+              Pending: "bg-orange-100 text-orange-700 border-orange-200",
+              Cancelled: "bg-red-100 text-red-700 border-red-200",
+              Delivered: "bg-green-100 text-green-700 border-green-200",
+            };
+            const colorClass = statusColors[status] || "bg-gray-100 text-gray-600 border-gray-200";
             return (
-              <Tag color={color} className="capitalize">
-                {status || "N/A"}
-              </Tag>
+              <span
+                className={`text-[10px] px-1.5 py-0.5 rounded border capitalize font-medium ${colorClass}`}
+              >
+                {status || "—"}
+              </span>
             );
           },
         },
@@ -325,50 +555,160 @@ export default function OrderTable({
             ]
           : []),
         {
-          title: "Status",
+          title: "FFM Status",
           dataIndex: "status",
           key: "status",
-          render: (status) => {
-            let color = "default";
-            if (status === "processed") color = "green";
-            else if (status === "unprocessed") color = "orange";
-
-            return (
-              <Tag color={color} className="capitalize">
-                {status || "N/A"}
-              </Tag>
-            );
-          },
+          width: 95,
+          render: (status) => (
+            <span
+              className={`text-[10px] text-white px-2 py-0.5 rounded-full font-medium ${
+                status === "processed"
+                  ? "bg-green-600"
+                  : status === "partially processed"
+                  ? "bg-yellow-500"
+                  : "bg-red-500"
+              } capitalize`}
+            >
+              {status || "—"}
+            </span>
+          ),
         },
+        ...(orderStatus === "processed"
+          ? [
+              {
+                title: "SS Status",
+                dataIndex: "shipStation_order_status",
+                key: "shipStation_order_status",
+                width: 90,
+                render: (status, record) =>
+                  record?.shipStation_OrderId ? (
+                    <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded border border-blue-200 capitalize">
+                      {status || "—"}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-400">—</span>
+                  ),
+              },
+              {
+                title: "SS ID",
+                dataIndex: "shipStation_OrderId",
+                key: "shipStation_OrderId",
+                width: 70,
+                render: (id, record) =>
+                  record?.shipStation_OrderId ? (
+                    <span className="text-xs text-gray-700 font-mono">{id}</span>
+                  ) : (
+                    <span className="text-xs text-gray-400">—</span>
+                  ),
+              },
+            ]
+          : []),
         {
           title: "Tracking",
           dataIndex: "tracking_number",
           key: "tracking_number",
-          render: (tracking) => (
-            <span
-              className={`whitespace-nowrap ${
-                tracking ? "text-green-600" : "text-gray-400"
-              } `}
-            >
-              {tracking || "No tracking"}
-            </span>
-          ),
+          width: 100,
+          render: (trackingNumber) => {
+            if (!trackingNumber || trackingNumber.trim() === "") {
+              return <span className="text-xs text-gray-400">—</span>;
+            }
+            return (
+              <span className="text-xs text-blue-600 font-medium truncate block" title={trackingNumber}>
+                {trackingNumber}
+              </span>
+            );
+          },
+        },
+        // {
+        //   title: "App ID",
+        //   dataIndex: "app_id",
+        //   key: "app_id",
+        //   width: 75,
+        //   render: (app_id) => (
+        //     <span
+        //       className={`text-xs truncate block ${
+        //         app_id ? "text-green-600 font-medium" : "text-gray-400"
+        //       }`}
+        //       title={app_id}
+        //     >
+        //       {app_id || "—"}
+        //     </span>
+        //   ),
+        // },
+        {
+          title: "Label Status",
+          dataIndex: "labelStatus",
+          key: "labelStatus",
+          width: 90,
+          render: (_, record) => {
+            const hasInfo = hasLabelInfo(record);
+            return (
+              <div className="flex items-center justify-center">
+                {hasInfo ? (
+                  <Tooltip title="Label info added">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-50 text-green-700 rounded border border-green-200">
+                      <CheckCircleOutlined className="text-[10px]" />
+                      <span className="text-[10px] font-medium">Added</span>
+                    </span>
+                  </Tooltip>
+                ) : (
+                  <Tooltip title="Label info missing">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-orange-50 text-orange-700 rounded border border-orange-200">
+                      <InfoCircleOutlined className="text-[10px]" />
+                      <span className="text-[10px] font-medium">Pending</span>
+                    </span>
+                  </Tooltip>
+                )}
+              </div>
+            );
+          },
         },
         {
-          title: "App ID",
-          dataIndex: "app_id",
-          key: "app_id",
-          render: (app_id) => (
-            <span
-              className={`whitespace-nowrap ${
-                app_id ? "text-green-600" : "text-gray-400"
-              }`}
-            >
-              {app_id || "No app ID"}
-            </span>
+          title: "Date ↓",
+          dataIndex: "createdAt",
+          key: "createdAt",
+          width: 75,
+          render: formatDate,
+          sorter: (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+        },
+        {
+          title: "Actions",
+          dataIndex: "actions",
+          key: "actions",
+          width: 170,
+          fixed: "right",
+          render: (_, record) => (
+            <div className="flex items-center gap-0.5">
+              <AddLabelModal
+                order={record}
+                activeTab={activeTab}
+                fetchProcessedOrders={fetchProcessedOrders}
+              />
+              <Button
+                type="link"
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEditClick(record);
+                }}
+                className="text-blue-600 hover:text-blue-800 p-0 h-auto text-xs"
+              >
+                Edit
+              </Button>
+              {/* <Button
+                type="link"
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRowClick(record);
+                }}
+                className="text-green-600 hover:text-green-800 p-0 h-auto text-xs"
+              >
+                View
+              </Button> */}
+            </div>
           ),
         },
-        ...baseColumns.slice(1), // Created At and Actions
       ];
     }
 
@@ -377,56 +717,52 @@ export default function OrderTable({
       return [
         ...checkboxColumn,
         {
-          title: "Order ID",
+          title: "Order",
           dataIndex: "orderId",
           key: "orderId",
-          render: (text) => {
-            // Extract numeric ID from gid://shopify/Order/6163651690800 format
+          width: 80,
+          render: (text, record) => {
             const numericId = text?.replace("gid://shopify/Order/", "") || text;
+            const orderKey = record?.order_key || record?.shopifyDetails?.name;
             return (
-              <span className="font-semibold text-gray-900">{numericId}</span>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-semibold text-gray-900">{numericId}</span>
+                {orderKey && (
+                  <span className="text-[10px] text-gray-500 font-mono">{orderKey}</span>
+                )}
+              </div>
             );
           },
         },
         {
-          title: "Order Key",
-          dataIndex: "order_key",
-          key: "order_key",
-          render: (text) => (
-            <span className="text-sm text-gray-600 font-mono">
-              {text || "N/A"}
+          title: "SF Status",
+          dataIndex: "sf_status",
+          key: "sf_status",
+          width: 85,
+          render: (status) => (
+            <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded border border-gray-200 capitalize">
+              {status || "—"}
             </span>
           ),
         },
-        // sf_status will only in processing
         {
-          title: "SF Status",
-          dataIndex: "sf_status", // Shopify uses wc_status field
-          key: "sf_status",
-          render: (status) => {
-            let color = "default";
-            return (
-              <Tag color={color} className="capitalize">
-                {status || "N/A"}
-              </Tag>
-            );
-          },
-        },
-        {
-          title: "Status",
+          title: "FFM Status",
           dataIndex: "status",
           key: "status",
-          render: (status) => {
-            let color = "default";
-            if (status === "processed") color = "green";
-            else if (status === "unprocessed") color = "orange";
-
-            return (
-              <Tag color={color} className="capitalize">
-                {status || "N/A"}
-              </Tag>
-            );
-          },
+          width: 95,
+          render: (status) => (
+            <span
+              className={`text-[10px] text-white px-2 py-0.5 rounded-full font-medium ${
+                status === "processed"
+                  ? "bg-green-600"
+                  : status === "partially processed"
+                  ? "bg-yellow-500"
+                  : "bg-red-500"
+              } capitalize`}
+            >
+              {status || "—"}
+            </span>
+          ),
         },
         ...(orderStatus === "processed"
           ? [
@@ -434,29 +770,26 @@ export default function OrderTable({
                 title: "SS Status",
                 dataIndex: "shipStation_order_status",
                 key: "shipStation_order_status",
-                width: 150,
+                width: 90,
                 render: (status, record) =>
                   record?.shipStation_OrderId ? (
-                    <Tag
-                      color={status ? "blue" : "default"}
-                      className="capitalize"
-                    >
-                      {status || "N/A"}
-                    </Tag>
+                    <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded border border-blue-200 capitalize">
+                      {status || "—"}
+                    </span>
                   ) : (
-                    <span className="text-gray-400">—</span>
+                    <span className="text-xs text-gray-400">—</span>
                   ),
               },
               {
-                title: "SS Order ID",
+                title: "SS ID",
                 dataIndex: "shipStation_OrderId",
                 key: "shipStation_OrderId",
-                width: 80,
+                width: 70,
                 render: (id, record) =>
                   record?.shipStation_OrderId ? (
-                    <span className="text-gray-900">{id}</span>
+                    <span className="text-xs text-gray-700 font-mono">{id}</span>
                   ) : (
-                    <span className="text-gray-400">—</span>
+                    <span className="text-xs text-gray-400">—</span>
                   ),
               },
             ]
@@ -465,31 +798,108 @@ export default function OrderTable({
           title: "Tracking",
           dataIndex: "tracking_number",
           key: "tracking_number",
-          render: (tracking) => (
-            <span
-              className={`whitespace-nowrap ${
-                tracking ? "text-green-600" : "text-gray-400"
-              } `}
-            >
-              {tracking || "No tracking"}
-            </span>
-          ),
+          width: 100,
+          render: (trackingNumber) => {
+            if (!trackingNumber || trackingNumber.trim() === "") {
+              return <span className="text-xs text-gray-400">—</span>;
+            }
+            return (
+              <span className="text-xs text-blue-600 font-medium truncate block" title={trackingNumber}>
+                {trackingNumber}
+              </span>
+            );
+          },
         },
         {
           title: "App ID",
           dataIndex: "app_id",
           key: "app_id",
+          width: 75,
           render: (app_id) => (
             <span
-              className={`whitespace-nowrap ${
-                app_id ? "text-green-600" : "text-gray-400"
+              className={`text-xs truncate block ${
+                app_id ? "text-green-600 font-medium" : "text-gray-400"
               }`}
+              title={app_id}
             >
-              {app_id || "No app ID"}
+              {app_id || "—"}
             </span>
           ),
         },
-        ...baseColumns.slice(1), // Created At and Actions
+        {
+          title: "Label Status",
+          dataIndex: "labelStatus",
+          key: "labelStatus",
+          width: 90,
+          render: (_, record) => {
+            const hasInfo = hasLabelInfo(record);
+            return (
+              <div className="flex items-center justify-center">
+                {hasInfo ? (
+                  <Tooltip title="Label info added">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-50 text-green-700 rounded border border-green-200">
+                      <CheckCircleOutlined className="text-[10px]" />
+                      <span className="text-[10px] font-medium">Added</span>
+                    </span>
+                  </Tooltip>
+                ) : (
+                  <Tooltip title="Label info missing">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-orange-50 text-orange-700 rounded border border-orange-200">
+                      <InfoCircleOutlined className="text-[10px]" />
+                      <span className="text-[10px] font-medium">Pending</span>
+                    </span>
+                  </Tooltip>
+                )}
+              </div>
+            );
+          },
+        },
+        {
+          title: "Date ↓",
+          dataIndex: "createdAt",
+          key: "createdAt",
+          width: 75,
+          render: formatDate,
+          sorter: (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+        },
+        {
+          title: "Actions",
+          dataIndex: "actions",
+          key: "actions",
+          width: 90,
+          fixed: "right",
+          render: (_, record) => (
+            <div className="flex items-center gap-0.5">
+              <AddLabelModal
+                order={record}
+                activeTab={activeTab}
+                fetchProcessedOrders={fetchProcessedOrders}
+              />
+              <Button
+                type="link"
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEditClick(record);
+                }}
+                className="text-blue-600 hover:text-blue-800 p-0 h-auto text-xs"
+              >
+                Edit
+              </Button>
+              <Button
+                type="link"
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRowClick(record);
+                }}
+                className="text-green-600 hover:text-green-800 p-0 h-auto text-xs"
+              >
+                View
+              </Button>
+            </div>
+          ),
+        },
       ];
     }
 
@@ -822,23 +1232,52 @@ export default function OrderTable({
 
   // Desktop/Tablet layout
   return (
-    <div className="space-y-4 overflow-x-auto hide-scrollbar transition-opacity duration-300">
-      <Table
-        columns={columns}
-        dataSource={orders}
-        rowKey="_id"
-        pagination={false}
-        size={isTablet ? "small" : "middle"}
-        className="bg-white rounded-lg shadow-sm overflow-x-auto overflow-y-auto"
-        scroll={{ x: isTablet ? 800 : undefined }}
-        rowClassName={(record) =>
-          record?.shipStation_OrderId ? "opacity-60" : ""
-        }
-        onRow={(record) => ({
-          onClick: () => onRowClick(record),
-          className: "cursor-pointer hover:bg-gray-50 transition-colors",
-        })}
-      />
+    <div className="space-y-4 transition-opacity duration-300">
+      {/* Bulk Actions Bar - Compact */}
+      {showCheckboxes && selectedOrders.length > 0 && (
+        <div className="mb-2 p-2 bg-red-50 rounded-md border border-red-200">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-red-800">
+              {selectedOrders.length} selected
+            </span>
+            <Button
+              size="small"
+              icon={<DeleteOutlined className="text-xs" />}
+              loading={isDeleting}
+              disabled={isDeleting}
+              onClick={handleBulkDelete}
+              className="!bg-red-600 hover:!bg-red-700 !border-red-600 text-white text-xs h-6 px-3 font-medium shadow-sm"
+              style={{ backgroundColor: '#dc2626', borderColor: '#dc2626' }}
+            >
+              Delete
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Main Table */}
+      <div className="overflow-x-auto hide-scrollbar">
+        <Table
+          columns={columns}
+          dataSource={orders}
+          rowKey="_id"
+          pagination={false}
+          size="small"
+          className="bg-white rounded-lg shadow-sm [&_.ant-table-thead>tr>th]:bg-gray-50 [&_.ant-table-thead>tr>th]:text-xs [&_.ant-table-thead>tr>th]:font-semibold [&_.ant-table-thead>tr>th]:text-gray-700 [&_.ant-table-thead>tr>th]:py-2 [&_.ant-table-thead>tr>th]:px-2 [&_.ant-table-tbody>tr>td]:py-2 [&_.ant-table-tbody>tr>td]:px-2 [&_.ant-table-tbody>tr>td]:text-xs"
+          scroll={{ x: "max-content" }}
+          rowClassName={(record) => {
+            const classes = ["hover:bg-blue-50/50 transition-colors"];
+            if (record?.shipStation_OrderId) {
+              classes.push("opacity-60 bg-gray-50/50");
+            }
+            return classes.join(" ");
+          }}
+          onRow={(record) => ({
+            onClick: () => onRowClick(record),
+            className: "cursor-pointer",
+          })}
+        />
+      </div>
 
       {showPagination && (
         <div className="flex justify-center">
@@ -859,3 +1298,16 @@ export default function OrderTable({
     </div>
   );
 }
+
+export default memo(OrderTable, (prevProps, nextProps) => {
+  // Custom comparison function for memo
+  return (
+    prevProps.orders === nextProps.orders &&
+    prevProps.loading === nextProps.loading &&
+    prevProps.currentPage === nextProps.currentPage &&
+    prevProps.pageSize === nextProps.pageSize &&
+    prevProps.totalOrders === nextProps.totalOrders &&
+    prevProps.selectedOrders?.length === nextProps.selectedOrders?.length &&
+    prevProps.selectAll === nextProps.selectAll
+  );
+});
