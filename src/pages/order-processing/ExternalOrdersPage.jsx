@@ -13,6 +13,7 @@ import OrderEditModal from "../../components/external-orders/OrderEditModal";
 import PlatformTabs, {
   PLATFORM_CONFIG,
 } from "../../components/external-orders/PlatformTabs";
+import OrderStepper from "../../components/external-orders/OrderStepper";
 import Swal from "sweetalert2";
 import { getPlatformConfig } from "../../config/platforms";
 
@@ -579,14 +580,17 @@ export default function ExternalOrdersPage() {
         {isRefreshing && (
           <div className="absolute inset-0 bg-white bg-opacity-50 z-50 pointer-events-auto cursor-not-allowed" />
         )}
+        {/* Order Stepper */}
+        <OrderStepper />
+
         {/* Header */}
-        <div className="mb-8">
+        <div className="mb-6">
           <div className="flex sm:flex-row flex-col justify-between items-start max-md:gap-4">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-black mb-2">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
                 Pending Orders
               </h1>
-              <p className="text-gray-600">
+              <p className="text-sm text-gray-500">
                 Manage pending orders from different e-commerce platforms
               </p>
             </div>

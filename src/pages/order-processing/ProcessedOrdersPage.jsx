@@ -15,6 +15,7 @@ import OrderEditModal from "../../components/external-orders/OrderEditModal";
 import PlatformTabs, {
   PLATFORM_CONFIG,
 } from "../../components/external-orders/PlatformTabs";
+import OrderStepper from "../../components/external-orders/OrderStepper";
 
 const showRefreshSuccessToast = () => {
   Swal.fire({
@@ -1323,7 +1324,7 @@ export default function ProcessedOrdersPage() {
         {/* Bulk Actions */}
         {selectedOrders.length > 0 && (
           <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-3">
                 <span className="text-sm font-medium text-blue-800">
                   {selectedOrders.length} order(s) selected
@@ -1362,6 +1363,10 @@ export default function ProcessedOrdersPage() {
             selectAll={selectAll}
             onSelectAll={handleSelectAll}
             fetchProcessedOrders={refetch}
+            onDeleteSuccess={() => {
+              setSelectedOrders([]);
+              setSelectAll(false);
+            }}
           />
         ) : (
           <OrderTable
@@ -1381,6 +1386,10 @@ export default function ProcessedOrdersPage() {
             selectAll={selectAll}
             onSelectAll={handleSelectAll}
             fetchProcessedOrders={refetch}
+            onDeleteSuccess={() => {
+              setSelectedOrders([]);
+              setSelectAll(false);
+            }}
           />
         )}
       </div>
@@ -1399,16 +1408,18 @@ export default function ProcessedOrdersPage() {
         {isRefreshing && (
           <div className="absolute inset-0 bg-white bg-opacity-50 z-50 pointer-events-auto cursor-not-allowed" />
         )}
+        {/* Order Stepper */}
+        <OrderStepper />
+
         {/* Header */}
-        <div className="mb-8">
+        <div className="mb-6">
           <div className="flex sm:flex-row flex-col justify-between items-start max-md:gap-4">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-black mb-2">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
                 Processed Orders
               </h1>
-              <p className="text-gray-600">
-                View and manage processed orders from different e-commerce
-                platforms
+              <p className="text-sm text-gray-500">
+                View and manage processed orders from different e-commerce platforms
               </p>
             </div>
             <div className="flex items-center gap-4">

@@ -60,19 +60,6 @@ export default function AddLabelModal({
 
   console.log("order", order);
 
-  // Initial form data
-  const initialFormData = useMemo(
-    () => ({
-      platform: activeTab ?? "shopify",
-      warehouseId: "",
-      packageCode: "",
-      weight: { value: 0, units: "pounds" },
-      dimensions: { length: 0, width: 0, height: 0, units: "inch" },
-      packageName: "",
-    }),
-    [activeTab]
-  );
-
   // Fetch warehouses with caching
   const fetchWarehouses = useCallback(async () => {
     const now = Date.now();
@@ -290,7 +277,8 @@ export default function AddLabelModal({
           customClass: { popup: "rounded-lg" },
         });
 
-        handleClose();
+        setOpen(false);
+        form.resetFields();
         if (typeof fetchProcessedOrders === "function") {
           fetchProcessedOrders();
         }
@@ -303,7 +291,7 @@ export default function AddLabelModal({
     } finally {
       setLoading(false);
     }
-  }, [validateForm, form, order, fetchProcessedOrders, packages]);
+  }, [validateForm, form, order, activeTab, fetchProcessedOrders, packages]);
 
   // Close handler with cleanup
   const handleClose = useCallback(() => {
@@ -342,27 +330,37 @@ export default function AddLabelModal({
     [packages]
   );
 
+  // Check if label info is complete
+  const hasLabelInfo =
+    order?.packageCode &&
+    order?.warehouseId &&
+    order?.weight?.value &&
+    order?.dimensions?.length &&
+    order?.dimensions?.width &&
+    order?.dimensions?.height;
+
   return (
     <>
-      <Button
-        type="link"
-        icon={
-          order.packageCode ? (
-            <CheckOutlined className="text-green-600" />
-          ) : (
-            <PlusOutlined className="text-blue-600" />
-          )
-        }
-        onClick={handleOpen}
-        size="small"
-        className={`font-medium transition-all ${
-          order.packageCode
-            ? "text-green-600 hover:text-green-700"
-            : "text-blue-600 hover:text-blue-700"
-        }`}
-      >
-        {order.packageCode ? "Info Added" : "Add Info"}
-      </Button>
+      {hasLabelInfo ? (
+        <button
+          onClick={handleOpen}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-green-50 to-green-100/50 hover:from-green-100 hover:to-green-200 border border-green-300/50 text-green-700 font-semibold text-xs shadow-sm hover:shadow-md transition-all duration-200 group"
+        >
+          <CheckOutlined className="text-sm text-green-600 group-hover:rotate-12 transition-transform duration-200" />
+          <span className="relative">
+            Info Added
+            <span className="absolute -top-1 -right-1 w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+          </span>
+        </button>
+      ) : (
+        <button
+          onClick={handleOpen}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-50 to-blue-100/50 hover:from-blue-100 hover:to-blue-200 border border-blue-300/50 text-blue-700 font-semibold text-xs shadow-sm hover:shadow-md transition-all duration-200 group"
+        >
+          <PlusOutlined className="text-sm text-blue-600 group-hover:rotate-90 transition-transform duration-200" />
+          <span>Add Info</span>
+        </button>
+      )}
 
       <Modal
         title={

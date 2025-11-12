@@ -1,4 +1,4 @@
-import React, { memo } from "react";
+import React, { memo, useState } from "react";
 import {
   Table,
   Tag,
@@ -15,9 +15,14 @@ import {
   CloseCircleOutlined,
   ExclamationCircleOutlined,
   WarningOutlined,
+  DeleteOutlined,
+  CheckCircleOutlined,
+  InfoCircleOutlined,
 } from "@ant-design/icons";
 import { FaCheckCircle } from "react-icons/fa";
 import AddLabelModal from "./AddLabel";
+import apiClient from "../../api/client";
+import Swal from "sweetalert2";
 
 function ShopifyOrderTable({
   orders,
@@ -36,18 +41,30 @@ function ShopifyOrderTable({
   onSelectAll = null,
   activeTab,
   fetchProcessedOrders,
+  onDeleteSuccess = () => {},
 }) {
   const isMobile = useMediaQuery({ maxWidth: 768 });
-  const isTablet = useMediaQuery({ minWidth: 769, maxWidth: 1024 });
+  const [isDeleting, setIsDeleting] = useState(false);
 
   console.log("Orders:", orders);
 
-  // Helper function to format date
+  // Helper function to check if label info is complete
+  const hasLabelInfo = (record) => {
+    return !!(
+      record?.warehouseId &&
+      record?.packageCode &&
+      record?.weight?.value &&
+      record?.dimensions?.length &&
+      record?.dimensions?.width &&
+      record?.dimensions?.height
+    );
+  };
+
+  // Helper function to format date (compact)
   const formatDate = (createdAt) => {
     if (!createdAt) {
-      return <span className="text-sm text-gray-400">—</span>;
+      return <span className="text-xs text-gray-400">—</span>;
     }
-
     const date = new Date(createdAt);
     const now = new Date();
     const diffTime = Math.abs(now - date);
@@ -55,171 +72,136 @@ function ShopifyOrderTable({
 
     if (diffDays === 1) {
       return (
-        <div className="text-sm">
-          <div className="text-gray-900">Today</div>
-          <div className="text-gray-500">
-            {date.toLocaleTimeString("en-US", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+        <div className="text-xs leading-tight">
+          <div className="text-gray-900 font-medium">Today</div>
+          <div className="text-gray-500 text-[10px]">
+            {date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
           </div>
         </div>
       );
     } else if (diffDays === 2) {
       return (
-        <div className="text-sm">
-          <div className="text-gray-900">Yesterday</div>
-          <div className="text-gray-500">
-            {date.toLocaleTimeString("en-US", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+        <div className="text-xs leading-tight">
+          <div className="text-gray-900 font-medium">Yesterday</div>
+          <div className="text-gray-500 text-[10px]">
+            {date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
           </div>
         </div>
       );
     } else {
-      const dayName = date.toLocaleDateString("en-US", { weekday: "long" });
+      const dayName = date.toLocaleDateString("en-US", { weekday: "short" });
       return (
-        <div className="text-sm">
-          <div className="text-gray-900">{dayName}</div>
-          <div className="text-gray-500">
-            {date.toLocaleTimeString("en-US", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+        <div className="text-xs leading-tight">
+          <div className="text-gray-900 font-medium">{dayName}</div>
+          <div className="text-gray-500 text-[10px]">
+            {date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
           </div>
         </div>
       );
     }
   };
 
-  // Helper function to format currency
+  // Helper function to format currency (compact)
   const formatCurrency = (amount, currency = "USD") => {
-    if (!amount) return "$0.00";
-    return new Intl.NumberFormat("en-US", {
+    if (!amount) return <span className="text-xs text-gray-400">—</span>;
+    const formatted = new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: currency,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
     }).format(parseFloat(amount));
+    return <span className="text-xs font-semibold text-gray-900">{formatted}</span>;
   };
 
-  // Get payment status dot
+  // Get payment status dot (compact)
   const getPaymentStatusDot = (status) => {
     switch (status?.toLowerCase()) {
       case "paid":
-        return <div className="w-2 h-2 bg-green-500 rounded-full"></div>;
+        return <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>;
       case "processed":
-        return <div className="w-2 h-2 bg-green-500 rounded-full"></div>;
+        return <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>;
       case "unprocessed":
-        return <div className="w-2 h-2 bg-red-500 rounded-full"></div>;
+        return <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>;
       case "refunded":
-        return <div className="w-2 h-2 bg-red-500 rounded-full"></div>;
+        return <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>;
       default:
-        return <div className="w-2 h-2 bg-gray-300 rounded-full"></div>;
+        return <div className="w-1.5 h-1.5 bg-gray-300 rounded-full"></div>;
     }
   };
 
-  // Get fulfillment status
+  // Get fulfillment status (compact)
   const getFulfillmentStatus = (status) => {
-    // Handle null/undefined as unfulfilled
     if (!status || status === null) {
       return (
-        <div className="flex items-center justify-center gap-2 bg-yellow-400 rounded-full text-black p-0.5">
-          <div className="w-2 h-2 bg-white rounded-full"></div>
-          <span className="text-sm font-medium">Unfulfilled</span>
-        </div>
+        <span className="text-[10px] px-1.5 py-0.5 bg-yellow-100 text-yellow-800 rounded border border-yellow-200 font-medium">
+          Unfulfilled
+        </span>
       );
     }
 
     switch (status?.toLowerCase()) {
       case "fulfilled":
         return (
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-            <span className="text-sm text-green-700 font-medium">
-              Fulfilled
-            </span>
-          </div>
+          <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded border border-green-200 font-medium">
+            Fulfilled
+          </span>
         );
       default:
         return (
-          <div className="flex items-center justify-center gap-2 bg-yellow-400 rounded-full text-black p-1">
-            <div className="w-2 h-2 bg-white rounded-full"></div>
-            <span className="text-sm font-medium">Unfulfilled</span>
-          </div>
+          <span className="text-[10px] px-1.5 py-0.5 bg-yellow-100 text-yellow-800 rounded border border-yellow-200 font-medium">
+            Unfulfilled
+          </span>
         );
     }
   };
 
-  // Get delivery status
+  // Get delivery status (compact)
   const getDeliveryStatus = (status) => {
     if (!status) {
-      return <span className="text-sm text-gray-400">—</span>;
+      return <span className="text-xs text-gray-400">—</span>;
     }
 
-    switch (status?.toLowerCase()) {
-      case "awaiting_shipment":
-        return (
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-            <span className="text-sm text-yellow-700 font-medium">
-              Awaiting Shipment
-            </span>
-          </div>
-        );
-      case "in_transit":
-        return (
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-            <span className="text-sm text-blue-700 font-medium">
-              In Transit
-            </span>
-          </div>
-        );
-      case "delivered":
-        return (
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-            <span className="text-sm text-green-700 font-medium">
-              Delivered
-            </span>
-          </div>
-        );
-      default:
-        return (
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-            <span className="text-sm text-gray-600">{status}</span>
-          </div>
-        );
-    }
+    const statusConfig = {
+      awaiting_shipment: { bg: "bg-yellow-100", text: "text-yellow-700", border: "border-yellow-200", label: "Awaiting" },
+      in_transit: { bg: "bg-blue-100", text: "text-blue-700", border: "border-blue-200", label: "In Transit" },
+      delivered: { bg: "bg-green-100", text: "text-green-700", border: "border-green-200", label: "Delivered" },
+    };
+
+    const config = statusConfig[status?.toLowerCase()] || { bg: "bg-gray-100", text: "text-gray-600", border: "border-gray-200", label: status };
+
+    return (
+      <span className={`text-[10px] px-1.5 py-0.5 ${config.bg} ${config.text} rounded border ${config.border} font-medium capitalize`}>
+        {config.label}
+      </span>
+    );
   };
 
-  // Get delivery method
+  // Get delivery method (compact)
   const getDeliveryMethod = (method) => {
-    if (!method) return <span className="text-sm text-gray-400">—</span>;
-    return <span className="text-sm text-gray-600">{method}</span>;
+    if (!method) return <span className="text-xs text-gray-400">—</span>;
+    return <span className="text-xs text-gray-600 truncate block" title={method}>{method}</span>;
   };
 
-  // Get cancel reason badge
+  // Get cancel reason badge (compact)
   const getCancelReasonBadge = (cancelReason) => {
     if (!cancelReason || cancelReason === "null") return null;
 
     const reasonConfig = {
-      customer: { color: "bg-blue-100 text-blue-800", text: "Customer" },
-      inventory: { color: "bg-orange-100 text-orange-800", text: "Inventory" },
-      fraud: { color: "bg-red-100 text-red-800", text: "Fraud" },
-      staff: { color: "bg-purple-100 text-purple-800", text: "Staff" },
-      cancel: { color: "bg-gray-100 text-gray-800", text: "Cancelled" },
+      customer: { color: "bg-blue-100 text-blue-800 border-blue-200", text: "Customer" },
+      inventory: { color: "bg-orange-100 text-orange-800 border-orange-200", text: "Inventory" },
+      fraud: { color: "bg-red-100 text-red-800 border-red-200", text: "Fraud" },
+      staff: { color: "bg-purple-100 text-purple-800 border-purple-200", text: "Staff" },
+      cancel: { color: "bg-gray-100 text-gray-800 border-gray-200", text: "Cancelled" },
     };
 
     const config = reasonConfig[cancelReason] || {
-      color: "bg-gray-100 text-gray-800",
+      color: "bg-gray-100 text-gray-800 border-gray-200",
       text: cancelReason,
     };
 
     return (
       <span
-        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${config.color}`}
+        className={`inline-flex items-center px-1 py-0.5 rounded border text-[10px] font-medium ${config.color}`}
       >
         {config.text}
       </span>
@@ -269,30 +251,109 @@ function ShopifyOrderTable({
     return null;
   };
 
-  // Get tags
+  // Get tags (compact)
   const getTags = (tags) => {
     if (!tags || !Array.isArray(tags) || tags.length === 0) {
-      return <span className="text-sm text-gray-400">—</span>;
+      return <span className="text-xs text-gray-400">—</span>;
     }
 
     return (
-      <div className="flex flex-wrap gap-1">
+      <div className="flex flex-wrap gap-0.5">
         {tags.slice(0, 2).map((tag, index) => (
           <span
             key={index}
-            className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-800"
+            className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-700 border border-gray-200"
           >
             {tag}
           </span>
         ))}
         {tags.length > 2 && (
-          <span className="text-xs text-gray-500">+{tags.length - 2} more</span>
+          <span className="text-[10px] text-gray-500">+{tags.length - 2}</span>
         )}
       </div>
     );
   };
 
-  // Checkbox column
+  // Handle bulk delete
+  const handleBulkDelete = async () => {
+    if (selectedOrders.length === 0) {
+      Swal.fire({
+        icon: "warning",
+        title: "No Orders Selected",
+        text: "Please select at least one order to delete.",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+        background: "#f59e0b",
+        color: "#fff",
+        customClass: { popup: "rounded-lg" },
+      });
+      return;
+    }
+
+    const result = await Swal.fire({
+      title: "Delete Orders?",
+      text: `Are you sure you want to delete ${selectedOrders.length} order(s)? This action cannot be undone.`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#ef4444",
+      cancelButtonColor: "#6b7280",
+      confirmButtonText: "Yes, delete",
+      cancelButtonText: "Cancel",
+    });
+
+    if (!result.isConfirmed) return;
+
+    setIsDeleting(true);
+    try {
+      const { data } = await apiClient.delete("/api/v1/orders/shopify/orders", {
+        data: { orderIds: selectedOrders },
+      });
+
+      if (data?.success) {
+        Swal.fire({
+          icon: "success",
+          title: "Orders Deleted",
+          text: `Successfully deleted ${data.deletedCount || selectedOrders.length} order(s)`,
+          toast: true,
+          position: "top-end",
+          showConfirmButton: false,
+          timer: 3000,
+          timerProgressBar: true,
+          background: "#10b981",
+          color: "#fff",
+          customClass: { popup: "rounded-lg" },
+        });
+
+        if (onDeleteSuccess) onDeleteSuccess();
+        if (fetchProcessedOrders) fetchProcessedOrders();
+      }
+    } catch (error) {
+      console.error("Delete error:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Delete Failed",
+        text:
+          error?.response?.data?.message ||
+          error?.message ||
+          "Failed to delete orders",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 4000,
+        timerProgressBar: true,
+        background: "#ef4444",
+        color: "#fff",
+        customClass: { popup: "rounded-lg" },
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Checkbox column (compact)
   const checkboxColumn = showCheckboxes
     ? [
         {
@@ -301,17 +362,18 @@ function ShopifyOrderTable({
               checked={selectAll}
               onChange={(e) => onSelectAll && onSelectAll(e.target.checked)}
               disabled={!orders || orders.length === 0}
+              className="[&_.ant-checkbox-inner]:w-3 [&_.ant-checkbox-inner]:h-3"
             />
           ),
           dataIndex: "checkbox",
           key: "checkbox",
-          width: 50,
+          width: 40,
           render: (_, record) => {
             const isDisabled = !!record?.shipStation_OrderId;
             return (
               <div className="flex items-center justify-center">
                 {isDisabled ? (
-                  <FaCheckCircle className="text-green-500 size-4" />
+                  <FaCheckCircle className="text-green-500 text-xs" />
                 ) : (
                   <Checkbox
                     checked={selectedOrders.includes(record?._id)}
@@ -321,6 +383,7 @@ function ShopifyOrderTable({
                       onOrderSelect(record?._id, e.target.checked)
                     }
                     onClick={(e) => e.stopPropagation()}
+                    className="[&_.ant-checkbox-inner]:w-3 [&_.ant-checkbox-inner]:h-3"
                   />
                 )}
               </div>
@@ -330,32 +393,33 @@ function ShopifyOrderTable({
       ]
     : [];
 
-  // Main columns matching Shopify admin design
+  // Main columns matching Shopify admin design (compact & advanced)
   const columns = [
     ...checkboxColumn,
     {
       title: "Order",
       dataIndex: "order_key",
       key: "order_key",
-      width: 120,
+      width: 85,
       render: (orderkey, record) => {
-        const numericId = orderkey;
+        const numericId = record?.orderId?.replace("gid://shopify/Order/", "") || orderkey;
+        const orderName = record?.shopifyDetails?.name || orderkey;
         const warning = getOrderWarning(record);
         const cancelReason = record?.shopifyDetails?.cancel_reason;
 
         return (
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-0.5">
+            <div className="flex items-center gap-1">
               {warning && (
                 <Tooltip title={warning.tooltip} placement="top">
-                  {warning.icon}
+                  <span className="text-[10px]">{warning.icon}</span>
                 </Tooltip>
               )}
-              <span className="font-semibold text-gray-900">
-                {record?.shopifyDetails?.name || `${numericId}` || "RF"}
+              <span className="text-xs font-semibold text-gray-900">
+                {orderName || numericId || "—"}
               </span>
             </div>
-            {getCancelReasonBadge(cancelReason)}
+            {cancelReason && getCancelReasonBadge(cancelReason)}
           </div>
         );
       },
@@ -364,7 +428,7 @@ function ShopifyOrderTable({
       title: "Date ↓",
       dataIndex: "createdAt",
       key: "createdAt",
-      width: 120,
+      width: 75,
       render: formatDate,
       sorter: (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
     },
@@ -372,91 +436,94 @@ function ShopifyOrderTable({
       title: "Customer",
       dataIndex: "user_name",
       key: "customerName",
-      width: 120,
+      width: 100,
       render: (name) => (
-        <span className="text-sm text-gray-900">{name || "Customer"}</span>
+        <span className="text-xs text-gray-700 truncate block" title={name}>
+          {name || "—"}
+        </span>
       ),
     },
     {
       title: "FFM Status",
       dataIndex: "status",
       key: "status",
-      width: 120,
+      width: 90,
       render: (status) => (
-        <div className="flex items-center gap-2">
-          <span
-            className={`text-sm text-white px-2 py-[2px] rounded-full ${
-              status === "processed" ? "bg-green-700" : "bg-red-500"
-            } capitalize`}
-          >
-            {status || "Unknown"}
-          </span>
-        </div>
+        <span
+          className={`text-[10px] text-white px-2 py-0.5 rounded-full font-medium ${
+            status === "processed"
+              ? "bg-green-600"
+              : status === "partially processed"
+              ? "bg-yellow-500"
+              : "bg-red-500"
+          } capitalize`}
+        >
+          {status || "—"}
+        </span>
       ),
     },
     {
       title: "SF Status",
       dataIndex: "sf_status",
       key: "sf_status",
-      width: 120,
+      width: 80,
       render: (sfstatus) => (
-        <span className="text-sm text-gray-600 capitalize">
-          {sfstatus || "Unknown"}
+        <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded border border-gray-200 capitalize">
+          {sfstatus || "—"}
         </span>
       ),
     },
-    {
-      title: "Channel",
-      dataIndex: "shopifyDetails",
-      key: "channel",
-      width: 120,
-      render: (shopifyDetails) => (
-        <span className="text-sm text-gray-600">
-          {shopifyDetails?.source_name === "web"
-            ? "Online Store"
-            : shopifyDetails?.source_name || "Online Store"}
-        </span>
-      ),
-    },
+    // {
+    //   title: "Channel",
+    //   dataIndex: "shopifyDetails",
+    //   key: "channel",
+    //   width: 90,
+    //   render: (shopifyDetails) => {
+    //     const source = shopifyDetails?.source_name === "web"
+    //       ? "Online"
+    //       : shopifyDetails?.source_name || "Online";
+    //     return (
+    //       <span className="text-xs text-gray-600 truncate block" title={source}>
+    //         {source}
+    //       </span>
+    //     );
+    //   },
+    // },
     {
       title: "Total",
       dataIndex: "shopifyDetails",
       key: "total",
-      width: 100,
-      render: (shopifyDetails) => (
-        <span className="text-sm font-medium text-gray-900">
-          {formatCurrency(
-            shopifyDetails?.total_price,
-            shopifyDetails?.currency
-          )}
-        </span>
-      ),
+      width: 70,
+      render: (shopifyDetails) =>
+        formatCurrency(shopifyDetails?.total_price, shopifyDetails?.currency),
     },
     {
-      title: "Payment status",
+      title: "Payment",
       dataIndex: "shopifyDetails",
       key: "paymentStatus",
-      width: 120,
-      render: (shopifyDetails) => (
-        <div className="flex items-center gap-2">
-          {getPaymentStatusDot(shopifyDetails?.financial_status)}
-          <span
-            className={`text-sm ${
-              shopifyDetails?.financial_status === "paid"
-                ? "text-green-700"
-                : "text-red-500"
-            } capitalize`}
-          >
-            {shopifyDetails?.financial_status || "Unknown"}
-          </span>
-        </div>
-      ),
+      width: 75,
+      render: (shopifyDetails) => {
+        const status = shopifyDetails?.financial_status;
+        const isPaid = status === "paid";
+        return (
+          <div className="flex items-center gap-1">
+            {getPaymentStatusDot(status)}
+            <span
+              className={`text-[10px] capitalize font-medium ${
+                isPaid ? "text-green-700" : "text-red-600"
+              }`}
+            >
+              {status || "—"}
+            </span>
+          </div>
+        );
+      },
     },
     {
-      title: "Fulfillment status",
+      title: "Fulfillment",
       dataIndex: "shopifyDetails",
       key: "fulfillmentStatus",
-      width: 140,
+      width: 85,
       render: (shopifyDetails) =>
         getFulfillmentStatus(shopifyDetails?.fulfillment_status),
     },
@@ -464,28 +531,56 @@ function ShopifyOrderTable({
       title: "Items",
       dataIndex: "shopifyDetails",
       key: "items",
-      width: 80,
-      render: (shopifyDetails) => (
-        <div className="text-center">
-          <div className="text-lg font-semibold text-gray-900">
-            {shopifyDetails?.line_items?.length || 0}
+      width: 50,
+      render: (shopifyDetails) => {
+        const count = shopifyDetails?.line_items?.length || 0;
+        return (
+          <div className="text-center">
+            <div className="text-xs font-bold text-gray-900">{count}</div>
           </div>
-          <div className="text-xs text-gray-500">Items</div>
-        </div>
-      ),
+        );
+      },
     },
     {
-      title: "Delivery status",
+      title: "Delivery",
       dataIndex: "shipStation_order_status",
       key: "deliveryStatus",
-      width: 120,
+      width: 85,
       render: getDeliveryStatus,
     },
     {
-      title: "Delivery method",
+      title: "Label Status",
+      dataIndex: "labelStatus",
+      key: "labelStatus",
+      width: 90,
+      render: (_, record) => {
+        const hasInfo = hasLabelInfo(record);
+        return (
+          <div className="flex items-center justify-center">
+            {hasInfo ? (
+              <Tooltip title="Label info added">
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-50 text-green-700 rounded border border-green-200">
+                  <CheckCircleOutlined className="text-[10px]" />
+                  <span className="text-[10px] font-medium">Added</span>
+                </span>
+              </Tooltip>
+            ) : (
+              <Tooltip title="Label info missing">
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-orange-50 text-orange-700 rounded border border-orange-200">
+                  <InfoCircleOutlined className="text-[10px]" />
+                  <span className="text-[10px] font-medium">Pending</span>
+                </span>
+              </Tooltip>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      title: "Method",
       dataIndex: "shopifyDetails",
       key: "deliveryMethod",
-      width: 140,
+      width: 80,
       render: (shopifyDetails) =>
         getDeliveryMethod(shopifyDetails?.shipping_lines?.[0]?.title),
     },
@@ -493,68 +588,47 @@ function ShopifyOrderTable({
       title: "Tracking",
       dataIndex: "tracking_number",
       key: "trackingNumber",
-      width: 120,
+      width: 100,
       render: (trackingNumber) => {
         if (!trackingNumber || trackingNumber.trim() === "") {
-          return <span className="text-sm text-gray-400">—</span>;
+          return <span className="text-xs text-gray-400">—</span>;
         }
         return (
-          <span className="text-sm text-blue-600 font-medium">
+          <span className="text-xs text-blue-600 font-medium truncate block" title={trackingNumber}>
             {trackingNumber}
           </span>
         );
       },
     },
-    {
-      title: "Tags",
-      dataIndex: "shopifyDetails",
-      key: "tags",
-      width: 200,
-      render: (shopifyDetails) =>
-        getTags(
-          shopifyDetails?.tags
-            ? shopifyDetails.tags
-                .split(",")
-                .map((tag) => tag.trim())
-                .filter(Boolean)
-            : []
-        ),
-    },
+    // {
+    //   title: "Tags",
+    //   dataIndex: "shopifyDetails",
+    //   key: "tags",
+    //   width: 120,
+    //   render: (shopifyDetails) =>
+    //     getTags(
+    //       shopifyDetails?.tags
+    //         ? shopifyDetails.tags
+    //             .split(",")
+    //             .map((tag) => tag.trim())
+    //             .filter(Boolean)
+    //         : []
+    //     ),
+    // },
+  
     {
       title: "Actions",
       dataIndex: "actions",
       key: "actions",
-      width: 150,
+      width: 140,
       fixed: "right",
       render: (_, record) => (
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           <AddLabelModal
             order={record}
             activeTab={activeTab}
             fetchProcessedOrders={fetchProcessedOrders}
           />
-          {/* <Button
-            type="link"
-            size="small"
-            onClick={(e) => {
-              e.stopPropagation();
-              onEditClick(record);
-            }}
-            className="text-blue-600 hover:text-blue-800 p-1"
-          >
-            Edit
-          </Button> */}
-          {/* <Button
-            type="link"
-            size="small"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRowClick(record);
-            }}
-            className="text-green-600 hover:text-green-800 p-1"
-          >
-            View
-          </Button> */}
         </div>
       ),
     },
@@ -755,6 +829,28 @@ function ShopifyOrderTable({
   // Desktop layout
   return (
     <div className="space-y-4 transition-opacity duration-300">
+      {/* Bulk Actions Bar - Compact */}
+      {showCheckboxes && selectedOrders.length > 0 && (
+        <div className="mb-2 p-2 bg-red-50 rounded-md border border-red-200">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-red-800">
+              {selectedOrders.length} selected
+            </span>
+            <Button
+              size="small"
+              icon={<DeleteOutlined className="text-xs" />}
+              loading={isDeleting}
+              disabled={isDeleting}
+              onClick={handleBulkDelete}
+              className="!bg-red-600 hover:!bg-red-700 !border-red-600 text-white text-xs h-6 px-3 font-medium shadow-sm"
+              style={{ backgroundColor: '#dc2626', borderColor: '#dc2626' }}
+            >
+              Delete
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Main Table */}
       <div className="overflow-x-auto hide-scrollbar">
         <Table
@@ -762,15 +858,15 @@ function ShopifyOrderTable({
           dataSource={orders}
           rowKey="_id"
           pagination={false}
-          size="middle"
-          className="bg-white rounded-lg shadow-sm"
-          scroll={{ x: 1400 }}
+          size="small"
+          className="bg-white rounded-lg shadow-sm [&_.ant-table-thead>tr>th]:bg-gray-50 [&_.ant-table-thead>tr>th]:text-xs [&_.ant-table-thead>tr>th]:font-semibold [&_.ant-table-thead>tr>th]:text-gray-700 [&_.ant-table-thead>tr>th]:py-2 [&_.ant-table-thead>tr>th]:px-2 [&_.ant-table-tbody>tr>td]:py-2 [&_.ant-table-tbody>tr>td]:px-2 [&_.ant-table-tbody>tr>td]:text-xs [&_.ant-table]:border-collapse"
+          scroll={{ x: "max-content" }}
           rowClassName={(record) => {
             const warning = getOrderWarning(record);
-            const classes = [];
+            const classes = ["hover:bg-blue-50/50 transition-colors border-b border-gray-100"];
 
             if (record?.shipStation_OrderId) {
-              classes.push("opacity-60");
+              classes.push("opacity-60 bg-gray-50/50");
             }
 
             if (warning && warning.type === "cancel") {
@@ -781,7 +877,7 @@ function ShopifyOrderTable({
           }}
           onRow={(record) => ({
             onClick: () => onRowClick(record),
-            className: "cursor-pointer hover:bg-gray-50 transition-colors",
+            className: "cursor-pointer",
           })}
         />
       </div>

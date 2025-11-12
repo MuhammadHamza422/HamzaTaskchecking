@@ -4,7 +4,14 @@ import { useAuth } from "../../contexts/AuthContext";
 import { motion } from "framer-motion";
 import Swal from "sweetalert2";
 import useFullscreen from "../useFullscreen";
-import { MdAdd, MdFullscreen, MdFullscreenExit } from "react-icons/md";
+import { 
+  MdAdd, 
+  MdFullscreen, 
+  MdFullscreenExit,
+  MdPendingActions,
+  MdCheckCircle,
+  MdCreateNewFolder
+} from "react-icons/md";
 
 const navLinks = [
   {
@@ -79,30 +86,24 @@ const navLinks = [
         to: "orders/external/orders/pending",
         label: "Pending Orders",
         default: true,
+        icon: MdPendingActions,
+        color: "blue",
       },
-      { to: "orders/external/orders/processed", label: "Processed Orders" },
-      { to: "orders/external/orders/manual", label: "Manual Orders" },
+      { 
+        to: "orders/external/orders/processed", 
+        label: "Processed Orders",
+        icon: MdCheckCircle,
+        color: "green",
+      },
+      { 
+        to: "orders/external/orders/manual", 
+        label: "Manual Orders",
+        icon: MdCreateNewFolder,
+        color: "orange",
+      },
     ],
   },
-  // {
-  //   label: "Pending Orders",
-  //   to: "orders/external/orders/pending",
-  //   app: "orders",
-  //   roles: ["admin", "sourcer", "purchaser"],
-  //   default: true,
-  // },
-  // {
-  //   label: "Processed Orders",
-  //   to: "orders/external/orders/processed",
-  //   app: "orders",
-  //   roles: ["admin", "sourcer", "purchaser"],
-  // },
-  // {
-  //   label: "Manual Orders",
-  //   to: "orders/external/orders/manual",
-  //   app: "orders",
-  //   roles: ["admin", "sourcer", "purchaser"],
-  // },
+ 
   {
     to: "orders/platforms",
     label: "Platforms",
@@ -368,17 +369,37 @@ const MainLayout = () => {
                           <div className="flex flex-col gap-1">
                             {children.map((child) => {
                               const isActive = location.pathname === child.to;
+                              const IconComponent = child.icon || MdAdd;
+                              const colorClass = child.color === "blue" 
+                                ? "bg-blue-500" 
+                                : child.color === "green"
+                                ? "bg-green-500"
+                                : "bg-orange-500";
+                              
+                              const getActiveClasses = () => {
+                                if (child.color === "blue") {
+                                  return "bg-blue-100 border-l-4 border-blue-600 text-blue-800";
+                                } else if (child.color === "green") {
+                                  return "bg-green-100 border-l-4 border-green-600 text-green-800";
+                                } else {
+                                  return "bg-orange-100 border-l-4 border-orange-600 text-orange-800";
+                                }
+                              };
+
                               return (
                                 <div
                                   key={child.to}
                                   onClick={() => handleNavClick(child.to)}
-                                  className={`w-full p-3 rounded-lg cursor-pointer transition-all duration-300 ${
+                                  className={`w-full p-3 rounded-lg cursor-pointer transition-all duration-300 flex items-center gap-2 ${
                                     isActive
-                                      ? "bg-blue-100 border-l-4 border-blue-600 font-semibold text-blue-800"
-                                      : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                                      ? `${getActiveClasses()} font-semibold`
+                                      : "text-gray-700 hover:bg-gray-50"
                                   }`}
                                 >
-                                  {child.label}
+                                  <div className={`flex items-center justify-center w-7 h-7 rounded-lg ${colorClass} text-white flex-shrink-0`}>
+                                    <IconComponent className="text-xs" />
+                                  </div>
+                                  <span className="text-sm">{child.label}</span>
                                 </div>
                               );
                             })}
@@ -510,36 +531,51 @@ const MainLayout = () => {
                               />
                             </svg>
                           </button>
-                          <div className="absolute left-0 mt-3 w-56 bg-white rounded-xl shadow-xl z-50 opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 group-hover:visible invisible transition-all duration-300 ease-out border border-gray-100">
+                          <div className="absolute left-0 mt-3 w-64 bg-white rounded-xl shadow-2xl z-50 opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 group-hover:visible invisible transition-all duration-300 ease-out border border-gray-100 overflow-hidden">
                             <div className="py-2">
                               {children.map((child) => {
                                 const isActive = location.pathname === child.to;
+                                const IconComponent = child.icon || MdAdd;
+                                const colorClass = child.color === "blue" 
+                                  ? "bg-blue-500" 
+                                  : child.color === "green"
+                                  ? "bg-green-500"
+                                  : "bg-orange-500";
+                                
+                                // Get proper gradient classes based on color
+                                const getActiveClasses = () => {
+                                  if (child.color === "blue") {
+                                    return "bg-gradient-to-r from-blue-100 to-blue-50 text-blue-700 border-l-4 border-blue-500";
+                                  } else if (child.color === "green") {
+                                    return "bg-gradient-to-r from-green-100 to-green-50 text-green-700 border-l-4 border-green-500";
+                                  } else {
+                                    return "bg-gradient-to-r from-orange-100 to-orange-50 text-orange-700 border-l-4 border-orange-500";
+                                  }
+                                };
+
                                 return (
-                                  <div
+                                  <motion.div
                                     key={child.to}
                                     onClick={() => handleNavClick(child.to)}
-                                    className={`flex items-center gap-2 px-5 py-2.5 cursor-pointer rounded-lg mx-1 my-0.5 transition-all duration-200 ${
+                                    whileHover={{ scale: 1.02, x: 4 }}
+                                    className={`flex items-center gap-3 px-5 py-3 cursor-pointer rounded-lg mx-1 my-0.5 transition-all duration-200 ${
                                       isActive
-                                        ? "bg-gradient-to-r from-blue-100 to-blue-50 text-blue-700 font-semibold shadow-sm"
-                                        : "text-gray-700 hover:bg-blue-50 hover:text-blue-600 hover:translate-x-1"
+                                        ? `${getActiveClasses()} font-semibold shadow-sm`
+                                        : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
                                     }`}
                                   >
-                                    <span
-                                      className={`w-2 h-2 rounded-full ${
-                                        child?.label === "Pending Orders"
-                                          ? "bg-blue-500"
-                                          : child?.label === "Processed Orders"
-                                          ? "bg-green-500"
-                                          : ""
-                                      }    gap-1 group-hover:opacity-100 transition-opacity duration-200`}
-                                    >
-                                      {child?.label === "Manual Orders" && (
-                                        <MdAdd className="text-orange-500 size-6 -ml-2 -mt-2" />
-                                      )}
-                                    </span>
-
-                                    {child.label}
-                                  </div>
+                                    <div className={`flex items-center justify-center w-8 h-8 rounded-lg ${colorClass} text-white shadow-sm`}>
+                                      <IconComponent className="text-sm" />
+                                    </div>
+                                    <span className="flex-1 font-medium text-sm">{child.label}</span>
+                                    {isActive && (
+                                      <motion.div
+                                        initial={{ scale: 0 }}
+                                        animate={{ scale: 1 }}
+                                        className={`w-2 h-2 rounded-full ${colorClass}`}
+                                      />
+                                    )}
+                                  </motion.div>
                                 );
                               })}
                             </div>
