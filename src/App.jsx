@@ -57,6 +57,10 @@ import PurchaseOrderDetailPage from "./pages/procurement/PurchaseOrderDetailPage
 import CreatePurchaseOrderPage from "./pages/procurement/CreatePurchaseOrderPage";
 import QRCodeScannerPage from "./pages/scan/QRCodeScannerPage";
 import QRScanResultPage from "./pages/scan/QRScanResultPage";
+import PackingOperationsPage from "./pages/order-fulfillment/PackingOperationsPage";
+import DropshipManagementPage from "./pages/order-fulfillment/DropshipManagementPage";
+import ShippingOperationsPage from "./pages/order-fulfillment/ShippingOperationsPage";
+import FulfillmentDashboardPage from "./pages/order-fulfillment/FulfillmentDashboardPage";
 
 // 🔹 Role guard for specific routes
 const RequireRoles = ({ allow, children }) => {
@@ -298,6 +302,40 @@ function App() {
             element={
               <RequireRoles allow={["admin", "procurement", "manager"]}>
                 <QRScanResultPage />
+              </RequireRoles>
+            }
+          />
+
+          {/* Order Fulfillment Routes - Dashboard is default */}
+          <Route
+            path="fulfillment"
+            element={
+              <RequireRoles allow={["admin"]}>
+                <FulfillmentDashboardPage />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="fulfillment/packing/*"
+            element={
+              <RequireRoles allow={["admin"]}>
+                <PackingOperationsPage />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="fulfillment/dropship"
+            element={
+              <RequireRoles allow={["admin"]}>
+                <DropshipManagementPage />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="fulfillment/shipping"
+            element={
+              <RequireRoles allow={["admin"]}>
+                <ShippingOperationsPage />
               </RequireRoles>
             }
           />

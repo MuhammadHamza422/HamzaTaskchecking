@@ -117,6 +117,15 @@ const rolesOptions = [
       "scan",              // access scan module
     ],
   },
+  {
+    app: "fulfillment",
+    label: "Order Fulfillment",
+    menu: [
+      "packing",              // access packing module
+      "dropship",              // access dropship module
+      "shipping",              // access shipping module
+    ],
+  },
 ];
 
 const CustomButton = ({
