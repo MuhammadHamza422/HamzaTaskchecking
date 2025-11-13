@@ -21,8 +21,10 @@ import {
   Switch,
   Space,
   Tooltip,
+  Tabs,
+  Badge,
 } from "antd";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Package } from "lucide-react";
 import { debounce } from "lodash";
 import { motion as Motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
@@ -263,6 +265,7 @@ const AdminProductsPage = () => {
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
   const [quickCreateLoading, setQuickCreateLoading] = useState(false);
   const [quickForm] = Form.useForm();
+  const [activeTab, setActiveTab] = useState("all");
 
   const options = ColorCode2.map((color) => ({
     value: color,
@@ -459,6 +462,18 @@ const AdminProductsPage = () => {
       };
     });
   }, [data]);
+
+  // Separate products into all (without issues) and missing fields
+  const { allProducts, productsWithMissingFields } = useMemo(() => {
+    // All products = products WITHOUT warnings/issues
+    const all = products.filter((p) => !p.hasWarnings);
+    // Products with issues = products WITH warnings
+    const withMissing = products.filter((p) => p.hasWarnings);
+    return {
+      allProducts: all,
+      productsWithMissingFields: withMissing,
+    };
+  }, [products]);
 
   const total = data?.totalProducts || 0;
   const totalPages = Math.max(1, Math.ceil(total / limit));
@@ -969,7 +984,7 @@ const AdminProductsPage = () => {
           }`}
         >
           {TYPE_CODE_LABELS[text] || text || (
-            <span className="italic text-red-500 inline-flex">Missing Type</span>
+            <span className="italic text-red-500 inline-flex min-w-fit">Missing Type</span>
           )}
         </span>
       ),
@@ -1102,9 +1117,16 @@ const AdminProductsPage = () => {
         {/* Filters Section */}
         <div className="bg-white rounded-lg p-4 mb-4 shadow-sm border border-gray-200">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
-            <Title level={4} style={{ margin: 0 }} className="text-gray-700">
-              Filters
-            </Title>
+            <div className="flex items-center gap-3">
+              <Title level={4} style={{ margin: 0 }} className="text-gray-700">
+                Filters
+              </Title>
+              {activeTab === "missing" && productsWithMissingFields.length > 0 && (
+                <Tag color="orange" className="text-xs">
+                  {productsWithMissingFields.length} products need attention
+                </Tag>
+              )}
+            </div>
             <Button
               onClick={handleFilterReset}
               size="small"
@@ -1189,31 +1211,122 @@ const AdminProductsPage = () => {
           )}
         </div>
 
-        <div className="bg-white rounded-lg">
-          {/* Desktop Table View */}
-          <Table
-            dataSource={products}
-            columns={columns}
-            rowKey="_id"
-            loading={isLoading}
-            pagination={false}
-            rowClassName={(record) =>
-              record?.hasWarnings ? "bg-yellow-50/30" : ""
-            }
-            locale={{
-              emptyText: (
-                <div className="py-12 text-center space-y-4">
-                  <Empty description="No products found" />
-                  <Button type="primary" onClick={handleOpenQuickCreate}>
-                    Quick Create Product
-                  </Button>
-                </div>
-              ),
-            }}
-            className="w-full overflow-x-auto"
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          {/* Advanced Tabs Design */}
+          <Tabs
+            activeKey={activeTab}
+            onChange={setActiveTab}
+            type="card"
+            size="large"
+            className="custom-tabs"
+            items={[
+              {
+                key: "all",
+                label: (
+                  <div className="flex items-center gap-2 px-2">
+                    <Package className="h-4 w-4" />
+                    <span>All Products</span>
+                    <Badge
+                      count={allProducts.length}
+                      showZero
+                      style={{
+                        backgroundColor: "#3b82f6",
+                        fontSize: "10px",
+                        minWidth: "18px",
+                        height: "18px",
+                        lineHeight: "18px",
+                      }}
+                    />
+                  </div>
+                ),
+                children: (
+                  <div className="p-4">
+                    <Table
+                      dataSource={allProducts}
+                      columns={columns}
+                      rowKey="_id"
+                      loading={isLoading}
+                      pagination={false}
+                      rowClassName={(record) =>
+                        record?.hasWarnings ? "bg-yellow-50/30" : ""
+                      }
+                      locale={{
+                        emptyText: (
+                          <div className="py-12 text-center space-y-4">
+                            <Empty description="No products found" />
+                            <Button type="primary" onClick={handleOpenQuickCreate}>
+                              Quick Create Product
+                            </Button>
+                          </div>
+                        ),
+                      }}
+                      className="w-full overflow-x-auto"
+                    />
+                  </div>
+                ),
+              },
+              {
+                key: "missing",
+                label: (
+                  <div className="flex items-center gap-2 px-2">
+                    <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                    <span>Products with Issues</span>
+                    <Badge
+                      count={productsWithMissingFields.length}
+                      showZero
+                      style={{
+                        backgroundColor: "#f59e0b",
+                        fontSize: "10px",
+                        minWidth: "18px",
+                        height: "18px",
+                        lineHeight: "18px",
+                      }}
+                    />
+                  </div>
+                ),
+                children: (
+                  <div className="p-4">
+                    {productsWithMissingFields.length > 0 ? (
+                      <Table
+                        dataSource={productsWithMissingFields}
+                        columns={columns}
+                        rowKey="_id"
+                        loading={isLoading}
+                        pagination={false}
+                        rowClassName="bg-yellow-50/30"
+                        locale={{
+                          emptyText: (
+                            <div className="py-12 text-center space-y-4">
+                              <Empty description="No products with missing fields" />
+                            </div>
+                          ),
+                        }}
+                        className="w-full overflow-x-auto"
+                      />
+                    ) : (
+                      <div className="py-12 text-center space-y-4">
+                        <div className="flex flex-col items-center gap-4">
+                          <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center">
+                            <CheckCircle2 className="h-8 w-8 text-green-600" />
+                          </div>
+                          <div>
+                            <Title level={4} className="text-gray-700 mb-2">
+                              All Products Are Complete! 🎉
+                            </Title>
+                            <Text className="text-gray-500">
+                              No products have missing fields or invalid SKUs.
+                            </Text>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ),
+              },
+            ]}
           />
-          {/* Pagination Section */}
-          {total > 0 && (
+          {/* Pagination Section for All Products */}
+          {total > 0 && activeTab === "all" && (
             <div className="mt-6 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-6">
               {/* Results Info */}
               <div className="text-center sm:text-left text-sm text-gray-600 font-medium mb-4 sm:mb-2">
@@ -1457,6 +1570,21 @@ const AdminProductsPage = () => {
                     </select>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Pagination for Missing Fields Tab */}
+          {productsWithMissingFields.length > 0 && activeTab === "missing" && (
+            <div className="mt-6 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-6">
+              {/* Results Info */}
+              <div className="text-center sm:text-left text-sm text-gray-600 font-medium mb-4 sm:mb-2">
+                Showing{" "}
+                <span className="font-semibold text-gray-900">
+                  {productsWithMissingFields.length}
+                </span>{" "}
+                product{productsWithMissingFields.length !== 1 ? "s" : ""} with
+                missing fields or invalid SKUs
               </div>
             </div>
           )}
@@ -1837,3 +1965,56 @@ const AdminProductsPage = () => {
 };
 
 export default AdminProductsPage;
+
+// Custom styles for tabs
+if (typeof document !== "undefined") {
+  const styleId = "admin-products-tabs-styles";
+  if (!document.getElementById(styleId)) {
+    const styleSheet = document.createElement("style");
+    styleSheet.id = styleId;
+    styleSheet.type = "text/css";
+    styleSheet.innerHTML = `
+      .custom-tabs .ant-tabs-nav {
+        margin: 0;
+        padding: 0 16px;
+        background: linear-gradient(to bottom, #f8fafc, #ffffff);
+        border-bottom: 2px solid #e5e7eb;
+      }
+      
+      .custom-tabs .ant-tabs-tab {
+        border: none !important;
+        border-radius: 8px 8px 0 0 !important;
+        margin-right: 4px !important;
+        padding: 12px 20px !important;
+        background: transparent !important;
+        transition: all 0.3s ease !important;
+      }
+      
+      .custom-tabs .ant-tabs-tab:hover {
+        background: rgba(59, 130, 246, 0.05) !important;
+      }
+      
+      .custom-tabs .ant-tabs-tab-active {
+        background: #ffffff !important;
+        border-bottom: 2px solid #3b82f6 !important;
+        box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05) !important;
+      }
+      
+      .custom-tabs .ant-tabs-tab-active .ant-tabs-tab-btn {
+        color: #3b82f6 !important;
+        font-weight: 600 !important;
+      }
+      
+      .custom-tabs .ant-tabs-content-holder {
+        background: #ffffff;
+      }
+      
+      .custom-tabs .ant-tabs-tab-btn {
+        font-size: 14px;
+        font-weight: 500;
+        color: #6b7280;
+      }
+    `;
+    document.head.appendChild(styleSheet);
+  }
+}

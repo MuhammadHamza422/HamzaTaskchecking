@@ -167,7 +167,7 @@ export default function ProcessedShopifyDetails({
         className="border border-green-200 rounded-lg shadow-sm"
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-gray-700">
-          <dl className="space-y-2">
+          {/* <dl className="space-y-2">
             <div className="flex">
               <dt className="w-28 font-semibold text-gray-800">Payment:</dt>
               <dd className="text-gray-700">
@@ -182,7 +182,7 @@ export default function ProcessedShopifyDetails({
               <dt className="w-28 font-semibold text-gray-800">Locale:</dt>
               <dd className="text-gray-700">{order?.customerLocale || "—"}</dd>
             </div>
-          </dl>
+          </dl> */}
           <dl className="space-y-2">
             <div className="flex">
               <dt className="w-28 font-semibold text-gray-800">Subtotal:</dt>
@@ -216,7 +216,7 @@ export default function ProcessedShopifyDetails({
       </Card>
 
       {/* Billing Address */}
-      <Card
+      {/* <Card
         size="small"
         title="Billing Address"
         className="border border-blue-200 rounded-lg shadow-sm"
@@ -246,10 +246,10 @@ export default function ProcessedShopifyDetails({
             </div>
           )}
         </div>
-      </Card>
+      </Card> */}
 
       {/* Shipping Address */}
-      <Card
+      {/* <Card
         size="small"
         title="Shipping Address"
         className="border border-purple-200 rounded-lg shadow-sm"
@@ -279,7 +279,7 @@ export default function ProcessedShopifyDetails({
             </div>
           )}
         </div>
-      </Card>
+      </Card> */}
 
       {/* Order Items */}
       <Card size="small" title="Order Items" className="border-orange-200">
