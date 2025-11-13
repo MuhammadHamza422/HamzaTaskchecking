@@ -62,6 +62,8 @@ import PackingOperationsPage from "./pages/order-fulfillment/PackingOperationsPa
 import DropshipManagementPage from "./pages/order-fulfillment/DropshipManagementPage";
 import ShippingOperationsPage from "./pages/order-fulfillment/ShippingOperationsPage";
 import FulfillmentDashboardPage from "./pages/order-fulfillment/FulfillmentDashboardPage";
+import FulfillmentLandingPage from "./pages/order-fulfillment/FulfillmentLandingPage";
+import DropshipDetails from "./pages/order-fulfillment/components/dropship/DropshipDetails";
 
 // 🔹 Role guard for specific routes
 const RequireRoles = ({ allow, children }) => {
@@ -311,9 +313,17 @@ function App() {
             }
           />
 
-          {/* Order Fulfillment Routes - Dashboard is default */}
+          {/* Order Fulfillment Routes - Landing page is default */}
           <Route
             path="fulfillment"
+            element={
+              <RequireRoles allow={["admin"]}>
+                <FulfillmentLandingPage />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="fulfillment/dashboard"
             element={
               <RequireRoles allow={["admin"]}>
                 <FulfillmentDashboardPage />
@@ -333,6 +343,14 @@ function App() {
             element={
               <RequireRoles allow={["admin"]}>
                 <DropshipManagementPage />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="fulfillment/dropship/:dropshipId"
+            element={
+              <RequireRoles allow={["admin"]}>
+                <DropshipDetails />
               </RequireRoles>
             }
           />

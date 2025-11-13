@@ -11,6 +11,7 @@ export default function PackingLandingPage() {
   const navigate = useNavigate();
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState(null);
+  const [alreadyPackedWarning, setAlreadyPackedWarning] = useState(null);
 
   const handleOrderFound = async (orderNumber) => {
     if (!orderNumber || orderNumber.trim() === "") {
@@ -24,8 +25,70 @@ export default function PackingLandingPage() {
       const result = await searchOrder(orderNumber.trim());
 
       if (result.success && result.data) {
-        const { orderId, orderNumber, platform, orderKey, order_key } = result.data;
+        const { orderId, orderNumber, platform, orderKey, order_key, isAlreadyPacked, packingInfo } = result.data;
         
+        // Check if order is already packed
+        if (isAlreadyPacked && packingInfo) {
+          setIsProcessing(false);
+          
+          // Set warning message to show under input
+          setAlreadyPackedWarning({
+            packingId: packingInfo.packingId,
+            status: packingInfo.status,
+            packedBy: packingInfo.packedBy,
+            packedAt: packingInfo.packedAt,
+          });
+          
+          // Show SweetAlert popup
+          const result = await Swal.fire({
+            icon: "warning",
+            title: "Order Already Packed",
+            html: `
+              <div class="text-left">
+                <p class="mb-4 text-gray-700">This order has already been packed and cannot be packed again.</p>
+                <div class="bg-gray-50 rounded-lg p-4 mb-4">
+                  <div class="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p class="text-gray-500 font-medium mb-1">Packing ID:</p>
+                      <p class="text-gray-900 font-semibold">${packingInfo.packingId || "N/A"}</p>
+                    </div>
+                    <div>
+                      <p class="text-gray-500 font-medium mb-1">Status:</p>
+                      <p class="text-gray-900 font-semibold">${packingInfo.status || "N/A"}</p>
+                    </div>
+                    <div>
+                      <p class="text-gray-500 font-medium mb-1">Packed By:</p>
+                      <p class="text-gray-900 font-semibold">${packingInfo.packedBy || "N/A"}</p>
+                    </div>
+                    <div>
+                      <p class="text-gray-500 font-medium mb-1">Packed At:</p>
+                      <p class="text-gray-900 font-semibold">${packingInfo.packedAt ? new Date(packingInfo.packedAt).toLocaleString() : "N/A"}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: "View Packing Details",
+            cancelButtonText: "OK",
+            confirmButtonColor: "#2563eb",
+            cancelButtonColor: "#6b7280",
+          });
+
+          if (result.isConfirmed && packingInfo.packingId) {
+            // Navigate to packing list with packingId to show details
+            setAlreadyPackedWarning(null);
+            navigate("/fulfillment/packing/list", {
+              state: { packingId: packingInfo.packingId },
+            });
+          }
+          return;
+        }
+        
+        // Clear warning if order is not packed
+        setAlreadyPackedWarning(null);
+        
+        // Order is not packed, proceed to details page
         let urlIdentifier;
         if (platform === "shopify") {
           urlIdentifier = orderNumber || orderKey || order_key || orderId;
@@ -39,6 +102,8 @@ export default function PackingLandingPage() {
             platform,
             orderKey: orderNumber || orderKey || order_key,
             searchData: result.data,
+            isAlreadyPacked: false,
+            packingInfo: null,
           },
         });
       }
@@ -60,7 +125,7 @@ export default function PackingLandingPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
-      <div className="max-w-[1550px] mx-auto px-4 sm:px-6 py-8">
+      <div className="max-w-[1550px] mx-auto p-4">
         <FulfillmentBreadcrumb />
 
         <motion.div
@@ -71,14 +136,14 @@ export default function PackingLandingPage() {
         >
           <div className="flex items-center gap-4 mb-4">
             <motion.div
-              className="p-4 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg"
+              className="p-2 md:p-4 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg md:rounded-2xl shadow-lg"
               whileHover={{ scale: 1.05, rotate: 5 }}
               transition={{ type: "spring", stiffness: 300 }}
             >
               <Package className="w-8 h-8 text-white" />
             </motion.div>
             <div>
-              <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-1">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-1">
                 Packing Operations
               </h1>
               <p className="text-gray-600 text-base">
@@ -122,7 +187,47 @@ export default function PackingLandingPage() {
                 </motion.div>
               )}
 
-              {error && !isProcessing && (
+              {alreadyPackedWarning && !isProcessing && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-4 p-4 bg-amber-50 border-2 border-amber-200 rounded-lg"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="p-1 bg-amber-100 rounded-lg flex-shrink-0">
+                      <Package className="w-4 h-4 text-amber-600" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-amber-900 mb-2">
+                        ⚠️ This order has already been packed
+                      </p>
+                      <div className="text-xs text-amber-800 space-y-1">
+                        <p><span className="font-medium">Packing ID:</span> {alreadyPackedWarning.packingId || "N/A"}</p>
+                        <p><span className="font-medium">Status:</span> {alreadyPackedWarning.status || "N/A"}</p>
+                        <p><span className="font-medium">Packed By:</span> {alreadyPackedWarning.packedBy || "N/A"}</p>
+                        {alreadyPackedWarning.packedAt && (
+                          <p><span className="font-medium">Packed At:</span> {new Date(alreadyPackedWarning.packedAt).toLocaleString()}</p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (alreadyPackedWarning.packingId) {
+                            setAlreadyPackedWarning(null);
+                            navigate("/fulfillment/packing/list", {
+                              state: { packingId: alreadyPackedWarning.packingId },
+                            });
+                          }
+                        }}
+                        className="mt-3 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors"
+                      >
+                        View Packing Details
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {error && !isProcessing && !alreadyPackedWarning && (
                 <motion.div
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
