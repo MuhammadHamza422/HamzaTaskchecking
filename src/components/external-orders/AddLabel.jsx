@@ -58,7 +58,33 @@ export default function AddLabelModal({
   const [packages, setPackages] = useState([]);
   const [form] = Form.useForm();
 
+  // Get activeTab from localStorage if not provided as prop
+  const getActiveTabFromStorage = useCallback(() => {
+    if (activeTab) return activeTab;
+    
+    // Try different localStorage keys used in different pages
+    const possibleKeys = [
+      "processedOrdersActiveTab",
+      "externalOrdersActiveTab", 
+      "shippedOrdersActiveTab",
+      "pendingOrdersActiveTab"
+    ];
+    
+    for (const key of possibleKeys) {
+      const storedTab = localStorage.getItem(key);
+      if (storedTab && ["shopify", "woocommerce", "walmart", "amazon"].includes(storedTab)) {
+        return storedTab;
+      }
+    }
+    
+    return null;
+  }, [activeTab]);
+
+  const resolvedActiveTab = getActiveTabFromStorage();
+
   console.log("order", order);
+  console.log("activeTab (prop):", activeTab);
+  console.log("resolvedActiveTab:", resolvedActiveTab);
 
   // Fetch warehouses with caching
   const fetchWarehouses = useCallback(async () => {
@@ -133,8 +159,9 @@ export default function AddLabelModal({
     setOpen(true);
 
     // Set form values from order data
+    const currentTab = resolvedActiveTab || activeTab || "shopify";
     const formValues = {
-      platform: activeTab ?? "shopify",
+      platform: currentTab,
       warehouseId: order?.warehouseId || "",
       packageCode: order?.packageCode || "",
       packageName: order?.packageName || "",
@@ -151,7 +178,7 @@ export default function AddLabelModal({
     };
 
     form.setFieldsValue(formValues);
-  }, [order, activeTab, form]);
+  }, [order, activeTab, resolvedActiveTab, form]);
 
   // Load data when modal opens
   useEffect(() => {
@@ -238,12 +265,49 @@ export default function AddLabelModal({
         packageName = selectedPackage?.name || "";
       }
 
-      const orderId = activeTab==="shopify"? order.order_key: order.orderId;
+      // For Shopify orders, use order_key if available and not in GraphQL format
+      // Otherwise use shopifyDetails.name (e.g., "RF2120") or extract from orderId
+      let orderId;
+      
+      // Detect if this is a Shopify order (use resolvedActiveTab or fallback to detection)
+      const isShopify = resolvedActiveTab === "shopify" || 
+                       activeTab === "shopify" ||
+                       order?.shopifyDetails || 
+                       (order?.orderId && order.orderId.startsWith("gid://")) ||
+                       (order?.order_key && order.order_key.startsWith("gid://"));
+      
+      if (isShopify) {
+        // Priority 1: shopifyDetails.name (e.g., "RF2120") - most reliable
+        if (order?.shopifyDetails?.name && order.shopifyDetails.name.trim() !== "") {
+          orderId = order.shopifyDetails.name;
+        }
+        // Priority 2: order_key if it exists and is NOT a GraphQL ID
+        else if (order?.order_key && !order.order_key.startsWith("gid://") && order.order_key.trim() !== "") {
+          orderId = order.order_key;
+        }
+        // Priority 3: Extract numeric ID from GraphQL format orderId
+        else if (order?.orderId && order.orderId.startsWith("gid://")) {
+          const match = order.orderId.match(/\/(\d+)(?:"|$)/);
+          orderId = match ? match[1] : order.orderId;
+        }
+        // Fallback
+        else {
+          orderId = order?.order_key || order?.orderId || "";
+        }
+      } else {
+        orderId = order?.orderId || "";
+      }
+      
+      console.log("AddLabel - orderId:", orderId, "activeTab (prop):", activeTab, "resolvedActiveTab:", resolvedActiveTab, "isShopify:", isShopify, "order:", {
+        order_key: order?.order_key,
+        orderId: order?.orderId,
+        shopifyDetails_name: order?.shopifyDetails?.name,
+      });
 
       const { data } = await apiClient.patch(
         `/api/v1/orders/shipstation/label/${orderId}`,
         {
-          platform: values.platform,
+          platform: resolvedActiveTab || activeTab || values.platform || "shopify",
           warehouseId: values.warehouseId,
           packageCode: values.packageCode,
           packageName: packageName,
@@ -291,7 +355,7 @@ export default function AddLabelModal({
     } finally {
       setLoading(false);
     }
-  }, [validateForm, form, order, activeTab, fetchProcessedOrders, packages]);
+  }, [validateForm, form, order, activeTab, resolvedActiveTab, fetchProcessedOrders, packages]);
 
   // Close handler with cleanup
   const handleClose = useCallback(() => {

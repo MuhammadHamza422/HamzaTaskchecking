@@ -113,6 +113,8 @@ export default function ProcessedOrdersPage() {
         limit: limit.toString(),
         page: page.toString(),
         status: "processed", // Always fetch processed orders
+        // Exclude shipped orders - only show orders that haven't been sent to ShipStation
+        shipStation_status: "pending",
       });
 
       // Add all filters to API
@@ -133,6 +135,8 @@ export default function ProcessedOrdersPage() {
         limit: limit.toString(),
         page: page.toString(),
         status: "processed", // Always fetch processed orders
+        // Exclude shipped orders - only show orders that haven't been sent to ShipStation
+        shipStation_status: "pending",
       });
 
       // Add all filters to API for Walmart
@@ -152,7 +156,9 @@ export default function ProcessedOrdersPage() {
       const params = new URLSearchParams({
         limit: limit.toString(),
         page: page.toString(),
-        status: "processed", 
+        status: "processed",
+        // Exclude shipped orders - only show orders that haven't been sent to ShipStation
+        shipStation_status: "pending",
       });
       if (search) {
         params.append("search", search);
@@ -1358,11 +1364,12 @@ export default function ProcessedOrdersPage() {
             showPagination={true}
             onEditClick={handleEditClick}
             showCheckboxes={true}
+            activeTab={activeTab}
+            fetchProcessedOrders={refetch}
             selectedOrders={selectedOrders}
             onOrderSelect={handleOrderSelect}
             selectAll={selectAll}
             onSelectAll={handleSelectAll}
-            fetchProcessedOrders={refetch}
             onDeleteSuccess={() => {
               setSelectedOrders([]);
               setSelectAll(false);
@@ -1445,24 +1452,6 @@ export default function ProcessedOrdersPage() {
                 </svg>
                 {isLoading || isRefreshing ? "Refreshing..." : "Refresh Orders"}
               </button> */}
-              <button
-                onClick={
-                  activeTab === "woocommerce"
-                    ? handleUpdateOrderStatus
-                    : activeTab === "walmart"
-                    ? handleWMUpdateOrderStatus
-                    : activeTab === "shopify"
-                    ? handleShopifyUpdateOrderStatus
-                    : ""
-                }
-                disabled={updateOrderStatusLoading}
-                className="sm:w-auto w-full flex items-center text-[14px] sm:text-[15px] min-w-fit  justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200 shadow-sm"
-              >
-                {updateOrderStatusLoading && (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                )}
-                {updateOrderStatusLoading ? "Updating..." : "Update Status"}
-              </button>
             </div>
           </div>
         </div>

@@ -43,6 +43,7 @@ import AdminProductsPage from "./pages/order-processing/AdminProductsPage";
 import ExternalOrdersPage from "./pages/order-processing/ExternalOrdersPage";
 import MergedProductsPage from "./pages/order-processing/MergedProductsPage";
 import ProcessedOrdersPage from "./pages/order-processing/ProcessedOrdersPage";
+import ShippedOrdersPage from "./pages/order-processing/ShippedOrdersPage";
 import SellerDetailsPage from "./pages/sellers/SellersDetailsPage";
 import SellersListPage from "./pages/sellers/SellersListPage";
 import SourcerDashboardPage from "./pages/sourcer/SourcerDashboardPage";
@@ -165,6 +166,10 @@ function App() {
           <Route
             path="orders/external/orders/processed"
             element={<ProcessedOrdersPage />}
+          />
+          <Route
+            path="orders/external/orders/shipped"
+            element={<ShippedOrdersPage />}
           />
           <Route
             path="orders/external/orders/manual"

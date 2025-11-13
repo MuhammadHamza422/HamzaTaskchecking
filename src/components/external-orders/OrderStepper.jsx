@@ -4,7 +4,8 @@ import { motion } from "framer-motion";
 import { 
   MdPendingActions, 
   MdCheckCircle, 
-  MdCreateNewFolder 
+  MdCreateNewFolder,
+  MdLocalShipping
 } from "react-icons/md";
 
 const orderSteps = [
@@ -21,6 +22,13 @@ const orderSteps = [
     icon: MdCheckCircle,
     color: "green",
     description: "Orders ready for shipment",
+  },
+  {
+    path: "orders/external/orders/shipped",
+    label: "Shipped Orders",
+    icon: MdLocalShipping,
+    color: "purple",
+    description: "Orders with tracking numbers",
   },
   {
     path: "orders/external/orders/manual",
@@ -74,6 +82,12 @@ export default function OrderStepper() {
               text: "text-orange-600",
               border: "border-orange-500",
               light: "bg-orange-50",
+            },
+            purple: {
+              bg: "bg-purple-500",
+              text: "text-purple-600",
+              border: "border-purple-500",
+              light: "bg-purple-50",
             },
           };
 
