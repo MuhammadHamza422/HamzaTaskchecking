@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { CheckCircle2, XCircle } from "lucide-react";
+import { motion } from "framer-motion";
 
 export default function PackingOrderLines({ orderLines = [], selectedItems: initialSelectedItems = [], onSelectionChange }) {
   const [selectedItems, setSelectedItems] = useState(
@@ -84,7 +85,7 @@ export default function PackingOrderLines({ orderLines = [], selectedItems: init
         )}
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full">
           <thead className="bg-gray-50">
             <tr>
@@ -178,6 +179,77 @@ export default function PackingOrderLines({ orderLines = [], selectedItems: init
             })}
           </tbody>
         </table>
+      </div>
+
+      <div className="md:hidden p-4 space-y-4">
+        {orderLines.map((item, index) => {
+          const isSelected = selectedItems.has(item.id);
+          return (
+            <motion.div
+              key={item.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.05 }}
+              onClick={() => handleToggleItem(item.id)}
+              className={`bg-white rounded-lg border-2 p-4 shadow-sm cursor-pointer transition-all ${
+                isSelected
+                  ? "border-blue-500 bg-blue-50/30"
+                  : "border-amber-300 bg-amber-50/50"
+              }`}
+            >
+              <div className="flex items-start gap-3 mb-3">
+                <div onClick={(e) => e.stopPropagation()} className="mt-1">
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => handleToggleItem(item.id)}
+                    className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                  />
+                </div>
+                <div className="w-16 h-16 bg-gray-100 rounded border border-gray-200 flex items-center justify-center shrink-0">
+                  {item.image ? (
+                    <img src={item.image} alt={item.name} className="w-full h-full object-cover rounded" />
+                  ) : (
+                    <span className="text-gray-400 text-xs">No Image</span>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-1">{item.name}</h4>
+                  {item.variant && <p className="text-xs text-gray-500 mb-2">{item.variant}</p>}
+                  <div className="flex items-center gap-2">
+                    {item.isInStock ? (
+                      <span className="inline-flex items-center gap-1 text-green-600">
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span className="text-xs font-medium">
+                          In Stock{item.stockQuantity !== null ? ` (${item.stockQuantity})` : ""}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-amber-600">
+                        <XCircle className="w-4 h-4" />
+                        <span className="text-xs font-medium">Out of Stock</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3 pt-3 border-t border-gray-200">
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">SKU</p>
+                  <p className="text-sm font-semibold text-gray-900">{item.sku || "N/A"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Quantity</p>
+                  <p className="text-sm font-semibold text-gray-900">{item.quantity}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Price</p>
+                  <p className="text-sm font-semibold text-blue-600">${item.price}</p>
+                </div>
+              </div>
+            </motion.div>
+          );
+        })}
       </div>
     </div>
   );
