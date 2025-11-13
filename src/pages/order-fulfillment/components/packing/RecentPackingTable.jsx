@@ -43,16 +43,6 @@ export default function RecentPackingTable({ data = [], loading = false }) {
       ),
     },
     {
-      title: "Out of Stock",
-      dataIndex: "outOfStockItemsCount",
-      key: "outOfStockItemsCount",
-      render: (count) => (
-        <span className={`text-sm font-medium ${count > 0 ? "text-amber-600" : "text-gray-600"}`}>
-          {count || 0}
-        </span>
-      ),
-    },
-    {
       title: "Packed By",
       dataIndex: "packedBy",
       key: "packedBy",
@@ -163,21 +153,15 @@ export default function RecentPackingTable({ data = [], loading = false }) {
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 mb-1">Out of Stock</p>
-                    <p className={`text-sm font-semibold ${record.outOfStockItemsCount > 0 ? "text-amber-600" : "text-gray-900"}`}>
-                      {record.outOfStockItemsCount || 0}
-                    </p>
-                  </div>
-                  <div>
                     <p className="text-xs text-gray-500 mb-1">Packed By</p>
                     <p className="text-sm font-semibold text-gray-900">
                       {record.packedBy || "N/A"}
                     </p>
                   </div>
-                  <div>
+                  <div className="col-span-2">
                     <p className="text-xs text-gray-500 mb-1">Packed At</p>
                     <p className="text-sm font-semibold text-gray-900">
-                      {record.packedAt ? dayjs(record.packedAt).format("MMM DD, YYYY") : "N/A"}
+                      {record.packedAt ? dayjs(record.packedAt).format("MMM DD, YYYY HH:mm") : "N/A"}
                     </p>
                   </div>
                 </div>

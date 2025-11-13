@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { CheckCircle2, XCircle } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function PackingOrderLines({ orderLines = [], selectedItems: initialSelectedItems = [], onSelectionChange }) {
@@ -11,8 +10,9 @@ export default function PackingOrderLines({ orderLines = [], selectedItems: init
     if (initialSelectedItems.length > 0) {
       setSelectedItems(new Set(initialSelectedItems));
     } else {
+      // Select all items by default
       setSelectedItems(
-        new Set(orderLines.filter((item) => item.isInStock).map((item) => item.id))
+        new Set(orderLines.map((item) => item.id))
       );
     }
   }, [initialSelectedItems, orderLines]);
@@ -79,7 +79,7 @@ export default function PackingOrderLines({ orderLines = [], selectedItems: init
         {unselectedCount === 0 && orderLines.length > 0 && (
           <div className="bg-green-50 border border-green-200 rounded-lg p-4">
             <p className="text-sm text-green-800 font-medium">
-              ✓ All in-stock items are selected. You can proceed to upload packing photos.
+              ✓ All items are selected. You can proceed to upload packing photos.
             </p>
           </div>
         )}
@@ -108,9 +108,6 @@ export default function PackingOrderLines({ orderLines = [], selectedItems: init
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Price
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Status
               </th>
             </tr>
           </thead>
@@ -159,21 +156,6 @@ export default function PackingOrderLines({ orderLines = [], selectedItems: init
                   <td className="px-6 py-4 whitespace-nowrap">
                     <p className="text-sm font-medium text-gray-900">${item.price}</p>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {item.isInStock ? (
-                      <span className="inline-flex items-center gap-1 text-green-600">
-                        <CheckCircle2 className="w-4 h-4" />
-                        <span className="text-xs font-medium">
-                          In Stock{item.stockQuantity !== null ? ` (${item.stockQuantity})` : ""}
-                        </span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-amber-600">
-                        <XCircle className="w-4 h-4" />
-                        <span className="text-xs font-medium">Out of Stock</span>
-                      </span>
-                    )}
-                  </td>
                 </tr>
               );
             })}
@@ -216,21 +198,6 @@ export default function PackingOrderLines({ orderLines = [], selectedItems: init
                 <div className="flex-1">
                   <h4 className="text-sm font-semibold text-gray-900 mb-1">{item.name}</h4>
                   {item.variant && <p className="text-xs text-gray-500 mb-2">{item.variant}</p>}
-                  <div className="flex items-center gap-2">
-                    {item.isInStock ? (
-                      <span className="inline-flex items-center gap-1 text-green-600">
-                        <CheckCircle2 className="w-4 h-4" />
-                        <span className="text-xs font-medium">
-                          In Stock{item.stockQuantity !== null ? ` (${item.stockQuantity})` : ""}
-                        </span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-amber-600">
-                        <XCircle className="w-4 h-4" />
-                        <span className="text-xs font-medium">Out of Stock</span>
-                      </span>
-                    )}
-                  </div>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3 pt-3 border-t border-gray-200">

@@ -31,6 +31,8 @@ export default function PackingOrderDetails() {
   const [isViewMode, setIsViewMode] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [isAlreadyPacked, setIsAlreadyPacked] = useState(false);
+  const [packingInfo, setPackingInfo] = useState(null);
 
   useEffect(() => {
     const loadOrderDetails = async () => {
@@ -54,6 +56,8 @@ export default function PackingOrderDetails() {
           setIsViewMode(false);
           const searchData = location.state?.searchData;
           const platform = location.state?.platform;
+          const alreadyPackedFromSearch = location.state?.isAlreadyPacked;
+          const packingInfoFromSearch = location.state?.packingInfo;
 
           if (!platform) {
             setError("Platform information is missing");
@@ -77,11 +81,33 @@ export default function PackingOrderDetails() {
 
           if (result.success && result.data) {
             setOrderData(result.data);
-            setSelectedItems(
-              result.data.orderLines
-                .filter((item) => item.isInStock)
-                .map((item) => item.id)
-            );
+            
+            // Check if order is already packed
+            const isPacked = result.data.isAlreadyPacked || alreadyPackedFromSearch || false;
+            const packingInfoData = result.data.packingInfo || packingInfoFromSearch || null;
+            
+            setIsAlreadyPacked(isPacked);
+            setPackingInfo(packingInfoData);
+            
+            // If already packed, switch to view mode
+            if (isPacked && packingInfoData) {
+              setIsViewMode(true);
+              // Load packing details
+              try {
+                const packingResult = await getPackingOrderDetails(packingInfoData.packingId);
+                if (packingResult.success && packingResult.data) {
+                  setPackingData(packingResult.data);
+                  setSelectedItems(packingResult.data.selectedItems || []);
+                }
+              } catch (err) {
+                console.error("Error loading packing details:", err);
+              }
+            } else {
+              // Select all items by default
+              setSelectedItems(
+                result.data.orderLines.map((item) => item.id)
+              );
+            }
           }
         }
       } catch (error) {
@@ -200,9 +226,20 @@ export default function PackingOrderDetails() {
     }
 
     const orderNumber = orderData.orderNumber || orderData.orderId;
-    const allItemIds = orderLines.map((item) => item.id);
-    const outOfStockItems = allItemIds.filter((id) => !selectedItems.includes(id));
+    const allItemIds = orderLines.map((item) => String(item.id));
+    const selectedItemsNormalized = selectedItems.map((id) => String(id));
+    const deselectedItems = allItemIds.filter((id) => !selectedItemsNormalized.includes(String(id)));
+    const deselectedItemsData = orderLines.filter((item) => deselectedItems.includes(String(item.id)));
     const photoFiles = photos.map((photo) => photo.file);
+
+    // Debug logging
+    console.log("🔍 Packing Debug Info:", {
+      allItemIds,
+      selectedItems: selectedItemsNormalized,
+      deselectedItems,
+      deselectedItemsCount: deselectedItems.length,
+      deselectedItemsData: deselectedItemsData.map(item => ({ id: item.id, name: item.name })),
+    });
 
     setSubmitting(true);
 
@@ -211,17 +248,41 @@ export default function PackingOrderDetails() {
         orderId: orderIdToUse,
         platform: platform,
         orderNumber: orderNumber,
-        selectedItems: selectedItems,
-        outOfStockItems: outOfStockItems,
+        selectedItems: selectedItemsNormalized,
+        deselectedItems: deselectedItems,
+        deselectedItemsData: deselectedItemsData,
+        orderData: {
+          customerName: orderData.customerName,
+          customerEmail: orderData.customerEmail,
+          phone: orderData.phone,
+          shipTo: orderData.shipTo,
+          totalValue: orderData.totalValue,
+          currency: orderData.currency,
+          subtotal: orderData.subtotal,
+          tax: orderData.tax,
+          shipping: orderData.shipping,
+          discount: orderData.discount,
+        },
         photos: photoFiles,
       });
 
       if (result.success) {
         const status = result.data.status;
+        const dropshipCreated = result.data.dropshipCreated;
+        const dropshipId = result.data.dropshipId;
+        const deselectedItemsCount = result.data.deselectedItemsCount || deselectedItems.length;
+        
+        let message = `Order ${orderNumber} has been packed successfully. Status: ${status}`;
+        if (dropshipCreated && dropshipId) {
+          message += `. Dropship order ${dropshipId} created for ${deselectedItemsCount} deselected item(s).`;
+        } else if (deselectedItemsCount > 0) {
+          message += `. ${deselectedItemsCount} item(s) were deselected but dropship creation failed.`;
+        }
+        
         await Swal.fire({
           icon: "success",
           title: "Packing Complete!",
-          text: `Order ${orderNumber} has been packed successfully. Status: ${status}`,
+          text: message,
           confirmButtonColor: "#2563eb",
           confirmButtonText: "OK",
         });
@@ -254,7 +315,7 @@ export default function PackingOrderDetails() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
-      <div className="max-w-[1550px] mx-auto px-4 sm:px-6 py-8">
+      <div className="max-w-[1550px] mx-auto">
         <FulfillmentBreadcrumb />
         
         <motion.button
@@ -272,6 +333,61 @@ export default function PackingOrderDetails() {
         <div className="mb-6">
           <OrderInfoCard order={order} />
         </div>
+
+        {/* Warning Banner for Already Packed Orders */}
+        {isAlreadyPacked && packingInfo && !isViewMode && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 bg-amber-50 border-2 border-amber-200 rounded-xl p-6 shadow-lg"
+          >
+            <div className="flex items-start gap-4">
+              <div className="p-2 bg-amber-100 rounded-lg flex-shrink-0">
+                <Package className="w-6 h-6 text-amber-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-amber-900 mb-2">
+                  This Order Has Already Been Packed
+                </h3>
+                <div className="bg-white rounded-lg p-4 mb-4 border border-amber-200">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 mb-1">Packing ID</p>
+                      <p className="text-sm font-semibold text-gray-900">{packingInfo.packingId || "N/A"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 mb-1">Status</p>
+                      <StatusBadge status={packingInfo.status} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 mb-1">Packed By</p>
+                      <p className="text-sm font-semibold text-gray-900">{packingInfo.packedBy || "N/A"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 mb-1">Packed At</p>
+                      <p className="text-sm font-semibold text-gray-900">
+                        {packingInfo.packedAt ? new Date(packingInfo.packedAt).toLocaleString() : "N/A"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    if (packingInfo.packingId) {
+                      navigate("/fulfillment/packing/list", {
+                        state: { packingId: packingInfo.packingId },
+                      });
+                    }
+                  }}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <Package className="w-4 h-4" />
+                  View Packing Details
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         {isViewMode && packingData && (
           <>
@@ -298,8 +414,8 @@ export default function PackingOrderDetails() {
                     <p className="text-sm font-semibold text-gray-900">{packingData.selectedItems?.length || 0}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-medium text-gray-500 mb-1">Out of Stock Items</p>
-                    <p className="text-sm font-semibold text-amber-600">{packingData.outOfStockItems?.length || 0}</p>
+                    <p className="text-xs font-medium text-gray-500 mb-1">Deselected Items</p>
+                    <p className="text-sm font-semibold text-amber-600">{packingData.deselectedItemsCount || 0}</p>
                   </div>
                   <div>
                     <p className="text-xs font-medium text-gray-500 mb-1">Photos</p>
@@ -508,9 +624,6 @@ export default function PackingOrderDetails() {
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Total
                         </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Status
-                        </th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -549,21 +662,6 @@ export default function PackingOrderDetails() {
                               {packingData.currency || "USD"} {item.total?.toFixed(2) || "0.00"}
                             </p>
                           </td>
-                          <td className="px-4 py-4 whitespace-nowrap">
-                            {item.isInStock ? (
-                              <span className="inline-flex items-center gap-1 text-green-600">
-                                <CheckCircle className="w-4 h-4" />
-                                <span className="text-xs font-medium">
-                                  In Stock{item.stockQuantity !== null ? ` (${item.stockQuantity})` : ""}
-                                </span>
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-amber-600">
-                                <X className="w-4 h-4" />
-                                <span className="text-xs font-medium">Out of Stock</span>
-                              </span>
-                            )}
-                          </td>
                         </tr>
                     ))}
                     </tbody>
@@ -592,21 +690,6 @@ export default function PackingOrderDetails() {
                         <div className="flex-1">
                           <h4 className="text-sm font-semibold text-gray-900 mb-1">{item.name || "N/A"}</h4>
                           {item.variant && <p className="text-xs text-gray-500 mb-2">{item.variant}</p>}
-                          <div className="flex items-center gap-2">
-                            {item.isInStock ? (
-                              <span className="inline-flex items-center gap-1 text-green-600">
-                                <CheckCircle className="w-4 h-4" />
-                                <span className="text-xs font-medium">
-                                  In Stock{item.stockQuantity !== null ? ` (${item.stockQuantity})` : ""}
-                                </span>
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-amber-600">
-                                <X className="w-4 h-4" />
-                                <span className="text-xs font-medium">Out of Stock</span>
-                              </span>
-                            )}
-                          </div>
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100">
@@ -673,7 +756,7 @@ export default function PackingOrderDetails() {
         </>
       )}
 
-        {!isViewMode && (
+        {!isViewMode && !isAlreadyPacked && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
             <motion.div
               initial={{ opacity: 0, x: -20 }}
@@ -708,7 +791,7 @@ export default function PackingOrderDetails() {
                     </div>
                     <div>
                       <p className="text-sm font-medium text-gray-900">Stage 1: Item Selection</p>
-                      <p className="text-xs text-gray-500">Select in-stock items</p>
+                      <p className="text-xs text-gray-500">Unselect out-of-stock items</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -773,7 +856,7 @@ export default function PackingOrderDetails() {
           </div>
         )}
 
-        {!isViewMode && stage === STAGES.PHOTO_UPLOAD && (
+        {!isViewMode && !isAlreadyPacked && stage === STAGES.PHOTO_UPLOAD && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

@@ -5,7 +5,6 @@ import { motion } from "framer-motion";
 import Swal from "sweetalert2";
 import useFullscreen from "../useFullscreen";
 
-import FulfillmentTabs from "../../pages/order-fulfillment/components/common/FulfillmentTabs";
 import { 
   MdAdd, 
   MdFullscreen, 
@@ -685,8 +684,6 @@ const MainLayout = () => {
         </>
       )}
 
-      {/* Order Fulfillment Tabs */}
-      {pathName.startsWith("/fulfillment") && <FulfillmentTabs />}
 
       {/* Main Content */}
       <main

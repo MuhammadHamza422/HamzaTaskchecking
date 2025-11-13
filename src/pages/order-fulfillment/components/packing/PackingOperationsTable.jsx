@@ -142,9 +142,9 @@ export default function PackingOperationsTable() {
       render: (count) => <span className="text-sm text-gray-700">{count || 0}</span>,
     },
     {
-      title: "Out of Stock",
-      dataIndex: "outOfStockItemsCount",
-      key: "outOfStockItemsCount",
+      title: "Deselected Items",
+      dataIndex: "deselectedItemsCount",
+      key: "deselectedItemsCount",
       render: (count) => (
         <span className={`text-sm ${count > 0 ? "text-amber-600 font-medium" : "text-gray-600"}`}>
           {count || 0}
@@ -199,9 +199,9 @@ export default function PackingOperationsTable() {
           <p className="text-sm font-semibold text-gray-900">{record.selectedItemsCount || 0}</p>
         </div>
         <div>
-          <p className="text-xs text-gray-500 mb-1">Out of Stock</p>
-          <p className={`text-sm font-semibold ${record.outOfStockItemsCount > 0 ? "text-amber-600" : "text-gray-900"}`}>
-            {record.outOfStockItemsCount || 0}
+          <p className="text-xs text-gray-500 mb-1">Deselected Items</p>
+          <p className={`text-sm font-semibold ${record.deselectedItemsCount > 0 ? "text-amber-600" : "text-gray-900"}`}>
+            {record.deselectedItemsCount || 0}
           </p>
         </div>
         <div>
@@ -226,7 +226,7 @@ export default function PackingOperationsTable() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
-      <div className="max-w-[1550px] mx-auto px-4 sm:px-6 py-8">
+      <div className="max-w-[1550px] mx-auto p-2">
         <FulfillmentBreadcrumb />
 
         <motion.div
@@ -234,7 +234,7 @@ export default function PackingOperationsTable() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-6"
         >
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">All Packing Operations</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">All Packing Operations</h1>
           <p className="text-gray-600">View and manage all packing orders</p>
         </motion.div>
 

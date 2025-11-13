@@ -11,6 +11,18 @@ const statusConfig = {
     label: "Pending",
     className: "bg-gray-100 text-gray-700 border-gray-300",
   },
+  unfulfilled: {
+    label: "Unfulfilled",
+    className: "bg-red-100 text-red-700 border-red-300",
+  },
+  fulfilled: {
+    label: "Fulfilled",
+    className: "bg-green-100 text-green-700 border-green-300",
+  },
+  cancelled: {
+    label: "Cancelled",
+    className: "bg-gray-100 text-gray-700 border-gray-300",
+  },
 };
 
 export default function StatusBadge({ status }) {

@@ -85,17 +85,20 @@ export async function getOrderDetails(orderId, platform, country = null) {
 
 /**
  * Create packing record for an order with photos
+ * Automatically creates dropship records for deselected items
  * @param {Object} packingData - Packing data object
  * @param {string} packingData.orderId - Order ID (GID for Shopify, orderId for others)
  * @param {string} packingData.platform - Platform name: "woocommerce" | "shopify" | "walmart"
  * @param {string} packingData.orderNumber - Display order number
  * @param {Array<string>} packingData.selectedItems - Array of packed item IDs
- * @param {Array<string>} packingData.outOfStockItems - Array of out-of-stock item IDs
+ * @param {Array<string>} packingData.deselectedItems - Array of deselected item IDs (moved to dropship)
+ * @param {Array<Object>} packingData.deselectedItemsData - Full item data for deselected items
+ * @param {Object} packingData.orderData - Complete order details (customer, shipping, financials)
  * @param {Array<File>} packingData.photos - Array of image File objects (1-5 photos)
  * @returns {Promise<Object>} Created packing record with photo URLs
  */
 export async function createPacking(packingData) {
-  const { orderId, platform, orderNumber, selectedItems, outOfStockItems, photos } = packingData;
+  const { orderId, platform, orderNumber, selectedItems, deselectedItems, deselectedItemsData, orderData, photos } = packingData;
 
   if (!orderId) {
     throw new Error("Order ID is required");
@@ -122,7 +125,21 @@ export async function createPacking(packingData) {
     formData.append("platform", platform);
     formData.append("orderNumber", orderNumber);
     formData.append("selectedItems", JSON.stringify(selectedItems));
-    formData.append("outOfStockItems", JSON.stringify(outOfStockItems || []));
+    formData.append("deselectedItems", JSON.stringify(deselectedItems || []));
+    if (deselectedItemsData && deselectedItemsData.length > 0) {
+      formData.append("deselectedItemsData", JSON.stringify(deselectedItemsData));
+    }
+    if (orderData) {
+      formData.append("orderData", JSON.stringify(orderData));
+    }
+
+    // Debug logging
+    console.log("📤 API Request - Deselected Items:", {
+      deselectedItems,
+      deselectedItemsCount: deselectedItems?.length || 0,
+      deselectedItemsData: deselectedItemsData?.map(item => ({ id: item.id, name: item.name })) || [],
+      deselectedItemsJSON: JSON.stringify(deselectedItems || []),
+    });
 
     photos.forEach((photo) => {
       formData.append("photos", photo);
@@ -293,6 +310,164 @@ export async function getRecentPacking(filters = {}) {
 
     if (!response.data.success) {
       const errorMsg = response.data.error?.message || "Failed to fetch recent packing operations";
+      const error = new Error(errorMsg);
+      error.code = response.data.error?.code;
+      throw error;
+    }
+
+    return response.data;
+  } catch (error) {
+    if (error.response?.data?.error) {
+      const errorMsg = error.response.data.error.message;
+      const newError = new Error(errorMsg);
+      newError.code = error.response.data.error.code;
+      throw newError;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Get all dropship orders with pagination and filters
+ * @param {Object} filters - Filter parameters
+ * @param {number} filters.page - Page number (default: 1)
+ * @param {number} filters.limit - Items per page (default: 30)
+ * @param {string} filters.platform - Filter by platform: "woocommerce" | "shopify" | "walmart"
+ * @param {string} filters.status - Filter by status: "Unfulfilled" | "Fulfilled" | "Cancelled"
+ * @param {string} filters.search - Search in orderId, orderNumber, or dropshipId
+ * @param {string} filters.startDate - Start date (ISO format)
+ * @param {string} filters.endDate - End date (ISO format)
+ * @returns {Promise<Object>} Dropship orders list with pagination
+ */
+export async function getAllDropshipOrders(filters = {}) {
+  try {
+    const params = {};
+
+    if (filters.page) params.page = filters.page;
+    if (filters.limit) params.limit = filters.limit;
+    if (filters.platform) params.platform = filters.platform;
+    if (filters.status) params.status = filters.status;
+    if (filters.search) params.search = filters.search;
+    if (filters.startDate) params.startDate = filters.startDate;
+    if (filters.endDate) params.endDate = filters.endDate;
+
+    const response = await apiClient.get("/api/v1/fulfillment/dropship", {
+      params,
+    });
+
+    if (!response.data.success) {
+      const errorMsg = response.data.error?.message || "Failed to fetch dropship orders";
+      const error = new Error(errorMsg);
+      error.code = response.data.error?.code;
+      throw error;
+    }
+
+    return response.data;
+  } catch (error) {
+    if (error.response?.data?.error) {
+      const errorMsg = error.response.data.error.message;
+      const newError = new Error(errorMsg);
+      newError.code = error.response.data.error.code;
+      throw newError;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Get dropship order details by ID
+ * @param {string} dropshipId - Dropship order ID (e.g., "DS-20250115-001")
+ * @returns {Promise<Object>} Complete dropship order details
+ */
+export async function getDropshipOrderDetails(dropshipId) {
+  if (!dropshipId) {
+    throw new Error("Dropship ID is required");
+  }
+
+  try {
+    const response = await apiClient.get(`/api/v1/fulfillment/dropship/${dropshipId}`);
+
+    if (!response.data.success) {
+      const errorMsg = response.data.error?.message || "Failed to fetch dropship order details";
+      const error = new Error(errorMsg);
+      error.code = response.data.error?.code;
+      throw error;
+    }
+
+    return response.data;
+  } catch (error) {
+    if (error.response?.data?.error) {
+      const errorMsg = error.response.data.error.message;
+      const newError = new Error(errorMsg);
+      newError.code = error.response.data.error.code;
+      throw newError;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Update dropship order status
+ * @param {string} dropshipId - Dropship order ID
+ * @param {Object} updateData - Update data
+ * @param {string} updateData.status - New status: "Unfulfilled" | "Fulfilled" | "Cancelled"
+ * @param {string} updateData.marketplaceName - Marketplace name (optional)
+ * @param {string} updateData.marketplaceOrderNumber - Marketplace order number (optional)
+ * @param {string} updateData.notes - Notes (optional)
+ * @returns {Promise<Object>} Updated dropship order
+ */
+export async function updateDropshipStatus(dropshipId, updateData) {
+  if (!dropshipId) {
+    throw new Error("Dropship ID is required");
+  }
+
+  try {
+    const response = await apiClient.patch(
+      `/api/v1/fulfillment/dropship/${dropshipId}/status`,
+      updateData
+    );
+
+    if (!response.data.success) {
+      const errorMsg = response.data.error?.message || "Failed to update dropship status";
+      const error = new Error(errorMsg);
+      error.code = response.data.error?.code;
+      throw error;
+    }
+
+    return response.data;
+  } catch (error) {
+    if (error.response?.data?.error) {
+      const errorMsg = error.response.data.error.message;
+      const newError = new Error(errorMsg);
+      newError.code = error.response.data.error.code;
+      throw newError;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Create marketplace order for dropship
+ * @param {string} dropshipId - Dropship order ID
+ * @param {Object} orderData - Marketplace order data
+ * @param {string} orderData.marketplaceName - Marketplace name (e.g., "Shopify")
+ * @param {string} orderData.marketplaceOrderNumber - Marketplace order number
+ * @param {string} orderData.notes - Notes (optional)
+ * @returns {Promise<Object>} Updated dropship order with marketplace info
+ */
+export async function createMarketplaceOrder(dropshipId, orderData) {
+  if (!dropshipId) {
+    throw new Error("Dropship ID is required");
+  }
+
+  try {
+    const response = await apiClient.post(
+      `/api/v1/fulfillment/dropship/${dropshipId}/create-marketplace-order`,
+      orderData
+    );
+
+    if (!response.data.success) {
+      const errorMsg = response.data.error?.message || "Failed to create marketplace order";
       const error = new Error(errorMsg);
       error.code = response.data.error?.code;
       throw error;
