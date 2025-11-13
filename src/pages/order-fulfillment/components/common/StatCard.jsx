@@ -24,9 +24,9 @@ export default function StatCard({ icon: Icon, title, value, change, changeType,
         )}
       </div>
       <h3 className="text-sm font-medium text-gray-600 mb-2">{title}</h3>
-      <p className={`text-3xl font-bold ${color} mb-1`}>{value}</p>
-      {change !== undefined && (
-        <p className="text-xs text-gray-500">
+      <p className={`text-3xl font-bold ${color}`}>{value}</p>
+      {change !== null && change !== undefined && (
+        <p className="text-xs text-gray-500 mt-1">
           {isPositive ? "Increase" : "Decrease"} from last period
         </p>
       )}
