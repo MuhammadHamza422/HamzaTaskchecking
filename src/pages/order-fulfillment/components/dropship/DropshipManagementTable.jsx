@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Table, Select, DatePicker, Input, Button } from "antd";
-import { Search, Package } from "lucide-react";
+import { Search, Package, XCircle } from "lucide-react";
+import { motion } from "framer-motion";
 import PlatformBadge from "../common/PlatformBadge";
 import StatusBadge from "../common/StatusBadge";
+import FulfillmentBreadcrumb from "../common/FulfillmentBreadcrumb";
 import dayjs from "dayjs";
 
 const { RangePicker } = DatePicker;
@@ -118,51 +120,148 @@ export default function DropshipManagementTable() {
     return true;
   });
 
-  return (
-    <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
-      <div className="p-6 border-b border-gray-200">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1">
-            <Input
-              placeholder="Search by order number"
-              prefix={<Search className="w-4 h-4 text-gray-400" />}
-              value={filters.search}
-              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-              className="w-full"
-            />
+  const renderMobileCard = (record) => (
+    <motion.div
+      key={record.id}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-white rounded-xl border-2 border-gray-200 shadow-sm p-4 mb-4"
+    >
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex-1">
+          <h3 className="font-semibold text-gray-900 text-base mb-1">
+            {record.originalOrderNumber}
+          </h3>
+          <PlatformBadge platform={record.marketplaceName} />
+        </div>
+        <StatusBadge status={record.status} />
+      </div>
+
+      <div className="space-y-2 mb-3">
+        <div>
+          <p className="text-xs text-gray-500 mb-1">Marketplace Order</p>
+          <p className="text-sm font-semibold text-gray-900">
+            {record.marketplaceOrderNumber}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-500 mb-1">Date</p>
+          <p className="text-sm font-semibold text-gray-900">
+            {dayjs(record.date).format("MMM DD, YYYY")}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-500 mb-1">Unselected Items</p>
+          <div className="space-y-1">
+            {record.unselectedItems.map((item, idx) => (
+              <p key={idx} className="text-sm text-gray-700">
+                {item.name} (SKU: {item.sku}) × {item.quantity}
+              </p>
+            ))}
           </div>
-          <Select
-            placeholder="Marketplace"
-            allowClear
-            value={filters.marketplace}
-            onChange={(value) => setFilters({ ...filters, marketplace: value })}
-            className="w-full md:w-48"
-            options={[
-              { label: "Shopify", value: "shopify" },
-              { label: "WooCommerce", value: "woocommerce" },
-              { label: "Walmart", value: "walmart" },
-              { label: "Amazon", value: "amazon" },
-            ]}
-          />
-          <RangePicker
-            value={filters.dateRange}
-            onChange={(dates) => setFilters({ ...filters, dateRange: dates })}
-            className="w-full md:w-64"
-          />
         </div>
       </div>
 
-      <Table
-        columns={columns}
-        dataSource={filteredData}
-        rowKey="id"
-        pagination={{
-          pageSize: 10,
-          showSizeChanger: true,
-          showTotal: (total) => `Total ${total} orders`,
-        }}
-        className="fulfillment-table"
-      />
+      <button
+        onClick={() => handleCreateDropship(record)}
+        disabled={record.status === "Fulfilled"}
+        className={`w-full py-2 px-4 rounded-lg font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${
+          record.status === "Fulfilled"
+            ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+            : "bg-blue-600 text-white hover:bg-blue-700 active:scale-95"
+        }`}
+      >
+        <Package className="w-4 h-4" />
+        <span>Create Dropship</span>
+      </button>
+    </motion.div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
+      <div className="max-w-[1550px] mx-auto px-4 sm:px-6 py-8">
+        <FulfillmentBreadcrumb />
+
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6"
+        >
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Drop-ship Management</h1>
+          <p className="text-gray-600">Manage orders with unselected items</p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden"
+        >
+          <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-blue-50">
+            <div className="flex items-center gap-2 mb-4">
+              <Search className="w-5 h-5 text-purple-600" />
+              <h2 className="text-lg font-semibold text-gray-900">Filters</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="lg:col-span-1">
+                <Input
+                  placeholder="Search by order number"
+                  prefix={<Search className="w-4 h-4 text-gray-400" />}
+                  value={filters.search}
+                  onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                  className="w-full h-11"
+                  allowClear
+                />
+              </div>
+              <Select
+                placeholder="Marketplace"
+                allowClear
+                value={filters.marketplace}
+                onChange={(value) => setFilters({ ...filters, marketplace: value })}
+                className="w-full h-11"
+                options={[
+                  { label: "Shopify", value: "shopify" },
+                  { label: "WooCommerce", value: "woocommerce" },
+                  { label: "Walmart", value: "walmart" },
+                  { label: "Amazon", value: "amazon" },
+                ]}
+              />
+              <RangePicker
+                value={filters.dateRange}
+                onChange={(dates) => setFilters({ ...filters, dateRange: dates })}
+                className="w-full h-11"
+              />
+            </div>
+          </div>
+
+          <div className="hidden md:block">
+            <Table
+              columns={columns}
+              dataSource={filteredData}
+              rowKey="id"
+              pagination={{
+                pageSize: 10,
+                showSizeChanger: true,
+                showTotal: (total) => `Total ${total} orders`,
+              }}
+              className="fulfillment-table"
+            />
+          </div>
+
+          <div className="md:hidden p-4">
+            {filteredData.length === 0 ? (
+              <div className="text-center py-12">
+                <XCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600">No orders found</p>
+              </div>
+            ) : (
+              <>
+                {filteredData.map(renderMobileCard)}
+              </>
+            )}
+          </div>
+        </motion.div>
+      </div>
     </div>
   );
 }
