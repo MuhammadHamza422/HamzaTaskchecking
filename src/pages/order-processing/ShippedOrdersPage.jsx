@@ -258,6 +258,33 @@ export default function ShippedOrdersPage() {
     setCurrentPage(1);
   }, []);
 
+  // Fetch order details
+  const fetchOrderDetails = useCallback(async (orderId) => {
+    if (!orderId) return null;
+    const config = getPlatformConfig(activeTab);
+    if (activeTab === "shopify") {
+      // Shopify expects orderId as a query parameter
+      const response = await apiClient.get(
+        `${config.detailsApi}?orderId=${orderId}`
+      );
+      return response.data;
+    }
+    const response = await apiClient.get(`${config.detailsApi}/${orderId}`);
+    return response.data;
+  }, [activeTab]);
+
+  // Order details query
+  const {
+    data: orderDetails,
+    isLoading: orderDetailsLoading,
+    error: orderDetailsError,
+    refetch: refetchOrderDetails,
+  } = useQuery({
+    queryKey: ["shippedOrderDetails", selectedOrder?.orderId, activeTab],
+    queryFn: () => fetchOrderDetails(selectedOrder?.orderId),
+    enabled: !!selectedOrder?.orderId && open,
+  });
+
   // Handle update order status (similar to ProcessedOrdersPage)
   const handleUpdateOrderStatus = useCallback(async () => {
     setUpdateOrderStatusLoading(true);
@@ -323,6 +350,15 @@ export default function ShippedOrdersPage() {
       });
     }
   }, [ordersError]);
+
+  useEffect(() => {
+    if (orderDetailsError) {
+      notification.error({
+        message: "Failed to load order details",
+        description: orderDetailsError.message,
+      });
+    }
+  }, [orderDetailsError]);
 
   const renderTabContent = () => {
     return (
@@ -441,9 +477,13 @@ export default function ShippedOrdersPage() {
         <ProcessedOrderDetailsDrawer
           open={open}
           onClose={handleDrawerClose}
-          order={selectedOrder}
-          platform={activeTab}
-          onEditClick={handleEditClick}
+          selectedOrder={selectedOrder}
+          orderDetails={orderDetails}
+          orderDetailsLoading={orderDetailsLoading}
+          activeTab={activeTab}
+          tabConfig={PLATFORM_CONFIG[activeTab]}
+          refetch={refetch}
+          refetchOrderDetails={refetchOrderDetails}
         />
 
         {/* Edit Modal */}

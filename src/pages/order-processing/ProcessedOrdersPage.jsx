@@ -588,9 +588,21 @@ export default function ProcessedOrdersPage() {
     tagId,
   }) => {
     const wc = details?.order || details; // safety
-    const kitsArray = Array.isArray(kits?.allKits) ? kits.allKits : [];
+    // Handle both response structure: kits?.allKits or kits directly if it's already an array
+    const kitsArray = Array.isArray(kits?.allKits) 
+      ? kits.allKits 
+      : Array.isArray(kits) 
+      ? kits 
+      : [];
     const dbInfo = details?.order?.dbInfo || details?.dbInfo || {};
-    console.log("wcdata",  dbInfo);
+    
+    console.log("📦 WooCommerce Order Kits Debug:", {
+      orderId: tableOrder?.orderId,
+      kitsStructure: kits ? Object.keys(kits) : null,
+      allKitsCount: Array.isArray(kits?.allKits) ? kits.allKits.length : 0,
+      kitsArrayCount: kitsArray.length,
+      kitsArray: kitsArray,
+    });
 
     const items = [];
     const productTitles = [];
@@ -599,20 +611,29 @@ export default function ProcessedOrdersPage() {
         productTitles.push(kit.product_title);
       }
       for (const sku of kit?.skus || []) {
-        console.log(sku);
+        if (!sku?.pId) {
+          console.warn("⚠️ Skipping SKU without pId:", sku);
+          continue;
+        }
         items.push({
           // lineItemKey: sku?._id || kit?.kit_id || kit?.productId,
-          sku: sku?.pId?.sku,
-          name: sku?.pId?.pro_title,
+          sku: sku?.pId?.sku || String(sku?.pId?._id || ""),
+          name: sku?.pId?.pro_title || "Product",
           imageUrl: null,
-          quantity: Number(sku?.quantity),
-          unitPrice: Number(sku?.price),
+          quantity: Number(sku?.quantity || 1),
+          unitPrice: Number(sku?.price || sku?.pId?.sale_price || 0),
           taxAmount: null,
           shippingAmount: null,
           productId: Number(sku?.pId?.uid) || undefined,
         });
       }
     }
+    
+    console.log("📦 WooCommerce Items Built:", {
+      orderId: tableOrder?.orderId,
+      itemsCount: items.length,
+      items: items,
+    });
 
     const orderDate = formatDateForShipStation(
       wc?.date_created || tableOrder?.orderCreatedAt || tableOrder?.createdAt || new Date()
@@ -755,9 +776,20 @@ export default function ProcessedOrdersPage() {
   }) => {
     const wm = details?.order?.order || details?.order || details || {};
     const dbInfo = details?.order?.dbInfo || details?.dbInfo || {};
-    const kitsArray = Array.isArray(kits?.allKits) ? kits.allKits : [];
+    // Handle both response structure: kits?.allKits or kits directly if it's already an array
+    const kitsArray = Array.isArray(kits?.allKits) 
+      ? kits.allKits 
+      : Array.isArray(kits) 
+      ? kits 
+      : [];
 
-    // console.log("wmdata",  dbInfo);
+    console.log("📦 Walmart Order Kits Debug:", {
+      orderId: tableOrder?.orderId,
+      kitsStructure: kits ? Object.keys(kits) : null,
+      allKitsCount: Array.isArray(kits?.allKits) ? kits.allKits.length : 0,
+      kitsArrayCount: kitsArray.length,
+      kitsArray: kitsArray,
+    });
 
     const items = [];
     const productTitles = [];
@@ -766,6 +798,10 @@ export default function ProcessedOrdersPage() {
         productTitles.push(kit?.product_title);
       }
       for (const sku of kit?.skus || []) {
+        if (!sku?.pId) {
+          console.warn("⚠️ Skipping SKU without pId:", sku);
+          continue;
+        }
         items.push({
           // lineItemKey: sku?._id || kit?.kit_id || kit?.productId,
           sku: sku?.pId?.sku || String(sku?.pId?._id || ""),
@@ -779,6 +815,12 @@ export default function ProcessedOrdersPage() {
         });
       }
     }
+    
+    console.log("📦 Walmart Items Built:", {
+      orderId: tableOrder?.orderId,
+      itemsCount: items.length,
+      items: items,
+    });
 
     const orderDate = formatDateForShipStation(
       typeof wm?.orderDate === "number"
@@ -918,8 +960,20 @@ export default function ProcessedOrdersPage() {
     tagId,
   }) => {
     const sf = details?.order || details || {};
-    console.log("sf", sf);
-    const kitsArray = Array.isArray(kits?.allKits) ? kits.allKits : [];
+    // Handle both response structure: kits?.allKits or kits directly if it's already an array
+    const kitsArray = Array.isArray(kits?.allKits) 
+      ? kits.allKits 
+      : Array.isArray(kits) 
+      ? kits 
+      : [];
+
+    console.log("📦 Shopify Order Kits Debug:", {
+      orderId: tableOrder?.orderId,
+      kitsStructure: kits ? Object.keys(kits) : null,
+      allKitsCount: Array.isArray(kits?.allKits) ? kits.allKits.length : 0,
+      kitsArrayCount: kitsArray.length,
+      kitsArray: kitsArray,
+    });
 
     const items = [];
     const productTitles = [];
@@ -929,8 +983,12 @@ export default function ProcessedOrdersPage() {
       }
 
       for (const sku of kit?.skus || []) {
+        if (!sku?.pId) {
+          console.warn("⚠️ Skipping SKU without pId:", sku);
+          continue;
+        }
         items.push({
-          sku: sku?.pId?.sku,
+          sku: sku?.pId?.sku || String(sku?.pId?._id || ""),
           name: sku?.pId?.pro_title || "Product",
           imageUrl: null,
           quantity: Number(sku?.quantity || 1),
@@ -941,6 +999,12 @@ export default function ProcessedOrdersPage() {
         });
       }
     }
+    
+    console.log("📦 Shopify Items Built:", {
+      orderId: tableOrder?.orderId,
+      itemsCount: items.length,
+      items: items,
+    });
 
     // Fallback: if no kits found, derive items from Shopify order line items (production safety)
     if (items.length === 0) {
@@ -1145,20 +1209,53 @@ export default function ProcessedOrdersPage() {
         // Fetch kits and details for each order in parallel
         const results = await Promise.all(
           orders.map(async (ord) => {
-            let kitsData = kitsByOrderId[ord?.orderId];
-            if (kitsData) {
-              console.log("Using cached kits for move", ord?.orderId, kitsData);
+            // Try to get kits from cache first (check both original orderId and numeric version)
+            const numericOrderId =
+              activeTab === "shopify"
+                ? String(ord?.orderId).replace("gid://shopify/Order/", "")
+                : ord?.orderId;
+            
+            let kitsData = kitsByOrderId[ord?.orderId] || kitsByOrderId[numericOrderId];
+            
+            if (kitsData && Array.isArray(kitsData?.allKits) && kitsData.allKits.length > 0) {
+              console.log("✅ Using cached kits for move", ord?.orderId, {
+                allKitsCount: kitsData.allKits.length,
+              });
             } else {
-              const numericOrderId =
-                activeTab === "shopify"
-                  ? String(ord?.orderId).replace("gid://shopify/Order/", "")
-                  : ord?.orderId;
-
-              console.log("Fetching kits for move", ord?.orderId);
-              const kitsRes = await apiClient.get(
-                `/api/v1/kit/order/kits/${encodeURIComponent(numericOrderId)}`
-              );
-              kitsData = kitsRes?.data;
+              console.log("🔄 Fetching kits for move", ord?.orderId, "numericOrderId:", numericOrderId);
+              try {
+                const kitsRes = await apiClient.get(
+                  `/api/v1/kit/order/kits/${encodeURIComponent(numericOrderId)}`
+                );
+                kitsData = kitsRes?.data;
+                
+                // Validate response structure
+                if (!kitsData || !kitsData.success) {
+                  console.warn("⚠️ Kits API returned unsuccessful response:", kitsData);
+                  kitsData = { success: false, allKits: [] };
+                } else if (!Array.isArray(kitsData.allKits)) {
+                  console.warn("⚠️ Kits API response missing allKits array:", kitsData);
+                  kitsData = { success: true, allKits: [] };
+                }
+                
+                console.log("📦 Kits response for", ord?.orderId, ":", {
+                  success: kitsData?.success,
+                  allKitsCount: Array.isArray(kitsData?.allKits) ? kitsData.allKits.length : 0,
+                  hasKits: Array.isArray(kitsData?.allKits) && kitsData.allKits.length > 0,
+                });
+                
+                // Cache the kits for future use
+                if (kitsData && kitsData.success) {
+                  setKitsByOrderId((prev) => ({
+                    ...prev,
+                    [ord?.orderId]: kitsData,
+                    [numericOrderId]: kitsData,
+                  }));
+                }
+              } catch (kitsError) {
+                console.error(`❌ Error fetching kits for order ${ord?.orderId}:`, kitsError);
+                kitsData = { success: false, allKits: [] };
+              }
             }
             let detailsRes;
             if (activeTab === "shopify") {
@@ -1205,13 +1302,44 @@ export default function ProcessedOrdersPage() {
           .filter(Boolean);
 
         // Ensure we don't send orders without items
-        orderData = orderData.filter(
-          (od) => Array.isArray(od?.items) && od.items.length > 0
-        );
+        orderData = orderData.filter((od) => {
+          const hasItems = Array.isArray(od?.items) && od.items.length > 0;
+          if (!hasItems) {
+            console.warn("⚠️ Skipping order without items:", {
+              orderNumber: od?.orderNumber,
+              orderKey: od?.orderKey,
+              itemsCount: od?.items?.length || 0,
+            });
+          }
+          return hasItems;
+        });
 
-        if(orderData.length === 0) {
+        if (orderData.length === 0) {
+          Swal.fire({
+            icon: "warning",
+            title: "No Items to Send",
+            text: "Selected orders have no mapped kit products. Please map products to orders before sending to ShipStation.",
+            toast: true,
+            position: "top-end",
+            showConfirmButton: false,
+            timer: 4000,
+            timerProgressBar: true,
+            background: "#f59e0b",
+            color: "#111827",
+            customClass: { popup: "rounded-lg" },
+          });
           return;
         }
+        
+        console.log("📦 Final Order Data for ShipStation:", {
+          ordersCount: orderData.length,
+          orders: orderData.map((od) => ({
+            orderNumber: od?.orderNumber,
+            orderKey: od?.orderKey,
+            itemsCount: od?.items?.length || 0,
+            items: od?.items,
+          })),
+        });
 
         const payload = { plateformId: String(platformId), orderData };
         // console.log("Posting ShipStation payload", payload);

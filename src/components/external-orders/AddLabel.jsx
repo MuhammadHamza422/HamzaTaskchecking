@@ -42,6 +42,8 @@ const DIMENSION_UNITS = [
 const cache = {
   warehouses: { data: null, timestamp: 0 },
   packages: { data: null, timestamp: 0 },
+  carriers: { data: null, timestamp: 0 },
+  carrierPackages: {}, // Keyed by carrierCode
 };
 
 const CACHE_DURATION = 5 * 60 * 1000;
@@ -56,6 +58,11 @@ export default function AddLabelModal({
   const [initialLoading, setInitialLoading] = useState(false);
   const [warehouses, setWarehouses] = useState([]);
   const [packages, setPackages] = useState([]);
+  const [carriers, setCarriers] = useState([]);
+  const [carrierPackages, setCarrierPackages] = useState([]);
+  const [selectedCarrier, setSelectedCarrier] = useState(null);
+  const [packageType, setPackageType] = useState("custom"); // "custom" or "carrier"
+  const [loadingCarrierPackages, setLoadingCarrierPackages] = useState(false);
   const [form] = Form.useForm();
 
   // Get activeTab from localStorage if not provided as prop
@@ -82,9 +89,7 @@ export default function AddLabelModal({
 
   const resolvedActiveTab = getActiveTabFromStorage();
 
-  console.log("order", order);
-  console.log("activeTab (prop):", activeTab);
-  console.log("resolvedActiveTab:", resolvedActiveTab);
+
 
   // Fetch warehouses with caching
   const fetchWarehouses = useCallback(async () => {
@@ -111,6 +116,34 @@ export default function AddLabelModal({
     } catch (err) {
       console.error("Error fetching warehouses:", err);
       message.error("Error fetching warehouses");
+    }
+  }, []);
+
+  // Fetch carriers with caching
+  const fetchCarriers = useCallback(async () => {
+    const now = Date.now();
+
+    // Return cached data if still valid
+    if (
+      cache.carriers.data &&
+      now - cache.carriers.timestamp < CACHE_DURATION
+    ) {
+      setCarriers(cache.carriers.data);
+      return;
+    }
+
+    try {
+      const { data } = await apiClient.get("/api/v1/shipstation/carriers");
+
+      if (data?.carriers) {
+        cache.carriers = { data: data.carriers, timestamp: now };
+        setCarriers(data.carriers);
+      } else {
+        message.error("Failed to fetch carriers");
+      }
+    } catch (err) {
+      console.error("Error fetching carriers:", err);
+      message.error("Error fetching carriers");
     }
   }, []);
 
@@ -144,19 +177,69 @@ export default function AddLabelModal({
     }
   }, []);
 
+  // Fetch carrier packages
+  const fetchCarrierPackages = useCallback(async (carrierCode) => {
+    if (!carrierCode) {
+      setCarrierPackages([]);
+      return;
+    }
+
+    const now = Date.now();
+
+    // Return cached data if still valid
+    if (
+      cache.carrierPackages[carrierCode]?.data &&
+      now - cache.carrierPackages[carrierCode].timestamp < CACHE_DURATION
+    ) {
+      setCarrierPackages(cache.carrierPackages[carrierCode].data);
+      return;
+    }
+
+    setLoadingCarrierPackages(true);
+    try {
+      const { data } = await apiClient.get(
+        `/api/v1/shipstation/packages?carrierCode=${carrierCode}`
+      );
+
+      if (data?.packages) {
+        cache.carrierPackages[carrierCode] = {
+          data: data.packages,
+          timestamp: now,
+        };
+        setCarrierPackages(data.packages);
+      } else {
+        message.error("Failed to fetch carrier packages");
+        setCarrierPackages([]);
+      }
+    } catch (err) {
+      console.error("Error fetching carrier packages:", err);
+      message.error("Error fetching carrier packages");
+      setCarrierPackages([]);
+    } finally {
+      setLoadingCarrierPackages(false);
+    }
+  }, []);
+
   // Load initial data only once when modal opens
   const loadInitialData = useCallback(async () => {
     setInitialLoading(true);
     try {
-      await Promise.all([fetchWarehouses(), fetchCustomPackages()]);
+      await Promise.all([
+        fetchWarehouses(),
+        fetchCustomPackages(),
+        fetchCarriers(),
+      ]);
     } finally {
       setInitialLoading(false);
     }
-  }, [fetchWarehouses, fetchCustomPackages]);
+  }, [fetchWarehouses, fetchCustomPackages, fetchCarriers]);
 
   // Handle modal open
   const handleOpen = useCallback(() => {
     setOpen(true);
+    setPackageType("custom");
+    setSelectedCarrier(null);
+    setCarrierPackages([]);
 
     // Set form values from order data
     const currentTab = resolvedActiveTab || activeTab || "shopify";
@@ -187,29 +270,81 @@ export default function AddLabelModal({
     }
   }, [open, loadInitialData]);
 
+  // Handle carrier selection
+  const handleCarrierChange = useCallback(
+    (carrierCode) => {
+      setSelectedCarrier(carrierCode);
+      form.setFieldsValue({ packageCode: "", packageName: "" });
+      if (carrierCode) {
+        fetchCarrierPackages(carrierCode);
+      } else {
+        setCarrierPackages([]);
+      }
+    },
+    [form, fetchCarrierPackages]
+  );
+
+  // Handle package type change
+  const handlePackageTypeChange = useCallback(
+    (type) => {
+      setPackageType(type);
+      setSelectedCarrier(null);
+      setCarrierPackages([]);
+      form.setFieldsValue({ packageCode: "", packageName: "" });
+    },
+    [form]
+  );
+
   // Handle package selection and auto-fill dimensions
   const handlePackageChange = useCallback(
     (packageCode) => {
-      const selectedPackage = packages.find(
-        (pkg) => pkg.package_id === packageCode
-      );
+      let selectedPackage = null;
+
+      if (packageType === "custom") {
+        selectedPackage = packages.find(
+          (pkg) => pkg.package_id === packageCode
+        );
+      } else if (packageType === "carrier") {
+        selectedPackage = carrierPackages.find(
+          (pkg) => pkg.code === packageCode || pkg.packageCode === packageCode
+        );
+      }
 
       if (selectedPackage) {
         const newValues = {
-          packageCode: selectedPackage.package_id,
-          packageName: selectedPackage.name,
+          packageCode:
+            selectedPackage.package_id ||
+            selectedPackage.code ||
+            selectedPackage.packageCode,
+          packageName:
+            selectedPackage.name ||
+            selectedPackage.packageName ||
+            selectedPackage.description ||
+            "",
           dimensions: {
-            length: selectedPackage.dimensions?.length || 0,
-            width: selectedPackage.dimensions?.width || 0,
-            height: selectedPackage.dimensions?.height || 0,
-            units: selectedPackage.dimensions?.unit || "inch",
+            length:
+              selectedPackage.dimensions?.length ||
+              selectedPackage.length ||
+              0,
+            width:
+              selectedPackage.dimensions?.width ||
+              selectedPackage.width ||
+              0,
+            height:
+              selectedPackage.dimensions?.height ||
+              selectedPackage.height ||
+              0,
+            units:
+              selectedPackage.dimensions?.unit ||
+              selectedPackage.dimensions?.units ||
+              "inch",
           },
         };
 
         form.setFieldsValue(newValues);
       }
     },
-    [packages, form]
+    [packages, carrierPackages, packageType, form]
   );
 
   // Form validation
@@ -218,6 +353,11 @@ export default function AddLabelModal({
 
     if (!values.warehouseId) {
       message.error("Please select a warehouse location");
+      return false;
+    }
+
+    if (packageType === "carrier" && !selectedCarrier) {
+      message.error("Please select a carrier");
       return false;
     }
 
@@ -245,7 +385,7 @@ export default function AddLabelModal({
     }
 
     return true;
-  }, [form]);
+  }, [form, packageType, selectedCarrier]);
 
   // Submit handler with validation
   const handleSubmit = useCallback(async () => {
@@ -259,10 +399,24 @@ export default function AddLabelModal({
       // Ensure packageName is included - get from selected package if missing
       let packageName = values.packageName;
       if (!packageName && values.packageCode) {
-        const selectedPackage = packages.find(
-          (pkg) => pkg.package_id === values.packageCode
-        );
-        packageName = selectedPackage?.name || "";
+        let selectedPackage = null;
+        if (packageType === "custom") {
+          selectedPackage = packages.find(
+            (pkg) => pkg.package_id === values.packageCode
+          );
+          packageName = selectedPackage?.name || "";
+        } else if (packageType === "carrier") {
+          selectedPackage = carrierPackages.find(
+            (pkg) =>
+              pkg.code === values.packageCode ||
+              pkg.packageCode === values.packageCode
+          );
+          packageName =
+            selectedPackage?.name ||
+            selectedPackage?.packageName ||
+            selectedPackage?.description ||
+            "";
+        }
       }
 
       // For Shopify orders, use order_key if available and not in GraphQL format
@@ -355,12 +509,25 @@ export default function AddLabelModal({
     } finally {
       setLoading(false);
     }
-  }, [validateForm, form, order, activeTab, resolvedActiveTab, fetchProcessedOrders, packages]);
+  }, [
+    validateForm,
+    form,
+    order,
+    activeTab,
+    resolvedActiveTab,
+    fetchProcessedOrders,
+    packages,
+    carrierPackages,
+    packageType,
+  ]);
 
   // Close handler with cleanup
   const handleClose = useCallback(() => {
     setOpen(false);
     form.resetFields();
+    setPackageType("custom");
+    setSelectedCarrier(null);
+    setCarrierPackages([]);
   }, [form]);
 
   // Memoized warehouse options
@@ -378,8 +545,25 @@ export default function AddLabelModal({
     [warehouses]
   );
 
-  // Memoized package options
-  const packageOptions = useMemo(
+  // Memoized carrier options
+  const carrierOptions = useMemo(
+    () =>
+      carriers.map((carrier) => ({
+        label: (
+          <div className="flex items-center gap-2">
+            <span>{carrier.name || carrier.carrierName || carrier.code}</span>
+            {carrier.code && (
+              <span className="text-gray-400 text-xs">({carrier.code})</span>
+            )}
+          </div>
+        ),
+        value: carrier.code || carrier.carrierCode,
+      })),
+    [carriers]
+  );
+
+  // Memoized custom package options
+  const customPackageOptions = useMemo(
     () =>
       packages.map((pkg) => ({
         label: (
@@ -393,6 +577,37 @@ export default function AddLabelModal({
       })),
     [packages]
   );
+
+  // Memoized carrier package options
+  const carrierPackageOptions = useMemo(
+    () =>
+      carrierPackages.map((pkg) => ({
+        label: (
+          <div className="flex items-center gap-2">
+            <InboxOutlined className="text-blue-500" />
+            <span>
+              {pkg.name ||
+                pkg.packageName ||
+                pkg.description ||
+                pkg.code ||
+                "Package"}
+            </span>
+            {(pkg.code || pkg.packageCode) && (
+              <span className="text-gray-400 text-xs">
+                ({pkg.code || pkg.packageCode})
+              </span>
+            )}
+          </div>
+        ),
+        value: pkg.code || pkg.packageCode || pkg.package_id,
+      })),
+    [carrierPackages]
+  );
+
+  // Combined package options based on type
+  const packageOptions = useMemo(() => {
+    return packageType === "custom" ? customPackageOptions : carrierPackageOptions;
+  }, [packageType, customPackageOptions, carrierPackageOptions]);
 
   // Check if label info is complete
   const hasLabelInfo =
@@ -500,6 +715,61 @@ export default function AddLabelModal({
               />
             </Form.Item>
 
+            {/* Package Type Selection */}
+            <Form.Item
+              label={<span className="font-semibold">Package Type</span>}
+            >
+              <Select
+                size="large"
+                value={packageType}
+                onChange={handlePackageTypeChange}
+                options={[
+                  {
+                    label: (
+                      <div className="flex items-center gap-2">
+                        <InboxOutlined className="text-green-500" />
+                        <span>Custom Packages</span>
+                      </div>
+                    ),
+                    value: "custom",
+                  },
+                  {
+                    label: (
+                      <div className="flex items-center gap-2">
+                        <InboxOutlined className="text-blue-500" />
+                        <span>Carrier Packages</span>
+                      </div>
+                    ),
+                    value: "carrier",
+                  },
+                ]}
+              />
+            </Form.Item>
+
+            {/* Carrier Selection (only for carrier packages) */}
+            {packageType === "carrier" && (
+              <Form.Item
+                label={<span className="font-semibold">Carrier</span>}
+                rules={[
+                  {
+                    required: packageType === "carrier",
+                    message: "Please select a carrier",
+                  },
+                ]}
+              >
+                <Select
+                  size="large"
+                  placeholder="Select a carrier"
+                  value={selectedCarrier}
+                  onChange={handleCarrierChange}
+                  options={carrierOptions}
+                  showSearch
+                  optionFilterProp="children"
+                  loading={initialLoading}
+                />
+              </Form.Item>
+            )}
+
             {/* Package Selection */}
             <Form.Item
               label={<span className="font-semibold">Package</span>}
@@ -508,16 +778,25 @@ export default function AddLabelModal({
             >
               <Select
                 size="large"
-                placeholder="Select a package"
+                placeholder={
+                  packageType === "carrier" && !selectedCarrier
+                    ? "Select a carrier first"
+                    : "Select a package"
+                }
                 options={packageOptions}
                 onChange={handlePackageChange}
                 showSearch
                 optionFilterProp="children"
-                filterOption={(input, option) =>
-                  option.label.props.children[1].props.children
-                    .toLowerCase()
-                    .includes(input.toLowerCase())
-                }
+                disabled={packageType === "carrier" && !selectedCarrier}
+                loading={packageType === "carrier" && loadingCarrierPackages}
+                filterOption={(input, option) => {
+                  const labelText =
+                    typeof option.label === "string"
+                      ? option.label
+                      : option.label?.props?.children?.[1]?.props?.children ||
+                        "";
+                  return labelText.toLowerCase().includes(input.toLowerCase());
+                }}
               />
             </Form.Item>
 
