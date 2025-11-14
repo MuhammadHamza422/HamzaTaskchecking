@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Table, Select, DatePicker, Input } from "antd";
+import { Table, Select, DatePicker, Input, Button } from "antd";
 import { Search, Filter, Calendar, Tag, CheckCircle, XCircle } from "lucide-react";
 import { motion } from "framer-motion";
 import StatusBadge from "../common/StatusBadge";
 import PlatformBadge from "../common/PlatformBadge";
 import FulfillmentBreadcrumb from "../common/FulfillmentBreadcrumb";
+import FilterDrawer from "../common/FilterDrawer";
 import { getAllPackingOrders } from "../../../../api/fulfillment";
 import apiClient from "../../../../api/client";
 import dayjs from "dayjs";
@@ -30,6 +31,7 @@ export default function PackingOperationsTable() {
   });
   const [platforms, setPlatforms] = useState([]);
   const [platformsLoading, setPlatformsLoading] = useState(false);
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
 
   const fetchPlatforms = async () => {
     try {
@@ -244,7 +246,8 @@ export default function PackingOperationsTable() {
           transition={{ delay: 0.1 }}
           className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden"
         >
-          <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-green-50">
+          {/* Desktop Filters */}
+          <div className="hidden md:block p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-green-50">
             <div className="flex items-center gap-2 mb-4">
               <Filter className="w-5 h-5 text-blue-600" />
               <h2 className="text-lg font-semibold text-gray-900">Filters</h2>
@@ -295,6 +298,28 @@ export default function PackingOperationsTable() {
                 suffixIcon={<Calendar className="w-4 h-4 text-gray-400" />}
               />
             </div>
+          </div>
+
+          {/* Mobile Filter Button */}
+          <div className="md:hidden p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-green-50">
+            <Button
+              type="primary"
+              icon={<Filter className="w-4 h-4" />}
+              onClick={() => setFilterDrawerOpen(true)}
+              className="w-full h-11 flex items-center justify-center gap-2"
+            >
+              Filters
+              {(filters.search || filters.platform || filters.status || (filters.dateRange && filters.dateRange.length === 2)) && (
+                <span className="ml-1 px-2 py-0.5 bg-white text-blue-600 rounded-full text-xs font-semibold">
+                  {[
+                    filters.search && "1",
+                    filters.platform && "1",
+                    filters.status && "1",
+                    filters.dateRange && filters.dateRange.length === 2 && "1",
+                  ].filter(Boolean).length}
+                </span>
+              )}
+            </Button>
           </div>
 
           <div className="hidden md:block">
@@ -359,6 +384,22 @@ export default function PackingOperationsTable() {
             )}
           </div>
         </motion.div>
+
+        {/* Mobile Filter Drawer */}
+        <FilterDrawer
+          open={filterDrawerOpen}
+          onClose={() => setFilterDrawerOpen(false)}
+          filters={filters}
+          onFilterChange={handleFilterChange}
+          platforms={platforms}
+          platformsLoading={platformsLoading}
+          statusOptions={[
+            { label: "Completely Fulfilled", value: "Completely Fulfilled" },
+            { label: "Partially Fulfilled", value: "Partially Fulfilled" },
+          ]}
+          searchPlaceholder="Search by order number"
+          onApply={() => loadPackingOrders(1, pagination.pageSize)}
+        />
       </div>
     </div>
   );
