@@ -18,15 +18,15 @@ export default function CustomerInfoCard({ customerName, customerEmail, phone, d
       <div className="space-y-3">
         <div>
           <p className="text-xs font-medium text-gray-500 mb-1">Name</p>
-          <p className="text-sm font-semibold text-gray-900">{customerName || "N/A"}</p>
+          <p className="text-sm font-semibold text-gray-900">{customerName}</p>
         </div>
         <div>
           <p className="text-xs font-medium text-gray-500 mb-1">Email</p>
-          <p className="text-sm text-gray-900">{customerEmail || "N/A"}</p>
+          <p className="text-sm text-gray-900">{customerEmail}</p>
         </div>
         <div>
           <p className="text-xs font-medium text-gray-500 mb-1">Phone</p>
-          <p className="text-sm text-gray-900">{phone || "N/A"}</p>
+          <p className="text-sm text-gray-900">{phone}</p>
         </div>
       </div>
     </motion.div>

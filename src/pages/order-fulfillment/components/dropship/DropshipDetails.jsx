@@ -11,11 +11,14 @@ import ShippingAddressCard from "../common/ShippingAddressCard";
 import OrderFinancialsCard from "../common/OrderFinancialsCard";
 import OrderTimelineCard from "../common/OrderTimelineCard";
 import OrderItemsDisplay from "../common/OrderItemsDisplay";
+import DropshipItemsDisplay from "./DropshipItemsDisplay";
 import AuditLogsCard from "../common/AuditLogsCard";
 import DropshipInfoCard from "./DropshipInfoCard";
 import StatusUpdateModal from "./StatusUpdateModal";
 import MarketplaceOrderModal from "./MarketplaceOrderModal";
-import { getDropshipOrderDetails, updateDropshipStatus, createMarketplaceOrder } from "../../../../api/fulfillment";
+import ItemFulfillmentModal from "./ItemFulfillmentModal";
+import OrderDetailsSkeleton from "../common/OrderDetailsSkeleton";
+import { getDropshipOrderDetails, updateDropshipStatus, createMarketplaceOrder, fulfillDropshipItem, getPackingOrderDetails } from "../../../../api/fulfillment";
 import Swal from "sweetalert2";
 
 export default function DropshipDetails() {
@@ -26,6 +29,8 @@ export default function DropshipDetails() {
   const [error, setError] = useState(null);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showMarketplaceModal, setShowMarketplaceModal] = useState(false);
+  const [showFulfillmentModal, setShowFulfillmentModal] = useState(false);
+  const [selectedItem, setSelectedItem] = useState(null);
   const [statusForm, setStatusForm] = useState({
     status: "",
     marketplaceName: "",
@@ -33,8 +38,12 @@ export default function DropshipDetails() {
     notes: "",
   });
   const [submitting, setSubmitting] = useState(false);
+  const [fulfillingItem, setFulfillingItem] = useState(false);
 
   useEffect(() => {
+    // Scroll to top on mount
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    
     const loadDropshipDetails = async () => {
       if (!dropshipId) return;
 
@@ -59,15 +68,28 @@ export default function DropshipDetails() {
         console.error("Error loading dropship details:", error);
         setError(error.message || "Failed to load dropship details");
 
-        Swal.fire({
-          icon: "error",
-          title: "Failed to Load",
-          text: error.message || "Unable to fetch dropship details. Please try again.",
-          confirmButtonColor: "#2563eb",
-          confirmButtonText: "OK",
-        }).then(() => {
-          navigate("/fulfillment/dropship");
-        });
+        // Handle 404 error - dropship order was deleted (all items fulfilled)
+        if (error.response?.status === 404 || error.status === 404 || error.code === "DROPSHIP_NOT_FOUND") {
+          Swal.fire({
+            icon: "info",
+            title: "Order Completed",
+            text: "This dropship order has been completed and removed. All items have been fulfilled.",
+            confirmButtonColor: "#2563eb",
+            confirmButtonText: "OK",
+          }).then(() => {
+            navigate("/fulfillment/dropship");
+          });
+        } else {
+          Swal.fire({
+            icon: "error",
+            title: "Failed to Load",
+            text: error.message || "Unable to fetch dropship details. Please try again.",
+            confirmButtonColor: "#2563eb",
+            confirmButtonText: "OK",
+          }).then(() => {
+            navigate("/fulfillment/dropship");
+          });
+        }
       } finally {
         setLoading(false);
       }
@@ -177,18 +199,132 @@ export default function DropshipDetails() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 text-purple-600 animate-spin mx-auto mb-4" />
-          <p className="text-gray-600 font-medium">Loading dropship details...</p>
-        </div>
-      </div>
-    );
-  }
+  const handleFulfillItemClick = (item) => {
+    if (item.fulfillmentStatus === "Fulfilled") {
+      return; // Don't open modal for already fulfilled items
+    }
+    setSelectedItem(item);
+    setShowFulfillmentModal(true);
+  };
 
-  if (error || !dropshipData) {
+  const handleFulfillItem = async (fulfillmentData) => {
+    if (!selectedItem || !dropshipId) return;
+
+    setFulfillingItem(true);
+
+    try {
+      const result = await fulfillDropshipItem(dropshipId, selectedItem.id, fulfillmentData);
+
+      if (result.success) {
+        const packingOrderNumber = result.data.packingOrderNumber || result.data.packingId;
+        const originalOrderNumber = dropshipData?.originalOrderNumber;
+        const originalPackingId = dropshipData?.packingOrders?.[0]?.packingId;
+        const dropshipDeleted = result.data.dropshipDeleted === true;
+        const dropshipStatus = result.data.dropshipStatus;
+
+        // Check if dropship was deleted (all items fulfilled)
+        if (dropshipDeleted) {
+          // Show success message with details
+          await Swal.fire({
+            icon: "success",
+            title: "All Items Fulfilled!",
+            html: `
+              <p>${result.data.message || "All items have been fulfilled successfully."}</p>
+              <p class="mt-2 text-sm text-gray-600">
+                Packing Order: <strong>${packingOrderNumber}</strong>
+              </p>
+              <p class="mt-2 text-xs text-gray-500">
+                The dropship order has been removed and the packing order has been updated.
+              </p>
+            `,
+            confirmButtonColor: "#2563eb",
+            confirmButtonText: "OK",
+          });
+
+          // Refresh packing order details if it exists
+          if (originalPackingId) {
+            try {
+              await getPackingOrderDetails(originalPackingId);
+              console.log("Packing order refreshed after dropship fulfillment");
+            } catch (packingError) {
+              console.warn("Failed to refresh packing order:", packingError);
+              // Non-critical error, don't show to user
+            }
+          }
+
+          // Redirect to dropship list since order is deleted
+          navigate("/fulfillment/dropship");
+          return;
+        }
+
+        // Show success message for partial fulfillment
+        await Swal.fire({
+          icon: "success",
+          title: "Item Fulfilled",
+          html: `
+            <p>The item has been fulfilled successfully.</p>
+            <p class="mt-2 text-sm text-gray-600">
+              Packing Order: <strong>${packingOrderNumber}</strong>
+            </p>
+            ${dropshipStatus === "Partially Fulfilled" ? '<p class="mt-2 text-xs text-gray-500">Some items are still pending fulfillment.</p>' : ''}
+          `,
+          confirmButtonColor: "#2563eb",
+          confirmButtonText: "OK",
+        });
+
+        // Try to reload dropship details to get updated data
+        try {
+          const updatedResult = await getDropshipOrderDetails(dropshipId);
+          if (updatedResult.success && updatedResult.data) {
+            setDropshipData(updatedResult.data);
+          }
+        } catch (reloadError) {
+          // If 404, dropship order was deleted (shouldn't happen here, but handle gracefully)
+          if (reloadError.response?.status === 404 || reloadError.status === 404 || reloadError.code === "DROPSHIP_NOT_FOUND") {
+            await Swal.fire({
+              icon: "info",
+              title: "Order Completed",
+              text: "This dropship order has been completed and removed.",
+              confirmButtonColor: "#2563eb",
+              confirmButtonText: "OK",
+            });
+            navigate("/fulfillment/dropship");
+            return;
+          }
+          console.warn("Failed to reload dropship details:", reloadError);
+        }
+
+        // If packing order was updated (not created new), refresh packing order details
+        // Check if packingOrderNumber matches originalOrderNumber (indicates update, not new creation)
+        if (packingOrderNumber === originalOrderNumber && originalPackingId) {
+          try {
+            // Refresh packing order details in the background
+            await getPackingOrderDetails(originalPackingId);
+            console.log("Packing order refreshed after dropship fulfillment");
+          } catch (packingError) {
+            console.warn("Failed to refresh packing order:", packingError);
+            // Non-critical error, don't show to user
+          }
+        }
+
+        setShowFulfillmentModal(false);
+        setSelectedItem(null);
+      }
+    } catch (error) {
+      console.error("Error fulfilling item:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Failed to Fulfill Item",
+        text: error.message || "Unable to fulfill item. Please try again.",
+        confirmButtonColor: "#2563eb",
+        confirmButtonText: "OK",
+      });
+    } finally {
+      setFulfillingItem(false);
+    }
+  };
+
+  if (error || (!loading && !dropshipData)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center max-w-md">
@@ -224,21 +360,22 @@ export default function DropshipDetails() {
           <span className="sm:hidden">Back</span>
         </motion.button>
 
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-6"
-        >
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
-                {dropshipData.dropshipId}
-              </h1>
-              <p className="text-sm sm:text-base text-gray-600">Original Order: {dropshipData.originalOrderNumber}</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-              <StatusBadge status={dropshipData.status} />
-              {dropshipData.status === "Unfulfilled" && (
+        {dropshipData && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
+                  {dropshipData.dropshipId || "N/A"}
+                </h1>
+                <p className="text-sm sm:text-base text-gray-600">Original Order: {dropshipData.originalOrderNumber || "N/A"}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                <StatusBadge status={dropshipData.status} />
+                {dropshipData.status === "Unfulfilled" && (
                 <>
                   <Button
                     icon={<Edit className="w-4 h-4" />}
@@ -264,16 +401,24 @@ export default function DropshipDetails() {
             </div>
           </div>
         </motion.div>
+        )}
 
-        {/* Mobile-first: Order Items on top, other info below */}
-        <div className="flex flex-col lg:flex-col-reverse gap-6 mb-6">
+        {loading ? (
+          <OrderDetailsSkeleton />
+        ) : dropshipData ? (
+          <>
+            {/* Mobile-first: Order Items on top, other info below */}
+            <div className="flex flex-col lg:flex-col-reverse gap-6 mb-6">
           {/* Order Items - First on mobile, last on desktop */}
           <div className="order-1 lg:order-2">
-            <OrderItemsDisplay
-              items={dropshipData.deselectedItems}
+            <DropshipItemsDisplay
+              items={dropshipData.deselectedItems || []}
               currency={dropshipData.currency}
-              showStatus={false}
-              title="Out of Stock Items"
+              title="Dropship Items"
+              dropshipId={dropshipData.dropshipId}
+              onFulfillClick={handleFulfillItemClick}
+              fulfilledItemsCount={dropshipData.fulfilledItemsCount || 0}
+              remainingItemsCount={dropshipData.remainingItemsCount || dropshipData.deselectedItems?.length || 0}
             />
           </div>
 
@@ -286,14 +431,16 @@ export default function DropshipDetails() {
                 platform={dropshipData.platform}
                 status={dropshipData.status}
                 deselectedItemsCount={dropshipData.deselectedItems?.length || 0}
+                fulfilledItemsCount={dropshipData.fulfilledItemsCount || 0}
+                remainingItemsCount={dropshipData.remainingItemsCount || dropshipData.deselectedItems?.length || 0}
                 createdAt={dropshipData.createdAt}
                 marketplaceName={dropshipData.marketplaceName}
                 marketplaceOrderNumber={dropshipData.marketplaceOrderNumber}
               />
               <CustomerInfoCard
-                customerName={dropshipData.customerName}
-                customerEmail={dropshipData.customerEmail}
-                phone={dropshipData.phone}
+                customerName={dropshipData.customerName || dropshipData.shipTo?.name}
+                customerEmail={dropshipData.customerEmail || dropshipData.shipTo?.email}
+                phone={dropshipData.phone || dropshipData.shipTo?.phone}
               />
             </div>
 
@@ -317,7 +464,47 @@ export default function DropshipDetails() {
           </div>
         </div>
 
-        <AuditLogsCard auditLogs={dropshipData.auditLogs} />
+            <AuditLogsCard auditLogs={dropshipData.auditLogs} />
+
+            {/* Packing Orders Section */}
+            {dropshipData.packingOrders && dropshipData.packingOrders.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white rounded-xl border-2 border-gray-200 shadow-lg p-6"
+              >
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <Package className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900">Linked Packing Orders</h3>
+                </div>
+                <div className="space-y-3">
+                  {dropshipData.packingOrders.map((packingOrder) => (
+                    <div
+                      key={packingOrder.packingId}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer"
+                      onClick={() => navigate(`/fulfillment/packing/${packingOrder.packingId}`)}
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">
+                          {packingOrder.packingOrderNumber || packingOrder.packingId}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {packingOrder.itemsCount} item{packingOrder.itemsCount !== 1 ? "s" : ""} •{" "}
+                          {packingOrder.createdAt
+                            ? new Date(packingOrder.createdAt).toLocaleDateString()
+                            : "N/A"}
+                        </p>
+                      </div>
+                      <StatusBadge status={packingOrder.status} />
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </>
+        ) : null}
 
         <StatusUpdateModal
           open={showStatusModal}
@@ -336,6 +523,20 @@ export default function DropshipDetails() {
           onSubmit={handleCreateMarketplaceOrder}
           submitting={submitting}
         />
+
+        {/* Item Fulfillment Modal */}
+        {selectedItem && (
+          <ItemFulfillmentModal
+            open={showFulfillmentModal}
+            onCancel={() => {
+              setShowFulfillmentModal(false);
+              setSelectedItem(null);
+            }}
+            item={selectedItem}
+            onSubmit={handleFulfillItem}
+            submitting={fulfillingItem}
+          />
+        )}
       </div>
     </div>
   );

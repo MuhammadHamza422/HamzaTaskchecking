@@ -3,7 +3,15 @@ const statusConfig = {
     label: "Completely Fulfilled",
     className: "bg-green-100 text-green-700 border-green-300",
   },
+  "completely fulfilled": {
+    label: "Completely Fulfilled",
+    className: "bg-green-100 text-green-700 border-green-300",
+  },
   "partially-fulfilled": {
+    label: "Partially Fulfilled",
+    className: "bg-amber-100 text-amber-700 border-amber-300",
+  },
+  "partially fulfilled": {
     label: "Partially Fulfilled",
     className: "bg-amber-100 text-amber-700 border-amber-300",
   },

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Package, List, Loader2, Sparkles, ScanLine } from "lucide-react";
 import { motion } from "framer-motion";
@@ -12,6 +12,11 @@ export default function PackingLandingPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState(null);
   const [alreadyPackedWarning, setAlreadyPackedWarning] = useState(null);
+
+  // Scroll to top on mount
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
 
   const handleOrderFound = async (orderNumber) => {
     if (!orderNumber || orderNumber.trim() === "") {

@@ -7,6 +7,8 @@ import StatusBadge from "../common/StatusBadge";
 import PlatformBadge from "../common/PlatformBadge";
 import FulfillmentBreadcrumb from "../common/FulfillmentBreadcrumb";
 import FilterDrawer from "../common/FilterDrawer";
+import TableSkeleton from "../common/TableSkeleton";
+import MobileCardSkeleton from "../common/MobileCardSkeleton";
 import { getAllPackingOrders } from "../../../../api/fulfillment";
 import apiClient from "../../../../api/client";
 import dayjs from "dayjs";
@@ -53,6 +55,8 @@ export default function PackingOperationsTable() {
   };
 
   useEffect(() => {
+    // Scroll to top on mount
+    window.scrollTo({ top: 0, behavior: "smooth" });
     fetchPlatforms();
   }, []);
 
@@ -323,36 +327,38 @@ export default function PackingOperationsTable() {
           </div>
 
           <div className="hidden md:block">
-            <Table
-              columns={columns}
-              dataSource={data}
-              rowKey="packingId"
-              loading={loading}
-              pagination={{
-                current: pagination.current,
-                pageSize: pagination.pageSize,
-                total: pagination.total,
-                showSizeChanger: true,
-                showTotal: (total) => `Total ${total} orders`,
-                pageSizeOptions: ["10", "30", "50", "100"],
-              }}
-              onChange={handleTableChange}
-              className="fulfillment-table"
-              onRow={(record) => ({
-                onClick: () => navigate(`/fulfillment/packing/${record.orderNumber}`, {
-                  state: { packingId: record.packingId },
-                }),
-                className: "cursor-pointer hover:bg-blue-50 transition-colors",
-              })}
-            />
+            {loading ? (
+              <div className="p-6">
+                <TableSkeleton columns={columns} rows={8} />
+              </div>
+            ) : (
+              <Table
+                columns={columns}
+                dataSource={data}
+                rowKey="packingId"
+                pagination={{
+                  current: pagination.current,
+                  pageSize: pagination.pageSize,
+                  total: pagination.total,
+                  showSizeChanger: true,
+                  showTotal: (total) => `Total ${total} orders`,
+                  pageSizeOptions: ["10", "30", "50", "100"],
+                }}
+                onChange={handleTableChange}
+                className="fulfillment-table"
+                onRow={(record) => ({
+                  onClick: () => navigate(`/fulfillment/packing/${record.orderNumber}`, {
+                    state: { packingId: record.packingId },
+                  }),
+                  className: "cursor-pointer hover:bg-blue-50 transition-colors",
+                })}
+              />
+            )}
           </div>
 
           <div className="md:hidden p-4">
             {loading ? (
-              <div className="text-center py-12">
-                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                <p className="mt-4 text-gray-600">Loading orders...</p>
-              </div>
+              <MobileCardSkeleton count={5} />
             ) : data.length === 0 ? (
               <div className="text-center py-12">
                 <XCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
