@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { useEffect } from "react";
 import { LayoutDashboard, Package, ShoppingCart, Truck } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -56,22 +57,27 @@ const cards = [
 export default function FulfillmentLandingPage() {
   const navigate = useNavigate();
 
+  // Scroll to top on mount (especially important for mobile)
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50">
-      <div className="max-w-[1550px] mx-auto px-4 sm:px-6 py-12">
+      <div className="max-w-[1550px] mx-auto px-4 sm:px-6 md:py-12 py-6">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
           className="text-center mb-12"
         >
-          <div className="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl mb-6 shadow-xl">
-            <Package className="w-12 h-12 text-white" />
+          <div className="inline-flex items-center justify-center w-16 h-16 md:w-20 md:h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl mb-6 shadow-xl">
+            <Package className="w-10 h-10 md:w-12 md:h-12 text-white" />
           </div>
-          <h1 className="text-5xl font-extrabold text-gray-900 mb-4 leading-tight">
+          <h1 className="lg:text-5xl md:text-4xl sm:text-3xl text-3xl font-bold md:font-extrabold text-gray-900 mb-4 leading-tight">
             Order Fulfillment
           </h1>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+          <p className="text-base md:text-xl text-gray-600 max-w-2xl mx-auto">
             Streamline your fulfillment operations with powerful tools for packing, dropshipping, and shipping
           </p>
         </motion.div>
@@ -92,13 +98,13 @@ export default function FulfillmentLandingPage() {
               >
                 <div className={`absolute inset-0 bg-gradient-to-br ${card.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-300`}></div>
                 
-                <div className="relative p-8">
-                  <div className="flex items-start gap-6 mb-6">
-                    <div className={`${card.iconBg} p-4 rounded-xl group-hover:bg-white transition-colors duration-300`}>
-                      <IconComponent className={`w-8 h-8 ${card.iconColor} group-hover:text-gray-900 transition-colors duration-300`} />
+                <div className="relative p-4 md:p-8">
+                  <div className="flex items-start gap-4 md:gap-6 mb-4 md:mb-6">
+                    <div className={`${card.iconBg} p-2 sm:p-4 rounded-xl group-hover:bg-white transition-colors duration-300`}>
+                      <IconComponent className={`w-6 h-6 sm:w-8 sm:h-8 ${card.iconColor} group-hover:text-gray-900 transition-colors duration-300`} />
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-2xl font-bold text-gray-900 group-hover:text-white transition-colors duration-300 mb-2">
+                      <h3 className="text-xl md:text-2xl font-bold text-gray-900 group-hover:text-white transition-colors duration-300 mb-2">
                         {card.title}
                       </h3>
                       <p className="text-gray-600 group-hover:text-blue-50 transition-colors duration-300 text-base leading-relaxed">

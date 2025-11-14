@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Table, Select, DatePicker, Input, Button, Pagination } from "antd";
-import { Search, Package, XCircle, Loader2, Calendar } from "lucide-react";
+import { Search, Package, XCircle, Loader2, Calendar, Filter } from "lucide-react";
 import { motion } from "framer-motion";
 import PlatformBadge from "../common/PlatformBadge";
 import StatusBadge from "../common/StatusBadge";
 import FulfillmentBreadcrumb from "../common/FulfillmentBreadcrumb";
+import FilterDrawer from "../common/FilterDrawer";
 import { getAllDropshipOrders } from "../../../../api/fulfillment";
 import apiClient from "../../../../api/client";
 import dayjs from "dayjs";
@@ -30,6 +31,7 @@ export default function DropshipManagementTable() {
   });
   const [platforms, setPlatforms] = useState([]);
   const [platformsLoading, setPlatformsLoading] = useState(false);
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
 
   const fetchPlatforms = async () => {
     try {
@@ -252,7 +254,8 @@ export default function DropshipManagementTable() {
           transition={{ delay: 0.1 }}
           className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden"
         >
-          <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-blue-50">
+          {/* Desktop Filters */}
+          <div className="hidden md:block p-6 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-blue-50">
             <div className="flex items-center gap-2 mb-4">
               <Search className="w-5 h-5 text-purple-600" />
               <h2 className="text-lg font-semibold text-gray-900">Filters</h2>
@@ -302,6 +305,28 @@ export default function DropshipManagementTable() {
                 suffixIcon={<Calendar className="w-4 h-4 text-gray-400" />}
               />
             </div>
+          </div>
+
+          {/* Mobile Filter Button */}
+          <div className="md:hidden p-4 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-blue-50">
+            <Button
+              type="primary"
+              icon={<Filter className="w-4 h-4" />}
+              onClick={() => setFilterDrawerOpen(true)}
+              className="w-full h-11 flex items-center justify-center gap-2"
+            >
+              Filters
+              {(filters.search || filters.platform || filters.status || (filters.dateRange && filters.dateRange.length === 2)) && (
+                <span className="ml-1 px-2 py-0.5 bg-white text-purple-600 rounded-full text-xs font-semibold">
+                  {[
+                    filters.search && "1",
+                    filters.platform && "1",
+                    filters.status && "1",
+                    filters.dateRange && filters.dateRange.length === 2 && "1",
+                  ].filter(Boolean).length}
+                </span>
+              )}
+            </Button>
           </div>
 
           {loading ? (
@@ -356,6 +381,23 @@ export default function DropshipManagementTable() {
             </>
           )}
         </motion.div>
+
+        {/* Mobile Filter Drawer */}
+        <FilterDrawer
+          open={filterDrawerOpen}
+          onClose={() => setFilterDrawerOpen(false)}
+          filters={filters}
+          onFilterChange={handleFilterChange}
+          platforms={platforms}
+          platformsLoading={platformsLoading}
+          statusOptions={[
+            { label: "Unfulfilled", value: "Unfulfilled" },
+            { label: "Fulfilled", value: "Fulfilled" },
+            { label: "Cancelled", value: "Cancelled" },
+          ]}
+          searchPlaceholder="Search by order number, dropship ID"
+          onApply={() => loadDropshipOrders(1, pagination.pageSize)}
+        />
       </div>
     </div>
   );
