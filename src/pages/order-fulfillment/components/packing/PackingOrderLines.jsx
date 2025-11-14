@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import Swal from "sweetalert2";
 
 export default function PackingOrderLines({ orderLines = [], selectedItems: initialSelectedItems = [], onSelectionChange }) {
   const [selectedItems, setSelectedItems] = useState(
@@ -20,6 +21,18 @@ export default function PackingOrderLines({ orderLines = [], selectedItems: init
   const handleToggleItem = (itemId) => {
     const newSelected = new Set(selectedItems);
     if (newSelected.has(itemId)) {
+      // Trying to deselect an item
+      // Prevent if this is the last selected item
+      if (newSelected.size === 1) {
+        Swal.fire({
+          icon: "warning",
+          title: "Cannot Deselect All Items",
+          text: "At least one item must be selected for packing. If you need to deselect all items, please cancel this packing operation.",
+          confirmButtonColor: "#2563eb",
+          confirmButtonText: "OK",
+        });
+        return; // Don't allow deselection
+      }
       newSelected.delete(itemId);
     } else {
       newSelected.add(itemId);
@@ -39,14 +52,20 @@ export default function PackingOrderLines({ orderLines = [], selectedItems: init
   };
 
   const handleDeselectAll = () => {
-    setSelectedItems(new Set());
-    if (onSelectionChange) {
-      onSelectionChange([]);
-    }
+    // Prevent deselecting all items
+    Swal.fire({
+      icon: "warning",
+      title: "Cannot Deselect All Items",
+      text: "At least one item must be selected for packing. If you need to deselect all items, please cancel this packing operation.",
+      confirmButtonColor: "#2563eb",
+      confirmButtonText: "OK",
+    });
+    return; // Don't allow deselection
   };
 
   const allSelected = selectedItems.size === orderLines.length && orderLines.length > 0;
   const unselectedCount = orderLines.length - selectedItems.size;
+  const hasNoSelection = selectedItems.size === 0;
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
@@ -63,20 +82,33 @@ export default function PackingOrderLines({ orderLines = [], selectedItems: init
             <span className="text-gray-300">|</span>
             <button
               onClick={handleDeselectAll}
-              className="text-sm text-gray-600 hover:text-gray-700 font-medium"
+              disabled={selectedItems.size <= 1}
+              className={`text-sm font-medium ${
+                selectedItems.size <= 1
+                  ? "text-gray-400 cursor-not-allowed"
+                  : "text-gray-600 hover:text-gray-700"
+              }`}
+              title={selectedItems.size <= 1 ? "At least one item must be selected" : "Clear All"}
             >
               Clear All
             </button>
           </div>
         </div>
-        {unselectedCount > 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-            <p className="text-sm text-amber-800 font-medium">
-              ⚠️ Please unselect out-of-stock items ({unselectedCount} item{unselectedCount > 1 ? "s" : ""} unselected)
+        {hasNoSelection && (
+          <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4">
+            <p className="text-sm text-red-800 font-semibold">
+              ❌ Error: At least one item must be selected for packing. Please select at least one item to continue.
             </p>
           </div>
         )}
-        {unselectedCount === 0 && orderLines.length > 0 && (
+        {!hasNoSelection && unselectedCount > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <p className="text-sm text-amber-800 font-medium">
+              ⚠️ {unselectedCount} item{unselectedCount > 1 ? "s" : ""} unselected. These will be moved to dropshipping.
+            </p>
+          </div>
+        )}
+        {!hasNoSelection && unselectedCount === 0 && orderLines.length > 0 && (
           <div className="bg-green-50 border border-green-200 rounded-lg p-4">
             <p className="text-sm text-green-800 font-medium">
               ✓ All items are selected. You can proceed to upload packing photos.
@@ -94,7 +126,7 @@ export default function PackingOrderLines({ orderLines = [], selectedItems: init
                   type="checkbox"
                   checked={allSelected}
                   onChange={allSelected ? handleDeselectAll : handleSelectAll}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
                 />
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
