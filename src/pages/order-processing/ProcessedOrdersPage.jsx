@@ -615,7 +615,7 @@ export default function ProcessedOrdersPage() {
     }
 
     const orderDate = formatDateForShipStation(
-      wc?.date_created || tableOrder?.createdAt || new Date()
+      wc?.date_created || tableOrder?.orderCreatedAt || tableOrder?.createdAt || new Date()
     );
     const billing = wc?.billing || {};
     const shipping = wc?.shipping || {};
@@ -783,7 +783,7 @@ export default function ProcessedOrdersPage() {
     const orderDate = formatDateForShipStation(
       typeof wm?.orderDate === "number"
         ? wm.orderDate
-        : tableOrder?.createdAt || new Date()
+        : tableOrder?.orderCreatedAt || tableOrder?.createdAt || new Date()
     );
     const addr = wm?.shippingInfo?.postalAddress || {};
 
@@ -965,7 +965,7 @@ export default function ProcessedOrdersPage() {
     }
 
     const orderDate = formatDateForShipStation(
-      sf?.createdAt || tableOrder?.createdAt || new Date()
+      sf?.createdAt || tableOrder?.orderCreatedAt || tableOrder?.createdAt || new Date()
     );
 
     const billing = sf?.billingAddress || {};

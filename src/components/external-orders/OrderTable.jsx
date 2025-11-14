@@ -238,11 +238,11 @@ function OrderTable({
       },
       {
         title: "Date ↓",
-        dataIndex: "createdAt",
-        key: "createdAt",
+        dataIndex: "orderCreatedAt",
+        key: "orderCreatedAt",
         width: 85,
-        render: formatDate,
-        sorter: (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+        render: (orderCreatedAt, record) => formatDate(orderCreatedAt || record.createdAt),
+        sorter: (a, b) => new Date(a.orderCreatedAt || a.createdAt) - new Date(b.orderCreatedAt || b.createdAt),
       },
       {
         title: "Customer",
@@ -416,11 +416,11 @@ function OrderTable({
         },
         {
           title: "Date ↓",
-          dataIndex: "createdAt",
-          key: "createdAt",
+          dataIndex: "orderCreatedAt",
+          key: "orderCreatedAt",
           width: 75,
-          render: formatDate,
-          sorter: (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+          render: (orderCreatedAt, record) => formatDate(orderCreatedAt || record.createdAt),
+          sorter: (a, b) => new Date(a.orderCreatedAt || a.createdAt) - new Date(b.orderCreatedAt || b.createdAt),
         },
         // {
         //   title: "Customer",
@@ -665,11 +665,11 @@ function OrderTable({
         },
         {
           title: "Date ↓",
-          dataIndex: "createdAt",
-          key: "createdAt",
+          dataIndex: "orderCreatedAt",
+          key: "orderCreatedAt",
           width: 75,
-          render: formatDate,
-          sorter: (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+          render: (orderCreatedAt, record) => formatDate(orderCreatedAt || record.createdAt),
+          sorter: (a, b) => new Date(a.orderCreatedAt || a.createdAt) - new Date(b.orderCreatedAt || b.createdAt),
         },
         {
           title: "Actions",
@@ -856,11 +856,11 @@ function OrderTable({
         },
         {
           title: "Date ↓",
-          dataIndex: "createdAt",
-          key: "createdAt",
+          dataIndex: "orderCreatedAt",
+          key: "orderCreatedAt",
           width: 75,
-          render: formatDate,
-          sorter: (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+          render: (orderCreatedAt, record) => formatDate(orderCreatedAt || record.createdAt),
+          sorter: (a, b) => new Date(a.orderCreatedAt || a.createdAt) - new Date(b.orderCreatedAt || b.createdAt),
         },
         {
           title: "Actions",
@@ -1132,7 +1132,7 @@ function OrderTable({
           {/* Footer */}
           <div className="flex justify-between items-center pt-2 border-t border-gray-100">
             <div className="text-sm text-gray-600 whitespace-nowrap">
-              {formatDate(order?.createdAt)}
+              {formatDate(order?.orderCreatedAt || order?.createdAt)}
             </div>
             <div className="flex gap-2">
               <div className="text-sm">

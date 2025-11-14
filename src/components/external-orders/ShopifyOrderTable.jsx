@@ -426,11 +426,11 @@ function ShopifyOrderTable({
     },
     {
       title: "Date ↓",
-      dataIndex: "createdAt",
-      key: "createdAt",
+      dataIndex: "orderCreatedAt",
+      key: "orderCreatedAt",
       width: 75,
-      render: formatDate,
-      sorter: (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+      render: (orderCreatedAt, record) => formatDate(orderCreatedAt || record.createdAt),
+      sorter: (a, b) => new Date(a.orderCreatedAt || a.createdAt) - new Date(b.orderCreatedAt || b.createdAt),
     },
     {
       title: "Customer",
@@ -682,7 +682,7 @@ function ShopifyOrderTable({
                   </div>
                 </div>
                 <div className="text-sm text-gray-500">
-                  {formatDate(order?.createdAt)}
+                  {formatDate(order?.orderCreatedAt || order?.createdAt)}
                 </div>
                 <div className="flex items-center gap-2 mt-1">
                   {getCancelReasonBadge(order?.shopifyDetails?.cancel_reason)}

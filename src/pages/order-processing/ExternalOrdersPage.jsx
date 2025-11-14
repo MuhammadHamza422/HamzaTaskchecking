@@ -501,7 +501,7 @@ export default function ExternalOrdersPage() {
       endDate.setHours(23, 59, 59, 999);
 
       filteredOrders = filteredOrders.filter((order) => {
-        const orderDate = new Date(order.createdAt);
+        const orderDate = new Date(order.orderCreatedAt || order.createdAt);
         return orderDate >= startDate && orderDate <= endDate;
       });
     }
