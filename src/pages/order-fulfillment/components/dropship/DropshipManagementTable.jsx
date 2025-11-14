@@ -1,12 +1,21 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Table, Select, DatePicker, Input, Button, Pagination } from "antd";
-import { Search, Package, XCircle, Loader2, Calendar, Filter } from "lucide-react";
+import {
+  Search,
+  Package,
+  XCircle,
+  Loader2,
+  Calendar,
+  Filter,
+} from "lucide-react";
 import { motion } from "framer-motion";
 import PlatformBadge from "../common/PlatformBadge";
 import StatusBadge from "../common/StatusBadge";
 import FulfillmentBreadcrumb from "../common/FulfillmentBreadcrumb";
 import FilterDrawer from "../common/FilterDrawer";
+import TableSkeleton from "../common/TableSkeleton";
+import MobileCardSkeleton from "../common/MobileCardSkeleton";
 import { getAllDropshipOrders } from "../../../../api/fulfillment";
 import apiClient from "../../../../api/client";
 import dayjs from "dayjs";
@@ -53,6 +62,8 @@ export default function DropshipManagementTable() {
   };
 
   useEffect(() => {
+    // Scroll to top on mount
+    window.scrollTo({ top: 0, behavior: "smooth" });
     fetchPlatforms();
   }, []);
 
@@ -93,7 +104,8 @@ export default function DropshipManagementTable() {
       Swal.fire({
         icon: "error",
         title: "Failed to Load Orders",
-        text: error.message || "Unable to fetch dropship orders. Please try again.",
+        text:
+          error.message || "Unable to fetch dropship orders. Please try again.",
         confirmButtonColor: "#2563eb",
         confirmButtonText: "OK",
       });
@@ -125,13 +137,17 @@ export default function DropshipManagementTable() {
       title: "Dropship ID",
       dataIndex: "dropshipId",
       key: "dropshipId",
-      render: (text) => <span className="font-semibold text-gray-900 text-sm">{text}</span>,
+      render: (text) => (
+        <span className="font-semibold text-gray-900 text-sm">{text}</span>
+      ),
     },
     {
       title: "Original Order",
       dataIndex: "originalOrderNumber",
       key: "originalOrderNumber",
-      render: (text) => <span className="font-medium text-gray-900 text-sm">{text}</span>,
+      render: (text) => (
+        <span className="font-medium text-gray-900 text-sm">{text}</span>
+      ),
     },
     {
       title: "Platform",
@@ -139,7 +155,11 @@ export default function DropshipManagementTable() {
       key: "platform",
       render: (platform) => (
         <PlatformBadge
-          platform={platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : platform}
+          platform={
+            platform
+              ? platform.charAt(0).toUpperCase() + platform.slice(1)
+              : platform
+          }
         />
       ),
     },
@@ -147,13 +167,25 @@ export default function DropshipManagementTable() {
       title: "Customer",
       dataIndex: "customerName",
       key: "customerName",
-      render: (name) => <span className="text-sm text-gray-700">{name || "N/A"}</span>,
+      render: (name) => (
+        <span className="text-sm text-gray-700">{name || "N/A"}</span>
+      ),
     },
     {
       title: "Items",
       dataIndex: "deselectedItemsCount",
       key: "deselectedItemsCount",
-      render: (count) => <span className="text-sm text-gray-700 font-medium">{count || 0}</span>,
+      render: (count, record) => (
+        <div className="flex flex-col gap-1">
+          <span className="text-sm text-gray-700 font-medium">Total: {count || 0}</span>
+          {record.fulfilledItemsCount > 0 && (
+            <span className="text-xs text-green-600">Fulfilled: {record.fulfilledItemsCount}</span>
+          )}
+          {record.remainingItemsCount > 0 && (
+            <span className="text-xs text-amber-600">Remaining: {record.remainingItemsCount}</span>
+          )}
+        </div>
+      ),
     },
     {
       title: "Total Value",
@@ -197,9 +229,16 @@ export default function DropshipManagementTable() {
           <h3 className="font-semibold text-gray-900 text-base mb-1">
             {record.dropshipId}
           </h3>
-          <p className="text-sm text-gray-600 mb-1">Order: {record.originalOrderNumber}</p>
+          <p className="text-sm text-gray-600 mb-1">
+            Order: {record.originalOrderNumber}
+          </p>
           <PlatformBadge
-            platform={record.platform ? record.platform.charAt(0).toUpperCase() + record.platform.slice(1) : record.platform}
+            platform={
+              record.platform
+                ? record.platform.charAt(0).toUpperCase() +
+                  record.platform.slice(1)
+                : record.platform
+            }
           />
         </div>
         <StatusBadge status={record.status} />
@@ -214,9 +253,17 @@ export default function DropshipManagementTable() {
         </div>
         <div>
           <p className="text-xs text-gray-500 mb-1">Items</p>
-          <p className="text-sm font-semibold text-gray-900">
-            {record.deselectedItemsCount || 0}
-          </p>
+          <div className="flex flex-col gap-0.5">
+            <p className="text-sm font-semibold text-gray-900">
+              Total: {record.deselectedItemsCount || 0}
+            </p>
+            {record.fulfilledItemsCount > 0 && (
+              <p className="text-xs text-green-600">Fulfilled: {record.fulfilledItemsCount}</p>
+            )}
+            {record.remainingItemsCount > 0 && (
+              <p className="text-xs text-amber-600">Remaining: {record.remainingItemsCount}</p>
+            )}
+          </div>
         </div>
         <div>
           <p className="text-xs text-gray-500 mb-1">Total Value</p>
@@ -227,7 +274,9 @@ export default function DropshipManagementTable() {
         <div>
           <p className="text-xs text-gray-500 mb-1">Created At</p>
           <p className="text-sm font-semibold text-gray-900">
-            {record.createdAt ? dayjs(record.createdAt).format("MMM DD, YYYY") : "N/A"}
+            {record.createdAt
+              ? dayjs(record.createdAt).format("MMM DD, YYYY")
+              : "N/A"}
           </p>
         </div>
       </div>
@@ -244,7 +293,9 @@ export default function DropshipManagementTable() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-6"
         >
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Drop-ship Management</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-1">
+            Drop-ship Management
+          </h1>
           <p className="text-gray-600">Manage orders with unselected items</p>
         </motion.div>
 
@@ -267,7 +318,9 @@ export default function DropshipManagementTable() {
                   prefix={<Search className="w-4 h-4 text-gray-400" />}
                   value={filters.search}
                   onChange={(e) => handleFilterChange("search", e.target.value)}
-                  onPressEnter={() => loadDropshipOrders(1, pagination.pageSize)}
+                  onPressEnter={() =>
+                    loadDropshipOrders(1, pagination.pageSize)
+                  }
                   className="w-full h-11"
                   allowClear
                 />
@@ -316,56 +369,66 @@ export default function DropshipManagementTable() {
               className="w-full h-11 flex items-center justify-center gap-2"
             >
               Filters
-              {(filters.search || filters.platform || filters.status || (filters.dateRange && filters.dateRange.length === 2)) && (
+              {(filters.search ||
+                filters.platform ||
+                filters.status ||
+                (filters.dateRange && filters.dateRange.length === 2)) && (
                 <span className="ml-1 px-2 py-0.5 bg-white text-purple-600 rounded-full text-xs font-semibold">
-                  {[
-                    filters.search && "1",
-                    filters.platform && "1",
-                    filters.status && "1",
-                    filters.dateRange && filters.dateRange.length === 2 && "1",
-                  ].filter(Boolean).length}
+                  {
+                    [
+                      filters.search && "1",
+                      filters.platform && "1",
+                      filters.status && "1",
+                      filters.dateRange &&
+                        filters.dateRange.length === 2 &&
+                        "1",
+                    ].filter(Boolean).length
+                  }
                 </span>
               )}
             </Button>
           </div>
 
-          {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="text-center">
-                <Loader2 className="w-12 h-12 text-purple-600 animate-spin mx-auto mb-4" />
-                <p className="text-gray-600 font-medium">Loading dropship orders...</p>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="hidden md:block">
+          <>
+            <div className="hidden md:block">
+              {loading ? (
+                <div className="p-6">
+                  <TableSkeleton columns={columns} rows={8} />
+                </div>
+              ) : (
                 <Table
                   columns={columns}
                   dataSource={data}
                   rowKey="dropshipId"
-                  loading={loading}
                   pagination={false}
                   className="fulfillment-table"
                   onRow={(record) => ({
                     onClick: () => handleRowClick(record),
-                    className: "cursor-pointer hover:bg-purple-50 transition-colors",
+                    className:
+                      "cursor-pointer hover:bg-purple-50 transition-colors",
                   })}
                 />
-              </div>
+              )}
+            </div>
 
-              <div className="md:hidden p-4">
-                {data.length === 0 ? (
-                  <div className="text-center py-12">
-                    <XCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600">No dropship orders found</p>
-                  </div>
-                ) : (
-                  <>
-                    {data.map((record, index) => renderMobileCard(record, index))}
-                  </>
-                )}
-              </div>
+            <div className="md:hidden p-4">
+              {loading ? (
+                <MobileCardSkeleton count={5} />
+              ) : data.length === 0 ? (
+                <div className="text-center py-12">
+                  <XCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600">No dropship orders found</p>
+                </div>
+              ) : (
+                <>
+                  {data.map((record, index) =>
+                    renderMobileCard(record, index)
+                  )}
+                </>
+              )}
+            </div>
 
+            {!loading && (
               <div className="mt-6 flex justify-center pb-4">
                 <Pagination
                   current={pagination.current}
@@ -378,8 +441,8 @@ export default function DropshipManagementTable() {
                   className="ant-pagination-alt"
                 />
               </div>
-            </>
-          )}
+            )}
+          </>
         </motion.div>
 
         {/* Mobile Filter Drawer */}
@@ -402,4 +465,3 @@ export default function DropshipManagementTable() {
     </div>
   );
 }
-

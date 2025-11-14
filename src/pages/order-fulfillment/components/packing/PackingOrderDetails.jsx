@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { ArrowLeft, Loader2, Package } from "lucide-react";
+import { ArrowLeft, Loader2, Package, Edit, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
 import OrderInfoCard from "../common/OrderInfoCard";
 import PackingOrderLines from "./PackingOrderLines";
@@ -15,7 +15,9 @@ import OrderItemsDisplay from "../common/OrderItemsDisplay";
 import PackingInfoCard from "./PackingInfoCard";
 import StepIndicator from "./StepIndicator";
 import PhotoUploadStep from "./PhotoUploadStep";
-import { getOrderDetails, createPacking, getPackingOrderDetails } from "../../../../api/fulfillment";
+import OrderDetailsSkeleton from "../common/OrderDetailsSkeleton";
+import EditPackingModal from "./EditPackingModal";
+import { getOrderDetails, createPacking, getPackingOrderDetails, addMissingProduct, deleteMissingProduct, updatePackingOrder, deletePackingOrder } from "../../../../api/fulfillment";
 import Swal from "sweetalert2";
 
 const STAGES = {
@@ -40,8 +42,13 @@ export default function PackingOrderDetails() {
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [isAlreadyPacked, setIsAlreadyPacked] = useState(false);
   const [packingInfo, setPackingInfo] = useState(null);
+  const [packingId, setPackingId] = useState(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   useEffect(() => {
+    // Scroll to top on mount
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    
     const loadOrderDetails = async () => {
       const packingId = location.state?.packingId;
 
@@ -51,6 +58,7 @@ export default function PackingOrderDetails() {
       try {
         if (packingId) {
           setIsViewMode(true);
+          setPackingId(packingId);
           const result = await getPackingOrderDetails(packingId);
 
           if (result.success && result.data) {
@@ -99,6 +107,7 @@ export default function PackingOrderDetails() {
             // If already packed, switch to view mode
             if (isPacked && packingInfoData) {
               setIsViewMode(true);
+              setPackingId(packingInfoData.packingId);
               // Load packing details
               try {
                 const packingResult = await getPackingOrderDetails(packingInfoData.packingId);
@@ -140,18 +149,7 @@ export default function PackingOrderDetails() {
     }
   }, [orderId, location.state, navigate]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
-          <p className="text-gray-600 font-medium">Loading order details...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error || (!orderData && !packingData)) {
+  if (error || (!loading && !orderData && !packingData)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center max-w-md">
@@ -171,27 +169,28 @@ export default function PackingOrderDetails() {
     );
   }
 
-  const order = isViewMode
+  // Only create order object if data is available
+  const order = loading ? null : (isViewMode
     ? {
-        orderNumber: packingData.orderNumber || packingData.orderId,
-        customerName: packingData.customerName || "N/A",
-        platform: packingData.platform,
-        shipTo: packingData.shipTo
+        orderNumber: packingData?.orderNumber || packingData?.orderId || "N/A",
+        customerName: packingData?.customerName || "N/A",
+        platform: packingData?.platform,
+        shipTo: packingData?.shipTo
           ? `${packingData.shipTo.address1}${packingData.shipTo.address2 ? `, ${packingData.shipTo.address2}` : ""}, ${packingData.shipTo.city}, ${packingData.shipTo.state} ${packingData.shipTo.zip}, ${packingData.shipTo.country}`
           : "N/A",
-        totalValue: packingData.totalValue || 0,
+        totalValue: packingData?.totalValue || 0,
       }
     : {
-        orderNumber: orderData.orderNumber || orderData.orderId,
-        customerName: orderData.customerName,
-        platform: orderData.platform,
-        shipTo: orderData.shipTo
+        orderNumber: orderData?.orderNumber || orderData?.orderId || "N/A",
+        customerName: orderData?.customerName || "N/A",
+        platform: orderData?.platform,
+        shipTo: orderData?.shipTo
           ? `${orderData.shipTo.address1}${orderData.shipTo.address2 ? `, ${orderData.shipTo.address2}` : ""}, ${orderData.shipTo.city}, ${orderData.shipTo.state} ${orderData.shipTo.zip}, ${orderData.shipTo.country}`
           : "N/A",
-        totalValue: orderData.totalValue,
-      };
+        totalValue: orderData?.totalValue || 0,
+      });
 
-  const orderLines = isViewMode ? packingData.orderLines || [] : orderData.orderLines || [];
+  const orderLines = loading ? [] : (isViewMode ? packingData?.orderLines || [] : orderData?.orderLines || []);
 
   const handleContinueToPhotos = () => {
     if (selectedItems.length > 0) {
@@ -232,7 +231,7 @@ export default function PackingOrderDetails() {
       orderIdToUse = decodeURIComponent(orderId);
     }
 
-    const orderNumber = orderData.orderNumber || orderData.orderId;
+    const orderNumber = orderData?.orderNumber || orderData?.orderId;
     const allItemIds = orderLines.map((item) => String(item.id));
     const selectedItemsNormalized = selectedItems.map((id) => String(id));
     const deselectedItems = allItemIds.filter((id) => !selectedItemsNormalized.includes(String(id)));
@@ -320,22 +319,193 @@ export default function PackingOrderDetails() {
   const canContinueToPhotos = selectedItems.length > 0;
   const canCompletePacking = photos.length >= 1;
 
+  // Missing Products Handlers
+  const handleAddMissingProduct = async (packingId, lineItemId, productName) => {
+    try {
+      console.log("Adding missing product:", { packingId, lineItemId, productName });
+      const result = await addMissingProduct(packingId, lineItemId, productName);
+      
+      if (result.success && packingData && packingData.orderLines) {
+        // Reload packing details to get updated missing products
+        const packingResult = await getPackingOrderDetails(packingId);
+        if (packingResult.success && packingResult.data) {
+          setPackingData(packingResult.data);
+        }
+      }
+      
+      Swal.fire({
+        icon: "success",
+        title: "Missing Product Added",
+        text: `"${productName}" has been added to the missing products list.`,
+        confirmButtonColor: "#2563eb",
+        confirmButtonText: "OK",
+      });
+    } catch (error) {
+      console.error("Error adding missing product:", error);
+      const errorMessage = error.message || error.response?.data?.message || "Unable to add missing product. Please try again.";
+      Swal.fire({
+        icon: "error",
+        title: "Failed to Add Missing Product",
+        text: errorMessage,
+        confirmButtonColor: "#2563eb",
+        confirmButtonText: "OK",
+      });
+    }
+  };
+
+  const handleDeleteMissingProduct = async (packingId, lineItemId, missingProductId) => {
+    // Show confirmation dialog first
+    const confirmResult = await Swal.fire({
+      icon: "warning",
+      title: "Delete Missing Product?",
+      text: "Are you sure you want to remove this missing product? This action cannot be undone.",
+      showCancelButton: true,
+      confirmButtonText: "Yes, Delete",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#6b7280",
+    });
+
+    if (!confirmResult.isConfirmed) {
+      return; // User cancelled
+    }
+
+    try {
+      const result = await deleteMissingProduct(packingId, lineItemId, missingProductId);
+      
+      if (result.success && packingData && packingData.orderLines) {
+        // Reload packing details to get updated missing products
+        const packingResult = await getPackingOrderDetails(packingId);
+        if (packingResult.success && packingResult.data) {
+          setPackingData(packingResult.data);
+        }
+      }
+      
+      Swal.fire({
+        icon: "success",
+        title: "Missing Product Removed",
+        text: "The missing product has been removed.",
+        confirmButtonColor: "#2563eb",
+        confirmButtonText: "OK",
+      });
+    } catch (error) {
+      console.error("Error deleting missing product:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Failed to Remove Missing Product",
+        text: error.message || "Unable to remove missing product. Please try again.",
+        confirmButtonColor: "#2563eb",
+        confirmButtonText: "OK",
+      });
+    }
+  };
+
+  const handleEditPacking = () => {
+    if (!packingData) return;
+    setEditModalOpen(true);
+  };
+
+  const handleEditSuccess = async (updatedData) => {
+    // Reload packing details to get updated data
+    if (packingId) {
+      try {
+        const packingResult = await getPackingOrderDetails(packingId);
+        if (packingResult.success && packingResult.data) {
+          setPackingData(packingResult.data);
+        }
+      } catch (error) {
+        console.error("Error reloading packing details:", error);
+      }
+    }
+  };
+
+  const handleDeletePacking = async () => {
+    if (!packingId) return;
+
+    const result = await Swal.fire({
+      icon: "warning",
+      title: "Delete Packing Order?",
+      text: "Are you sure you want to delete this packing order? This action cannot be undone.",
+      showCancelButton: true,
+      confirmButtonText: "Yes, Delete",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#6b7280",
+    });
+
+    if (result.isConfirmed) {
+      try {
+        const deleteResult = await deletePackingOrder(packingId);
+        
+        if (deleteResult.success) {
+          await Swal.fire({
+            icon: "success",
+            title: "Packing Order Deleted",
+            text: "The packing order has been deleted successfully.",
+            confirmButtonColor: "#2563eb",
+            confirmButtonText: "OK",
+          });
+          navigate("/fulfillment/packing/list");
+        }
+      } catch (error) {
+        console.error("Error deleting packing order:", error);
+        Swal.fire({
+          icon: "error",
+          title: "Failed to Delete",
+          text: error.message || "Unable to delete packing order. Please try again.",
+          confirmButtonColor: "#2563eb",
+          confirmButtonText: "OK",
+        });
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
       <div className="max-w-[1550px] mx-auto px-3 md:px-4 lg:px-6 py-4 md:py-6">
         <FulfillmentBreadcrumb />
         
-        <motion.button
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          onClick={() => navigate(isViewMode ? "/fulfillment/packing/list" : "/fulfillment/packing")}
-          className="flex items-center gap-2 px-3 md:px-4 py-2 bg-gradient-to-r from-gray-700 to-gray-800 text-white rounded-lg hover:from-gray-800 hover:to-gray-900 transition-all duration-300 mb-4 md:mb-6 text-xs md:text-sm font-medium shadow-md"
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-        >
-          <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
-          <span>{isViewMode ? "Back to Packing List" : "Back to Packing"}</span>
-        </motion.button>
+        <div className="flex items-center justify-between mb-4 md:mb-6">
+          <motion.button
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            onClick={() => navigate(isViewMode ? "/fulfillment/packing/list" : "/fulfillment/packing")}
+            className="flex items-center gap-2 px-3 md:px-4 py-2 bg-gradient-to-r from-gray-700 to-gray-800 text-white rounded-lg hover:from-gray-800 hover:to-gray-900 transition-all duration-300 text-xs md:text-sm font-medium shadow-md"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
+            <span>{isViewMode ? "Back to Packing List" : "Back to Packing"}</span>
+          </motion.button>
+
+          {/* Edit and Delete Buttons - Only show in view mode */}
+          {isViewMode && packingId && (
+            <div className="flex items-center gap-2">
+              <motion.button
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                onClick={handleEditPacking}
+                className="flex items-center gap-2 px-3 md:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-300 text-xs md:text-sm font-medium shadow-md"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <Edit className="w-4 h-4" />
+                <span className="hidden sm:inline">Edit</span>
+              </motion.button>
+              <motion.button
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                onClick={handleDeletePacking}
+                className="flex items-center gap-2 px-3 md:px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all duration-300 text-xs md:text-sm font-medium shadow-md"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <Trash2 className="w-4 h-4" />
+                <span className="hidden sm:inline">Delete</span>
+              </motion.button>
+            </div>
+          )}
+        </div>
 
         {/* Step Indicator */}
         <StepIndicator 
@@ -344,35 +514,39 @@ export default function PackingOrderDetails() {
           isAlreadyPacked={isAlreadyPacked} 
         />
 
-        {/* Mobile-first layout: Order lines on top, Order Info below */}
-        {!isViewMode && !isAlreadyPacked && stage === STAGES.SELECTION && (
-          <div className="flex flex-col lg:flex-col-reverse gap-4 md:gap-6">
-            {/* Order Lines - Show first on mobile, second on desktop */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="order-1 lg:order-2"
-            >
-              <PackingOrderLines
-                orderLines={orderLines}
-                selectedItems={selectedItems}
-                onSelectionChange={setSelectedItems}
-              />
-            </motion.div>
+        {loading ? (
+          <OrderDetailsSkeleton />
+        ) : (
+          <>
+            {/* Mobile-first layout: Order lines on top, Order Info below */}
+            {!isViewMode && !isAlreadyPacked && stage === STAGES.SELECTION && (
+              <div className="flex flex-col lg:flex-col-reverse gap-4 md:gap-6">
+                {/* Order Lines - Show first on mobile, second on desktop */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="order-1 lg:order-2"
+                >
+                  <PackingOrderLines
+                    orderLines={orderLines}
+                    selectedItems={selectedItems}
+                    onSelectionChange={setSelectedItems}
+                  />
+                </motion.div>
 
-            {/* Order Info Card - Show second on mobile, first on desktop */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="order-2 lg:order-1"
-            >
-              <OrderInfoCard order={order} />
-            </motion.div>
-          </div>
-        )}
+                {/* Order Info Card - Show second on mobile, first on desktop */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="order-2 lg:order-1"
+                >
+                  {order && <OrderInfoCard order={order} />}
+                </motion.div>
+              </div>
+            )}
 
-        {/* Warning Banner for Already Packed Orders */}
-        {isAlreadyPacked && packingInfo && !isViewMode && (
+            {/* Warning Banner for Already Packed Orders */}
+            {isAlreadyPacked && packingInfo && !isViewMode && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -438,6 +612,10 @@ export default function PackingOrderDetails() {
                   showStatus={true}
                   packedCount={packingData.orderLines.filter((item) => item.isSelected === true).length}
                   deselectedCount={packingData.deselectedItemsCount}
+                  packingId={packingId}
+                  isViewMode={isViewMode}
+                  onMissingProductAdd={handleAddMissingProduct}
+                  onMissingProductDelete={handleDeleteMissingProduct}
                 />
               </div>
 
@@ -453,9 +631,9 @@ export default function PackingOrderDetails() {
                     packedAt={packingData.packedAt}
                   />
                   <CustomerInfoCard
-                    customerName={packingData.customerName}
-                    customerEmail={packingData.customerEmail}
-                    phone={packingData.phone}
+                    customerName={packingData.customerName || packingData.shipTo?.name}
+                    customerEmail={packingData.customerEmail || packingData.shipTo?.email}
+                    phone={packingData.phone || packingData.shipTo?.phone}
                   />
                 </div>
 
@@ -566,7 +744,7 @@ export default function PackingOrderDetails() {
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div>
                   <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-1">
-                    Order {order.orderNumber}
+                    Order {order?.orderNumber || "N/A"}
                   </h3>
                   <p className="text-xs md:text-sm text-gray-600">
                     {selectedItems.length} item{selectedItems.length !== 1 ? "s" : ""} selected
@@ -593,6 +771,8 @@ export default function PackingOrderDetails() {
             />
           </motion.div>
         )}
+          </>
+        )}
 
         <ImageModal
           imageUrl={selectedImage}
@@ -602,6 +782,16 @@ export default function PackingOrderDetails() {
             setSelectedImage(null);
           }}
         />
+
+        {/* Edit Packing Modal */}
+        {isViewMode && packingData && (
+          <EditPackingModal
+            open={editModalOpen}
+            onCancel={() => setEditModalOpen(false)}
+            packingData={packingData}
+            onSuccess={handleEditSuccess}
+          />
+        )}
       </div>
     </div>
   );
