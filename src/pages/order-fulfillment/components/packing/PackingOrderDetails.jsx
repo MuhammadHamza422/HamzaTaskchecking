@@ -1,15 +1,20 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { ArrowLeft, CheckCircle, Loader2, X, Package, MapPin, DollarSign, Clock, Camera, Upload } from "lucide-react";
+import { ArrowLeft, Loader2, Package } from "lucide-react";
 import { motion } from "framer-motion";
 import OrderInfoCard from "../common/OrderInfoCard";
 import PackingOrderLines from "./PackingOrderLines";
-import PackingPhotoUpload from "./PackingPhotoUpload";
-import CameraCapture from "./CameraCapture";
-import PhotoPreview from "./PhotoPreview";
 import ImageModal from "../common/ImageModal";
 import StatusBadge from "../common/StatusBadge";
 import FulfillmentBreadcrumb from "../common/FulfillmentBreadcrumb";
+import CustomerInfoCard from "../common/CustomerInfoCard";
+import ShippingAddressCard from "../common/ShippingAddressCard";
+import OrderFinancialsCard from "../common/OrderFinancialsCard";
+import OrderTimelineCard from "../common/OrderTimelineCard";
+import OrderItemsDisplay from "../common/OrderItemsDisplay";
+import PackingInfoCard from "./PackingInfoCard";
+import StepIndicator from "./StepIndicator";
+import PhotoUploadStep from "./PhotoUploadStep";
 import { getOrderDetails, createPacking, getPackingOrderDetails } from "../../../../api/fulfillment";
 import Swal from "sweetalert2";
 
@@ -315,296 +320,6 @@ export default function PackingOrderDetails() {
   const canContinueToPhotos = selectedItems.length > 0;
   const canCompletePacking = photos.length >= 1;
 
-  // Photo Upload Step Component with auto-open camera
-  const PhotoUploadStepComponent = ({ onPhotosChange, photos, onComplete, canComplete, submitting }) => {
-    const [showCamera, setShowCamera] = useState(false);
-    const [selectedImage, setSelectedImage] = useState(null);
-    const [isImageModalOpen, setIsImageModalOpen] = useState(false);
-    const [hasAutoOpened, setHasAutoOpened] = useState(false);
-    const fileInputRef = useRef(null);
-    const MAX_PHOTOS = 5;
-    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-    const ACCEPTED_FORMATS = ["image/jpeg", "image/png", "image/webp"];
-
-    // Auto-open camera ONLY on first mount of this step (before any photos are taken)
-    useEffect(() => {
-      // Only auto-open if:
-      // 1. We haven't auto-opened before
-      // 2. There are no photos yet
-      // 3. We haven't reached max photos
-      if (!hasAutoOpened && photos.length === 0 && photos.length < MAX_PHOTOS) {
-        const timer = setTimeout(() => {
-          setShowCamera(true);
-          setHasAutoOpened(true); // Mark as auto-opened so it won't open again
-        }, 300); // Small delay for smooth transition
-        return () => clearTimeout(timer);
-      }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []); // Only run on mount - never auto-open again after this
-
-    const validateFile = (file) => {
-      if (!ACCEPTED_FORMATS.includes(file.type)) {
-        return { valid: false, message: "Invalid image format. Only JPEG, PNG, and WebP are allowed." };
-      }
-      if (file.size > MAX_FILE_SIZE) {
-        return { valid: false, message: "Photo size must be less than 10MB." };
-      }
-      return { valid: true };
-    };
-
-    const addPhoto = (file) => {
-      if (photos.length >= MAX_PHOTOS) {
-        return;
-      }
-
-      const validation = validateFile(file);
-      if (!validation.valid) {
-        Swal.fire({
-          icon: "error",
-          title: "Invalid File",
-          text: validation.message,
-          confirmButtonColor: "#2563eb",
-        });
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const newPhoto = {
-          id: Date.now() + Math.random(),
-          file: file,
-          preview: e.target.result,
-        };
-        const updatedPhotos = [...photos, newPhoto];
-        onPhotosChange(updatedPhotos);
-      };
-      reader.readAsDataURL(file);
-    };
-
-    const handleCameraCapture = (file) => {
-      addPhoto(file);
-      setShowCamera(false);
-    };
-
-    const handleFileSelect = (e) => {
-      const files = Array.from(e.target.files || []);
-      if (files.length === 0) return;
-
-      const remainingSlots = MAX_PHOTOS - photos.length;
-      if (files.length > remainingSlots) {
-        Swal.fire({
-          icon: "warning",
-          title: "Too Many Photos",
-          text: `You can only add ${remainingSlots} more photo(s).`,
-          confirmButtonColor: "#2563eb",
-        });
-        return;
-      }
-
-      files.forEach((file) => addPhoto(file));
-      e.target.value = "";
-    };
-
-    const handleRemovePhoto = (photoId) => {
-      const updatedPhotos = photos.filter((p) => p.id !== photoId);
-      onPhotosChange(updatedPhotos);
-    };
-
-    const handleImageClick = (photo) => {
-      setSelectedImage(photo.preview);
-      setIsImageModalOpen(true);
-    };
-
-    const canAddMore = photos.length < MAX_PHOTOS;
-
-    return (
-      <>
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 md:p-6">
-          <div className="mb-4 md:mb-6">
-            <h3 className="text-lg md:text-xl font-bold text-gray-900 mb-2">
-              Packing Photos
-            </h3>
-            <p className="text-sm md:text-base text-gray-600">
-              Upload up to {MAX_PHOTOS} photos. At least 1 photo is required to complete packing.
-            </p>
-          </div>
-
-          {/* Photo Grid */}
-          {photos.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4 mb-4 md:mb-6">
-              {photos.map((photo) => (
-                <PhotoPreview
-                  key={photo.id}
-                  photo={photo}
-                  onRemove={handleRemovePhoto}
-                  onImageClick={() => handleImageClick(photo)}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Upload Actions */}
-          {canAddMore && (
-            <div className="flex flex-col sm:flex-row gap-3 md:gap-4 mb-4 md:mb-6">
-              <motion.button
-                onClick={() => setShowCamera(true)}
-                className="flex-1 flex items-center justify-center gap-2 py-3 md:py-3.5 px-4 md:px-6 bg-blue-600 text-white rounded-xl font-semibold text-sm md:text-base hover:bg-blue-700 transition-all duration-300 shadow-lg"
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.99 }}
-              >
-                <Camera className="w-5 h-5 md:w-6 md:h-6" />
-                <span>Take Photo</span>
-              </motion.button>
-              <motion.button
-                onClick={() => fileInputRef.current?.click()}
-                className="flex-1 flex items-center justify-center gap-2 py-3 md:py-3.5 px-4 md:px-6 bg-gray-600 text-white rounded-xl font-semibold text-sm md:text-base hover:bg-gray-700 transition-all duration-300 shadow-lg"
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.99 }}
-              >
-                <Upload className="w-5 h-5 md:w-6 md:h-6" />
-                <span>Upload from Device</span>
-              </motion.button>
-            </div>
-          )}
-
-          {/* Photo Count */}
-          {photos.length > 0 && (
-            <div className="mb-4 md:mb-6">
-              <p className={`text-sm md:text-base font-semibold ${
-                photos.length >= 1 ? "text-green-600" : "text-amber-600"
-              }`}>
-                {photos.length} of {MAX_PHOTOS} photos uploaded
-                {photos.length < 1 && <span className="text-amber-600 ml-2">(At least 1 required)</span>}
-              </p>
-            </div>
-          )}
-
-          {/* Complete Button */}
-          <div className="flex flex-col sm:flex-row gap-3 md:gap-4 pt-4 border-t border-gray-200">
-            <motion.button
-              onClick={() => setStage(STAGES.SELECTION)}
-              className="flex-1 px-4 md:px-6 py-3 md:py-3.5 bg-white border-2 border-gray-300 text-gray-700 rounded-xl font-semibold text-sm md:text-base hover:bg-gray-50 transition-all duration-300 shadow-sm"
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
-            >
-              ← Back to Items
-            </motion.button>
-            <motion.button
-              onClick={onComplete}
-              disabled={!canComplete || submitting}
-              className={`flex-1 px-4 md:px-6 py-3 md:py-3.5 rounded-xl font-semibold text-sm md:text-base transition-all duration-300 shadow-lg flex items-center justify-center gap-2 ${
-                canComplete && !submitting
-                  ? "bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800"
-                  : "bg-gray-300 text-gray-500 cursor-not-allowed"
-              }`}
-              whileHover={canComplete && !submitting ? { scale: 1.01 } : {}}
-              whileTap={canComplete && !submitting ? { scale: 0.99 } : {}}
-            >
-              {submitting ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>Creating Packing...</span>
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="w-5 h-5" />
-                  <span>Complete Packing</span>
-                </>
-              )}
-            </motion.button>
-          </div>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            multiple
-            onChange={handleFileSelect}
-            className="hidden"
-          />
-        </div>
-
-        {/* Camera Modal */}
-        {showCamera && (
-          <CameraCapture
-            onCapture={handleCameraCapture}
-            onClose={() => setShowCamera(false)}
-            maxPhotos={MAX_PHOTOS}
-            currentCount={photos.length}
-          />
-        )}
-
-        {/* Image Modal */}
-        <ImageModal
-          imageUrl={selectedImage}
-          isOpen={isImageModalOpen}
-          onClose={() => {
-            setIsImageModalOpen(false);
-            setSelectedImage(null);
-          }}
-        />
-      </>
-    );
-  };
-
-  // Step indicator component
-  const StepIndicator = () => {
-    if (isViewMode || isAlreadyPacked) return null;
-    
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mb-6 md:mb-8"
-      >
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 md:p-6">
-          <div className="flex items-center justify-between">
-            {/* Step 1 */}
-            <div className="flex items-center gap-3 md:gap-4 flex-1">
-              <div
-                className={`flex items-center justify-center w-10 h-10 md:w-12 md:h-12 rounded-full font-semibold text-sm md:text-base transition-all ${
-                  stage === STAGES.SELECTION
-                    ? "bg-blue-600 text-white shadow-lg scale-110"
-                    : "bg-green-500 text-white"
-                }`}
-              >
-                {stage === STAGES.SELECTION ? "1" : <CheckCircle className="w-5 h-5 md:w-6 md:h-6" />}
-              </div>
-              <div className="flex-1">
-                <p className="text-xs md:text-sm font-semibold text-gray-900">Step 1: Item Selection</p>
-                <p className="text-xs text-gray-500 hidden sm:block">Select items to pack</p>
-              </div>
-            </div>
-
-            {/* Connector Line */}
-            <div className={`flex-1 h-0.5 mx-2 md:mx-4 transition-all ${
-              stage === STAGES.PHOTO_UPLOAD ? "bg-green-500" : "bg-gray-300"
-            }`} />
-
-            {/* Step 2 */}
-            <div className="flex items-center gap-3 md:gap-4 flex-1">
-              <div
-                className={`flex items-center justify-center w-10 h-10 md:w-12 md:h-12 rounded-full font-semibold text-sm md:text-base transition-all ${
-                  stage === STAGES.PHOTO_UPLOAD
-                    ? "bg-blue-600 text-white shadow-lg scale-110"
-                    : stage === STAGES.SELECTION
-                    ? "bg-gray-200 text-gray-500"
-                    : "bg-green-500 text-white"
-                }`}
-              >
-                {stage === STAGES.PHOTO_UPLOAD ? "2" : stage === STAGES.SELECTION ? "2" : <CheckCircle className="w-5 h-5 md:w-6 md:h-6" />}
-              </div>
-              <div className="flex-1">
-                <p className="text-xs md:text-sm font-semibold text-gray-900">Step 2: Photo Upload</p>
-                <p className="text-xs text-gray-500 hidden sm:block">Capture packing photos</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </motion.div>
-    );
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
       <div className="max-w-[1550px] mx-auto px-3 md:px-4 lg:px-6 py-4 md:py-6">
@@ -623,17 +338,37 @@ export default function PackingOrderDetails() {
         </motion.button>
 
         {/* Step Indicator */}
-        <StepIndicator />
+        <StepIndicator 
+          stage={stage} 
+          isViewMode={isViewMode} 
+          isAlreadyPacked={isAlreadyPacked} 
+        />
 
-        {/* Order Info Card - Only show in Step 1 */}
+        {/* Mobile-first layout: Order lines on top, Order Info below */}
         {!isViewMode && !isAlreadyPacked && stage === STAGES.SELECTION && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-4 md:mb-6"
-          >
-            <OrderInfoCard order={order} />
-          </motion.div>
+          <div className="flex flex-col lg:flex-col-reverse gap-4 md:gap-6">
+            {/* Order Lines - Show first on mobile, second on desktop */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="order-1 lg:order-2"
+            >
+              <PackingOrderLines
+                orderLines={orderLines}
+                selectedItems={selectedItems}
+                onSelectionChange={setSelectedItems}
+              />
+            </motion.div>
+
+            {/* Order Info Card - Show second on mobile, first on desktop */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="order-2 lg:order-1"
+            >
+              <OrderInfoCard order={order} />
+            </motion.div>
+          </div>
         )}
 
         {/* Warning Banner for Already Packed Orders */}
@@ -693,420 +428,57 @@ export default function PackingOrderDetails() {
 
         {isViewMode && packingData && (
           <>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="bg-gradient-to-br from-white to-blue-50 rounded-xl border-2 border-blue-100 shadow-lg p-6"
-              >
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <Package className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900">Packing Information</h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 mb-1">Status</p>
-                    <StatusBadge status={packingData.status} />
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 mb-1">Items Packed</p>
-                    <p className="text-sm font-semibold text-gray-900">{packingData.selectedItems?.length || 0}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 mb-1">Deselected Items</p>
-                    <p className="text-sm font-semibold text-amber-600">{packingData.deselectedItemsCount || 0}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 mb-1">Photos</p>
-                    <p className="text-sm font-semibold text-gray-900">{packingData.photoUrls?.length || 0}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 mb-1">Packed By</p>
-                    <p className="text-sm font-semibold text-gray-900">{packingData.packedBy?.name || "N/A"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 mb-1">Packed At</p>
-                    <p className="text-sm font-semibold text-gray-900">
-                      {packingData.packedAt ? new Date(packingData.packedAt).toLocaleString() : "N/A"}
-                    </p>
-                  </div>
-                </div>
-              </motion.div>
+            {/* Mobile-first: Order Lines on top, other info below */}
+            <div className="flex flex-col lg:flex-col-reverse gap-6 mb-6">
+              {/* Order Lines - First on mobile, last on desktop */}
+              <div className="order-1 lg:order-2">
+                <OrderItemsDisplay
+                  items={packingData.orderLines}
+                  currency={packingData.currency}
+                  showStatus={true}
+                  packedCount={packingData.orderLines.filter((item) => item.isSelected === true).length}
+                  deselectedCount={packingData.deselectedItemsCount}
+                />
+              </div>
 
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="bg-gradient-to-br from-white to-green-50 rounded-xl border-2 border-green-100 shadow-lg p-6"
-              >
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900">Customer Information</h3>
+              {/* Other Info Sections - Second on mobile, first on desktop */}
+              <div className="order-2 lg:order-1 space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <PackingInfoCard
+                    status={packingData.status}
+                    selectedItemsCount={packingData.selectedItems?.length || 0}
+                    deselectedItemsCount={packingData.deselectedItemsCount || 0}
+                    photosCount={packingData.photoUrls?.length || 0}
+                    packedBy={packingData.packedBy?.name}
+                    packedAt={packingData.packedAt}
+                  />
+                  <CustomerInfoCard
+                    customerName={packingData.customerName}
+                    customerEmail={packingData.customerEmail}
+                    phone={packingData.phone}
+                  />
                 </div>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 mb-1">Name</p>
-                    <p className="text-sm font-semibold text-gray-900">{packingData.customerName || "N/A"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 mb-1">Email</p>
-                    <p className="text-sm text-gray-900">{packingData.customerEmail || "N/A"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 mb-1">Phone</p>
-                    <p className="text-sm text-gray-900">{packingData.phone || "N/A"}</p>
-                  </div>
+
+                <ShippingAddressCard shipTo={packingData.shipTo} />
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <OrderFinancialsCard
+                    currency={packingData.currency}
+                    subtotal={packingData.subtotal}
+                    tax={packingData.tax}
+                    shipping={packingData.shipping}
+                    discount={packingData.discount}
+                    totalValue={packingData.totalValue}
+                  />
+                  <OrderTimelineCard
+                    createdAt={packingData.orderCreatedAt}
+                    updatedAt={packingData.orderUpdatedAt}
+                    orderStatus={packingData.orderStatus}
+                    fulfillmentStatus={packingData.fulfillmentStatus || packingData.status}
+                  />
                 </div>
-              </motion.div>
+              </div>
             </div>
-
-            {packingData.shipTo && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="bg-gradient-to-br from-white to-purple-50 rounded-xl border-2 border-purple-100 shadow-lg p-6 mb-6"
-              >
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="p-2 bg-purple-100 rounded-lg">
-                    <MapPin className="w-5 h-5 text-purple-600" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900">Shipping Address</h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 mb-1">Name</p>
-                    <p className="text-sm font-semibold text-gray-900">{packingData.shipTo.name || "N/A"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 mb-1">Phone</p>
-                    <p className="text-sm text-gray-900">{packingData.shipTo.phone || "N/A"}</p>
-                  </div>
-                  <div className="md:col-span-2">
-                    <p className="text-xs font-medium text-gray-500 mb-1">Address</p>
-                    <p className="text-sm text-gray-900">
-                      {packingData.shipTo.address1 || ""}
-                      {packingData.shipTo.address2 ? `, ${packingData.shipTo.address2}` : ""}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 mb-1">City, State, ZIP</p>
-                    <p className="text-sm text-gray-900">
-                      {packingData.shipTo.city}, {packingData.shipTo.state} {packingData.shipTo.zip}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 mb-1">Country</p>
-                    <p className="text-sm text-gray-900">{packingData.shipTo.country || "N/A"}</p>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4 }}
-                className="bg-gradient-to-br from-white to-emerald-50 rounded-xl border-2 border-emerald-100 shadow-lg p-6"
-              >
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="p-2 bg-emerald-100 rounded-lg">
-                    <DollarSign className="w-5 h-5 text-emerald-600" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900">Order Financials</h3>
-                </div>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <p className="text-xs font-medium text-gray-500">Subtotal</p>
-                    <p className="text-sm font-semibold text-gray-900">
-                      {packingData.currency || "USD"} {packingData.subtotal?.toFixed(2) || "0.00"}
-                    </p>
-                  </div>
-                  <div className="flex justify-between">
-                    <p className="text-xs font-medium text-gray-500">Tax</p>
-                    <p className="text-sm font-semibold text-gray-900">
-                      {packingData.currency || "USD"} {packingData.tax?.toFixed(2) || "0.00"}
-                    </p>
-                  </div>
-                  <div className="flex justify-between">
-                    <p className="text-xs font-medium text-gray-500">Shipping</p>
-                    <p className="text-sm font-semibold text-gray-900">
-                      {packingData.currency || "USD"} {packingData.shipping?.toFixed(2) || "0.00"}
-                    </p>
-                  </div>
-                  {packingData.discount > 0 && (
-                    <div className="flex justify-between">
-                      <p className="text-xs font-medium text-gray-500">Discount</p>
-                      <p className="text-sm font-semibold text-red-600">
-                        -{packingData.currency || "USD"} {packingData.discount?.toFixed(2) || "0.00"}
-                      </p>
-                    </div>
-                  )}
-                  <div className="flex justify-between pt-3 border-t border-gray-200">
-                    <p className="text-sm font-semibold text-gray-900">Total</p>
-                    <p className="text-base font-bold text-blue-600">
-                      {packingData.currency || "USD"} {packingData.totalValue?.toFixed(2) || "0.00"}
-                    </p>
-                  </div>
-                </div>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5 }}
-                className="bg-gradient-to-br from-white to-orange-50 rounded-xl border-2 border-orange-100 shadow-lg p-6"
-              >
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="p-2 bg-orange-100 rounded-lg">
-                    <Clock className="w-5 h-5 text-orange-600" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900">Order Status</h3>
-                </div>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 mb-1">Order Status</p>
-                    <p className="text-sm font-semibold text-gray-900">{packingData.orderStatus || "N/A"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 mb-1">Fulfillment Status</p>
-                    <StatusBadge status={packingData.fulfillmentStatus || packingData.status} />
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 mb-1">Order Created</p>
-                    <p className="text-sm text-gray-900">
-                      {packingData.orderCreatedAt ? new Date(packingData.orderCreatedAt).toLocaleString() : "N/A"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 mb-1">Order Updated</p>
-                    <p className="text-sm text-gray-900">
-                      {packingData.orderUpdatedAt ? new Date(packingData.orderUpdatedAt).toLocaleString() : "N/A"}
-                    </p>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
-
-            {packingData.orderLines && packingData.orderLines.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.6 }}
-                className="bg-white rounded-xl border-2 border-gray-200 shadow-lg p-6 mb-6"
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <div className="p-2 bg-indigo-100 rounded-lg">
-                      <Package className="w-5 h-5 text-indigo-600" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-gray-900">Order Items</h3>
-                  </div>
-                  {isViewMode && (
-                    <div className="flex items-center gap-4 text-sm">
-                      <div className="flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full bg-green-500"></span>
-                        <span className="text-gray-600">
-                          Packed:{" "}
-                          <span className="font-semibold text-gray-900">
-                            {packingData.orderLines.filter((item) => item.isSelected === true).length}
-                          </span>
-                        </span>
-                      </div>
-                      {packingData.deselectedItemsCount > 0 && (
-                        <div className="flex items-center gap-2">
-                          <span className="w-3 h-3 rounded-full bg-amber-500"></span>
-                          <span className="text-gray-600">
-                            Deselected:{" "}
-                            <span className="font-semibold text-gray-900">
-                              {packingData.deselectedItemsCount ||
-                                packingData.orderLines.filter((item) => item.isDeselected === true).length}
-                            </span>
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <div className="hidden md:block overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Status
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Product
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          SKU
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Quantity
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Price
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Total
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {packingData.orderLines.map((item, index) => {
-                        const isSelected = item.isSelected === true;
-                        const isDeselected = item.isDeselected === true;
-                        return (
-                          <tr
-                            key={item.id || index}
-                            className={`hover:bg-gray-50 ${
-                              isDeselected
-                                ? "bg-amber-50/50 border-l-4 border-l-amber-400"
-                                : isSelected
-                                ? "bg-green-50/30 border-l-4 border-l-green-400"
-                                : ""
-                            }`}
-                          >
-                            <td className="px-4 py-4 whitespace-nowrap">
-                              {isSelected ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                  <span>✅</span>
-                                  <span>Packed</span>
-                                </span>
-                              ) : isDeselected ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-                                  <span>❌</span>
-                                  <span>Deselected</span>
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                                  <span>—</span>
-                                  <span>N/A</span>
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-4 py-4">
-                              <div className="flex items-center gap-3">
-                                {item.image && (
-                                  <div className="w-12 h-12 bg-gray-100 rounded border border-gray-200 flex items-center justify-center shrink-0">
-                                    <img
-                                      src={item.image}
-                                      alt={item.name}
-                                      className="w-full h-full object-cover rounded"
-                                    />
-                                  </div>
-                                )}
-                                <div>
-                                  <p className="text-sm font-medium text-gray-900">{item.name || "N/A"}</p>
-                                  {item.variant && <p className="text-xs text-gray-500">{item.variant}</p>}
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap">
-                              <p className="text-sm text-gray-900">{item.sku || "N/A"}</p>
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap">
-                              <p className="text-sm font-medium text-gray-900">{item.quantity || 0}</p>
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap">
-                              <p className="text-sm text-gray-900">
-                                {packingData.currency || "USD"} {item.price?.toFixed(2) || "0.00"}
-                              </p>
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap">
-                              <p className="text-sm font-semibold text-gray-900">
-                                {packingData.currency || "USD"} {item.total?.toFixed(2) || "0.00"}
-                              </p>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="md:hidden space-y-4">
-                  {packingData.orderLines.map((item, index) => {
-                    const isSelected = item.isSelected === true;
-                    const isDeselected = item.isDeselected === true;
-                    return (
-                      <motion.div
-                        key={item.id || index}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: index * 0.05 }}
-                        className={`rounded-lg border-2 p-4 shadow-sm ${
-                          isDeselected
-                            ? "bg-amber-50/50 border-amber-300"
-                            : isSelected
-                            ? "bg-green-50/30 border-green-300"
-                            : "bg-white border-gray-200"
-                        }`}
-                      >
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex items-start gap-3 flex-1">
-                            {item.image && (
-                              <div className="w-16 h-16 bg-gray-100 rounded border border-gray-200 flex items-center justify-center shrink-0">
-                                <img
-                                  src={item.image}
-                                  alt={item.name}
-                                  className="w-full h-full object-cover rounded"
-                                />
-                              </div>
-                            )}
-                            <div className="flex-1">
-                              <h4 className="text-sm font-semibold text-gray-900 mb-1">{item.name || "N/A"}</h4>
-                              {item.variant && <p className="text-xs text-gray-500 mb-2">{item.variant}</p>}
-                            </div>
-                          </div>
-                          <div>
-                            {isSelected ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                <span>✅</span>
-                                <span>Packed</span>
-                              </span>
-                            ) : isDeselected ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-                                <span>❌</span>
-                                <span>Deselected</span>
-                              </span>
-                            ) : null}
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100">
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">SKU</p>
-                            <p className="text-sm font-semibold text-gray-900">{item.sku || "N/A"}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Quantity</p>
-                            <p className="text-sm font-semibold text-gray-900">{item.quantity || 0}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Price</p>
-                            <p className="text-sm font-semibold text-gray-900">
-                              {packingData.currency || "USD"} {item.price?.toFixed(2) || "0.00"}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Total</p>
-                            <p className="text-sm font-semibold text-blue-600">
-                              {packingData.currency || "USD"} {item.total?.toFixed(2) || "0.00"}
-                            </p>
-                          </div>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-            </motion.div>
-          )}
 
           {packingData.photoUrls && packingData.photoUrls.length > 0 && (
             <motion.div
@@ -1144,19 +516,13 @@ export default function PackingOrderDetails() {
         </>
       )}
 
-        {/* Step 1: Item Selection */}
+        {/* Step 1: Item Selection - Action Buttons */}
         {!isViewMode && !isAlreadyPacked && stage === STAGES.SELECTION && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="space-y-4 md:space-y-6"
+            className="mt-4 md:mt-6"
           >
-            <PackingOrderLines
-              orderLines={orderLines}
-              selectedItems={selectedItems}
-              onSelectionChange={setSelectedItems}
-            />
-
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-3 md:gap-4 pt-4">
               <motion.button
@@ -1217,12 +583,13 @@ export default function PackingOrderDetails() {
             </motion.div>
 
             {/* Photo Upload Component - Camera opens automatically */}
-            <PhotoUploadStepComponent
+            <PhotoUploadStep
               onPhotosChange={setPhotos}
               photos={photos}
               onComplete={handleCompletePacking}
               canComplete={canCompletePacking}
               submitting={submitting}
+              onBack={() => setStage(STAGES.SELECTION)}
             />
           </motion.div>
         )}
