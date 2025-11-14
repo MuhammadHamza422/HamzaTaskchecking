@@ -234,7 +234,7 @@ export default function DropshipManagementTable() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
-      <div className="max-w-[1550px] mx-auto px-4 sm:px-6 py-8">
+      <div className="max-w-[1550px] mx-auto p-2">
         <FulfillmentBreadcrumb />
 
         <motion.div
