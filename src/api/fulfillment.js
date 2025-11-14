@@ -207,6 +207,16 @@ export async function getAllPackingOrders(filters = {}) {
       throw error;
     }
 
+    // Normalize response: convert outOfStockItemsCount to deselectedItemsCount for backward compatibility
+    if (response.data.data && response.data.data.orders) {
+      response.data.data.orders = response.data.data.orders.map((order) => {
+        if (order.outOfStockItemsCount !== undefined && order.deselectedItemsCount === undefined) {
+          order.deselectedItemsCount = order.outOfStockItemsCount;
+        }
+        return order;
+      });
+    }
+
     return response.data;
   } catch (error) {
     if (error.response?.data?.error) {
@@ -237,6 +247,19 @@ export async function getPackingOrderDetails(packingId) {
       const error = new Error(errorMsg);
       error.code = response.data.error?.code;
       throw error;
+    }
+
+    // Normalize response: convert outOfStockItems to deselectedItemsCount for backward compatibility
+    if (response.data.data) {
+      const data = response.data.data;
+      // If deselectedItemsCount is not present, calculate it from outOfStockItems array
+      if (!data.deselectedItemsCount && data.outOfStockItems) {
+        data.deselectedItemsCount = Array.isArray(data.outOfStockItems) ? data.outOfStockItems.length : 0;
+      }
+      // Also handle outOfStockItemsCount if present
+      if (!data.deselectedItemsCount && data.outOfStockItemsCount !== undefined) {
+        data.deselectedItemsCount = data.outOfStockItemsCount;
+      }
     }
 
     return response.data;
@@ -313,6 +336,16 @@ export async function getRecentPacking(filters = {}) {
       const error = new Error(errorMsg);
       error.code = response.data.error?.code;
       throw error;
+    }
+
+    // Normalize response: convert outOfStockItemsCount to deselectedItemsCount for backward compatibility
+    if (response.data.data && response.data.data.orders) {
+      response.data.data.orders = response.data.data.orders.map((order) => {
+        if (order.outOfStockItemsCount !== undefined && order.deselectedItemsCount === undefined) {
+          order.deselectedItemsCount = order.outOfStockItemsCount;
+        }
+        return order;
+      });
     }
 
     return response.data;
