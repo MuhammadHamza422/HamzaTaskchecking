@@ -120,6 +120,8 @@ export default function ExternalOrdersPage() {
         params.append("start_date", dateRange[0].format("YYYY-MM-DD"));
         params.append("end_date", dateRange[1].format("YYYY-MM-DD"));
       }
+      // Request details for table display (customer name, products count, total)
+      params.append("includeDetails", "true");
       const response = await apiClient.get(`${config.api}?${params}`);
       return response.data;
     } else if (tab === "walmart") {
@@ -142,6 +144,8 @@ export default function ExternalOrdersPage() {
         params.append("start_date", dateRange[0].format("YYYY-MM-DD"));
         params.append("end_date", dateRange[1].format("YYYY-MM-DD"));
       }
+      // Request details for table display (customer name, products count, total)
+      params.append("includeDetails", "true");
       const response = await apiClient.get(`${config.api}?${params}`);
       return response.data;
     } else if (tab === "shopify") {
@@ -164,6 +168,8 @@ export default function ExternalOrdersPage() {
         params.append("start_date", dateRange[0].format("YYYY-MM-DD"));
         params.append("end_date", dateRange[1].format("YYYY-MM-DD"));
       }
+      // Request details for table display (customer name, products count, total)
+      params.append("includeDetails", "true");
       const response = await apiClient.get(`${config.api}?${params}`);
       return response.data;
     } else {

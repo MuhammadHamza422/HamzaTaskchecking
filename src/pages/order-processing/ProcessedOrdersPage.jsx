@@ -128,7 +128,19 @@ export default function ProcessedOrdersPage() {
         params.append("start_date", dateRange[0].format("YYYY-MM-DD"));
         params.append("end_date", dateRange[1].format("YYYY-MM-DD"));
       }
+      // Request details for table display (customer name, products count, total)
+      params.append("includeDetails", "true");
       const response = await apiClient.get(`${config.api}?${params}`);
+      console.log("📦 WooCommerce API Response:", {
+        success: response.data?.success,
+        totalOrders: response.data?.totalOrders,
+        ordersCount: response.data?.orders?.length || 0,
+        firstOrder: response.data?.orders?.[0] ? {
+          orderId: response.data.orders[0].orderId,
+          hasWooCommerceDetails: !!response.data.orders[0].wooCommerceDetails,
+          wooCommerceDetailsKeys: response.data.orders[0].wooCommerceDetails ? Object.keys(response.data.orders[0].wooCommerceDetails) : null,
+        } : null,
+      });
       return response.data;
     } else if (tab === "walmart") {
       const params = new URLSearchParams({
@@ -150,7 +162,19 @@ export default function ProcessedOrdersPage() {
         params.append("start_date", dateRange[0].format("YYYY-MM-DD"));
         params.append("end_date", dateRange[1].format("YYYY-MM-DD"));
       }
+      // Request details for table display (customer name, products count, total)
+      params.append("includeDetails", "true");
       const response = await apiClient.get(`${config.api}?${params}`);
+      console.log("📦 Walmart API Response:", {
+        success: response.data?.success,
+        totalOrders: response.data?.totalOrders,
+        ordersCount: response.data?.orders?.length || 0,
+        firstOrder: response.data?.orders?.[0] ? {
+          orderId: response.data.orders[0].orderId,
+          hasWalmartDetails: !!response.data.orders[0].walmartDetails,
+          walmartDetailsKeys: response.data.orders[0].walmartDetails ? Object.keys(response.data.orders[0].walmartDetails) : null,
+        } : null,
+      });
       return response.data;
     } else if (tab === "shopify") {
       const params = new URLSearchParams({
@@ -170,6 +194,8 @@ export default function ProcessedOrdersPage() {
         params.append("start_date", dateRange[0].format("YYYY-MM-DD"));
         params.append("end_date", dateRange[1].format("YYYY-MM-DD"));
       }
+      // Request details for table display (customer name, products count, total)
+      params.append("includeDetails", "true");
       const response = await apiClient.get(`${config.api}?${params}`);
       return response.data;
     } else {
@@ -438,6 +464,35 @@ export default function ProcessedOrdersPage() {
     // Only apply additional client-side filtering if absolutely necessary
     return ordersData.orders;
   }, [ordersData?.orders]);
+
+  // Debug: Log orders data when it changes
+  useEffect(() => {
+    if (ordersData?.orders && ordersData.orders.length > 0) {
+      console.log(`📊 ${activeTab.toUpperCase()} Orders Received:`, {
+        totalOrders: ordersData.totalOrders,
+        ordersCount: ordersData.orders.length,
+        firstOrderSample: {
+          orderId: ordersData.orders[0]?.orderId,
+          user_name: ordersData.orders[0]?.user_name,
+          hasWooCommerceDetails: !!ordersData.orders[0]?.wooCommerceDetails,
+          hasWalmartDetails: !!ordersData.orders[0]?.walmartDetails,
+          wooCommerceDetails: ordersData.orders[0]?.wooCommerceDetails ? {
+            hasLineItems: !!ordersData.orders[0].wooCommerceDetails.line_items,
+            lineItemsCount: ordersData.orders[0].wooCommerceDetails.line_items?.length || 0,
+            hasTotal: !!ordersData.orders[0].wooCommerceDetails.total,
+            total: ordersData.orders[0].wooCommerceDetails.total,
+          } : null,
+          walmartDetails: ordersData.orders[0]?.walmartDetails ? {
+            hasOrder: !!ordersData.orders[0].walmartDetails.order,
+            hasOrderLines: !!ordersData.orders[0].walmartDetails.order?.orderLines?.orderLine,
+            orderLinesCount: Array.isArray(ordersData.orders[0].walmartDetails.order?.orderLines?.orderLine) 
+              ? ordersData.orders[0].walmartDetails.order.orderLines.orderLine.length 
+              : 0,
+          } : null,
+        },
+      });
+    }
+  }, [ordersData, activeTab]);
   const totalFilteredOrders = ordersData?.totalOrders || filteredOrders.length;
 
   // Handle bulk selection - memoized with useCallback
