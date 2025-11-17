@@ -129,7 +129,7 @@ export default function PhotoUploadStep({
 
   return (
     <>
-      <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 md:p-6">
+      <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-2 md:p-6">
         {/* Header */}
         <div className="mb-6">
           <h3 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">

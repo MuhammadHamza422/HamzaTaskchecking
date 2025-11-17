@@ -652,7 +652,7 @@ export default function PackingOrderDetails() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
-      <div className="max-w-[1550px] mx-auto px-3 md:px-4 lg:px-6 py-4 md:py-6">
+      <div className="max-w-[1550px] mx-auto sm:px-3 md:px-4 lg:px-6 sm:py-4 md:py-6">
         <FulfillmentBreadcrumb />
 
         <div className="flex items-center justify-between mb-4 md:mb-6">

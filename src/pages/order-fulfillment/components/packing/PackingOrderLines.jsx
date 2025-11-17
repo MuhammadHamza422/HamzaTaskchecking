@@ -142,7 +142,7 @@ export default function PackingOrderLines({
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
-      <div className="p-6 border-b border-gray-200">
+      <div className="p-2 md:p-6 border-b border-gray-200">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-900">Order Lines</h3>
           <div className="flex gap-2">
@@ -168,22 +168,22 @@ export default function PackingOrderLines({
           </div>
         </div>
         {hasNoSelection && (
-          <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4">
-            <p className="text-sm text-red-800 font-semibold">
+          <div className="bg-red-50 border-2 border-red-300 rounded-lg p-2 md:p-4">
+            <p className="text-xs sm:text-sm text-red-800 font-semibold">
               ❌ Error: At least one item must be selected for packing. Please select at least one item to continue.
             </p>
           </div>
         )}
         {!hasNoSelection && unselectedCount > 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-            <p className="text-sm text-amber-800 font-medium">
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 md:p-4">
+            <p className="text-xs sm:text-sm text-amber-800 font-medium">
               ⚠️ {unselectedCount} item{unselectedCount > 1 ? "s" : ""} unselected. These will be moved to dropshipping.
             </p>
           </div>
         )}
         {!hasNoSelection && unselectedCount === 0 && orderLines.length > 0 && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-            <p className="text-sm text-green-800 font-medium">
+          <div className="bg-green-50 border border-green-200 rounded-lg p-2 md:p-4">
+            <p className="text-xs sm:text-sm text-green-800 font-medium">
               ✓ All items are selected. You can proceed to upload packing photos.
             </p>
           </div>
@@ -357,7 +357,7 @@ export default function PackingOrderLines({
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.05 }}
-              className={`bg-white rounded-lg border-2 p-4 shadow-sm transition-all ${
+              className={`bg-white rounded-lg border-2 p-2 md:p-4 shadow-sm transition-all ${
                 isSelected
                   ? "border-blue-500 bg-blue-50/30"
                   : "border-amber-300 bg-amber-50/50"
@@ -372,7 +372,7 @@ export default function PackingOrderLines({
                     className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
                   />
                 </div>
-                <div className="w-16 h-16 bg-gray-100 rounded border border-gray-200 flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 md:w-16 md:h-16 bg-gray-100 rounded border border-gray-200 flex items-center justify-center shrink-0">
                   {item.image ? (
                     <img src={item.image} alt={item.name} className="w-full h-full object-cover rounded" />
                   ) : (
@@ -380,22 +380,22 @@ export default function PackingOrderLines({
                   )}
                 </div>
                 <div className="flex-1">
-                  <h4 className="text-sm font-semibold text-gray-900 mb-1">{item.name}</h4>
+                  <h4 className="text-xs sm:text-sm font-semibold text-gray-900 mb-1">{item.name}</h4>
                   {item.variant && <p className="text-xs text-gray-500 mb-2">{item.variant}</p>}
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3 pt-3 border-t border-gray-200 mb-3">
                 <div>
                   <p className="text-xs text-gray-500 mb-1">SKU</p>
-                  <p className="text-sm font-semibold text-gray-900">{item.sku || "N/A"}</p>
+                  <p className="text-xs sm:text-sm font-semibold text-gray-900">{item.sku || "N/A"}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 mb-1">Quantity</p>
-                  <p className="text-sm font-semibold text-gray-900">{item.quantity}</p>
+                  <p className="text-xs sm:text-sm text-center font-semibold text-gray-900">{item.quantity}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 mb-1">Price</p>
-                  <p className="text-sm font-semibold text-blue-600">${item.price}</p>
+                  <p className="text-xs sm:text-sm font-semibold text-blue-600">${item.price}</p>
                 </div>
               </div>
               {onMissingProductAdd && (
@@ -452,7 +452,7 @@ export default function PackingOrderLines({
                             onChange={(e) => setMissingProductInputs(prev => ({ ...prev, [item.id]: e.target.value }))}
                             onPressEnter={() => handleAddMissingProduct(item.id)}
                             size="small"
-                            className="flex-1"
+                            className="flex-1 py-1"
                           />
                           <Button
                             type="primary"

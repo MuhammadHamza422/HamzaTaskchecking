@@ -9,14 +9,14 @@ export default function OrderInfoCard({ order }) {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-gradient-to-br from-white via-blue-50 to-indigo-50 rounded-xl border-2 border-blue-200 shadow-xl p-6"
+      className="bg-gradient-to-br from-white via-blue-50 to-indigo-50 rounded-xl border-2 border-blue-200 shadow-xl p-2 md:p-6"
     >
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 md:gap-6">
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-white/80 rounded-lg p-4 border border-blue-100"
+          className="bg-white/80 rounded-lg p-2 md:p-4 border border-blue-100"
         >
           <div className="flex items-center gap-2 mb-2">
             <div className="p-1.5 bg-blue-100 rounded-lg">
@@ -24,14 +24,14 @@ export default function OrderInfoCard({ order }) {
             </div>
             <p className="text-xs font-medium text-gray-500">Order Number</p>
           </div>
-          <p className="text-lg font-bold text-gray-900">{order.orderNumber || "N/A"}</p>
+          <p className="text-xs sm:text-lg font-bold text-gray-900">{order.orderNumber || "N/A"}</p>
         </motion.div>
 
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.2 }}
-          className="bg-white/80 rounded-lg p-4 border border-green-100"
+          className="bg-white/80 rounded-lg p-2 md:p-4 border border-green-100"
         >
           <div className="flex items-center gap-2 mb-2">
             <div className="p-1.5 bg-green-100 rounded-lg">
@@ -39,14 +39,14 @@ export default function OrderInfoCard({ order }) {
             </div>
             <p className="text-xs font-medium text-gray-500">Customer Name</p>
           </div>
-          <p className="text-lg font-bold text-gray-900">{order.customerName || "N/A"}</p>
+          <p className="text-xs sm:text-lg font-bold text-gray-900">{order.customerName || "N/A"}</p>
         </motion.div>
 
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.3 }}
-          className="bg-white/80 rounded-lg p-4 border border-purple-100"
+          className="bg-white/80 rounded-lg p-2 md:p-4 border border-purple-100"
         >
           <div className="flex items-center gap-2 mb-2">
             <div className="p-1.5 bg-purple-100 rounded-lg">
@@ -61,7 +61,7 @@ export default function OrderInfoCard({ order }) {
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.4 }}
-          className="bg-white/80 rounded-lg p-4 border border-emerald-100"
+          className="bg-white/80 rounded-lg p-2 md:p-4 border border-emerald-100"
         >
           <div className="flex items-center gap-2 mb-2">
             <div className="p-1.5 bg-emerald-100 rounded-lg">
