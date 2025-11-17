@@ -98,7 +98,7 @@ export async function getOrderDetails(orderId, platform, country = null) {
  * @returns {Promise<Object>} Created packing record with photo URLs
  */
 export async function createPacking(packingData) {
-  const { orderId, platform, orderNumber, selectedItems, deselectedItems, deselectedItemsData, orderData, photos } = packingData;
+  const { orderId, platform, orderNumber, selectedItems, deselectedItems, deselectedItemsData, orderData, photos, missingProducts } = packingData;
 
   if (!orderId) {
     throw new Error("Order ID is required");
@@ -131,6 +131,11 @@ export async function createPacking(packingData) {
     }
     if (orderData) {
       formData.append("orderData", JSON.stringify(orderData));
+    }
+
+    // Add missing products if provided
+    if (missingProducts && Array.isArray(missingProducts) && missingProducts.length > 0) {
+      formData.append("missingProducts", JSON.stringify(missingProducts));
     }
 
     // Debug logging

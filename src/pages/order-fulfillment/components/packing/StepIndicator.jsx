@@ -22,40 +22,40 @@ export default function StepIndicator({ stage, isViewMode = false, isAlreadyPack
           <div className="flex items-center gap-3 md:gap-4 flex-1">
             <div
               className={`flex items-center justify-center w-10 h-10 md:w-12 md:h-12 rounded-full font-semibold text-sm md:text-base transition-all ${
-                stage === STAGES.SELECTION
+                stage === STAGES.PHOTO_UPLOAD
                   ? "bg-blue-600 text-white shadow-lg scale-110"
                   : "bg-green-500 text-white"
               }`}
             >
-              {stage === STAGES.SELECTION ? "1" : <CheckCircle className="w-5 h-5 md:w-6 md:h-6" />}
+              {stage === STAGES.PHOTO_UPLOAD ? "1" : <CheckCircle className="w-5 h-5 md:w-6 md:h-6" />}
             </div>
             <div className="flex-1">
-              <p className="text-xs md:text-sm font-semibold text-gray-900">Step 1: Item Selection</p>
-              <p className="text-xs text-gray-500 hidden sm:block">Select items to pack</p>
+              <p className="text-xs md:text-sm font-semibold text-gray-900">Step 1: Photo Upload</p>
+              <p className="text-xs text-gray-500 hidden sm:block">Capture packing photos</p>
             </div>
           </div>
 
           {/* Connector Line */}
           <div className={`flex-1 h-0.5 mx-2 md:mx-4 transition-all ${
-            stage === STAGES.PHOTO_UPLOAD ? "bg-green-500" : "bg-gray-300"
+            stage === STAGES.SELECTION ? "bg-green-500" : "bg-gray-300"
           }`} />
 
           {/* Step 2 */}
           <div className="flex items-center gap-3 md:gap-4 flex-1">
             <div
               className={`flex items-center justify-center w-10 h-10 md:w-12 md:h-12 rounded-full font-semibold text-sm md:text-base transition-all ${
-                stage === STAGES.PHOTO_UPLOAD
+                stage === STAGES.SELECTION
                   ? "bg-blue-600 text-white shadow-lg scale-110"
-                  : stage === STAGES.SELECTION
+                  : stage === STAGES.PHOTO_UPLOAD
                   ? "bg-gray-200 text-gray-500"
                   : "bg-green-500 text-white"
               }`}
             >
-              {stage === STAGES.PHOTO_UPLOAD ? "2" : stage === STAGES.SELECTION ? "2" : <CheckCircle className="w-5 h-5 md:w-6 md:h-6" />}
+              {stage === STAGES.SELECTION ? "2" : stage === STAGES.PHOTO_UPLOAD ? "2" : <CheckCircle className="w-5 h-5 md:w-6 md:h-6" />}
             </div>
             <div className="flex-1">
-              <p className="text-xs md:text-sm font-semibold text-gray-900">Step 2: Photo Upload</p>
-              <p className="text-xs text-gray-500 hidden sm:block">Capture packing photos</p>
+              <p className="text-xs md:text-sm font-semibold text-gray-900">Step 2: Item Selection</p>
+              <p className="text-xs text-gray-500 hidden sm:block">Select items to pack</p>
             </div>
           </div>
         </div>
@@ -66,40 +66,40 @@ export default function StepIndicator({ stage, isViewMode = false, isAlreadyPack
           <div className="flex items-center gap-3">
             <div
               className={`flex items-center justify-center w-10 h-10 rounded-full font-semibold text-sm transition-all flex-shrink-0 ${
-                stage === STAGES.SELECTION
+                stage === STAGES.PHOTO_UPLOAD
                   ? "bg-blue-600 text-white shadow-lg scale-110"
                   : "bg-green-500 text-white"
               }`}
             >
-              {stage === STAGES.SELECTION ? "1" : <CheckCircle className="w-5 h-5" />}
+              {stage === STAGES.PHOTO_UPLOAD ? "1" : <CheckCircle className="w-5 h-5" />}
             </div>
             <div className="flex-1">
-              <p className="text-sm font-semibold text-gray-900">Step 1: Item Selection</p>
-              <p className="text-xs text-gray-500">Select items to pack</p>
+              <p className="text-sm font-semibold text-gray-900">Step 1: Photo Upload</p>
+              <p className="text-xs text-gray-500">Capture packing photos</p>
             </div>
           </div>
 
           {/* Connector Line - Vertical */}
           <div className={`w-0.5 h-6 ml-5 transition-all ${
-            stage === STAGES.PHOTO_UPLOAD ? "bg-green-500" : "bg-gray-300"
+            stage === STAGES.SELECTION ? "bg-green-500" : "bg-gray-300"
           }`} />
 
           {/* Step 2 */}
           <div className="flex items-center gap-3">
             <div
               className={`flex items-center justify-center w-10 h-10 rounded-full font-semibold text-sm transition-all flex-shrink-0 ${
-                stage === STAGES.PHOTO_UPLOAD
+                stage === STAGES.SELECTION
                   ? "bg-blue-600 text-white shadow-lg scale-110"
-                  : stage === STAGES.SELECTION
+                  : stage === STAGES.PHOTO_UPLOAD
                   ? "bg-gray-200 text-gray-500"
                   : "bg-green-500 text-white"
               }`}
             >
-              {stage === STAGES.PHOTO_UPLOAD ? "2" : stage === STAGES.SELECTION ? "2" : <CheckCircle className="w-5 h-5" />}
+              {stage === STAGES.SELECTION ? "2" : stage === STAGES.PHOTO_UPLOAD ? "2" : <CheckCircle className="w-5 h-5" />}
             </div>
             <div className="flex-1">
-              <p className="text-sm font-semibold text-gray-900">Step 2: Photo Upload</p>
-              <p className="text-xs text-gray-500">Capture packing photos</p>
+              <p className="text-sm font-semibold text-gray-900">Step 2: Item Selection</p>
+              <p className="text-xs text-gray-500">Select items to pack</p>
             </div>
           </div>
         </div>

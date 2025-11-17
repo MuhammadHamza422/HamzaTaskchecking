@@ -16,12 +16,14 @@ export default function PhotoUploadStep({
   onComplete, 
   canComplete, 
   submitting,
-  onBack 
+  onBack,
+  continueButtonText = "Complete Packing"
 }) {
   const [showCamera, setShowCamera] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [hasAutoOpened, setHasAutoOpened] = useState(false);
+  const [pendingPhotos, setPendingPhotos] = useState([]); // Photos captured but not yet saved
   const fileInputRef = useRef(null);
 
   // Auto-open camera ONLY on first mount (before any photos are taken)
@@ -76,7 +78,21 @@ export default function PhotoUploadStep({
   };
 
   const handleCameraCapture = (file) => {
+    // This is called for each photo when saving (via Save All or Save Photo)
     addPhoto(file);
+  };
+
+  const handleAddPhoto = (file) => {
+    // When "Add Photo" is clicked, immediately save it to parent's photos array
+    // This ensures the photo persists even if camera is closed and reopened
+    addPhoto(file);
+    // Also keep it in pendingPhotos for the current camera session
+    setPendingPhotos((prev) => [...prev, file]);
+  };
+
+  const handleCameraClose = () => {
+    // Clear pending photos when camera closes (they're already saved via handleAddPhoto)
+    setPendingPhotos([]);
     setShowCamera(false);
   };
 
@@ -114,8 +130,9 @@ export default function PhotoUploadStep({
   return (
     <>
       <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 md:p-6">
-        <div className="mb-4 md:mb-6">
-          <h3 className="text-lg md:text-xl font-bold text-gray-900 mb-2">
+        {/* Header */}
+        <div className="mb-6">
+          <h3 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">
             Packing Photos
           </h3>
           <p className="text-sm md:text-base text-gray-600">
@@ -123,47 +140,31 @@ export default function PhotoUploadStep({
           </p>
         </div>
 
-        {/* Photo Grid */}
-        {photos.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4 mb-4 md:mb-6">
-            {photos.map((photo) => (
-              <PhotoPreview
-                key={photo.id}
-                photo={photo}
-                onRemove={handleRemovePhoto}
-                onImageClick={() => handleImageClick(photo)}
-              />
-            ))}
+        {/* Main Content Area */}
+        <div className="mb-6">
+          {/* Photo Preview Section */}
+          <div className="mb-4">
+            {photos.length > 0 ? (
+              <div className="flex flex-wrap gap-3 md:gap-4">
+                {photos.map((photo) => (
+                  <div key={photo.id} className="w-32 h-32 md:w-40 md:h-40">
+                    <PhotoPreview
+                      photo={photo}
+                      onRemove={handleRemovePhoto}
+                      onImageClick={() => handleImageClick(photo)}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="w-32 h-32 md:w-40 md:h-40 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center">
+                <p className="text-gray-400 text-xs text-center px-2">No photos yet</p>
+              </div>
+            )}
           </div>
-        )}
 
-        {/* Upload Actions */}
-        {canAddMore && (
-          <div className="flex flex-col sm:flex-row gap-3 md:gap-4 mb-4 md:mb-6">
-            <motion.button
-              onClick={() => setShowCamera(true)}
-              className="flex-1 flex items-center justify-center gap-2 py-3 md:py-3.5 px-4 md:px-6 bg-blue-600 text-white rounded-xl font-semibold text-sm md:text-base hover:bg-blue-700 transition-all duration-300 shadow-lg"
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
-            >
-              <Camera className="w-5 h-5 md:w-6 md:h-6" />
-              <span>Take Photo</span>
-            </motion.button>
-            <motion.button
-              onClick={() => fileInputRef.current?.click()}
-              className="flex-1 flex items-center justify-center gap-2 py-3 md:py-3.5 px-4 md:px-6 bg-gray-600 text-white rounded-xl font-semibold text-sm md:text-base hover:bg-gray-700 transition-all duration-300 shadow-lg"
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
-            >
-              <Upload className="w-5 h-5 md:w-6 md:h-6" />
-              <span>Upload from Device</span>
-            </motion.button>
-          </div>
-        )}
-
-        {/* Photo Count */}
-        {photos.length > 0 && (
-          <div className="mb-4 md:mb-6">
+          {/* Photo Count Status */}
+          <div className="mb-4">
             <p className={`text-sm md:text-base font-semibold ${
               photos.length >= 1 ? "text-green-600" : "text-amber-600"
             }`}>
@@ -171,26 +172,51 @@ export default function PhotoUploadStep({
               {photos.length < 1 && <span className="text-amber-600 ml-2">(At least 1 required)</span>}
             </p>
           </div>
-        )}
 
-        {/* Complete Button */}
+          {/* Upload Action Buttons */}
+          {canAddMore && (
+            <div className="flex flex-col sm:flex-row gap-3 md:gap-4">
+              <motion.button
+                onClick={() => setShowCamera(true)}
+                className="flex-1 flex items-center justify-center gap-2 py-3 md:py-4 px-4 md:px-6 bg-blue-600 text-white rounded-lg font-semibold text-base hover:bg-blue-700 transition-all duration-200 shadow-md"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <Camera className="w-5 h-5" />
+                <span>Take Photo</span>
+              </motion.button>
+              <motion.button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex-1 flex items-center justify-center gap-2 py-3 md:py-4 px-4 md:px-6 bg-gray-600 text-white rounded-lg font-semibold text-base hover:bg-gray-700 transition-all duration-200 shadow-md"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <Upload className="w-5 h-5" />
+                <span>Upload from Device</span>
+              </motion.button>
+            </div>
+          )}
+        </div>
+
+        {/* Bottom Navigation Buttons */}
         <div className="flex flex-col sm:flex-row gap-3 md:gap-4 pt-4 border-t border-gray-200">
           {onBack && (
             <motion.button
               onClick={onBack}
-              className="flex-1 px-4 md:px-6 py-3 md:py-3.5 bg-white border-2 border-gray-300 text-gray-700 rounded-xl font-semibold text-sm md:text-base hover:bg-gray-50 transition-all duration-300 shadow-sm"
+              className="flex-1 flex items-center justify-center gap-2 px-4 md:px-6 py-3 md:py-3.5 bg-white border-2 border-gray-300 text-gray-700 rounded-lg font-semibold text-base hover:bg-gray-50 transition-all duration-200 shadow-sm"
               whileHover={{ scale: 1.01 }}
               whileTap={{ scale: 0.99 }}
             >
-              ← Back to Items
+              <span>←</span>
+              <span>Back</span>
             </motion.button>
           )}
           <motion.button
             onClick={onComplete}
             disabled={!canComplete || submitting}
-            className={`flex-1 px-4 md:px-6 py-3 md:py-3.5 rounded-xl font-semibold text-sm md:text-base transition-all duration-300 shadow-lg flex items-center justify-center gap-2 ${
+            className={`flex-1 flex items-center justify-center gap-2 px-4 md:px-6 py-3 md:py-3.5 rounded-lg font-semibold text-base transition-all duration-200 shadow-md ${
               canComplete && !submitting
-                ? "bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800"
+                ? "bg-green-600 text-white hover:bg-green-700"
                 : "bg-gray-300 text-gray-500 cursor-not-allowed"
             }`}
             whileHover={canComplete && !submitting ? { scale: 1.01 } : {}}
@@ -199,12 +225,12 @@ export default function PhotoUploadStep({
             {submitting ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                <span>Creating Packing...</span>
+                <span>Processing...</span>
               </>
             ) : (
               <>
                 <CheckCircle className="w-5 h-5" />
-                <span>Complete Packing</span>
+                <span>{continueButtonText}</span>
               </>
             )}
           </motion.button>
@@ -224,9 +250,11 @@ export default function PhotoUploadStep({
       {showCamera && (
         <CameraCapture
           onCapture={handleCameraCapture}
-          onClose={() => setShowCamera(false)}
+          onClose={handleCameraClose}
+          onAddPhoto={handleAddPhoto}
           maxPhotos={MAX_PHOTOS}
           currentCount={photos.length}
+          pendingPhotos={pendingPhotos}
         />
       )}
 

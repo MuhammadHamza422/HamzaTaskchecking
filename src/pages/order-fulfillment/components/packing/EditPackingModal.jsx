@@ -174,7 +174,7 @@ export default function EditPackingModal({
         onFinish={handleSubmit}
         className="mt-4"
       >
-        <Form.Item
+        {/* <Form.Item
           name="notes"
           label="Notes"
           rules={[
@@ -190,7 +190,7 @@ export default function EditPackingModal({
             showCount
             maxLength={1000}
           />
-        </Form.Item>
+        </Form.Item> */}
 
         <Form.Item label="Photos">
           <div className="space-y-4">
