@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Search, Scan, Camera } from "lucide-react";
 import CameraBarcodeScanner from "./CameraBarcodeScanner";
 
-export default function ScanInput({ onScan, onSearch, placeholder = "Scan or enter order number" }) {
+export default function ScanInput({ onScan, onSearch, placeholder = "Scan or enter order number", hideCameraButton = false }) {
   const [inputValue, setInputValue] = useState("");
   const [scanMethod, setScanMethod] = useState("scanner");
   const [showCamera, setShowCamera] = useState(false);
@@ -128,13 +128,15 @@ export default function ScanInput({ onScan, onSearch, placeholder = "Scan or ent
           <Scan className="w-4 h-4" />
           Scanner Device
         </button>
-        <button
-          onClick={handleOpenCamera}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors bg-green-600 hover:bg-green-700 text-white"
-        >
-          <Camera className="w-4 h-4" />
-          Camera Scan
-        </button>
+        {!hideCameraButton && (
+          <button
+            onClick={handleOpenCamera}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors bg-green-600 hover:bg-green-700 text-white"
+          >
+            <Camera className="w-4 h-4" />
+            Camera Scan
+          </button>
+        )}
         <button
           onClick={() => setScanMethod("manual")}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${

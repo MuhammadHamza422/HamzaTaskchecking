@@ -4,6 +4,7 @@ import { Package, List, Loader2, Sparkles, ScanLine } from "lucide-react";
 import { motion } from "framer-motion";
 import ScanInput from "../common/ScanInput";
 import FulfillmentBreadcrumb from "../common/FulfillmentBreadcrumb";
+import QuaggaBarcodeScanner from "./QuaggaBarcodeScanner";
 import { searchOrder } from "../../../../api/fulfillment";
 import Swal from "sweetalert2";
 
@@ -12,6 +13,8 @@ export default function PackingLandingPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState(null);
   const [alreadyPackedWarning, setAlreadyPackedWarning] = useState(null);
+  const [showScanner, setShowScanner] = useState(true); // Auto-open scanner
+  const [showManualSearch, setShowManualSearch] = useState(false);
 
   // Scroll to top on mount
   useEffect(() => {
@@ -25,6 +28,7 @@ export default function PackingLandingPage() {
 
     setIsProcessing(true);
     setError(null);
+    setShowScanner(false); // Close scanner when processing
 
     try {
       const result = await searchOrder(orderNumber.trim());
@@ -86,6 +90,9 @@ export default function PackingLandingPage() {
             navigate("/fulfillment/packing/list", {
               state: { packingId: packingInfo.packingId },
             });
+          } else {
+            // Reopen scanner after closing alert
+            setShowScanner(true);
           }
           return;
         }
@@ -109,6 +116,7 @@ export default function PackingLandingPage() {
             searchData: result.data,
             isAlreadyPacked: false,
             packingInfo: null,
+            autoOpenCamera: true, // Flag to auto-open camera
           },
         });
       }
@@ -122,11 +130,70 @@ export default function PackingLandingPage() {
         text: error.message || "No order found with the provided query. Please try again.",
         confirmButtonColor: "#2563eb",
         confirmButtonText: "OK",
+      }).then(() => {
+        // Reopen scanner after error
+        setShowScanner(true);
       });
     } finally {
       setIsProcessing(false);
     }
   };
+
+  const handleScannerSuccess = (barcode, searchData) => {
+    // Handle successful barcode scan
+    const { orderId, orderNumber, platform, orderKey, order_key, isAlreadyPacked, packingInfo } = searchData;
+    
+    if (isAlreadyPacked && packingInfo) {
+      // Already packed - handled in handleOrderFound
+      handleOrderFound(barcode);
+      return;
+    }
+    
+    // Navigate to order details
+    let urlIdentifier;
+    if (platform === "shopify") {
+      urlIdentifier = orderNumber || orderKey || order_key || orderId;
+    } else {
+      urlIdentifier = orderId || orderNumber;
+    }
+    
+    navigate(`/fulfillment/packing/${encodeURIComponent(urlIdentifier)}`, {
+      state: {
+        orderId,
+        platform,
+        orderKey: orderNumber || orderKey || order_key,
+        searchData: searchData,
+        isAlreadyPacked: false,
+        packingInfo: null,
+        autoOpenCamera: true, // Flag to auto-open camera
+      },
+    });
+  };
+
+  const handleManualSearchClick = () => {
+    setShowScanner(false);
+    setShowManualSearch(true);
+  };
+
+  const handleCloseScanner = () => {
+    setShowScanner(false);
+    setShowManualSearch(true);
+  };
+
+  // Show scanner by default, manual search only when requested
+  // Only render scanner when explicitly shown to prevent camera from staying active
+  if (showScanner && !showManualSearch) {
+    return (
+      <QuaggaBarcodeScanner
+        onScanSuccess={handleScannerSuccess}
+        onManualSearch={handleManualSearchClick}
+        onClose={handleCloseScanner}
+      />
+    );
+  }
+
+  // When scanner is closed, ensure it's not rendered
+  // This ensures camera is released when navigating to manual search
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
@@ -173,11 +240,36 @@ export default function PackingLandingPage() {
                 <h2 className="text-xl font-semibold text-gray-900">Scan or Search Order</h2>
               </div>
 
-              <ScanInput
-                onScan={handleOrderFound}
-                onSearch={handleOrderFound}
-                placeholder="Scan or enter order number / ShipStation packing slip barcode"
-              />
+              <div className="space-y-4">
+                <div className="flex items-center justify-center gap-3 mb-4">
+                  <motion.button
+                    onClick={() => {
+                      setShowManualSearch(false);
+                      setShowScanner(true);
+                    }}
+                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-xl font-semibold transition-all duration-300 shadow-lg"
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    <ScanLine className="w-5 h-5" />
+                    <span>Camera Scan</span>
+                  </motion.button>
+                </div>
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-300"></div>
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-4 bg-white text-gray-500">OR</span>
+                  </div>
+                </div>
+                <ScanInput
+                  onScan={handleOrderFound}
+                  onSearch={handleOrderFound}
+                  placeholder="Scan or enter order number / ShipStation packing slip barcode"
+                  hideCameraButton={true}
+                />
+              </div>
 
               {isProcessing && (
                 <motion.div

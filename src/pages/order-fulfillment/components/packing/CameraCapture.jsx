@@ -18,7 +18,7 @@ const createImage = (url) =>
     image.src = url;
   });
 
-const getCroppedImg = async (imageSrc, crop, rotation = 0) => {
+const getCroppedImg = async (imageSrc, crop, rotation = 0, displayedWidth = 0, displayedHeight = 0) => {
   const image = await createImage(imageSrc);
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
@@ -27,40 +27,91 @@ const getCroppedImg = async (imageSrc, crop, rotation = 0) => {
     return imageSrc;
   }
 
-  const scaleX = image.naturalWidth / image.width;
-  const scaleY = image.naturalHeight / image.height;
-  const pixelRatio = window.devicePixelRatio;
+  // Use provided displayed dimensions, or fall back to natural dimensions
+  const displayWidth = displayedWidth > 0 ? displayedWidth : image.width;
+  const displayHeight = displayedHeight > 0 ? displayedHeight : image.height;
 
-  canvas.width = crop.width * scaleX * pixelRatio;
-  canvas.height = crop.height * scaleY * pixelRatio;
+  // Calculate scale factors between displayed size and natural size
+  const scaleX = image.naturalWidth / displayWidth;
+  const scaleY = image.naturalHeight / displayHeight;
 
-  ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  // Convert crop coordinates from percentage/pixels to natural image pixels
+  let cropX, cropY, cropWidth, cropHeight;
+
+  if (crop.unit === "%") {
+    // Crop is in percentage - convert to pixels based on displayed size, then scale to natural
+    cropX = (crop.x / 100) * displayWidth * scaleX;
+    cropY = (crop.y / 100) * displayHeight * scaleY;
+    cropWidth = (crop.width / 100) * displayWidth * scaleX;
+    cropHeight = (crop.height / 100) * displayHeight * scaleY;
+  } else {
+    // Crop is in pixels - scale directly to natural size
+    cropX = crop.x * scaleX;
+    cropY = crop.y * scaleY;
+    cropWidth = crop.width * scaleX;
+    cropHeight = crop.height * scaleY;
+  }
+
+  // Ensure crop coordinates are within image bounds
+  cropX = Math.max(0, Math.min(cropX, image.naturalWidth));
+  cropY = Math.max(0, Math.min(cropY, image.naturalHeight));
+  cropWidth = Math.min(cropWidth, image.naturalWidth - cropX);
+  cropHeight = Math.min(cropHeight, image.naturalHeight - cropY);
+
+  // Set canvas size to the cropped dimensions
+  canvas.width = cropWidth;
+  canvas.height = cropHeight;
+
   ctx.imageSmoothingQuality = "high";
 
-  const cropX = crop.x * scaleX;
-  const cropY = crop.y * scaleY;
-  const rotateRads = (rotation * Math.PI) / 180;
-  const centerX = image.naturalWidth / 2;
-  const centerY = image.naturalHeight / 2;
-
-  ctx.save();
-  ctx.translate(-cropX, -cropY);
-  ctx.translate(centerX, centerY);
-  ctx.rotate(rotateRads);
-  ctx.translate(-centerX, -centerY);
+  // Draw only the cropped portion of the image
+  // This directly extracts the selected region from the source image
   ctx.drawImage(
     image,
-    0,
-    0,
-    image.naturalWidth,
-    image.naturalHeight,
-    0,
-    0,
-    image.naturalWidth,
-    image.naturalHeight
+    cropX,           // Source X (where to start cropping from original image)
+    cropY,           // Source Y
+    cropWidth,       // Source width (how much to crop)
+    cropHeight,      // Source height
+    0,               // Destination X (where to place on canvas)
+    0,               // Destination Y
+    cropWidth,       // Destination width
+    cropHeight       // Destination height
   );
 
-  ctx.restore();
+  // Handle rotation AFTER cropping (rotate the cropped result)
+  if (rotation !== 0) {
+    const rotateRads = (rotation * Math.PI) / 180;
+    
+    // Calculate the bounding box needed for rotation
+    const rotatedWidth = Math.abs(cropWidth * Math.cos(rotateRads)) + Math.abs(cropHeight * Math.sin(rotateRads));
+    const rotatedHeight = Math.abs(cropWidth * Math.sin(rotateRads)) + Math.abs(cropHeight * Math.cos(rotateRads));
+
+    // Create a new canvas for the rotated result
+    const rotatedCanvas = document.createElement("canvas");
+    rotatedCanvas.width = rotatedWidth;
+    rotatedCanvas.height = rotatedHeight;
+    const rotatedCtx = rotatedCanvas.getContext("2d");
+    rotatedCtx.imageSmoothingQuality = "high";
+
+    // Draw the cropped image onto the rotated canvas with rotation
+    rotatedCtx.save();
+    rotatedCtx.translate(rotatedWidth / 2, rotatedHeight / 2);
+    rotatedCtx.rotate(rotateRads);
+    rotatedCtx.drawImage(canvas, -cropWidth / 2, -cropHeight / 2);
+    rotatedCtx.restore();
+
+    // Return the rotated canvas blob
+    return new Promise((resolve) => {
+      rotatedCanvas.toBlob((blob) => {
+        if (!blob) {
+          resolve(imageSrc);
+          return;
+        }
+        const fileUrl = URL.createObjectURL(blob);
+        resolve(fileUrl);
+      }, "image/jpeg", 0.9);
+    });
+  }
 
   return new Promise((resolve) => {
     canvas.toBlob((blob) => {
@@ -74,9 +125,10 @@ const getCroppedImg = async (imageSrc, crop, rotation = 0) => {
   });
 };
 
-export default function CameraCapture({ onCapture, onClose, maxPhotos, currentCount }) {
+export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhotos, currentCount, pendingPhotos = [] }) {
   const [mode, setMode] = useState("camera"); // "camera" | "edit" | "review"
-  const [capturedPhotos, setCapturedPhotos] = useState([]);
+  // Initialize with pending photos from parent to persist across camera opens
+  const [capturedPhotos, setCapturedPhotos] = useState(pendingPhotos);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(-1);
   const [currentImage, setCurrentImage] = useState(null);
   const [crop, setCrop] = useState(null);
@@ -87,12 +139,65 @@ export default function CameraCapture({ onCapture, onClose, maxPhotos, currentCo
   const imgRef = useRef(null);
   const [facingMode, setFacingMode] = useState("environment");
 
+  // Helper function to stop webcam stream
+  const stopWebcamStream = useCallback(() => {
+    if (webcamRef.current) {
+      // Try multiple ways to access the stream
+      const videoElement = webcamRef.current.video;
+      if (videoElement) {
+        const stream = videoElement.srcObject;
+        if (stream && stream instanceof MediaStream) {
+          const tracks = stream.getTracks();
+          tracks.forEach((track) => {
+            track.stop();
+            console.log("Stopped webcam track:", track.kind, track.label);
+          });
+          // Clear the srcObject
+          videoElement.srcObject = null;
+        }
+      }
+      // Also try to access stream directly from webcamRef if available
+      if (webcamRef.current.stream) {
+        const tracks = webcamRef.current.stream.getTracks();
+        tracks.forEach((track) => {
+          track.stop();
+          console.log("Stopped webcam track (direct):", track.kind, track.label);
+        });
+      }
+    }
+  }, []);
+
+  // Cleanup: Stop webcam stream when component unmounts
+  useEffect(() => {
+    return () => {
+      stopWebcamStream();
+    };
+  }, [stopWebcamStream]);
+
+  // Stop webcam when camera is closed
+  const handleClose = useCallback(() => {
+    stopWebcamStream();
+    if (onClose) {
+      onClose();
+    }
+  }, [stopWebcamStream, onClose]);
+
   const capture = useCallback(() => {
     if (!webcamRef.current) return;
 
     const imageSrc = webcamRef.current.getScreenshot();
     if (imageSrc) {
+      // Revoke any previous image URL to prevent memory leaks and ensure fresh state
+      if (currentImage && currentImage.startsWith('blob:')) {
+        URL.revokeObjectURL(currentImage);
+      }
+      if (croppedImageUrl && croppedImageUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(croppedImageUrl);
+      }
+      
+      // Set new image and reset ALL crop state for fresh photo
       setCurrentImage(imageSrc);
+      setCroppedImageUrl(null); // Reset cropped image URL for new photo
       setCrop({
         unit: "%",
         width: 90,
@@ -100,10 +205,11 @@ export default function CameraCapture({ onCapture, onClose, maxPhotos, currentCo
         x: 5,
         y: 5,
       });
+      setCompletedCrop(null); // Reset completed crop
       setRotation(0);
       setMode("edit");
     }
-  }, []);
+  }, [currentImage, croppedImageUrl]);
 
   const onImageLoad = useCallback((e) => {
     const { width, height } = e.currentTarget;
@@ -124,7 +230,11 @@ export default function CameraCapture({ onCapture, onClose, maxPhotos, currentCo
     }
 
     try {
-      const cropped = await getCroppedImg(currentImage, completedCrop, rotation);
+      // Get the actual displayed image dimensions from the ref
+      const displayedWidth = imgRef.current?.width || 0;
+      const displayedHeight = imgRef.current?.height || 0;
+      
+      const cropped = await getCroppedImg(currentImage, completedCrop, rotation, displayedWidth, displayedHeight);
       setCroppedImageUrl(cropped);
     } catch (error) {
       console.error("Error cropping image:", error);
@@ -134,6 +244,8 @@ export default function CameraCapture({ onCapture, onClose, maxPhotos, currentCo
 
   useEffect(() => {
     if (mode === "edit" && currentImage) {
+      // Reset croppedImageUrl when a new image is loaded to ensure fresh crop
+      setCroppedImageUrl(null);
       applyCropAndRotation();
     }
   }, [mode, currentImage, completedCrop, rotation, applyCropAndRotation]);
@@ -142,7 +254,10 @@ export default function CameraCapture({ onCapture, onClose, maxPhotos, currentCo
     try {
       const response = await fetch(imageUrl);
       const blob = await response.blob();
-      return new File([blob], `camera-${Date.now()}.jpg`, {
+      // Use a unique timestamp to ensure each file is different
+      const timestamp = Date.now();
+      const random = Math.random().toString(36).substring(2, 9);
+      return new File([blob], `camera-${timestamp}-${random}.jpg`, {
         type: "image/jpeg",
       });
     } catch (error) {
@@ -154,9 +269,25 @@ export default function CameraCapture({ onCapture, onClose, maxPhotos, currentCo
   const addPhoto = async () => {
     if (croppedImageUrl) {
       try {
+        // Convert the cropped image to a file BEFORE resetting state
         const file = await convertToFile(croppedImageUrl);
-        const newPhotos = [...capturedPhotos, { file, preview: croppedImageUrl }];
+        
+        // Revoke the old blob URL to free memory
+        if (croppedImageUrl.startsWith('blob:')) {
+          URL.revokeObjectURL(croppedImageUrl);
+        }
+        
+        // Create a new preview URL from the file
+        const previewUrl = URL.createObjectURL(file);
+        const newPhotos = [...capturedPhotos, { file, preview: previewUrl }];
         setCapturedPhotos(newPhotos);
+        
+        // Notify parent component about the new photo
+        if (onAddPhoto) {
+          onAddPhoto(file);
+        }
+        
+        // Reset all state AFTER converting to file
         setCurrentImage(null);
         setCroppedImageUrl(null);
         setCrop(null);
@@ -173,8 +304,17 @@ export default function CameraCapture({ onCapture, onClose, maxPhotos, currentCo
     if (croppedImageUrl) {
       try {
         const file = await convertToFile(croppedImageUrl);
-        onCapture(file);
-        onClose();
+        // If there are already photos in the array, add this one too
+        if (capturedPhotos.length > 0) {
+          const previewUrl = URL.createObjectURL(file);
+          const allPhotos = [...capturedPhotos, { file, preview: previewUrl }];
+          allPhotos.forEach((photo) => {
+            onCapture(photo.file);
+          });
+        } else {
+          onCapture(file);
+        }
+        handleClose();
       } catch (error) {
         console.error("Error saving photo:", error);
       }
@@ -182,6 +322,13 @@ export default function CameraCapture({ onCapture, onClose, maxPhotos, currentCo
   };
 
   const retakeCurrent = () => {
+    // Revoke blob URL if it exists
+    if (croppedImageUrl && croppedImageUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(croppedImageUrl);
+    }
+    if (currentImage && currentImage.startsWith('blob:')) {
+      URL.revokeObjectURL(currentImage);
+    }
     setCurrentImage(null);
     setCroppedImageUrl(null);
     setCrop(null);
@@ -195,12 +342,35 @@ export default function CameraCapture({ onCapture, onClose, maxPhotos, currentCo
     setCapturedPhotos(newPhotos);
   };
 
-  const saveAllPhotos = () => {
-    if (capturedPhotos.length > 0) {
-      capturedPhotos.forEach((photo) => {
-        onCapture(photo.file);
+  const saveAllPhotos = async () => {
+    const photosToSave = [];
+    
+    // First, add all photos from the capturedPhotos array (already converted to files)
+    capturedPhotos.forEach((photo) => {
+      photosToSave.push(photo.file);
+    });
+    
+    // If there's a current cropped photo that hasn't been added yet, convert and add it
+    if (croppedImageUrl && mode === "edit") {
+      try {
+        const file = await convertToFile(croppedImageUrl);
+        photosToSave.push(file);
+        
+        // Revoke the blob URL after converting
+        if (croppedImageUrl.startsWith('blob:')) {
+          URL.revokeObjectURL(croppedImageUrl);
+        }
+      } catch (error) {
+        console.error("Error converting current photo:", error);
+      }
+    }
+    
+    // Save all photos in order
+    if (photosToSave.length > 0) {
+      photosToSave.forEach((file) => {
+        onCapture(file);
       });
-      onClose();
+      handleClose();
     }
   };
 
@@ -212,9 +382,31 @@ export default function CameraCapture({ onCapture, onClose, maxPhotos, currentCo
     setRotation((prev) => (direction === "right" ? prev + 90 : prev - 90));
   };
 
-  const canCaptureMore = currentCount + capturedPhotos.length < maxPhotos;
+  // Sync capturedPhotos with pendingPhotos from parent when component mounts or updates
+  useEffect(() => {
+    if (pendingPhotos && pendingPhotos.length >= 0) {
+      // Convert pending photos (files) to the format expected by capturedPhotos
+      const formattedPhotos = pendingPhotos.map((file) => {
+        // Check if we already have this file in capturedPhotos to avoid recreating URLs
+        const existing = capturedPhotos.find((p) => p.file === file);
+        if (existing) {
+          return existing;
+        }
+        return {
+          file,
+          preview: URL.createObjectURL(file),
+        };
+      });
+      setCapturedPhotos(formattedPhotos);
+    }
+  }, [pendingPhotos]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const canCaptureMore = currentCount + capturedPhotos.length + (croppedImageUrl && mode === "edit" ? 1 : 0) < maxPhotos;
   const canAddPhoto = croppedImageUrl && canCaptureMore;
-  const canSaveAll = capturedPhotos.length > 0;
+
+  // Can save all if there are photos in array OR if there's a current cropped photo
+  const canSaveAll = capturedPhotos.length > 0 || (croppedImageUrl && mode === "edit");
+  const totalPhotosToSave = capturedPhotos.length + (croppedImageUrl && mode === "edit" ? 1 : 0);
 
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col">
@@ -233,7 +425,7 @@ export default function CameraCapture({ onCapture, onClose, maxPhotos, currentCo
             />
             <div className="absolute top-4 left-4 right-4 flex justify-between items-center z-10">
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="p-3 bg-black/60 backdrop-blur-sm rounded-full text-white hover:bg-black/80 transition-colors shadow-lg"
                 aria-label="Close camera"
               >
@@ -312,7 +504,7 @@ export default function CameraCapture({ onCapture, onClose, maxPhotos, currentCo
                     className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center gap-2 shadow-lg"
                   >
                     <Check className="w-4 h-4" />
-                    <span>Save All ({capturedPhotos.length})</span>
+                    <span>Save All ({totalPhotosToSave})</span>
                   </button>
                 )}
               </div>
@@ -332,6 +524,7 @@ export default function CameraCapture({ onCapture, onClose, maxPhotos, currentCo
                   onComplete={(c) => setCompletedCrop(c)}
                   aspect={undefined}
                   minWidth={50}
+                  minHeight={50}
                 >
                   <img
                     ref={imgRef}
@@ -340,6 +533,8 @@ export default function CameraCapture({ onCapture, onClose, maxPhotos, currentCo
                     onLoad={onImageLoad}
                     style={{
                       maxWidth: "100%",
+                      maxHeight: "70vh",
+                      display: "block",
                       transform: `rotate(${rotation}deg)`,
                       transition: "transform 0.3s",
                     }}
@@ -390,13 +585,6 @@ export default function CameraCapture({ onCapture, onClose, maxPhotos, currentCo
                   <RotateCcw className="w-5 h-5" />
                   <span>Retake</span>
                 </button>
-                <button
-                  onClick={saveSinglePhoto}
-                  className="flex-1 py-3 px-6 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-all duration-200 flex items-center justify-center gap-2 shadow-lg active:scale-95"
-                >
-                  <Save className="w-5 h-5" />
-                  <span>Save Photo</span>
-                </button>
                 {canAddPhoto && (
                   <button
                     onClick={addPhoto}
@@ -409,10 +597,10 @@ export default function CameraCapture({ onCapture, onClose, maxPhotos, currentCo
                 {canSaveAll && (
                   <button
                     onClick={saveAllPhotos}
-                    className="flex-1 py-3 px-6 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 transition-all duration-200 flex items-center justify-center gap-2 shadow-lg active:scale-95"
+                    className="flex-1 py-3 px-6 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-all duration-200 flex items-center justify-center gap-2 shadow-lg active:scale-95"
                   >
                     <Check className="w-5 h-5" />
-                    <span>Save All ({capturedPhotos.length})</span>
+                    <span>Save All ({totalPhotosToSave})</span>
                   </button>
                 )}
               </div>
