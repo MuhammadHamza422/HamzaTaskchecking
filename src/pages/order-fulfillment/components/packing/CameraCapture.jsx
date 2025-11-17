@@ -751,7 +751,8 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
   }, [pendingPhotos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const canCaptureMore = currentCount + capturedPhotos.length + (croppedImageUrl && mode === "edit" ? 1 : 0) < maxPhotos;
-  const canAddPhoto = croppedImageUrl && canCaptureMore;
+  // Show "Add Photo" when in edit mode with current image and can capture more
+  const canAddPhoto = mode === "edit" && currentImage && canCaptureMore;
 
   // Can save all if there are photos in array OR if there's a current cropped photo
   const canSaveAll = capturedPhotos.length > 0 || (croppedImageUrl && mode === "edit");
@@ -936,7 +937,35 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
 
       {mode === "edit" && currentImage && (
         <div className="flex-1 flex flex-col bg-black overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-4">
+          {/* Fixed rotate controls - always visible at top */}
+          <div className="sticky top-0 z-40 bg-black/95 backdrop-blur-md border-b border-white/10 p-3">
+            <div className="max-w-4xl mx-auto">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-white">
+                  <RotateCw className="w-5 h-5" />
+                  <span className="text-sm font-medium">Rotate</span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => rotateImage("left")}
+                    className="p-3 bg-white/20 hover:bg-white/30 rounded-lg text-white transition-colors active:scale-95 shadow-lg"
+                    aria-label="Rotate left"
+                  >
+                    <RotateCcw className="w-6 h-6" />
+                  </button>
+                  <button
+                    onClick={() => rotateImage("right")}
+                    className="p-3 bg-white/20 hover:bg-white/30 rounded-lg text-white transition-colors active:scale-95 shadow-lg"
+                    aria-label="Rotate right"
+                  >
+                    <RotateCw className="w-6 h-6" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 pb-20">
             <div className="max-w-4xl mx-auto">
               <div className="bg-black/60 backdrop-blur-sm rounded-lg p-4 mb-4">
                 <ReactCrop
@@ -954,7 +983,7 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
                     onLoad={onImageLoad}
                     style={{
                       maxWidth: "100%",
-                      maxHeight: "70vh",
+                      maxHeight: "60vh",
                       display: "block",
                       transform: `rotate(${rotation}deg)`,
                       transition: "transform 0.3s",
@@ -963,65 +992,44 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
                 </ReactCrop>
               </div>
 
-              <div className="bg-black/60 backdrop-blur-sm rounded-lg p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-white">
-                    <RotateCw className="w-5 h-5" />
-                    <span className="text-sm font-medium">Rotate</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => rotateImage("left")}
-                      className="p-2 bg-white/20 hover:bg-white/30 rounded-lg text-white transition-colors"
-                      aria-label="Rotate left"
-                    >
-                      <RotateCcw className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => rotateImage("right")}
-                      className="p-2 bg-white/20 hover:bg-white/30 rounded-lg text-white transition-colors"
-                      aria-label="Rotate right"
-                    >
-                      <RotateCw className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-white/20">
-                  <p className="text-white text-xs">
-                    Drag the corners to crop the image
-                  </p>
-                </div>
+              <div className="bg-black/60 backdrop-blur-sm rounded-lg p-4">
+                <p className="text-white text-xs text-center">
+                  Drag the corners to crop the image
+                </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-black/90 backdrop-blur-md border-t border-white/10 p-4">
+          {/* Fixed bottom button bar - icon-only with better visibility */}
+          <div className="fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-md border-t border-white/10 p-3 z-50">
             <div className="max-w-4xl mx-auto">
-              <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex items-center justify-center gap-4">
                 <button
                   onClick={retakeCurrent}
-                  className="flex-1 py-3 px-6 bg-gray-700 text-white rounded-lg font-semibold hover:bg-gray-600 transition-all duration-200 flex items-center justify-center gap-2 shadow-lg active:scale-95"
+                  className="flex flex-col items-center justify-center gap-1 p-3 bg-gray-700/90 hover:bg-gray-600 rounded-full text-white transition-all duration-200 shadow-lg active:scale-95 min-w-[70px]"
+                  title="Retake"
                 >
-                  <RotateCcw className="w-5 h-5" />
-                  <span>Retake</span>
+                  <RotateCcw className="w-6 h-6" />
+                  <span className="text-xs font-medium">Retake</span>
                 </button>
                 {canAddPhoto && (
                   <button
                     onClick={addPhoto}
-                    className="flex-1 py-3 px-6 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-all duration-200 flex items-center justify-center gap-2 shadow-lg active:scale-95"
+                    className="flex flex-col items-center justify-center gap-1 p-3 bg-blue-600/90 hover:bg-blue-700 rounded-full text-white transition-all duration-200 shadow-lg active:scale-95 min-w-[70px]"
+                    title="Add Photo"
                   >
-                    <Plus className="w-5 h-5" />
-                    <span>Add Photo</span>
+                    <Plus className="w-6 h-6" />
+                    <span className="text-xs font-medium">Add</span>
                   </button>
                 )}
                 {canSaveAll && (
                   <button
                     onClick={saveAllPhotos}
-                    className="flex-1 py-3 px-6 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-all duration-200 flex items-center justify-center gap-2 shadow-lg active:scale-95"
+                    className="flex flex-col items-center justify-center gap-1 p-3 bg-green-600/90 hover:bg-green-700 rounded-full text-white transition-all duration-200 shadow-lg active:scale-95 min-w-[70px]"
+                    title={`Save All (${totalPhotosToSave})`}
                   >
-                    <Check className="w-5 h-5" />
-                    <span>Save All ({totalPhotosToSave})</span>
+                    <Check className="w-6 h-6" />
+                    <span className="text-xs font-medium">Save ({totalPhotosToSave})</span>
                   </button>
                 )}
               </div>
