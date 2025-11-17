@@ -33,20 +33,20 @@ apiClient.interceptors.response.use(
   },
   (error) => {
     console.log("API Error:", error.response?.status, error.response?.data);
-    
+
     if (error.response?.status === 401) {
       console.log("Token expired - triggering logout");
-      
+
       // Clear auth data
       localStorage.removeItem("token");
       localStorage.removeItem("user");
       delete apiClient.defaults.headers.common["Authorization"];
-      
+
       // Call logout callback if available (from AuthContext)
-      if (logoutCallback && typeof logoutCallback === 'function') {
+      if (logoutCallback && typeof logoutCallback === "function") {
         logoutCallback();
       }
-      
+
       // Redirect to login page
       window.location.href = "/login";
     }

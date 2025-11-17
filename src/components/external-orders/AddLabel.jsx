@@ -311,37 +311,54 @@ export default function AddLabelModal({
       }
 
       if (selectedPackage) {
-        const newValues = {
-          packageCode:
-            selectedPackage.package_id ||
-            selectedPackage.code ||
-            selectedPackage.packageCode,
-          packageName:
-            selectedPackage.name ||
-            selectedPackage.packageName ||
-            selectedPackage.description ||
-            "",
-          dimensions: {
-            length:
-              selectedPackage.dimensions?.length ||
-              selectedPackage.length ||
-              0,
-            width:
-              selectedPackage.dimensions?.width ||
-              selectedPackage.width ||
-              0,
-            height:
-              selectedPackage.dimensions?.height ||
-              selectedPackage.height ||
-              0,
-            units:
-              selectedPackage.dimensions?.unit ||
-              selectedPackage.dimensions?.units ||
-              "inch",
-          },
-        };
-
-        form.setFieldsValue(newValues);
+        if (packageType === "custom") {
+          // For custom packages, auto-fill dimensions
+          const newValues = {
+            packageCode:
+              selectedPackage.package_id ||
+              selectedPackage.code ||
+              selectedPackage.packageCode,
+            packageName:
+              selectedPackage.name ||
+              selectedPackage.packageName ||
+              selectedPackage.description ||
+              "",
+            dimensions: {
+              length:
+                selectedPackage.dimensions?.length ||
+                selectedPackage.length ||
+                0,
+              width:
+                selectedPackage.dimensions?.width ||
+                selectedPackage.width ||
+                0,
+              height:
+                selectedPackage.dimensions?.height ||
+                selectedPackage.height ||
+                0,
+              units:
+                selectedPackage.dimensions?.unit ||
+                selectedPackage.dimensions?.units ||
+                "inch",
+            },
+          };
+          form.setFieldsValue(newValues);
+        } else if (packageType === "carrier") {
+          // For carrier packages, only set packageCode and packageName
+          // User must enter dimensions and weight manually
+          const newValues = {
+            packageCode:
+              selectedPackage.code ||
+              selectedPackage.packageCode ||
+              selectedPackage.package_id,
+            packageName:
+              selectedPackage.name ||
+              selectedPackage.packageName ||
+              selectedPackage.description ||
+              "",
+          };
+          form.setFieldsValue(newValues);
+        }
       }
     },
     [packages, carrierPackages, packageType, form]

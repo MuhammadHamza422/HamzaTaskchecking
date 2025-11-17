@@ -304,9 +304,30 @@ function OrderTable({
           dataIndex: "orderId",
           key: "orderId",
           width: 80,
-          render: (text) => (
-            <span className="text-xs font-semibold text-gray-900">{text}</span>
-          ),
+          render: (text, record) => {
+            // Debug logging for first order
+            if (record && orders.indexOf(record) === 0) {
+              console.log("🔍 WooCommerce Order Data Sample:", {
+                orderId: text,
+                hasWooCommerceDetails: !!record?.wooCommerceDetails,
+                wooCommerceDetails: record?.wooCommerceDetails ? {
+                  hasLineItems: !!record.wooCommerceDetails.line_items,
+                  lineItemsCount: record.wooCommerceDetails.line_items?.length || 0,
+                  hasTotal: !!record.wooCommerceDetails.total,
+                  total: record.wooCommerceDetails.total,
+                  hasBilling: !!record.wooCommerceDetails.billing,
+                  hasShipping: !!record.wooCommerceDetails.shipping,
+                  hasCustomer: !!record.wooCommerceDetails.customer,
+                } : null,
+                recordKeys: Object.keys(record || {}),
+              });
+            }
+            return (
+              <span className="text-xs font-semibold text-gray-900">
+                {text || "—"}
+              </span>
+            );
+          },
         },
         {
           title: "WC Status",
@@ -415,6 +436,102 @@ function OrderTable({
           ),
         },
         {
+          title: "Customer",
+          dataIndex: "customerName",
+          key: "customerName",
+          width: 120,
+          render: (customerName, record) => {
+            // Use stored customerName from DB first, fallback to user_name, then details
+            let name = customerName?.trim() || record?.user_name?.trim() || "";
+            
+            // Fallback to WooCommerce details if not in DB
+            if (!name && record?.wooCommerceDetails) {
+              const billing = record.wooCommerceDetails.billing;
+              const shipping = record.wooCommerceDetails.shipping;
+              const customer = record.wooCommerceDetails.customer;
+              
+              if (billing?.first_name || billing?.last_name) {
+                name = [billing.first_name, billing.last_name]
+                  .filter(Boolean)
+                  .map(s => s?.trim())
+                  .filter(Boolean)
+                  .join(" ")
+                  .trim();
+              } else if (shipping?.first_name || shipping?.last_name) {
+                name = [shipping.first_name, shipping.last_name]
+                  .filter(Boolean)
+                  .map(s => s?.trim())
+                  .filter(Boolean)
+                  .join(" ")
+                  .trim();
+              } else if (customer?.first_name || customer?.last_name) {
+                name = [customer.first_name, customer.last_name]
+                  .filter(Boolean)
+                  .map(s => s?.trim())
+                  .filter(Boolean)
+                  .join(" ")
+                  .trim();
+              }
+            }
+            
+            if (!name || name.length === 0) {
+              name = "—";
+            }
+            
+            return (
+              <span className="text-xs text-gray-700 truncate block" title={name}>
+                {name}
+              </span>
+            );
+          },
+        },
+        {
+          title: "Products",
+          dataIndex: "productsCount",
+          key: "productsCount",
+          width: 70,
+          render: (count, record) => {
+            // Use stored productsCount from DB first, fallback to details
+            let productsCount = count || 0;
+            
+            if (productsCount === 0 && record?.wooCommerceDetails?.line_items) {
+              productsCount = record.wooCommerceDetails.line_items.length;
+            }
+            
+            return (
+              <span className="text-xs text-gray-600 font-medium">
+                {productsCount > 0 ? productsCount : "—"}
+              </span>
+            );
+          },
+        },
+        {
+          title: "Total",
+          dataIndex: "orderTotal",
+          key: "orderTotal",
+          width: 80,
+          render: (total, record) => {
+            // Use stored orderTotal from DB first, fallback to details
+            let orderTotal = total || 0;
+            
+            if (orderTotal === 0 && record?.wooCommerceDetails?.total) {
+              orderTotal = parseFloat(record.wooCommerceDetails.total) || 0;
+            }
+            
+            if (orderTotal === 0) {
+              return (
+                <span className="text-xs text-gray-400">—</span>
+              );
+            }
+            
+            return (
+              <span className="text-xs text-gray-900 font-semibold">
+                ${orderTotal.toFixed(2)}
+              </span>
+            );
+          },
+        },
+        {
           title: "Date ↓",
           dataIndex: "orderCreatedAt",
           key: "orderCreatedAt",
@@ -422,17 +539,6 @@ function OrderTable({
           render: (orderCreatedAt, record) => formatDate(orderCreatedAt || record.createdAt),
           sorter: (a, b) => new Date(a.orderCreatedAt || a.createdAt) - new Date(b.orderCreatedAt || b.createdAt),
         },
-        // {
-        //   title: "Customer",
-        //   dataIndex: "user_name",
-        //   key: "customerName",
-        //   width: 100,
-        //   render: (name) => (
-        //     <span className="text-xs text-gray-700 truncate block" title={name}>
-        //       {name || "—"}
-        //     </span>
-        //   ),
-        // },
         {
           title: "Actions",
           dataIndex: "actions",
@@ -483,9 +589,33 @@ function OrderTable({
           dataIndex: "orderId",
           key: "orderId",
           width: 80,
-          render: (text) => (
-            <span className="text-xs font-semibold text-gray-900">{text}</span>
-          ),
+          render: (text, record) => {
+            // Debug logging for first order
+            if (record && orders.indexOf(record) === 0) {
+              console.log("🔍 Walmart Order Data Sample:", {
+                orderId: text,
+                hasWalmartDetails: !!record?.walmartDetails,
+                walmartDetails: record?.walmartDetails ? {
+                  hasOrder: !!record.walmartDetails.order,
+                  hasOrderLines: !!record.walmartDetails.order?.orderLines?.orderLine,
+                  orderLinesCount: Array.isArray(record.walmartDetails.order?.orderLines?.orderLine) 
+                    ? record.walmartDetails.order.orderLines.orderLine.length 
+                    : Array.isArray(record.walmartDetails.orderLines?.orderLine)
+                    ? record.walmartDetails.orderLines.orderLine.length
+                    : 0,
+                  hasShippingInfo: !!record.walmartDetails.order?.shippingInfo || !!record.walmartDetails.shippingInfo,
+                  customerName: record.walmartDetails.order?.shippingInfo?.postalAddress?.name || 
+                               record.walmartDetails.shippingInfo?.postalAddress?.name,
+                } : null,
+                recordKeys: Object.keys(record || {}),
+              });
+            }
+            return (
+              <span className="text-xs font-semibold text-gray-900">
+                {text || "—"}
+              </span>
+            );
+          },
         },
         {
           title: "Cust Order ID",
@@ -619,22 +749,103 @@ function OrderTable({
             );
           },
         },
-        // {
-        //   title: "App ID",
-        //   dataIndex: "app_id",
-        //   key: "app_id",
-        //   width: 75,
-        //   render: (app_id) => (
-        //     <span
-        //       className={`text-xs truncate block ${
-        //         app_id ? "text-green-600 font-medium" : "text-gray-400"
-        //       }`}
-        //       title={app_id}
-        //     >
-        //       {app_id || "—"}
-        //     </span>
-        //   ),
-        // },
+        {
+          title: "Customer",
+          dataIndex: "customerName",
+          key: "customerName",
+          width: 120,
+          render: (customerName, record) => {
+            // Use stored customerName from DB first, fallback to details
+            let name = customerName?.trim() || "";
+            
+            // Fallback to Walmart details if not in DB
+            if (!name) {
+              name = 
+                record?.walmartDetails?.order?.shippingInfo?.postalAddress?.name ||
+                record?.walmartDetails?.shippingInfo?.postalAddress?.name ||
+                "";
+              name = name?.trim() || "";
+            }
+            
+            if (!name || name.length === 0) {
+              name = "—";
+            }
+            
+            return (
+              <span className="text-xs text-gray-700 truncate block" title={name}>
+                {name}
+              </span>
+            );
+          },
+        },
+        {
+          title: "Products",
+          dataIndex: "productsCount",
+          key: "productsCount",
+          width: 70,
+          render: (count, record) => {
+            // Use stored productsCount from DB first, fallback to details
+            let productsCount = count || 0;
+            
+            if (productsCount === 0) {
+              const orderLines = 
+                record?.walmartDetails?.order?.orderLines?.orderLine ||
+                record?.walmartDetails?.orderLines?.orderLine ||
+                [];
+              
+              if (Array.isArray(orderLines) && orderLines.length > 0) {
+                productsCount = orderLines.length;
+              }
+            }
+            
+            return (
+              <span className="text-xs text-gray-600 font-medium">
+                {productsCount > 0 ? productsCount : "—"}
+              </span>
+            );
+          },
+        },
+        {
+          title: "Total",
+          dataIndex: "orderTotal",
+          key: "orderTotal",
+          width: 80,
+          render: (total, record) => {
+            // Use stored orderTotal from DB first, fallback to details
+            let orderTotal = total || 0;
+            
+            if (orderTotal === 0) {
+              // Calculate total from order lines
+              const orderLines = 
+                record?.walmartDetails?.order?.orderLines?.orderLine ||
+                record?.walmartDetails?.orderLines?.orderLine ||
+                [];
+              
+              if (Array.isArray(orderLines) && orderLines.length > 0) {
+                orderLines.forEach((line) => {
+                  const charge = line?.charges?.charge?.find(
+                    (c) => c?.chargeType === "PRODUCT"
+                  );
+                  if (charge?.chargeAmount?.amount) {
+                    orderTotal += parseFloat(charge.chargeAmount.amount) || 0;
+                  }
+                });
+              }
+            }
+            
+            if (orderTotal === 0) {
+              return (
+                <span className="text-xs text-gray-400">—</span>
+              );
+            }
+            
+            return (
+              <span className="text-xs text-gray-900 font-semibold">
+                ${orderTotal.toFixed(2)}
+              </span>
+            );
+          },
+        },
         {
           title: "Label Status",
           dataIndex: "labelStatus",
