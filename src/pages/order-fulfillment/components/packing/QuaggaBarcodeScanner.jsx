@@ -377,7 +377,7 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col">
       {/* Top Bar */}
-      <div className="absolute top-0 left-0 right-0 z-20 bg-black/70 backdrop-blur-sm p-4 flex items-center justify-between">
+      <div className="absolute top-0 left-0 right-0 z-[9999] bg-black/70 backdrop-blur-sm p-4 flex items-center justify-between">
         <button
           onClick={onManualSearch}
           className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg font-medium transition-colors"

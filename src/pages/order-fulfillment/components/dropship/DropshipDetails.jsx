@@ -375,7 +375,7 @@ export default function DropshipDetails() {
               </div>
               <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 <StatusBadge status={dropshipData.status} />
-                {dropshipData.status === "Unfulfilled" && (
+                {/* {dropshipData.status === "Unfulfilled" && (
                 <>
                   <Button
                     icon={<Edit className="w-4 h-4" />}
@@ -397,7 +397,7 @@ export default function DropshipDetails() {
                     <span className="sm:hidden">Create Order</span>
                   </Button>
                 </>
-              )}
+              )} */}
             </div>
           </div>
         </motion.div>
