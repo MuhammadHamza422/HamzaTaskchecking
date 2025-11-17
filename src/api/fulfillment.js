@@ -433,7 +433,12 @@ export async function getDropshipOrderDetails(dropshipId) {
       const errorMsg = error.response.data.error.message;
       const newError = new Error(errorMsg);
       newError.code = error.response.data.error.code;
+      newError.status = error.response?.status; // Include status code for 404 handling
       throw newError;
+    }
+    // Preserve status code if available
+    if (error.response?.status) {
+      error.status = error.response.status;
     }
     throw error;
   }
@@ -501,6 +506,335 @@ export async function createMarketplaceOrder(dropshipId, orderData) {
 
     if (!response.data.success) {
       const errorMsg = response.data.error?.message || "Failed to create marketplace order";
+      const error = new Error(errorMsg);
+      error.code = response.data.error?.code;
+      throw error;
+    }
+
+    return response.data;
+  } catch (error) {
+    if (error.response?.data?.error) {
+      const errorMsg = error.response.data.error.message;
+      const newError = new Error(errorMsg);
+      newError.code = error.response.data.error.code;
+      throw newError;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Fulfill individual dropship item
+ * @param {string} dropshipId - Dropship order ID
+ * @param {string} lineItemId - Order line item ID (will be URL-encoded)
+ * @param {Object} fulfillmentData - Fulfillment data
+ * @param {string} fulfillmentData.marketplaceName - Marketplace name (required)
+ * @param {string} fulfillmentData.marketplaceOrderNumber - Marketplace order number (optional)
+ * @param {string} fulfillmentData.notes - Notes (optional)
+ * @param {string} fulfillmentData.trackingId - Tracking ID (required)
+ * @param {string} fulfillmentData.trackingLink - Tracking link URL (required)
+ * @returns {Promise<Object>} Fulfillment result with packing order details
+ */
+export async function fulfillDropshipItem(dropshipId, lineItemId, fulfillmentData) {
+  if (!dropshipId || !lineItemId) {
+    throw new Error("Dropship ID and line item ID are required");
+  }
+
+  if (!fulfillmentData.marketplaceName || !fulfillmentData.trackingId || !fulfillmentData.trackingLink) {
+    throw new Error("Marketplace name, tracking ID, and tracking link are required");
+  }
+
+  try {
+    // URL encode the lineItemId to handle special characters (e.g., gid://shopify/LineItem/...)
+    const encodedLineItemId = encodeURIComponent(lineItemId);
+    
+    const response = await apiClient.post(
+      `/api/v1/fulfillment/dropship/${dropshipId}/items/${encodedLineItemId}/fulfill`,
+      {
+        marketplaceName: fulfillmentData.marketplaceName.trim(),
+        marketplaceOrderNumber: fulfillmentData.marketplaceOrderNumber?.trim() || null,
+        notes: fulfillmentData.notes?.trim() || null,
+        trackingId: fulfillmentData.trackingId.trim(),
+        trackingLink: fulfillmentData.trackingLink.trim(),
+      }
+    );
+
+    if (!response.data.success) {
+      const errorMsg = response.data.error?.message || response.data.message || "Failed to fulfill item";
+      const error = new Error(errorMsg);
+      error.code = response.data.error?.code;
+      throw error;
+    }
+
+    return response.data;
+  } catch (error) {
+    // Preserve status code if available
+    if (error.response?.status) {
+      error.status = error.response.status;
+    }
+    // Log full error details for debugging
+    console.error("Fulfill dropship item error:", {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+      dropshipId,
+      lineItemId,
+    });
+
+    if (error.response?.data) {
+      // Handle different response structures
+      const errorData = error.response.data;
+      const errorMsg = 
+        errorData.error?.message || 
+        errorData.message || 
+        errorData.error ||
+        `Failed to fulfill item (${error.response.status})`;
+      
+      const newError = new Error(errorMsg);
+      newError.code = errorData.error?.code || errorData.code;
+      throw newError;
+    }
+    
+    // If it's already an Error object with a message, throw it as is
+    if (error.message) {
+      throw error;
+    }
+    
+    // Fallback for network errors or other issues
+    throw new Error(error.message || "Network error: Unable to connect to server");
+  }
+}
+
+/**
+ * Update an existing packing order
+ * @param {string} packingId - Packing order ID
+ * @param {Object} updateData - Data to update (selectedItems, photos, notes, etc.)
+ * @returns {Promise<Object>} Updated packing order details
+ */
+export async function updatePackingOrder(packingId, updateData) {
+  if (!packingId) {
+    throw new Error("Packing ID is required");
+  }
+
+  try {
+    const formData = new FormData();
+
+    // Add selected items
+    if (updateData.selectedItems) {
+      formData.append("selectedItems", JSON.stringify(updateData.selectedItems));
+    }
+
+    // Add deselected items
+    if (updateData.deselectedItems) {
+      formData.append("deselectedItems", JSON.stringify(updateData.deselectedItems));
+    }
+
+    // Add deselected items data
+    if (updateData.deselectedItemsData) {
+      formData.append("deselectedItemsData", JSON.stringify(updateData.deselectedItemsData));
+    }
+
+    // Add photos
+    if (updateData.photos && Array.isArray(updateData.photos)) {
+      updateData.photos.forEach((photo) => {
+        if (photo instanceof File) {
+          formData.append("photos", photo);
+        }
+      });
+    }
+
+    // Add photo URLs to remove
+    if (updateData.removePhotoUrls && Array.isArray(updateData.removePhotoUrls)) {
+      formData.append("removePhotoUrls", JSON.stringify(updateData.removePhotoUrls));
+    }
+
+    // Add notes
+    if (updateData.notes !== undefined) {
+      formData.append("notes", updateData.notes || "");
+    }
+
+    const response = await apiClient.patch(`/api/v1/fulfillment/packing/${packingId}`, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+
+    if (!response.data.success) {
+      const errorMsg = response.data.error?.message || "Failed to update packing order";
+      const error = new Error(errorMsg);
+      error.code = response.data.error?.code;
+      throw error;
+    }
+
+    return response.data;
+  } catch (error) {
+    if (error.response?.data?.error) {
+      const errorMsg = error.response.data.error.message;
+      const newError = new Error(errorMsg);
+      newError.code = error.response.data.error.code;
+      throw newError;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Delete a packing order
+ * @param {string} packingId - Packing order ID
+ * @returns {Promise<Object>} Deletion confirmation
+ */
+export async function deletePackingOrder(packingId) {
+  if (!packingId) {
+    throw new Error("Packing ID is required");
+  }
+
+  try {
+    const response = await apiClient.delete(`/api/v1/fulfillment/packing/${packingId}`);
+
+    if (!response.data.success) {
+      const errorMsg = response.data.error?.message || "Failed to delete packing order";
+      const error = new Error(errorMsg);
+      error.code = response.data.error?.code;
+      throw error;
+    }
+
+    return response.data;
+  } catch (error) {
+    if (error.response?.data?.error) {
+      const errorMsg = error.response.data.error.message;
+      const newError = new Error(errorMsg);
+      newError.code = error.response.data.error.code;
+      throw newError;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Add a missing product to an order line item
+ * @param {string} packingId - Packing order ID
+ * @param {string} lineItemId - Order line item ID
+ * @param {string} productName - Missing product name
+ * @param {string} notes - Optional notes
+ * @returns {Promise<Object>} Created missing product details
+ */
+export async function addMissingProduct(packingId, lineItemId, productName, notes = null) {
+  if (!packingId || !lineItemId || !productName) {
+    throw new Error("Packing ID, line item ID, and product name are required");
+  }
+
+  try {
+    // URL encode the lineItemId to handle special characters (e.g., gid://shopify/LineItem/...)
+    const encodedLineItemId = encodeURIComponent(lineItemId);
+    const response = await apiClient.post(
+      `/api/v1/fulfillment/packing/${packingId}/order-lines/${encodedLineItemId}/missing-products`,
+      {
+        productName: productName.trim(),
+        notes: notes?.trim() || null,
+      }
+    );
+
+    if (!response.data.success) {
+      const errorMsg = response.data.error?.message || response.data.message || "Failed to add missing product";
+      const error = new Error(errorMsg);
+      error.code = response.data.error?.code;
+      throw error;
+    }
+
+    return response.data;
+  } catch (error) {
+    // Log full error details for debugging
+    console.error("Add missing product error:", {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+      packingId,
+      lineItemId,
+      productName,
+    });
+
+    if (error.response?.data) {
+      // Handle different response structures
+      const errorData = error.response.data;
+      const errorMsg = 
+        errorData.error?.message || 
+        errorData.message || 
+        errorData.error ||
+        `Failed to add missing product (${error.response.status})`;
+      
+      const newError = new Error(errorMsg);
+      newError.code = errorData.error?.code || errorData.code;
+      throw newError;
+    }
+    
+    // If it's already an Error object with a message, throw it as is
+    if (error.message) {
+      throw error;
+    }
+    
+    // Fallback for network errors or other issues
+    throw new Error(error.message || "Network error: Unable to connect to server");
+  }
+}
+
+/**
+ * Get missing products for an order line item
+ * @param {string} packingId - Packing order ID
+ * @param {string} lineItemId - Order line item ID
+ * @returns {Promise<Object>} Missing products list
+ */
+export async function getMissingProducts(packingId, lineItemId) {
+  if (!packingId || !lineItemId) {
+    throw new Error("Packing ID and line item ID are required");
+  }
+
+  try {
+    // URL encode the lineItemId to handle special characters (e.g., gid://shopify/LineItem/...)
+    const encodedLineItemId = encodeURIComponent(lineItemId);
+    const response = await apiClient.get(
+      `/api/v1/fulfillment/packing/${packingId}/order-lines/${encodedLineItemId}/missing-products`
+    );
+
+    if (!response.data.success) {
+      const errorMsg = response.data.error?.message || "Failed to fetch missing products";
+      const error = new Error(errorMsg);
+      error.code = response.data.error?.code;
+      throw error;
+    }
+
+    return response.data;
+  } catch (error) {
+    if (error.response?.data?.error) {
+      const errorMsg = error.response.data.error.message;
+      const newError = new Error(errorMsg);
+      newError.code = error.response.data.error.code;
+      throw newError;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Delete a missing product from an order line item
+ * @param {string} packingId - Packing order ID
+ * @param {string} lineItemId - Order line item ID
+ * @param {string} missingProductId - Missing product ID
+ * @returns {Promise<Object>} Deletion confirmation
+ */
+export async function deleteMissingProduct(packingId, lineItemId, missingProductId) {
+  if (!packingId || !lineItemId || !missingProductId) {
+    throw new Error("Packing ID, line item ID, and missing product ID are required");
+  }
+
+  try {
+    // URL encode the lineItemId to handle special characters (e.g., gid://shopify/LineItem/...)
+    const encodedLineItemId = encodeURIComponent(lineItemId);
+    const response = await apiClient.delete(
+      `/api/v1/fulfillment/packing/${packingId}/order-lines/${encodedLineItemId}/missing-products/${missingProductId}`
+    );
+
+    if (!response.data.success) {
+      const errorMsg = response.data.error?.message || "Failed to delete missing product";
       const error = new Error(errorMsg);
       error.code = response.data.error?.code;
       throw error;

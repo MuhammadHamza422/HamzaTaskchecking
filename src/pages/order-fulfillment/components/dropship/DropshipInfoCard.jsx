@@ -10,6 +10,8 @@ export default function DropshipInfoCard({
   platform,
   status,
   deselectedItemsCount = 0,
+  fulfilledItemsCount = 0,
+  remainingItemsCount = 0,
   createdAt,
   marketplaceName,
   marketplaceOrderNumber,
@@ -48,9 +50,21 @@ export default function DropshipInfoCard({
           <StatusBadge status={status} />
         </div>
         <div>
-          <p className="text-xs font-medium text-gray-500 mb-1">Out of Stock Items</p>
+          <p className="text-xs font-medium text-gray-500 mb-1">Total Items</p>
           <p className="text-sm font-semibold text-gray-900">{deselectedItemsCount}</p>
         </div>
+        {fulfilledItemsCount > 0 && (
+          <div>
+            <p className="text-xs font-medium text-gray-500 mb-1">Fulfilled Items</p>
+            <p className="text-sm font-semibold text-green-600">{fulfilledItemsCount}</p>
+          </div>
+        )}
+        {remainingItemsCount > 0 && (
+          <div>
+            <p className="text-xs font-medium text-gray-500 mb-1">Remaining Items</p>
+            <p className="text-sm font-semibold text-amber-600">{remainingItemsCount}</p>
+          </div>
+        )}
         <div>
           <p className="text-xs font-medium text-gray-500 mb-1">Created At</p>
           <p className="text-sm font-semibold text-gray-900">

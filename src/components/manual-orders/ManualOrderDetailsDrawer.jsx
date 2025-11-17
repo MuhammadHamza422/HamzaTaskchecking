@@ -153,39 +153,40 @@ export default function ManualOrderDetailsDrawer({
               <Title level={5} className="mb-3">Customer Information</Title>
               <Descriptions column={1} size="small">
                 <Descriptions.Item label="Username">
-                  <Text>{orderDetails.data.customerUsername}</Text>
+                  {/* show shipping name if customer username is not available */}
+                  <Text>{orderDetails?.data?.customerUsername || orderDetails?.data?.shipTo?.name}</Text>
                 </Descriptions.Item>
                 <Descriptions.Item label="Email">
-                  <Text>{orderDetails.data.customerEmail}</Text>
+                  <Text>{orderDetails?.data?.customerEmail || orderDetails?.data?.shipTo?.email}</Text>
                 </Descriptions.Item>
                 {orderDetails.data.requestedShippingService && (
                   <Descriptions.Item label="Shipping Service Request">
-                    <Text>{orderDetails.data.requestedShippingService}</Text>
+                    <Text>{orderDetails?.data?.requestedShippingService || orderDetails?.data?.shipTo?.shippingServiceRequest}</Text>
                   </Descriptions.Item>
                 )}
               </Descriptions>
             </div>
 
             {/* Shipping Information */}
-            {orderDetails.data.shipTo && (
+            {orderDetails?.data?.shipTo && (
               <div className="bg-white border border-gray-200 p-4 rounded-lg">
                 <Title level={5} className="mb-3">Shipping Address</Title>
                 <Descriptions column={1} size="small">
                   <Descriptions.Item label="Name">
-                    <Text>{orderDetails.data.shipTo.name}</Text>
+                    <Text>{orderDetails?.data?.shipTo?.name || "N/A"}</Text>
                   </Descriptions.Item>
                   {orderDetails.data.shipTo.company && (
                     <Descriptions.Item label="Company">
-                      <Text>{orderDetails.data.shipTo.company}</Text>
+                      <Text>{orderDetails?.data?.shipTo?.company || "N/A"}</Text>
                     </Descriptions.Item>
                   )}
                   <Descriptions.Item label="Address">
                     <div>
-                      <div>{orderDetails.data.shipTo.street1}</div>
+                      <div>{orderDetails?.data?.shipTo?.street1 || "N/A"}</div>
                       {orderDetails.data.shipTo.street2 && (
-                        <div>{orderDetails.data.shipTo.street2}</div>
+                        <div>{orderDetails?.data?.shipTo?.street2 || "N/A"}</div>
                       )}
-                      {orderDetails.data.shipTo.street3 && (
+                      {orderDetails?.data?.shipTo?.street3 && (
                         <div>{orderDetails.data.shipTo.street3}</div>
                       )}
                     </div>

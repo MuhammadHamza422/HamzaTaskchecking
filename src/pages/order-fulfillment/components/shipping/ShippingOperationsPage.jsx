@@ -1,6 +1,12 @@
+import { useEffect } from "react";
 import { Truck } from "lucide-react";
 
 export default function ShippingOperationsPage() {
+  // Scroll to top on mount
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
   return (
     <div className="min-h-[60vh] flex items-center justify-center bg-gray-50">
       <div className="text-center">
