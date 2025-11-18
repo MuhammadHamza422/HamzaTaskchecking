@@ -1,21 +1,45 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import Quagga from "quagga";
+import Webcam from "react-webcam";
 import { X, Search } from "lucide-react";
 import { searchOrder } from "../../../../api/fulfillment";
 import Swal from "sweetalert2";
 
+// Mobile-friendly video constraints
+const getVideoConstraints = () => {
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  
+  if (isMobile) {
+    // Mobile: Use more flexible constraints
+    return {
+      width: { min: 320, ideal: 640, max: 1280 },
+      height: { min: 240, ideal: 480, max: 720 },
+      facingMode: { ideal: "environment" },
+    };
+  }
+  
+  // Desktop: Higher resolution
+  return {
+    width: { ideal: 1280 },
+    height: { ideal: 720 },
+    facingMode: { ideal: "environment" },
+  };
+};
+
 export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, onClose }) {
   const scannerRef = useRef(null);
   const canvasRef = useRef(null);
+  const webcamRef = useRef(null);
   const [isScanning, setIsScanning] = useState(false);
   const [detectedBoxes, setDetectedBoxes] = useState([]);
   const [validatedBox, setValidatedBox] = useState(null);
   const [isValidating, setIsValidating] = useState(false);
   const lastScannedCodeRef = useRef("");
   const validationTimeoutRef = useRef(null);
+  const processingIntervalRef = useRef(null);
 
   // Play success sound
-  const playSuccessSound = () => {
+  const playSuccessSound = useCallback(() => {
     try {
       // Try to play audio file first, fallback to Web Audio API
       const audio = new Audio("/sounds/success-beep.mp3");
@@ -62,26 +86,36 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
         console.error("Fallback sound also failed:", fallbackError);
       }
     }
-  };
+  }, []);
+
+  // Stop webcam stream
+  const stopWebcamStream = useCallback(() => {
+    if (webcamRef.current?.video?.srcObject) {
+      const stream = webcamRef.current.video.srcObject;
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+      webcamRef.current.video.srcObject = null;
+    }
+  }, []);
 
   // Draw boxes on canvas overlay
-  const drawBoxes = (boxes, color = "red") => {
-    if (!canvasRef.current || !scannerRef.current) return;
+  const drawBoxes = useCallback((boxes, color = "red") => {
+    if (!canvasRef.current || !webcamRef.current?.video) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
-    const video = scannerRef.current?.querySelector("video");
-    const drawingCanvas = scannerRef.current?.querySelector("canvas.drawingBuffer");
+    const video = webcamRef.current.video;
 
-    if (!video && !drawingCanvas) return;
+    if (!video || video.readyState !== video.HAVE_ENOUGH_DATA) return;
 
     // Get the displayed video dimensions (what user sees)
-    const displayedWidth = video.clientWidth || scannerRef.current.clientWidth;
-    const displayedHeight = video.clientHeight || scannerRef.current.clientHeight;
+    const displayedWidth = video.clientWidth || scannerRef.current?.clientWidth || video.videoWidth;
+    const displayedHeight = video.clientHeight || scannerRef.current?.clientHeight || video.videoHeight;
 
     // Get the native video dimensions (actual video resolution)
-    const nativeWidth = video.videoWidth || drawingCanvas?.width || displayedWidth;
-    const nativeHeight = video.videoHeight || drawingCanvas?.height || displayedHeight;
+    const nativeWidth = video.videoWidth || displayedWidth;
+    const nativeHeight = video.videoHeight || displayedHeight;
 
     // Calculate scale factors
     const scaleX = displayedWidth / nativeWidth;
@@ -123,247 +157,214 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
         ctx.shadowBlur = 0; // Reset shadow
       }
     });
-  };
+  }, []);
 
-  useEffect(() => {
-    if (!scannerRef.current) return;
+  // Process video frame with Quagga
+  const processFrame = useCallback(() => {
+    if (!webcamRef.current?.video || isValidating) return;
 
-    const config = {
-      inputStream: {
-        name: "Live",
-        type: "LiveStream",
-        target: scannerRef.current,
-        constraints: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          facingMode: "environment", // Back camera
+    const video = webcamRef.current.video;
+    if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
+
+    try {
+      Quagga.decodeSingle(
+        {
+          decoder: {
+            readers: [
+              "code_128_reader",
+              "ean_reader",
+              "ean_8_reader",
+              "code_39_reader",
+              "code_39_vin_reader",
+              "codabar_reader",
+              "upc_reader",
+              "upc_e_reader",
+              "i2of5_reader",
+            ],
+          },
+          locate: true,
+          src: video,
         },
-      },
-      locator: {
-        patchSize: "medium",
-        halfSample: true,
-      },
-      numOfWorkers: 2,
-      decoder: {
-        readers: [
-          "code_128_reader",
-          "ean_reader",
-          "ean_8_reader",
-          "code_39_reader",
-          "code_39_vin_reader",
-          "codabar_reader",
-          "upc_reader",
-          "upc_e_reader",
-          "i2of5_reader",
-        ],
-      },
-      locate: true,
-    };
+        (result) => {
+          if (result && result.codeResult && result.codeResult.code) {
+            const code = result.codeResult.code;
+            const box = result.codeResult.box;
 
-    Quagga.init(config, (err) => {
-      if (err) {
-        console.error("Error initializing QuaggaJS:", err);
-        Swal.fire({
-          icon: "error",
-          title: "Camera Error",
-          text: "Failed to access camera. Please check permissions.",
-          confirmButtonColor: "#2563eb",
-        });
-        if (onClose) onClose();
-        return;
-      }
+            // Avoid processing the same code multiple times
+            if (code === lastScannedCodeRef.current || isValidating) {
+              // Still draw red box for visual feedback
+              if (box && box.length === 4 && !validatedBox) {
+                drawBoxes([box], "red");
+              }
+              return;
+            }
 
-      // Ensure video element fills container after Quagga initializes
-      setTimeout(() => {
-        const container = scannerRef.current;
-        if (container) {
-          const video = container.querySelector('video');
-          const drawingBuffer = container.querySelector('canvas.drawingBuffer');
-          if (video) {
-            video.style.width = '100%';
-            video.style.height = '100%';
-            video.style.objectFit = 'cover';
-            video.style.position = 'absolute';
-            video.style.top = '0';
-            video.style.left = '0';
-          }
-          if (drawingBuffer) {
-            drawingBuffer.style.width = '100%';
-            drawingBuffer.style.height = '100%';
-            drawingBuffer.style.position = 'absolute';
-            drawingBuffer.style.top = '0';
-            drawingBuffer.style.left = '0';
-          }
-        }
-      }, 100);
+            lastScannedCodeRef.current = code;
 
-      setIsScanning(true);
-      Quagga.start();
+            // Clear previous validation timeout
+            if (validationTimeoutRef.current) {
+              clearTimeout(validationTimeoutRef.current);
+            }
 
-      // Handle detection
-      Quagga.onDetected((result) => {
-        const code = result.codeResult.code;
-        const box = result.codeResult.box;
+            // Show red box for detected barcode
+            if (box && box.length === 4) {
+              setDetectedBoxes([box]);
+              drawBoxes([box], "red");
+            }
 
-        // Avoid processing the same code multiple times
-        if (code === lastScannedCodeRef.current || isValidating) {
-          return;
-        }
+            // Debounce validation
+            validationTimeoutRef.current = setTimeout(async () => {
+              setIsValidating(true);
+              
+              try {
+                const searchResult = await searchOrder(code.trim());
 
-        lastScannedCodeRef.current = code;
+                if (searchResult.success && searchResult.data) {
+                  const { isAlreadyPacked, packingInfo } = searchResult.data;
 
-        // Clear previous validation timeout
-        if (validationTimeoutRef.current) {
-          clearTimeout(validationTimeoutRef.current);
-        }
+                  // Check if already packed
+                  if (isAlreadyPacked && packingInfo) {
+                    setIsValidating(false);
+                    setDetectedBoxes([]);
+                    setValidatedBox(null);
+                    
+                    await Swal.fire({
+                      icon: "warning",
+                      title: "Order Already Packed",
+                      html: `
+                        <div class="text-left">
+                          <p class="mb-4 text-gray-700">This order has already been packed.</p>
+                          <div class="bg-gray-50 rounded-lg p-4 mb-4">
+                            <p class="text-sm"><span class="font-medium">Packing ID:</span> ${packingInfo.packingId || "N/A"}</p>
+                            <p class="text-sm"><span class="font-medium">Status:</span> ${packingInfo.status || "N/A"}</p>
+                          </div>
+                        </div>
+                      `,
+                      confirmButtonColor: "#2563eb",
+                      confirmButtonText: "OK",
+                    });
+                    
+                    // Continue scanning
+                    lastScannedCodeRef.current = "";
+                    return;
+                  }
 
-        // Show red box for detected barcode
-        if (box && box.length === 4) {
-          setDetectedBoxes([box]);
-          drawBoxes([box], "red");
-        }
+                  // Success - show green box and play sound
+                  if (box && box.length === 4) {
+                    setValidatedBox(box);
+                    drawBoxes([box], "green");
+                    playSuccessSound();
+                  }
 
-        // Debounce validation
-        validationTimeoutRef.current = setTimeout(async () => {
-          setIsValidating(true);
-          
-          try {
-            const searchResult = await searchOrder(code.trim());
-
-            if (searchResult.success && searchResult.data) {
-              const { isAlreadyPacked, packingInfo } = searchResult.data;
-
-              // Check if already packed
-              if (isAlreadyPacked && packingInfo) {
+                  // Call success handler
+                  if (onScanSuccess) {
+                    setIsValidating(false);
+                    // Stop processing and release camera before navigating
+                    if (processingIntervalRef.current) {
+                      clearInterval(processingIntervalRef.current);
+                      processingIntervalRef.current = null;
+                    }
+                    stopWebcamStream();
+                    // Clear canvas
+                    if (canvasRef.current) {
+                      const ctx = canvasRef.current.getContext("2d");
+                      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+                    }
+                    onScanSuccess(code, searchResult.data);
+                  }
+                }
+              } catch (error) {
+                console.error("Error validating barcode:", error);
                 setIsValidating(false);
                 setDetectedBoxes([]);
                 setValidatedBox(null);
                 
-                await Swal.fire({
-                  icon: "warning",
-                  title: "Order Already Packed",
-                  html: `
-                    <div class="text-left">
-                      <p class="mb-4 text-gray-700">This order has already been packed.</p>
-                      <div class="bg-gray-50 rounded-lg p-4 mb-4">
-                        <p class="text-sm"><span class="font-medium">Packing ID:</span> ${packingInfo.packingId || "N/A"}</p>
-                        <p class="text-sm"><span class="font-medium">Status:</span> ${packingInfo.status || "N/A"}</p>
-                      </div>
-                    </div>
-                  `,
+                Swal.fire({
+                  icon: "error",
+                  title: "Order Not Found",
+                  text: error.message || "No order found with this barcode.",
                   confirmButtonColor: "#2563eb",
                   confirmButtonText: "OK",
                 });
                 
                 // Continue scanning
                 lastScannedCodeRef.current = "";
-                return;
               }
-
-              // Success - show green box and play sound
-              if (box && box.length === 4) {
-                setValidatedBox(box);
-                drawBoxes([box], "green");
-                playSuccessSound();
-              }
-
-              // Call success handler
-              if (onScanSuccess) {
-                setIsValidating(false);
-                // Stop Quagga and release camera before navigating
-                try {
-                  Quagga.stop();
-                  Quagga.offDetected();
-                  Quagga.offProcessed();
-                } catch (error) {
-                  console.error("Error stopping Quagga:", error);
-                }
-                // Clear canvas
-                if (canvasRef.current) {
-                  const ctx = canvasRef.current.getContext("2d");
-                  ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-                }
-                onScanSuccess(code, searchResult.data);
+            }, 500);
+          } else {
+            // No barcode detected - clear red boxes if not showing validated box
+            if (!validatedBox && !isValidating) {
+              setDetectedBoxes([]);
+              if (canvasRef.current) {
+                const ctx = canvasRef.current.getContext("2d");
+                ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
               }
             }
-          } catch (error) {
-            console.error("Error validating barcode:", error);
-            setIsValidating(false);
-            setDetectedBoxes([]);
-            setValidatedBox(null);
-            
-            Swal.fire({
-              icon: "error",
-              title: "Order Not Found",
-              text: error.message || "No order found with this barcode.",
-              confirmButtonColor: "#2563eb",
-              confirmButtonText: "OK",
-            });
-            
-            // Continue scanning
-            lastScannedCodeRef.current = "";
           }
-        }, 500);
-      });
-
-      // Handle process result for drawing boxes
-      Quagga.onProcessed((result) => {
-        if (!validatedBox && !isValidating) {
-          // Use requestAnimationFrame for smoother rendering
-          requestAnimationFrame(() => {
-            if (result && result.codeResult && result.codeResult.box) {
-              const box = result.codeResult.box;
-              if (box && box.length === 4) {
-                setDetectedBoxes([box]);
-                drawBoxes([box], "red");
-              }
-            } else {
-              // Clear boxes if no detection (but only if we're not showing a validated box)
-              if (!validatedBox) {
-                setDetectedBoxes([]);
-                if (canvasRef.current) {
-                  const ctx = canvasRef.current.getContext("2d");
-                  ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-                }
-              }
-            }
-          });
         }
-      });
-    });
+      );
+    } catch (error) {
+      console.error("Error processing frame:", error);
+    }
+  }, [isValidating, validatedBox, onScanSuccess, stopWebcamStream, drawBoxes, playSuccessSound]);
+
+  // Initialize Quagga and start processing
+  useEffect(() => {
+    if (!webcamRef.current) return;
+
+    const video = webcamRef.current.video;
+    if (!video) return;
+
+    // Detect mobile device for performance optimization
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    // Mobile: Process less frequently to save battery/CPU, Desktop: More frequent for better UX
+    const processingInterval = isMobile ? 200 : 100; // Mobile: 200ms, Desktop: 100ms
+
+    // Wait for video to be ready
+    const handleVideoReady = () => {
+      setIsScanning(true);
+      
+      // Start processing frames periodically
+      processingIntervalRef.current = setInterval(() => {
+        processFrame();
+      }, processingInterval);
+    };
+
+    if (video.readyState >= video.HAVE_METADATA) {
+      handleVideoReady();
+    } else {
+      video.addEventListener("loadedmetadata", handleVideoReady, { once: true });
+    }
 
     return () => {
-      // Properly stop Quagga and release camera
-      try {
-        Quagga.stop();
-        Quagga.offDetected();
-        Quagga.offProcessed();
-      } catch (error) {
-        console.error("Error stopping Quagga:", error);
+      // Cleanup
+      if (processingIntervalRef.current) {
+        clearInterval(processingIntervalRef.current);
+        processingIntervalRef.current = null;
       }
       if (validationTimeoutRef.current) {
         clearTimeout(validationTimeoutRef.current);
       }
+      stopWebcamStream();
       // Clear canvas
       if (canvasRef.current) {
         const ctx = canvasRef.current.getContext("2d");
         ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
       }
     };
-  }, [validatedBox, isValidating]);
+  }, [processFrame, stopWebcamStream]);
 
   const handleClose = () => {
-    // Properly stop Quagga and release camera
-    try {
-      Quagga.stop();
-      Quagga.offDetected();
-      Quagga.offProcessed();
-    } catch (error) {
-      console.error("Error stopping Quagga:", error);
+    // Stop processing
+    if (processingIntervalRef.current) {
+      clearInterval(processingIntervalRef.current);
+      processingIntervalRef.current = null;
     }
     if (validationTimeoutRef.current) {
       clearTimeout(validationTimeoutRef.current);
     }
+    // Stop webcam stream
+    stopWebcamStream();
     // Clear canvas
     if (canvasRef.current) {
       const ctx = canvasRef.current.getContext("2d");
@@ -395,7 +396,25 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
       </div>
 
       {/* Scanner Container */}
-      <div ref={scannerRef} className="quagga-scanner-container flex-1 flex items-center justify-center w-full h-full relative overflow-hidden">
+      <div ref={scannerRef} className="flex-1 flex items-center justify-center w-full h-full relative overflow-hidden">
+        {/* Webcam video feed */}
+        <Webcam
+          audio={false}
+          ref={webcamRef}
+          videoConstraints={getVideoConstraints()}
+          className="absolute inset-0 w-full h-full object-cover"
+          playsInline
+          mirrored={false}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+          }}
+        />
+        {/* Canvas overlay for drawing barcode boxes */}
         <canvas
           ref={canvasRef}
           className="absolute inset-0 pointer-events-none z-10"
@@ -409,22 +428,6 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
           }}
         />
       </div>
-      {/* Global styles for Quagga video to fill full width */}
-      <style>{`
-        .quagga-scanner-container video,
-        .quagga-scanner-container canvas.drawingBuffer {
-          width: 100% !important;
-          height: 100% !important;
-          object-fit: cover !important;
-          position: absolute !important;
-          top: 0 !important;
-          left: 0 !important;
-        }
-        .quagga-scanner-container > div {
-          width: 100% !important;
-          height: 100% !important;
-        }
-      `}</style>
 
       {/* Status Bar */}
       <div className="absolute bottom-0 left-0 right-0 z-20 bg-black/70 backdrop-blur-sm p-4">

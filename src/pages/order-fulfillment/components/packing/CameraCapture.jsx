@@ -936,106 +936,128 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
       )}
 
       {mode === "edit" && currentImage && (
-        <div className="flex-1 flex flex-col bg-black overflow-hidden">
-          {/* Fixed rotate controls - always visible at top */}
-          <div className="sticky top-0 z-40 bg-black/95 backdrop-blur-md border-b border-white/10 p-3">
-            <div className="max-w-4xl mx-auto">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-white">
-                  <RotateCw className="w-5 h-5" />
-                  <span className="text-sm font-medium">Rotate</span>
+        <>
+          {/* Custom styles for ReactCrop centering */}
+          <style>{`
+            .ReactCrop {
+              display: flex !important;
+              align-items: center !important;
+              justify-content: center !important;
+              width: 100% !important;
+            }
+            .ReactCrop__crop-selection {
+              margin: 0 auto !important;
+            }
+            .ReactCrop__image {
+              max-width: 100% !important;
+              height: auto !important;
+              display: block !important;
+              margin: 0 auto !important;
+            }
+          `}</style>
+          <div className="flex-1 flex flex-col bg-black overflow-hidden">
+            {/* Fixed rotate controls - always visible at top */}
+            <div className="sticky top-0 z-40 bg-black/95 backdrop-blur-md border-b border-white/10 p-3">
+              <div className="max-w-4xl mx-auto">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-white">
+                    <RotateCw className="w-5 h-5" />
+                    <span className="text-sm font-medium">Rotate</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => rotateImage("left")}
+                      className="p-3 bg-white/20 hover:bg-white/30 rounded-lg text-white transition-colors active:scale-95 shadow-lg"
+                      aria-label="Rotate left"
+                    >
+                      <RotateCcw className="w-6 h-6" />
+                    </button>
+                    <button
+                      onClick={() => rotateImage("right")}
+                      className="p-3 bg-white/20 hover:bg-white/30 rounded-lg text-white transition-colors active:scale-95 shadow-lg"
+                      aria-label="Rotate right"
+                    >
+                      <RotateCw className="w-6 h-6" />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex gap-2">
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto flex items-center justify-center p-0 sm:p-4 pb-20">
+              <div className="w-full max-w-4xl mx-auto flex flex-col items-center justify-center min-h-full">
+                <div className="w-full flex items-center justify-center bg-black/60 backdrop-blur-sm rounded-none sm:rounded-lg p-1 sm:p-4 mb-1 sm:mb-4">
+                  <div className="w-full flex items-center justify-center">
+                    <ReactCrop
+                      crop={crop}
+                      onChange={(c) => setCrop(c)}
+                      onComplete={(c) => setCompletedCrop(c)}
+                      aspect={undefined}
+                      minWidth={50}
+                      minHeight={50}
+                    >
+                      <img
+                        ref={imgRef}
+                        src={currentImage}
+                        alt="Crop me"
+                        onLoad={onImageLoad}
+                        className="w-full h-auto max-h-[calc(100vh-200px)] sm:max-h-[70vh] object-contain"
+                        style={{
+                          display: "block",
+                          transform: `rotate(${rotation}deg)`,
+                          transition: "transform 0.3s",
+                          margin: "0 auto",
+                        }}
+                      />
+                    </ReactCrop>
+                  </div>
+                </div>
+
+                <div className="w-full bg-black/60 backdrop-blur-sm rounded-none sm:rounded-lg p-2 sm:p-3">
+                  <p className="text-white text-xs sm:text-sm text-center">
+                    Drag the corners to crop the image
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Fixed bottom button bar - icon-only with better visibility */}
+            <div className="fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-md border-t border-white/10 p-3 z-50">
+              <div className="max-w-4xl mx-auto">
+                <div className="flex items-center justify-center gap-4">
                   <button
-                    onClick={() => rotateImage("left")}
-                    className="p-3 bg-white/20 hover:bg-white/30 rounded-lg text-white transition-colors active:scale-95 shadow-lg"
-                    aria-label="Rotate left"
+                    onClick={retakeCurrent}
+                    className="flex flex-col items-center justify-center gap-1 p-3 bg-gray-700/90 hover:bg-gray-600 rounded-full text-white transition-all duration-200 shadow-lg active:scale-95 min-w-[70px]"
+                    title="Retake"
                   >
                     <RotateCcw className="w-6 h-6" />
+                    <span className="text-xs font-medium">Retake</span>
                   </button>
-                  <button
-                    onClick={() => rotateImage("right")}
-                    className="p-3 bg-white/20 hover:bg-white/30 rounded-lg text-white transition-colors active:scale-95 shadow-lg"
-                    aria-label="Rotate right"
-                  >
-                    <RotateCw className="w-6 h-6" />
-                  </button>
+                  {canAddPhoto && (
+                    <button
+                      onClick={addPhoto}
+                      className="flex flex-col items-center justify-center gap-1 p-3 bg-blue-600/90 hover:bg-blue-700 rounded-full text-white transition-all duration-200 shadow-lg active:scale-95 min-w-[70px]"
+                      title="Add Photo"
+                    >
+                      <Plus className="w-6 h-6" />
+                      <span className="text-xs font-medium">Add</span>
+                    </button>
+                  )}
+                  {canSaveAll && (
+                    <button
+                      onClick={saveAllPhotos}
+                      className="flex flex-col items-center justify-center gap-1 p-3 bg-green-600/90 hover:bg-green-700 rounded-full text-white transition-all duration-200 shadow-lg active:scale-95 min-w-[70px]"
+                      title={`Save All (${totalPhotosToSave})`}
+                    >
+                      <Check className="w-6 h-6" />
+                      <span className="text-xs font-medium">Save ({totalPhotosToSave})</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
           </div>
-
-          <div className="flex-1 overflow-y-auto p-4 pb-20">
-            <div className="max-w-4xl mx-auto">
-              <div className="bg-black/60 backdrop-blur-sm rounded-lg p-4 mb-4">
-                <ReactCrop
-                  crop={crop}
-                  onChange={(c) => setCrop(c)}
-                  onComplete={(c) => setCompletedCrop(c)}
-                  aspect={undefined}
-                  minWidth={50}
-                  minHeight={50}
-                >
-                  <img
-                    ref={imgRef}
-                    src={currentImage}
-                    alt="Crop me"
-                    onLoad={onImageLoad}
-                    style={{
-                      maxWidth: "100%",
-                      maxHeight: "60vh",
-                      display: "block",
-                      transform: `rotate(${rotation}deg)`,
-                      transition: "transform 0.3s",
-                    }}
-                  />
-                </ReactCrop>
-              </div>
-
-              <div className="bg-black/60 backdrop-blur-sm rounded-lg p-4">
-                <p className="text-white text-xs text-center">
-                  Drag the corners to crop the image
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Fixed bottom button bar - icon-only with better visibility */}
-          <div className="fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-md border-t border-white/10 p-3 z-50">
-            <div className="max-w-4xl mx-auto">
-              <div className="flex items-center justify-center gap-4">
-                <button
-                  onClick={retakeCurrent}
-                  className="flex flex-col items-center justify-center gap-1 p-3 bg-gray-700/90 hover:bg-gray-600 rounded-full text-white transition-all duration-200 shadow-lg active:scale-95 min-w-[70px]"
-                  title="Retake"
-                >
-                  <RotateCcw className="w-6 h-6" />
-                  <span className="text-xs font-medium">Retake</span>
-                </button>
-                {canAddPhoto && (
-                  <button
-                    onClick={addPhoto}
-                    className="flex flex-col items-center justify-center gap-1 p-3 bg-blue-600/90 hover:bg-blue-700 rounded-full text-white transition-all duration-200 shadow-lg active:scale-95 min-w-[70px]"
-                    title="Add Photo"
-                  >
-                    <Plus className="w-6 h-6" />
-                    <span className="text-xs font-medium">Add</span>
-                  </button>
-                )}
-                {canSaveAll && (
-                  <button
-                    onClick={saveAllPhotos}
-                    className="flex flex-col items-center justify-center gap-1 p-3 bg-green-600/90 hover:bg-green-700 rounded-full text-white transition-all duration-200 shadow-lg active:scale-95 min-w-[70px]"
-                    title={`Save All (${totalPhotosToSave})`}
-                  >
-                    <Check className="w-6 h-6" />
-                    <span className="text-xs font-medium">Save ({totalPhotosToSave})</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        </>
       )}
     </div>
   );

@@ -492,9 +492,40 @@ export default function PackingOrderDetails() {
     const deselectedItems = allItemIds.filter(
       (id) => !selectedItemsNormalized.includes(String(id))
     );
-    const deselectedItemsData = orderLines.filter((item) =>
-      deselectedItems.includes(String(item.id))
-    );
+    
+    // Transform deselectedItemsData to match API specification
+    // Each item must have: id, name, quantity, price (required)
+    // Optional: total, productId, sku, variant, image
+    const deselectedItemsData = orderLines
+      .filter((item) => deselectedItems.includes(String(item.id)))
+      .map((item) => {
+        // Calculate total if not present
+        const total = item.total ?? (item.quantity && item.price ? item.quantity * item.price : 0);
+        
+        // Normalize variant: ensure it's an object or null, not a string
+        let normalizedVariant = null;
+        if (item.variant) {
+          if (typeof item.variant === 'object' && item.variant !== null) {
+            normalizedVariant = item.variant;
+          } else if (typeof item.variant === 'string' && item.variant.trim() !== '') {
+            // If variant is a string, convert to object or set to null
+            normalizedVariant = null; // Backend expects object or null
+          }
+        }
+        
+        return {
+          id: String(item.id), // Required - must match deselectedItems ID
+          name: item.name || "", // Required
+          quantity: Number(item.quantity) || 1, // Required
+          price: Number(item.price) || 0, // Required
+          total: Number(total), // Optional (calculated if missing)
+          productId: item.productId || "", // Optional (empty string if missing)
+          sku: item.sku || "", // Optional (empty string if missing)
+          variant: normalizedVariant, // Optional (object or null, not string)
+          image: item.image || null, // Optional (null if missing)
+        };
+      });
+    
     const photoFiles = photos.map((photo) => photo.file);
 
     // Debug logging
@@ -506,6 +537,9 @@ export default function PackingOrderDetails() {
       deselectedItemsData: deselectedItemsData.map((item) => ({
         id: item.id,
         name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+        total: item.total,
       })),
     });
 
@@ -541,16 +575,28 @@ export default function PackingOrderDetails() {
 
       if (result.success) {
         const status = result.data.status;
-        const dropshipCreated = result.data.dropshipCreated;
-        const dropshipId = result.data.dropshipId;
-        const deselectedItemsCount =
-          result.data.deselectedItemsCount || deselectedItems.length;
+        const dropshipCreated = result.data.dropshipCreated; // Can be true, false, or undefined
+        const dropshipId = result.data.dropshipId; // Only present if dropshipCreated is true
+        const deselectedItemsCount = result.data.deselectedItemsCount || 0;
+        const missingProductsCount = result.data.missingProductsCount || 0;
 
         let message = `Order ${orderNumber} has been packed successfully. Status: ${status}`;
-        if (dropshipCreated && dropshipId) {
-          message += `. Dropship order ${dropshipId} created for ${deselectedItemsCount} deselected item(s).`;
-        } else if (deselectedItemsCount > 0) {
-          message += `. ${deselectedItemsCount} item(s) were deselected but dropship creation failed.`;
+        
+        // Handle dropship creation status
+        if (deselectedItemsCount > 0) {
+          if (dropshipCreated === true && dropshipId) {
+            message += ` Dropship order ${dropshipId} created for ${deselectedItemsCount} deselected item(s).`;
+          } else if (dropshipCreated === false) {
+            message += ` ${deselectedItemsCount} item(s) were deselected but dropship creation failed.`;
+          } else {
+            // dropshipCreated is undefined (shouldn't happen if deselectedItemsCount > 0, but handle it)
+            message += ` ${deselectedItemsCount} item(s) were deselected.`;
+          }
+        }
+        
+        // Handle missing products count
+        if (missingProductsCount > 0) {
+          message += ` ${missingProductsCount} missing product(s) recorded.`;
         }
 
         await Swal.fire({
