@@ -1,16 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import Quagga from "quagga";
-import { X, Search } from "lucide-react";
+import { X, Search, Keyboard } from "lucide-react";
 import { searchOrder } from "../../../../api/fulfillment";
 import Swal from "sweetalert2";
 
-export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, onClose }) {
+export default function QuaggaBarcodeScanner({
+  onScanSuccess,
+  onManualSearch,
+  onClose,
+}) {
   const scannerRef = useRef(null);
   const canvasRef = useRef(null);
+  const frameCanvasRef = useRef(null);
   const [isScanning, setIsScanning] = useState(false);
   const [detectedBoxes, setDetectedBoxes] = useState([]);
   const [validatedBox, setValidatedBox] = useState(null);
   const [isValidating, setIsValidating] = useState(false);
+  const [scannedCode, setScannedCode] = useState("");
   const lastScannedCodeRef = useRef("");
   const validationTimeoutRef = useRef(null);
   const resizeTimeoutRef = useRef(null);
@@ -23,7 +29,8 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
       audio.volume = 0.5;
       audio.play().catch((err) => {
         // Fallback to Web Audio API
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const audioContext = new (window.AudioContext ||
+          window.webkitAudioContext)();
         const oscillator = audioContext.createOscillator();
         const gainNode = audioContext.createGain();
 
@@ -34,7 +41,10 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
         oscillator.type = "sine";
 
         gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+        gainNode.gain.exponentialRampToValueAtTime(
+          0.01,
+          audioContext.currentTime + 0.3
+        );
 
         oscillator.start(audioContext.currentTime);
         oscillator.stop(audioContext.currentTime + 0.3);
@@ -43,7 +53,8 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
       console.error("Error playing sound:", error);
       // Final fallback - try Web Audio API directly
       try {
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const audioContext = new (window.AudioContext ||
+          window.webkitAudioContext)();
         const oscillator = audioContext.createOscillator();
         const gainNode = audioContext.createGain();
 
@@ -54,7 +65,10 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
         oscillator.type = "sine";
 
         gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+        gainNode.gain.exponentialRampToValueAtTime(
+          0.01,
+          audioContext.currentTime + 0.3
+        );
 
         oscillator.start(audioContext.currentTime);
         oscillator.stop(audioContext.currentTime + 0.3);
@@ -79,7 +93,9 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
     const video = scannerRef.current?.querySelector("video");
-    const drawingCanvas = scannerRef.current?.querySelector("canvas.drawingBuffer");
+    const drawingCanvas = scannerRef.current?.querySelector(
+      "canvas.drawingBuffer"
+    );
 
     // Retry if video element not ready yet
     if (!video && !drawingCanvas) {
@@ -93,7 +109,8 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
 
     // Get container dimensions
     const containerWidth = scannerRef.current.clientWidth || window.innerWidth;
-    const containerHeight = scannerRef.current.clientHeight || window.innerHeight;
+    const containerHeight =
+      scannerRef.current.clientHeight || window.innerHeight;
 
     // Get the displayed video dimensions (what user sees)
     const displayedWidth = video?.clientWidth || containerWidth;
@@ -103,18 +120,28 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
     // Use drawingCanvas dimensions if video dimensions not available
     let nativeWidth = video?.videoWidth || 0;
     let nativeHeight = video?.videoHeight || 0;
-    
+
     if (nativeWidth === 0 || nativeHeight === 0) {
       nativeWidth = drawingCanvas?.width || displayedWidth;
       nativeHeight = drawingCanvas?.height || displayedHeight;
     }
 
     // Ensure we have valid dimensions
-    if (displayedWidth === 0 || displayedHeight === 0 || nativeWidth === 0 || nativeHeight === 0) {
+    if (
+      displayedWidth === 0 ||
+      displayedHeight === 0 ||
+      nativeWidth === 0 ||
+      nativeHeight === 0
+    ) {
       if (retryCount < 10) {
         setTimeout(() => drawBoxes(boxes, color, retryCount + 1), 50);
       } else {
-        console.warn("drawBoxes: Invalid dimensions", { displayedWidth, displayedHeight, nativeWidth, nativeHeight });
+        console.warn("drawBoxes: Invalid dimensions", {
+          displayedWidth,
+          displayedHeight,
+          nativeWidth,
+          nativeHeight,
+        });
       }
       return;
     }
@@ -124,11 +151,16 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
     // The video element itself is sized to the container, but the video content is scaled/cropped
     const containerAspect = containerWidth / containerHeight;
     const videoAspect = nativeWidth / nativeHeight;
-    
+
     let scaleX, scaleY, videoOffsetX, videoOffsetY;
-    
+
     // Handle edge cases (avoid division by zero, invalid aspect ratios)
-    if (isNaN(containerAspect) || isNaN(videoAspect) || containerAspect <= 0 || videoAspect <= 0) {
+    if (
+      isNaN(containerAspect) ||
+      isNaN(videoAspect) ||
+      containerAspect <= 0 ||
+      videoAspect <= 0
+    ) {
       // Fallback to simple scaling if aspect ratio calculation fails
       scaleX = containerWidth / nativeWidth;
       scaleY = containerHeight / nativeHeight;
@@ -167,7 +199,7 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
     canvas.style.zIndex = "100";
     canvas.style.pointerEvents = "none";
     canvas.style.backgroundColor = "transparent";
-    
+
     // Scale context to account for device pixel ratio
     ctx.scale(devicePixelRatio, devicePixelRatio);
 
@@ -185,7 +217,7 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
       let points = [];
       if (Array.isArray(box) && box.length === 4) {
         points = box.map((point) => {
-          if (typeof point === 'object' && point !== null) {
+          if (typeof point === "object" && point !== null) {
             // Point is an object with x, y properties
             return {
               x: point.x || 0,
@@ -208,14 +240,14 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
       ctx.strokeStyle = color;
       ctx.lineWidth = color === "green" ? 4 : 3; // Thicker line for success
       ctx.beginPath();
-      
+
       // Transform coordinates:
       // 1. Scale from native video size to visible video size
       // 2. Offset to account for video positioning (centering due to object-fit: cover)
       // Note: ctx.scale() already handles device pixel ratio, so we use container dimensions directly
       const scaledPoints = points.map((point) => ({
-        x: (point.x * scaleX) + videoOffsetX,
-        y: (point.y * scaleY) + videoOffsetY,
+        x: point.x * scaleX + videoOffsetX,
+        y: point.y * scaleY + videoOffsetY,
       }));
 
       ctx.moveTo(scaledPoints[0].x, scaledPoints[0].y);
@@ -233,18 +265,18 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
         ctx.shadowBlur = 0; // Reset shadow
       }
 
-      console.log("drawBoxes: Drew box", { 
-        color, 
-        points, 
-        scaledPoints, 
-        scaleX, 
-        scaleY, 
-        videoOffsetX, 
+      console.log("drawBoxes: Drew box", {
+        color,
+        points,
+        scaledPoints,
+        scaleX,
+        scaleY,
+        videoOffsetX,
         videoOffsetY,
         nativeWidth,
         nativeHeight,
         containerWidth,
-        containerHeight
+        containerHeight,
       });
     });
   };
@@ -307,27 +339,27 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
         }
 
         if (container) {
-          const video = container.querySelector('video');
-          const drawingBuffer = container.querySelector('canvas.drawingBuffer');
-          
+          const video = container.querySelector("video");
+          const drawingBuffer = container.querySelector("canvas.drawingBuffer");
+
           if (video) {
-            video.style.width = '100%';
-            video.style.height = '100%';
-            video.style.objectFit = 'cover';
-            video.style.position = 'absolute';
-            video.style.top = '0';
-            video.style.left = '0';
-            video.style.zIndex = '1';
+            video.style.width = "100%";
+            video.style.height = "100%";
+            video.style.objectFit = "cover";
+            video.style.position = "absolute";
+            video.style.top = "0";
+            video.style.left = "0";
+            video.style.zIndex = "1";
           }
-          
+
           if (drawingBuffer) {
-            drawingBuffer.style.width = '100%';
-            drawingBuffer.style.height = '100%';
-            drawingBuffer.style.position = 'absolute';
-            drawingBuffer.style.top = '0';
-            drawingBuffer.style.left = '0';
-            drawingBuffer.style.zIndex = '1';
-            drawingBuffer.style.pointerEvents = 'none';
+            drawingBuffer.style.width = "100%";
+            drawingBuffer.style.height = "100%";
+            drawingBuffer.style.position = "absolute";
+            drawingBuffer.style.top = "0";
+            drawingBuffer.style.left = "0";
+            drawingBuffer.style.zIndex = "1";
+            drawingBuffer.style.pointerEvents = "none";
           }
 
           // If video not ready yet, retry
@@ -372,90 +404,70 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
           console.warn("onDetected: Invalid box format", box);
         }
 
-        // Debounce validation
+        // Optimized: Reduced debounce from 500ms to 100ms for faster response
         validationTimeoutRef.current = setTimeout(async () => {
           setIsValidating(true);
-          
-          try {
-            const searchResult = await searchOrder(code.trim());
 
-            if (searchResult.success && searchResult.data) {
-              const { isAlreadyPacked, packingInfo } = searchResult.data;
-
-              // Check if already packed
-              if (isAlreadyPacked && packingInfo) {
-                setIsValidating(false);
-                setDetectedBoxes([]);
-                setValidatedBox(null);
-                
-                await Swal.fire({
-                  icon: "warning",
-                  title: "Order Already Packed",
-                  html: `
-                    <div class="text-left">
-                      <p class="mb-4 text-gray-700">This order has already been packed.</p>
-                      <div class="bg-gray-50 rounded-lg p-4 mb-4">
-                        <p class="text-sm"><span class="font-medium">Packing ID:</span> ${packingInfo.packingId || "N/A"}</p>
-                        <p class="text-sm"><span class="font-medium">Status:</span> ${packingInfo.status || "N/A"}</p>
-                      </div>
-                    </div>
-                  `,
-                  confirmButtonColor: "#2563eb",
-                  confirmButtonText: "OK",
-                });
-                
-                // Continue scanning
-                lastScannedCodeRef.current = "";
-                return;
-              }
-
-              // Success - show green box and play sound
-              if (box && box.length === 4) {
-                setValidatedBox(box);
-                // Use requestAnimationFrame for smoother rendering
-                requestAnimationFrame(() => {
-                  drawBoxes([box], "green");
-                });
-                playSuccessSound();
-              }
-
-              // Call success handler
-              if (onScanSuccess) {
-                setIsValidating(false);
-                // Stop Quagga and release camera before navigating
-                try {
-                  Quagga.stop();
-                  Quagga.offDetected();
-                  Quagga.offProcessed();
-                } catch (error) {
-                  console.error("Error stopping Quagga:", error);
-                }
-                // Clear canvas
-                if (canvasRef.current) {
-                  const ctx = canvasRef.current.getContext("2d");
-                  ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-                }
-                onScanSuccess(code, searchResult.data);
-              }
-            }
-          } catch (error) {
-            console.error("Error validating barcode:", error);
-            setIsValidating(false);
-            setDetectedBoxes([]);
-            setValidatedBox(null);
-            
-            Swal.fire({
-              icon: "error",
-              title: "Order Not Found",
-              text: error.message || "No order found with this barcode.",
-              confirmButtonColor: "#2563eb",
-              confirmButtonText: "OK",
+          // Show green box and play sound immediately (optimistic)
+          if (box && box.length === 4) {
+            setValidatedBox(box);
+            requestAnimationFrame(() => {
+              drawBoxes([box], "green");
             });
-            
-            // Continue scanning
-            lastScannedCodeRef.current = "";
+            playSuccessSound();
           }
-        }, 500);
+
+          // Navigate immediately (optimistic navigation)
+          if (onScanSuccess) {
+            // Stop Quagga and release camera immediately
+            try {
+              Quagga.stop();
+              Quagga.offDetected();
+              Quagga.offProcessed();
+            } catch (error) {
+              console.error("Error stopping Quagga:", error);
+            }
+
+            // Navigate with barcode immediately, API call happens in background
+            onScanSuccess(code, { barcode: code, isOptimistic: true });
+          }
+
+          // API call happens in background (non-blocking)
+          // If it fails, error will be handled in the destination page
+          searchOrder(code.trim())
+            .then((searchResult) => {
+              if (searchResult.success && searchResult.data) {
+                const { isAlreadyPacked, packingInfo } = searchResult.data;
+
+                // Check if already packed - show warning but navigation already happened
+                if (isAlreadyPacked && packingInfo) {
+                  Swal.fire({
+                    icon: "warning",
+                    title: "Order Already Packed",
+                    html: `
+                      <div class="text-left">
+                        <p class="mb-4 text-gray-700">This order has already been packed.</p>
+                        <div class="bg-gray-50 rounded-lg p-4 mb-4">
+                          <p class="text-sm"><span class="font-medium">Packing ID:</span> ${
+                            packingInfo.packingId || "N/A"
+                          }</p>
+                          <p class="text-sm"><span class="font-medium">Status:</span> ${
+                            packingInfo.status || "N/A"
+                          }</p>
+                        </div>
+                      </div>
+                    `,
+                    confirmButtonColor: "#2563eb",
+                    confirmButtonText: "OK",
+                  });
+                }
+              }
+            })
+            .catch((error) => {
+              console.error("Error validating barcode (background):", error);
+              // Error will be handled in the destination page
+            });
+        }, 100);
       });
 
       // Handle process result for drawing boxes (shows red boxes on detected barcodes)
@@ -466,8 +478,16 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
             if (result && result.codeResult && result.codeResult.box) {
               const box = result.codeResult.box;
               const code = result.codeResult.code;
+              // Update scanned code in real time
+              if (code && code !== scannedCode) {
+                setScannedCode(code);
+              }
               // Only draw if it's a different code or no code was scanned yet
-              if (box && box.length === 4 && code !== lastScannedCodeRef.current) {
+              if (
+                box &&
+                box.length === 4 &&
+                code !== lastScannedCodeRef.current
+              ) {
                 console.log("onProcessed: Drawing red box", { code, box });
                 setDetectedBoxes([box]);
                 drawBoxes([box], "red");
@@ -514,7 +534,7 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
       if (resizeTimeoutRef.current) {
         clearTimeout(resizeTimeoutRef.current);
       }
-      
+
       resizeTimeoutRef.current = setTimeout(() => {
         // Redraw boxes if we have any detected boxes
         if (detectedBoxes.length > 0) {
@@ -532,7 +552,7 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
 
     window.addEventListener("resize", handleResize);
     window.addEventListener("orientationchange", handleResize);
-    
+
     // Some mobile browsers fire resize on orientation change with delay
     const orientationTimeout = setTimeout(handleResize, 500);
 
@@ -544,7 +564,133 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
         clearTimeout(resizeTimeoutRef.current);
       }
     };
-  }, [detectedBoxes, validatedBox]);
+  }, [detectedBoxes, validatedBox, scannedCode]);
+
+  // Draw blue L-shaped corner frame overlay with black background outside
+  useEffect(() => {
+    let animationFrameId;
+    let blinkPhase = 0;
+
+    const drawFrame = () => {
+      if (!frameCanvasRef.current || !scannerRef.current) return;
+
+      const canvas = frameCanvasRef.current;
+      const ctx = canvas.getContext("2d");
+      const containerWidth =
+        scannerRef.current.clientWidth || window.innerWidth;
+      const containerHeight =
+        scannerRef.current.clientHeight || window.innerHeight;
+
+      // Set canvas size
+      const devicePixelRatio = window.devicePixelRatio || 1;
+      canvas.width = containerWidth * devicePixelRatio;
+      canvas.height = containerHeight * devicePixelRatio;
+      canvas.style.width = `${containerWidth}px`;
+      canvas.style.height = `${containerHeight}px`;
+
+      ctx.scale(devicePixelRatio, devicePixelRatio);
+
+      // Clear canvas
+      ctx.clearRect(0, 0, containerWidth, containerHeight);
+
+      // Calculate frame dimensions - responsive for large screens
+      const isLargeScreen = containerWidth >= 1024; // Desktop/large screens
+      let frameWidth, frameHeight;
+      
+      if (isLargeScreen) {
+        // Large screens: narrower width, taller height
+        frameWidth = containerWidth * 0.5; // 50% width (narrower)
+        frameHeight = containerHeight * 0.6; // 60% height (taller)
+      } else {
+        // Mobile/small screens: original dimensions
+        frameWidth = containerWidth * 0.7; // 70% width
+        frameHeight = containerHeight * 0.4; // 40% height
+      }
+      
+      const frameX = (containerWidth - frameWidth) / 2;
+      const frameY = (containerHeight - frameHeight) / 2;
+      const cornerLength = 40;
+      const lineWidth = 4;
+
+      // Draw semi-transparent black overlay covering entire screen
+      ctx.fillStyle = "rgba(0, 0, 0, 0.7)"; // 70% opacity black
+      ctx.fillRect(0, 0, containerWidth, containerHeight);
+
+      // Use composite operation to cut out the scanning area (make it transparent)
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.fillStyle = "rgba(0, 0, 0, 1)"; // Fully opaque to cut out
+      ctx.fillRect(frameX, frameY, frameWidth, frameHeight);
+
+      // Reset composite operation to draw the blue corners
+      ctx.globalCompositeOperation = "source-over";
+
+      // Calculate blinking opacity (smooth pulse between 0.5 and 1.0)
+      // Using sine wave for smooth animation
+      blinkPhase += 0.05; // Animation speed
+      if (blinkPhase > Math.PI * 2) blinkPhase = 0;
+      const opacity = 0.5 + (Math.sin(blinkPhase) + 1) * 0.25; // Range: 0.5 to 1.0
+
+      // Draw blue L-shaped corners with blinking effect
+      ctx.strokeStyle = `rgba(59, 130, 246, ${opacity})`; // Blue color with opacity
+      ctx.lineWidth = lineWidth;
+      ctx.lineCap = "round";
+      ctx.shadowColor = `rgba(59, 130, 246, ${opacity * 0.5})`; // Glow effect
+      ctx.shadowBlur = 8;
+
+      // Top-left corner
+      ctx.beginPath();
+      ctx.moveTo(frameX, frameY + cornerLength);
+      ctx.lineTo(frameX, frameY);
+      ctx.lineTo(frameX + cornerLength, frameY);
+      ctx.stroke();
+
+      // Top-right corner
+      ctx.beginPath();
+      ctx.moveTo(frameX + frameWidth - cornerLength, frameY);
+      ctx.lineTo(frameX + frameWidth, frameY);
+      ctx.lineTo(frameX + frameWidth, frameY + cornerLength);
+      ctx.stroke();
+
+      // Bottom-left corner
+      ctx.beginPath();
+      ctx.moveTo(frameX, frameY + frameHeight - cornerLength);
+      ctx.lineTo(frameX, frameY + frameHeight);
+      ctx.lineTo(frameX + cornerLength, frameY + frameHeight);
+      ctx.stroke();
+
+      // Bottom-right corner
+      ctx.beginPath();
+      ctx.moveTo(frameX + frameWidth - cornerLength, frameY + frameHeight);
+      ctx.lineTo(frameX + frameWidth, frameY + frameHeight);
+      ctx.lineTo(frameX + frameWidth, frameY + frameHeight - cornerLength);
+      ctx.stroke();
+
+      // Reset shadow
+      ctx.shadowBlur = 0;
+
+      // Continue animation loop
+      animationFrameId = requestAnimationFrame(drawFrame);
+    };
+
+    // Start animation
+    drawFrame();
+
+    // Handle resize and orientation change
+    const handleResize = () => {
+      // Animation will automatically redraw with new dimensions
+    };
+
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("orientationchange", handleResize);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("orientationchange", handleResize);
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, []);
 
   const handleClose = () => {
     // Properly stop Quagga and release camera
@@ -584,8 +730,9 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
           className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg font-medium transition-colors"
         >
           <Search className="w-4 h-4" />
-          <span>Manual Search</span>
+          <span className="hidden sm:inline">Manual Search</span>
         </button>
+        <h2 className="text-white text-lg font-semibold">Scan to Pack</h2>
         <button
           onClick={handleClose}
           className="p-2 bg-white/20 hover:bg-white/30 text-white rounded-full transition-colors"
@@ -596,12 +743,29 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
       </div>
 
       {/* Scanner Container */}
-      <div ref={scannerRef} className="quagga-scanner-container flex-1 flex items-center justify-center w-full h-full relative overflow-hidden">
+      <div
+        ref={scannerRef}
+        className="quagga-scanner-container flex-1 flex items-center justify-center w-full h-full relative overflow-hidden"
+      >
+        {/* Frame overlay canvas (blue L-shaped corners) */}
+        <canvas
+          ref={frameCanvasRef}
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            width: "100%",
+            height: "100%",
+            zIndex: 50,
+            position: "absolute",
+            backgroundColor: "transparent",
+          }}
+        />
+
+        {/* Detection boxes canvas */}
         <canvas
           ref={canvasRef}
           className="absolute inset-0 pointer-events-none"
-          style={{ 
-            width: "100%", 
+          style={{
+            width: "100%",
             height: "100%",
             top: 0,
             left: 0,
@@ -612,7 +776,32 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
             backgroundColor: "transparent",
           }}
         />
+
+        {/* Scanned Code Display */}
+        {scannedCode && (
+          <div className="absolute top-24 left-1/2 transform -translate-x-1/2 z-[200] flex flex-col items-center gap-2">
+            <div className="bg-black/70 backdrop-blur-sm rounded-lg p-3 flex items-center justify-center">
+              <svg
+                className="w-8 h-8 text-white"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"
+                />
+              </svg>
+            </div>
+            <p className="text-white text-lg font-semibold bg-black/70 backdrop-blur-sm px-4 py-2 rounded-lg">
+              {scannedCode}
+            </p>
+          </div>
+        )}
       </div>
+
       {/* Global styles for Quagga video to fill full width */}
       <style>{`
         .quagga-scanner-container video,
@@ -633,30 +822,15 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
         }
       `}</style>
 
-      {/* Status Bar */}
-      <div className="absolute bottom-0 left-0 right-0 z-20 bg-black/70 backdrop-blur-sm p-4">
-        <div className="text-center">
-          {isValidating ? (
-            <div className="flex items-center justify-center gap-2 text-yellow-400">
-              <div className="w-4 h-4 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin"></div>
-              <p className="text-sm font-medium">Validating barcode...</p>
-            </div>
-          ) : validatedBox ? (
-            <div className="flex items-center justify-center gap-2 text-green-400">
-              <div className="w-4 h-4 bg-green-400 rounded-full"></div>
-              <p className="text-sm font-medium">Barcode validated! Loading order...</p>
-            </div>
-          ) : isScanning ? (
-            <div className="flex items-center justify-center gap-2 text-blue-400">
-              <div className="w-4 h-4 bg-blue-400 rounded-full animate-pulse"></div>
-              <p className="text-sm font-medium">Point camera at barcode</p>
-            </div>
-          ) : (
-            <div className="flex items-center justify-center gap-2 text-gray-400">
-              <p className="text-sm">Initializing camera...</p>
-            </div>
-          )}
-        </div>
+      {/* Simplified Bottom Bar - Only Manual Input Button */}
+      <div className="absolute bottom-0 left-0 right-0 z-[9999] bg-black/70 backdrop-blur-sm p-4 flex items-center justify-center">
+        <button
+          onClick={onManualSearch}
+          className="flex items-center justify-center gap-2 px-6 py-3 bg-white/20 hover:bg-white/30 text-white rounded-full font-medium transition-colors"
+        >
+          <Keyboard className="w-5 h-5" />
+          <span>Manual Input</span>
+        </button>
       </div>
     </div>
   );

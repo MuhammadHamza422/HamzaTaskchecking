@@ -27,13 +27,14 @@ export default function PhotoUploadStep({
   const fileInputRef = useRef(null);
 
   // Auto-open camera ONLY on first mount (before any photos are taken)
+  // Optimized: Removed delay for instant camera opening
   useEffect(() => {
     if (!hasAutoOpened && photos.length === 0 && photos.length < MAX_PHOTOS) {
-      const timer = setTimeout(() => {
+      // Use requestAnimationFrame for smoother transition, but no artificial delay
+      requestAnimationFrame(() => {
         setShowCamera(true);
         setHasAutoOpened(true);
-      }, 300);
-      return () => clearTimeout(timer);
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -255,6 +256,21 @@ export default function PhotoUploadStep({
           maxPhotos={MAX_PHOTOS}
           currentCount={photos.length}
           pendingPhotos={pendingPhotos}
+          onSaveAllComplete={(savedCount) => {
+            // When Save All is clicked (whether it's "Save (1)" or "Save All (N)"), 
+            // save all photos and move to next step
+            // savedCount tells us how many photos were just saved
+            if (savedCount > 0 && onComplete) {
+              // Use a delay to ensure photos are saved via onCapture
+              // Since we know photos were just saved (savedCount > 0), we can force the transition
+              // This is especially important for single photo case where state might not update in time
+              setTimeout(() => {
+                // Always force transition when we know photos were saved
+                // The parent's handleContinueToItems will accept the force parameter
+                onComplete(true);
+              }, 100);
+            }
+          }}
         />
       )}
 
