@@ -30,6 +30,7 @@ import {
   getPackingOrderDetails,
   updatePackingOrder,
   deletePackingOrder,
+  searchOrder,
 } from "../../../../api/fulfillment";
 import Swal from "sweetalert2";
 import { message } from "antd";
@@ -236,16 +237,14 @@ export default function PackingOrderDetails() {
           const platform = location.state?.platform;
           const alreadyPackedFromSearch = location.state?.isAlreadyPacked;
           const packingInfoFromSearch = location.state?.packingInfo;
-
-          if (!platform) {
-            setError("Platform information is missing");
-            setLoading(false);
-            return;
-          }
+          const isOptimistic = searchData?.isOptimistic;
 
           let orderIdToUse;
 
-          if (platform === "shopify") {
+          // For optimistic navigation, use barcode from URL or state
+          if (isOptimistic) {
+            orderIdToUse = decodeURIComponent(orderId) || searchData?.barcode;
+          } else if (platform === "shopify") {
             orderIdToUse = searchData?.orderId || location.state?.orderId;
           } else {
             orderIdToUse = decodeURIComponent(orderId);
@@ -255,14 +254,49 @@ export default function PackingOrderDetails() {
             throw new Error("Order ID is missing");
           }
 
+          // For optimistic navigation, platform will be determined after search
+          if (!isOptimistic && !platform) {
+            setError("Platform information is missing");
+            setLoading(false);
+            return;
+          }
+
           // If autoOpenCamera flag is set, immediately go to photo upload stage
           // Don't wait for order details - load them in background
           if (autoOpenCamera) {
             setStage(STAGES.PHOTO_UPLOAD);
             setLoading(false); // Don't block UI, allow camera to open immediately
 
-            // Load order details in background (non-blocking)
-            getOrderDetails(orderIdToUse, platform)
+            // For optimistic navigation, search order by barcode in background
+            const isOptimistic = location.state?.searchData?.isOptimistic;
+            if (isOptimistic && orderIdToUse) {
+              // Search order by barcode first, then get details
+              searchOrder(orderIdToUse)
+                .then((searchResult) => {
+                  if (searchResult.success && searchResult.data) {
+                    const { orderId, orderNumber, platform: foundPlatform } = searchResult.data;
+                    const finalOrderId = orderId || orderNumber || orderIdToUse;
+                    const finalPlatform = foundPlatform || platform;
+                    
+                    // Now get full order details
+                    return getOrderDetails(finalOrderId, finalPlatform);
+                  }
+                  throw new Error("Order not found");
+                })
+                .then((result) => {
+                  if (result.success && result.data) {
+                    setOrderData(result.data);
+                    // Select all items by default
+                    setSelectedItems(result.data.orderLines?.map((item) => item.id) || []);
+                  }
+                })
+                .catch((error) => {
+                  console.error("Error loading order details (optimistic):", error);
+                  setError(error.message || "Failed to load order details");
+                });
+            } else {
+              // Load order details in background (non-blocking)
+              getOrderDetails(orderIdToUse, platform)
               .then((result) => {
                 if (result.success && result.data) {
                   setOrderData(result.data);
@@ -312,6 +346,7 @@ export default function PackingOrderDetails() {
                 // User can still take photos, error will show if they try to proceed
                 setError(error.message || "Failed to load order details");
               });
+            }
 
             return; // Exit early, don't wait for order details
           }
@@ -447,8 +482,10 @@ export default function PackingOrderDetails() {
     ? packingData?.orderLines || []
     : orderData?.orderLines || [];
 
-  const handleContinueToItems = () => {
-    if (photos.length > 0) {
+  const handleContinueToItems = (force = false) => {
+    // If force is true, proceed even if photos.length is 0 (photos were just saved but state hasn't updated yet)
+    // Otherwise, check that photos exist
+    if (force || photos.length > 0) {
       setStage(STAGES.SELECTION);
     }
   };

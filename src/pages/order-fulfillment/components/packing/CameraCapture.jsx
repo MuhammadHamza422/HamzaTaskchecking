@@ -126,7 +126,7 @@ const getCroppedImg = async (imageSrc, crop, rotation = 0, displayedWidth = 0, d
   });
 };
 
-export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhotos, currentCount, pendingPhotos = [] }) {
+export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhotos, currentCount, pendingPhotos = [], onSaveAllComplete }) {
   const [mode, setMode] = useState("camera"); // "camera" | "edit" | "review"
   // Initialize with pending photos from parent to persist across camera opens
   const [capturedPhotos, setCapturedPhotos] = useState(pendingPhotos);
@@ -387,18 +387,33 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
       photosToSave.push(photo.file);
     });
     
-    // If there's a current cropped photo that hasn't been added yet, convert and add it
-    if (croppedImageUrl && mode === "edit") {
+    // If there's a current photo in edit mode that hasn't been added yet, convert and add it
+    // Use croppedImageUrl if available (after crop/rotation), otherwise fall back to currentImage
+    if (mode === "edit" && currentImage) {
       try {
-        const file = await convertToFile(croppedImageUrl);
+        // Use croppedImageUrl if it exists (after crop/rotation), otherwise use currentImage
+        const imageToSave = croppedImageUrl || currentImage;
+        const file = await convertToFile(imageToSave);
         photosToSave.push(file);
         
         // Revoke the blob URL after converting
-        if (croppedImageUrl.startsWith('blob:')) {
+        if (croppedImageUrl && croppedImageUrl.startsWith('blob:')) {
           URL.revokeObjectURL(croppedImageUrl);
+        }
+        if (currentImage && currentImage.startsWith('blob:') && currentImage !== croppedImageUrl) {
+          URL.revokeObjectURL(currentImage);
         }
       } catch (error) {
         console.error("Error converting current photo:", error);
+        // If conversion fails, try to use currentImage directly as fallback
+        if (currentImage && !croppedImageUrl) {
+          try {
+            const file = await convertToFile(currentImage);
+            photosToSave.push(file);
+          } catch (fallbackError) {
+            console.error("Error in fallback conversion:", fallbackError);
+          }
+        }
       }
     }
     
@@ -408,6 +423,16 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
         onCapture(file);
       });
       handleClose();
+      
+      // Call onSaveAllComplete callback if provided (to move to next step)
+      // Pass the count of photos saved so parent can verify
+      // Always call this when photos are saved, whether it's 1 or multiple
+      if (onSaveAllComplete) {
+        // Use setTimeout to ensure photos are saved before moving to next step
+        setTimeout(() => {
+          onSaveAllComplete(photosToSave.length);
+        }, 100);
+      }
     }
   };
 
@@ -442,9 +467,9 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
   // Show "Add Photo" when in edit mode with current image and can capture more
   const canAddPhoto = mode === "edit" && currentImage && canCaptureMore;
 
-  // Can save all if there are photos in array OR if there's a current cropped photo
-  const canSaveAll = capturedPhotos.length > 0 || (croppedImageUrl && mode === "edit");
-  const totalPhotosToSave = capturedPhotos.length + (croppedImageUrl && mode === "edit" ? 1 : 0);
+  // Can save all if there are photos in array OR if there's a current photo in edit mode
+  const canSaveAll = capturedPhotos.length > 0 || (mode === "edit" && currentImage);
+  const totalPhotosToSave = capturedPhotos.length + (mode === "edit" && currentImage ? 1 : 0);
 
   const cameraModal = (
     <div 
