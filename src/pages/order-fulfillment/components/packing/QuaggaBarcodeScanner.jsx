@@ -5,25 +5,10 @@ import { X, Search } from "lucide-react";
 import { searchOrder } from "../../../../api/fulfillment";
 import Swal from "sweetalert2";
 
-// Mobile-friendly video constraints
-const getVideoConstraints = () => {
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  
-  if (isMobile) {
-    // Mobile: Use more flexible constraints
-    return {
-      width: { min: 320, ideal: 640, max: 1280 },
-      height: { min: 240, ideal: 480, max: 720 },
-      facingMode: { ideal: "environment" },
-    };
-  }
-  
-  // Desktop: Higher resolution
-  return {
-    width: { ideal: 1280 },
-    height: { ideal: 720 },
-    facingMode: { ideal: "environment" },
-  };
+const videoConstraints = {
+  width: { ideal: 1280 },
+  height: { ideal: 720 },
+  facingMode: { ideal: "environment" },
 };
 
 export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, onClose }) {
@@ -39,7 +24,7 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
   const processingIntervalRef = useRef(null);
 
   // Play success sound
-  const playSuccessSound = useCallback(() => {
+  const playSuccessSound = () => {
     try {
       // Try to play audio file first, fallback to Web Audio API
       const audio = new Audio("/sounds/success-beep.mp3");
@@ -86,7 +71,7 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
         console.error("Fallback sound also failed:", fallbackError);
       }
     }
-  }, []);
+  };
 
   // Stop webcam stream
   const stopWebcamStream = useCallback(() => {
@@ -118,14 +103,18 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
     const nativeHeight = video.videoHeight || displayedHeight;
 
     // Calculate scale factors
-    const scaleX = displayedWidth / nativeWidth;
-    const scaleY = displayedHeight / nativeHeight;
+    const scaleX = nativeWidth > 0 ? displayedWidth / nativeWidth : 1;
+    const scaleY = nativeHeight > 0 ? displayedHeight / nativeHeight : 1;
 
     // Set canvas size to match displayed video size
     canvas.width = displayedWidth;
     canvas.height = displayedHeight;
     canvas.style.width = `${displayedWidth}px`;
     canvas.style.height = `${displayedHeight}px`;
+    canvas.style.position = "absolute";
+    canvas.style.top = "0";
+    canvas.style.left = "0";
+    canvas.style.zIndex = "100";
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -308,34 +297,52 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
     }
   }, [isValidating, validatedBox, onScanSuccess, stopWebcamStream, drawBoxes, playSuccessSound]);
 
-  // Initialize Quagga and start processing
-  useEffect(() => {
-    if (!webcamRef.current) return;
-
-    const video = webcamRef.current.video;
-    if (!video) return;
-
-    // Detect mobile device for performance optimization
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    // Mobile: Process less frequently to save battery/CPU, Desktop: More frequent for better UX
-    const processingInterval = isMobile ? 200 : 100; // Mobile: 200ms, Desktop: 100ms
-
-    // Wait for video to be ready
-    const handleVideoReady = () => {
-      setIsScanning(true);
+  // Handle camera ready
+  const handleUserMedia = useCallback((stream) => {
+    // Camera stream is ready
+    if (webcamRef.current?.video) {
+      const video = webcamRef.current.video;
       
-      // Start processing frames periodically
-      processingIntervalRef.current = setInterval(() => {
-        processFrame();
-      }, processingInterval);
-    };
+      // Detect mobile device for performance optimization
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      // Mobile: Process less frequently to save battery/CPU, Desktop: More frequent for better UX
+      const processingInterval = isMobile ? 200 : 100; // Mobile: 200ms, Desktop: 100ms
 
-    if (video.readyState >= video.HAVE_METADATA) {
-      handleVideoReady();
-    } else {
-      video.addEventListener("loadedmetadata", handleVideoReady, { once: true });
+      // Wait for video to be ready
+      const handleVideoReady = () => {
+        setIsScanning(true);
+        
+        // Start processing frames periodically
+        if (processingIntervalRef.current) {
+          clearInterval(processingIntervalRef.current);
+        }
+        processingIntervalRef.current = setInterval(() => {
+          processFrame();
+        }, processingInterval);
+      };
+
+      if (video.readyState >= video.HAVE_METADATA) {
+        handleVideoReady();
+      } else {
+        video.addEventListener("loadedmetadata", handleVideoReady, { once: true });
+      }
     }
+  }, [processFrame]);
 
+  // Handle camera error
+  const handleUserMediaError = useCallback((error) => {
+    console.error("Camera error:", error);
+    Swal.fire({
+      icon: "error",
+      title: "Camera Error",
+      text: "Failed to access camera. Please check permissions and try again.",
+      confirmButtonColor: "#2563eb",
+    });
+    if (onClose) onClose();
+  }, [onClose]);
+
+  // Cleanup on unmount
+  useEffect(() => {
     return () => {
       // Cleanup
       if (processingIntervalRef.current) {
@@ -352,7 +359,7 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
         ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
       }
     };
-  }, [processFrame, stopWebcamStream]);
+  }, [stopWebcamStream]);
 
   const handleClose = () => {
     // Stop processing
@@ -401,7 +408,9 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
         <Webcam
           audio={false}
           ref={webcamRef}
-          videoConstraints={getVideoConstraints()}
+          videoConstraints={videoConstraints}
+          onUserMedia={handleUserMedia}
+          onUserMediaError={handleUserMediaError}
           className="absolute inset-0 w-full h-full object-cover"
           playsInline
           mirrored={false}
@@ -412,6 +421,7 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
             width: "100%",
             height: "100%",
             objectFit: "cover",
+            zIndex: 1,
           }}
         />
         {/* Canvas overlay for drawing barcode boxes */}
@@ -424,7 +434,8 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
             top: 0,
             left: 0,
             right: 0,
-            bottom: 0
+            bottom: 0,
+            zIndex: 10,
           }}
         />
       </div>
@@ -457,4 +468,3 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
     </div>
   );
 }
-
