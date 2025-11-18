@@ -241,9 +241,11 @@ export default function PackingOrderDetails() {
 
           let orderIdToUse;
 
-          // For optimistic navigation, use barcode from URL or state
+          // For optimistic navigation, use barcode from state first (most reliable), then URL
+          // State barcode is set directly from scanner, URL might have encoding issues
           if (isOptimistic) {
-            orderIdToUse = decodeURIComponent(orderId) || searchData?.barcode;
+            // Priority: searchData.barcode (from state) > orderId from URL
+            orderIdToUse = searchData?.barcode || decodeURIComponent(orderId || "");
           } else if (platform === "shopify") {
             orderIdToUse = searchData?.orderId || location.state?.orderId;
           } else {
@@ -270,30 +272,62 @@ export default function PackingOrderDetails() {
             // For optimistic navigation, search order by barcode in background
             const isOptimistic = location.state?.searchData?.isOptimistic;
             if (isOptimistic && orderIdToUse) {
-              // Search order by barcode first, then get details
-              searchOrder(orderIdToUse)
-                .then((searchResult) => {
-                  if (searchResult.success && searchResult.data) {
-                    const { orderId, orderNumber, platform: foundPlatform } = searchResult.data;
-                    const finalOrderId = orderId || orderNumber || orderIdToUse;
-                    const finalPlatform = foundPlatform || platform;
+              // Add small delay and retry logic for better reliability
+              const searchWithRetry = async (query, retries = 3, delay = 300) => {
+                // Ensure query is a clean string
+                const cleanQuery = String(query).trim();
+                
+                for (let attempt = 0; attempt < retries; attempt++) {
+                  try {
+                    // Add delay before each attempt (exponential backoff)
+                    if (attempt > 0) {
+                      await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, attempt - 1)));
+                    } else {
+                      // First attempt: small initial delay to ensure API is ready
+                      await new Promise(resolve => setTimeout(resolve, delay));
+                    }
                     
-                    // Now get full order details
-                    return getOrderDetails(finalOrderId, finalPlatform);
+                    const searchResult = await searchOrder(cleanQuery);
+                    
+                    if (searchResult.success && searchResult.data) {
+                      const { orderId, orderNumber, platform: foundPlatform } = searchResult.data;
+                      const finalOrderId = orderId || orderNumber || query;
+                      const finalPlatform = foundPlatform || platform;
+                      
+                      if (!finalPlatform) {
+                        throw new Error("Platform not found in search result");
+                      }
+                      
+                      // Now get full order details
+                      const result = await getOrderDetails(finalOrderId, finalPlatform);
+                      
+                      if (result.success && result.data) {
+                        setOrderData(result.data);
+                        // Select all items by default
+                        setSelectedItems(result.data.orderLines?.map((item) => item.id) || []);
+                        setError(null); // Clear any previous errors
+                        return; // Success, exit retry loop
+                      }
+                    }
+                    throw new Error("Order not found");
+                  } catch (error) {
+                    
+                    // If this is the last attempt, set error (but don't block UI)
+                    if (attempt === retries - 1) {
+                      console.error("Error loading order details (optimistic):", error);
+                      // Only set error if we're not in photo upload stage (user might still be taking photos)
+                      // Error will be shown when user tries to proceed
+                      setError(error.message || "Failed to load order details");
+                    }
+                    // Otherwise, continue to next retry
                   }
-                  throw new Error("Order not found");
-                })
-                .then((result) => {
-                  if (result.success && result.data) {
-                    setOrderData(result.data);
-                    // Select all items by default
-                    setSelectedItems(result.data.orderLines?.map((item) => item.id) || []);
-                  }
-                })
-                .catch((error) => {
-                  console.error("Error loading order details (optimistic):", error);
-                  setError(error.message || "Failed to load order details");
-                });
+                }
+              };
+              
+              // Start search with retry in background (non-blocking)
+              searchWithRetry(orderIdToUse).catch((error) => {
+                console.error("All search retries failed:", error);
+              });
             } else {
               // Load order details in background (non-blocking)
               getOrderDetails(orderIdToUse, platform)
@@ -513,8 +547,23 @@ export default function PackingOrderDetails() {
       return;
     }
 
+    // Fix: Use orderData.platform as fallback for optimistic navigation
+    // This ensures platform is available even when location.state.platform is null
     const searchData = location.state?.searchData;
-    const platform = location.state?.platform;
+    const platform = location.state?.platform || orderData?.platform;
+    
+    // Validate platform exists before proceeding
+    if (!platform) {
+      Swal.fire({
+        icon: "error",
+        title: "Platform Required",
+        text: "Order details are still loading. Please wait a moment and try again.",
+        confirmButtonColor: "#2563eb",
+        confirmButtonText: "OK",
+      });
+      return;
+    }
+
     let orderIdToUse;
 
     if (platform === "shopify") {
@@ -565,20 +614,6 @@ export default function PackingOrderDetails() {
     
     const photoFiles = photos.map((photo) => photo.file);
 
-    // Debug logging
-    console.log("🔍 Packing Debug Info:", {
-      allItemIds,
-      selectedItems: selectedItemsNormalized,
-      deselectedItems,
-      deselectedItemsCount: deselectedItems.length,
-      deselectedItemsData: deselectedItemsData.map((item) => ({
-        id: item.id,
-        name: item.name,
-        quantity: item.quantity,
-        price: item.price,
-        total: item.total,
-      })),
-    });
 
     setSubmitting(true);
 
@@ -669,7 +704,13 @@ export default function PackingOrderDetails() {
     }
   };
 
-  const canCompletePacking = photos.length >= 1 && selectedItems.length > 0;
+  // Fix: Ensure orderData and platform are available before allowing packing creation
+  // This prevents "Platform is required" error for optimistic navigation
+  const canCompletePacking = 
+    photos.length >= 1 && 
+    selectedItems.length > 0 && 
+    orderData && 
+    (location.state?.platform || orderData?.platform);
 
   const handleEditPacking = () => {
     if (!packingData) return;
