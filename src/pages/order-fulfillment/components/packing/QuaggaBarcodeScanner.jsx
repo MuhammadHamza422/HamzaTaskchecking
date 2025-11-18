@@ -13,6 +13,7 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
   const [isValidating, setIsValidating] = useState(false);
   const lastScannedCodeRef = useRef("");
   const validationTimeoutRef = useRef(null);
+  const resizeTimeoutRef = useRef(null);
 
   // Play success sound
   const playSuccessSound = () => {
@@ -90,7 +91,7 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
       return;
     }
 
-    // Get container dimensions as fallback
+    // Get container dimensions
     const containerWidth = scannerRef.current.clientWidth || window.innerWidth;
     const containerHeight = scannerRef.current.clientHeight || window.innerHeight;
 
@@ -118,23 +119,60 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
       return;
     }
 
-    // Calculate scale factors
-    const scaleX = nativeWidth > 0 ? displayedWidth / nativeWidth : 1;
-    const scaleY = nativeHeight > 0 ? displayedHeight / nativeHeight : 1;
+    // Calculate visible video area accounting for object-fit: cover
+    // When object-fit: cover is used, the video maintains aspect ratio and fills the container
+    // The video element itself is sized to the container, but the video content is scaled/cropped
+    const containerAspect = containerWidth / containerHeight;
+    const videoAspect = nativeWidth / nativeHeight;
+    
+    let scaleX, scaleY, videoOffsetX, videoOffsetY;
+    
+    // Handle edge cases (avoid division by zero, invalid aspect ratios)
+    if (isNaN(containerAspect) || isNaN(videoAspect) || containerAspect <= 0 || videoAspect <= 0) {
+      // Fallback to simple scaling if aspect ratio calculation fails
+      scaleX = containerWidth / nativeWidth;
+      scaleY = containerHeight / nativeHeight;
+      videoOffsetX = 0;
+      videoOffsetY = 0;
+    } else if (videoAspect > containerAspect) {
+      // Video is wider than container - video height matches container height
+      // Width is scaled proportionally and cropped on sides
+      const scale = containerHeight / nativeHeight;
+      scaleX = scale;
+      scaleY = scale;
+      const scaledVideoWidth = nativeWidth * scale;
+      videoOffsetX = (containerWidth - scaledVideoWidth) / 2;
+      videoOffsetY = 0;
+    } else {
+      // Video is taller than container - video width matches container width
+      // Height is scaled proportionally and cropped on top/bottom
+      const scale = containerWidth / nativeWidth;
+      scaleX = scale;
+      scaleY = scale;
+      videoOffsetX = 0;
+      const scaledVideoHeight = nativeHeight * scale;
+      videoOffsetY = (containerHeight - scaledVideoHeight) / 2;
+    }
 
-    // Set canvas size to match displayed video size
-    canvas.width = displayedWidth;
-    canvas.height = displayedHeight;
-    canvas.style.width = `${displayedWidth}px`;
-    canvas.style.height = `${displayedHeight}px`;
+    // Set canvas size to match container (full overlay)
+    // Account for device pixel ratio for crisp rendering on high-DPI displays
+    const devicePixelRatio = window.devicePixelRatio || 1;
+    canvas.width = containerWidth * devicePixelRatio;
+    canvas.height = containerHeight * devicePixelRatio;
+    canvas.style.width = `${containerWidth}px`;
+    canvas.style.height = `${containerHeight}px`;
     canvas.style.position = "absolute";
     canvas.style.top = "0";
     canvas.style.left = "0";
     canvas.style.zIndex = "100";
     canvas.style.pointerEvents = "none";
     canvas.style.backgroundColor = "transparent";
+    
+    // Scale context to account for device pixel ratio
+    ctx.scale(devicePixelRatio, devicePixelRatio);
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Clear canvas using container dimensions (not device pixel ratio scaled)
+    ctx.clearRect(0, 0, containerWidth, containerHeight);
 
     boxes.forEach((box) => {
       if (!box) {
@@ -171,10 +209,13 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
       ctx.lineWidth = color === "green" ? 4 : 3; // Thicker line for success
       ctx.beginPath();
       
-      // Scale coordinates from native video size to displayed size
+      // Transform coordinates:
+      // 1. Scale from native video size to visible video size
+      // 2. Offset to account for video positioning (centering due to object-fit: cover)
+      // Note: ctx.scale() already handles device pixel ratio, so we use container dimensions directly
       const scaledPoints = points.map((point) => ({
-        x: point.x * scaleX,
-        y: point.y * scaleY,
+        x: (point.x * scaleX) + videoOffsetX,
+        y: (point.y * scaleY) + videoOffsetY,
       }));
 
       ctx.moveTo(scaledPoints[0].x, scaledPoints[0].y);
@@ -192,7 +233,19 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
         ctx.shadowBlur = 0; // Reset shadow
       }
 
-      console.log("drawBoxes: Drew box", { color, points, scaledPoints, scaleX, scaleY });
+      console.log("drawBoxes: Drew box", { 
+        color, 
+        points, 
+        scaledPoints, 
+        scaleX, 
+        scaleY, 
+        videoOffsetX, 
+        videoOffsetY,
+        nativeWidth,
+        nativeHeight,
+        containerWidth,
+        containerHeight
+      });
     });
   };
 
@@ -442,10 +495,56 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
       // Clear canvas
       if (canvasRef.current) {
         const ctx = canvasRef.current.getContext("2d");
-        ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+        const containerWidth = scannerRef.current?.clientWidth || 0;
+        const containerHeight = scannerRef.current?.clientHeight || 0;
+        if (containerWidth > 0 && containerHeight > 0) {
+          ctx.clearRect(0, 0, containerWidth, containerHeight);
+        }
+      }
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
       }
     };
   }, [validatedBox, isValidating, onScanSuccess, onClose]);
+
+  // Handle window resize and orientation changes (important for mobile)
+  useEffect(() => {
+    const handleResize = () => {
+      // Debounce resize to avoid excessive redraws
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+      
+      resizeTimeoutRef.current = setTimeout(() => {
+        // Redraw boxes if we have any detected boxes
+        if (detectedBoxes.length > 0) {
+          requestAnimationFrame(() => {
+            drawBoxes(detectedBoxes, "red");
+          });
+        }
+        if (validatedBox) {
+          requestAnimationFrame(() => {
+            drawBoxes([validatedBox], "green");
+          });
+        }
+      }, 150);
+    };
+
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("orientationchange", handleResize);
+    
+    // Some mobile browsers fire resize on orientation change with delay
+    const orientationTimeout = setTimeout(handleResize, 500);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("orientationchange", handleResize);
+      clearTimeout(orientationTimeout);
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+    };
+  }, [detectedBoxes, validatedBox]);
 
   const handleClose = () => {
     // Properly stop Quagga and release camera
@@ -460,9 +559,16 @@ export default function QuaggaBarcodeScanner({ onScanSuccess, onManualSearch, on
       clearTimeout(validationTimeoutRef.current);
     }
     // Clear canvas
-    if (canvasRef.current) {
+    if (canvasRef.current && scannerRef.current) {
       const ctx = canvasRef.current.getContext("2d");
-      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      const containerWidth = scannerRef.current.clientWidth || 0;
+      const containerHeight = scannerRef.current.clientHeight || 0;
+      if (containerWidth > 0 && containerHeight > 0) {
+        ctx.clearRect(0, 0, containerWidth, containerHeight);
+      }
+    }
+    if (resizeTimeoutRef.current) {
+      clearTimeout(resizeTimeoutRef.current);
     }
     if (onClose) {
       onClose();
