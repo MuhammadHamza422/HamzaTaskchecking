@@ -27,7 +27,11 @@ export default function DropshipItemsDisplay({
   const handlePackingOrderClick = (packingId, e) => {
     e.stopPropagation();
     if (packingId) {
-      navigate(`/fulfillment/packing/${packingId}`);
+      navigate(`/fulfillment/packing/${packingId}`, {
+        state: {
+          packingId: packingId,
+        },
+      });
     }
   };
 
