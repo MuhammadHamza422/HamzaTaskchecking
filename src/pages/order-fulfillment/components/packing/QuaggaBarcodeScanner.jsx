@@ -308,10 +308,15 @@ export default function QuaggaBarcodeScanner({
         // Limit to most common barcode formats for better accuracy
         // Reduced from 9 to 4 readers to minimize false positives
         readers: [
-          "code_128_reader", // Most common for shipping/orders
-          "ean_reader",      // Common for products
-          "upc_reader",      // Common in retail
-          "code_39_reader",  // Common in logistics
+            "code_128_reader",
+            "ean_reader",
+            "ean_8_reader",
+            "code_39_reader",
+            "code_39_vin_reader",
+            "codabar_reader",
+            "upc_reader",
+            "upc_e_reader",
+            "i2of5_reader",
         ],
       },
       locate: true,
