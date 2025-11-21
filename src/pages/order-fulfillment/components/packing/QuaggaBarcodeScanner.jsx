@@ -344,6 +344,14 @@ export default function QuaggaBarcodeScanner({
           const drawingBuffer = container.querySelector("canvas.drawingBuffer");
           
           if (video) {
+            // Critical: Add mobile-required attributes to fix black screen on mobile
+            // These attributes are REQUIRED for video to display inline on mobile browsers
+            video.setAttribute("playsinline", "true"); // iOS Safari requirement
+            video.setAttribute("webkit-playsinline", "true"); // Older iOS versions
+            video.setAttribute("muted", "true"); // Required for autoplay on most mobile browsers
+            video.setAttribute("autoplay", "true"); // Ensure video starts playing
+            
+            // Apply styles
             video.style.width = "100%";
             video.style.height = "100%";
             video.style.objectFit = "cover";
@@ -351,6 +359,11 @@ export default function QuaggaBarcodeScanner({
             video.style.top = "0";
             video.style.left = "0";
             video.style.zIndex = "1";
+            
+            // Force video to play (some browsers need this explicit call)
+            video.play().catch((err) => {
+              console.warn("Video autoplay failed (this is normal on some browsers):", err);
+            });
           }
           
           if (drawingBuffer) {
