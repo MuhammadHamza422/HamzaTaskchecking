@@ -13,6 +13,7 @@ export default function QuaggaBarcodeScanner({
   const canvasRef = useRef(null);
   const frameCanvasRef = useRef(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true); // NEW: Loading state
   const [detectedBoxes, setDetectedBoxes] = useState([]);
   const [validatedBox, setValidatedBox] = useState(null);
   const [isValidating, setIsValidating] = useState(false);
@@ -20,6 +21,7 @@ export default function QuaggaBarcodeScanner({
   const lastScannedCodeRef = useRef("");
   const validationTimeoutRef = useRef(null);
   const resizeTimeoutRef = useRef(null);
+  const initTimeoutRef = useRef(null);
   // Stability tracking: require same code to appear multiple times
   const candidateCodeRef = useRef("");
   const candidateCountRef = useRef(0);
@@ -301,6 +303,9 @@ export default function QuaggaBarcodeScanner({
         hostname: window.location.hostname,
       });
 
+      // Show loading state
+      setIsInitializing(true);
+
       // Simple, mobile-friendly camera constraints
       // Remove complex constraints that cause issues on some devices
       const config = {
@@ -339,39 +344,48 @@ export default function QuaggaBarcodeScanner({
 
       Quagga.init(config, (err) => {
         if (err) {
-          console.error("❌ QuaggaJS initialization error:", {
-            name: err.name,
-            message: err.message,
-            code: err.code,
-            constraint: err.constraint,
-            stack: err.stack,
-          });
+          // Better error logging - handle all error types
+          const errorInfo = {
+            name: err?.name || 'UnknownError',
+            message: err?.message || String(err),
+            code: err?.code || 'N/A',
+            constraint: err?.constraint || 'N/A',
+            toString: err ? String(err) : 'Unknown error',
+          };
+          
+          console.error("❌ QuaggaJS initialization error:", errorInfo);
+          
+          // Hide loading state
+          setIsInitializing(false);
           
           // Detailed error message based on error type
+          const errorName = err?.name || 'UnknownError';
+          const errorMessage_raw = err?.message || String(err) || 'Unknown error occurred';
+          
           let errorMessage = "Failed to initialize camera. Please try again.";
           let errorDetails = "";
           
-          if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+          if (errorName === "NotAllowedError" || errorName === "PermissionDeniedError") {
             errorMessage = "Camera access denied.";
             errorDetails = "Please allow camera permissions in your browser settings and reload the page.";
-          } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+          } else if (errorName === "NotFoundError" || errorName === "DevicesNotFoundError") {
             errorMessage = "No camera found on this device.";
             errorDetails = "Please make sure your device has a working camera.";
-          } else if (err.name === "NotReadableError" || err.name === "TrackStartError") {
+          } else if (errorName === "NotReadableError" || errorName === "TrackStartError") {
             errorMessage = "Camera is already in use.";
             errorDetails = "Please close other apps or tabs using the camera and try again.";
-          } else if (err.name === "OverconstrainedError" || err.name === "ConstraintNotSatisfiedError") {
+          } else if (errorName === "OverconstrainedError" || errorName === "ConstraintNotSatisfiedError") {
             errorMessage = "Camera doesn't meet requirements.";
-            errorDetails = `The camera doesn't support the required settings. Error: ${err.constraint || "unknown"}`;
-          } else if (err.name === "SecurityError") {
+            errorDetails = `The camera doesn't support the required settings. ${err?.constraint ? `Constraint: ${err.constraint}` : ""}`;
+          } else if (errorName === "SecurityError") {
             errorMessage = "Camera access blocked by security.";
-            errorDetails = "This site must be accessed via HTTPS. Please check your connection.";
-          } else if (err.name === "TypeError") {
+            errorDetails = "This site must be accessed via HTTPS. Please check your connection is secure.";
+          } else if (errorName === "TypeError") {
             errorMessage = "Camera initialization failed.";
             errorDetails = "The camera might be in use or the browser doesn't support camera access.";
           } else {
             errorMessage = "Camera initialization failed.";
-            errorDetails = `Error: ${err.message || "Unknown error"}`;
+            errorDetails = errorMessage_raw;
           }
           
           // Retry logic for transient errors
@@ -394,7 +408,7 @@ export default function QuaggaBarcodeScanner({
               <p class="text-sm text-gray-600 mb-2">${errorDetails}</p>
               <div class="bg-red-50 border border-red-200 rounded p-3 mt-3">
                 <p class="text-xs text-gray-700"><strong>Technical Details:</strong></p>
-                <p class="text-xs text-gray-600 font-mono">${err.name}: ${err.message}</p>
+                <p class="text-xs text-gray-600 font-mono break-words">${errorName}: ${errorMessage_raw}</p>
               </div>
             `,
             confirmButtonColor: "#2563eb",
@@ -406,6 +420,9 @@ export default function QuaggaBarcodeScanner({
         }
         
         console.log("✅ QuaggaJS initialized successfully");
+        
+        // Keep loading state visible while video initializes
+        // Will be hidden after video starts playing successfully
 
         // Ensure video element fills container after Quagga initializes
         // CRITICAL: Use longer delays for mobile browsers to properly initialize
@@ -453,6 +470,14 @@ export default function QuaggaBarcodeScanner({
                 video.play()
                   .then(() => {
                     console.log("✅ Video playing successfully");
+                    
+                    // Hide loading state once video starts playing
+                    setIsInitializing(false);
+                    
+                    // Clear initialization timeout since we're done
+                    if (initTimeoutRef.current) {
+                      clearTimeout(initTimeoutRef.current);
+                    }
                     
                     // Verify video has dimensions after a delay
                     setTimeout(() => {
@@ -520,6 +545,13 @@ export default function QuaggaBarcodeScanner({
         setTimeout(() => setupVideoStyles(), 300); // Increased from 100ms to 300ms
 
         setIsScanning(true);
+        
+        // Fallback: Hide loading state after 10 seconds even if video doesn't start
+        // This prevents infinite loading if something goes wrong
+        initTimeoutRef.current = setTimeout(() => {
+          console.warn("⚠️ Camera initialization timeout - hiding loading state");
+          setIsInitializing(false);
+        }, 10000); // 10 second timeout
         
         // Start Quagga with error handling
         try {
@@ -842,6 +874,9 @@ export default function QuaggaBarcodeScanner({
       if (resizeTimeoutRef.current) {
         clearTimeout(resizeTimeoutRef.current);
       }
+      if (initTimeoutRef.current) {
+        clearTimeout(initTimeoutRef.current);
+      }
       
       // Clear canvas
       if (canvasRef.current && scannerRef.current) {
@@ -1058,6 +1093,9 @@ export default function QuaggaBarcodeScanner({
     if (resizeTimeoutRef.current) {
       clearTimeout(resizeTimeoutRef.current);
     }
+    if (initTimeoutRef.current) {
+      clearTimeout(initTimeoutRef.current);
+    }
     
     // Clear canvas
     if (canvasRef.current && scannerRef.current) {
@@ -1156,6 +1194,47 @@ export default function QuaggaBarcodeScanner({
             <p className="text-white text-lg font-semibold bg-black/70 backdrop-blur-sm px-4 py-2 rounded-lg">
               {scannedCode}
             </p>
+          </div>
+        )}
+
+        {/* Camera Initializing Overlay */}
+        {isInitializing && (
+          <div className="absolute inset-0 z-[250] flex items-center justify-center bg-black/80 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl p-8 flex flex-col items-center gap-4 max-w-sm mx-4">
+              <div className="relative">
+                <div className="w-16 h-16 border-4 border-green-200 border-t-green-600 rounded-full animate-spin"></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <svg
+                    className="w-8 h-8 text-green-600"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                  </svg>
+                </div>
+              </div>
+              <div className="text-center">
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Initializing Camera</h3>
+                <p className="text-sm text-gray-600">
+                  Please wait while we prepare the camera...
+                </p>
+                <p className="text-xs text-gray-500 mt-2">
+                  This may take a few seconds
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
