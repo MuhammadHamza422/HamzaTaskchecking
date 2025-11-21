@@ -17,6 +17,7 @@ export default function QuaggaBarcodeScanner({
   const [validatedBox, setValidatedBox] = useState(null);
   const [isValidating, setIsValidating] = useState(false);
   const [scannedCode, setScannedCode] = useState("");
+  const [validationMessage, setValidationMessage] = useState("");
   const lastScannedCodeRef = useRef("");
   const validationTimeoutRef = useRef(null);
   const resizeTimeoutRef = useRef(null);
@@ -388,122 +389,121 @@ export default function QuaggaBarcodeScanner({
           return;
         }
 
+        // Set validating flag immediately to prevent duplicate processing and stop onProcessed from drawing
+        setIsValidating(true);
         lastScannedCodeRef.current = code;
+
+        // Stop Quagga immediately to prevent re-scanning the same barcode
+        try {
+          Quagga.stop();
+          Quagga.offDetected();
+          Quagga.offProcessed();
+        } catch (error) {
+          console.error("Error stopping Quagga:", error);
+        }
 
         // Clear previous validation timeout
         if (validationTimeoutRef.current) {
           clearTimeout(validationTimeoutRef.current);
         }
 
-        // Show red box for detected barcode
-        if (box && box.length === 4) {
-          console.log("onDetected: Barcode detected", { code, box });
-          setDetectedBoxes([box]);
-          // Use requestAnimationFrame for smoother rendering
-          requestAnimationFrame(() => {
-            drawBoxes([box], "red");
-          });
-        } else {
-          console.warn("onDetected: Invalid box format", box);
-        }
-
-        // Optimized: Reduced debounce from 500ms to 100ms for faster response
-        validationTimeoutRef.current = setTimeout(async () => {
-          setIsValidating(true);
+        // Validate barcode immediately - no delay, call API right away
+        // No visual boxes, just direct detection and API call
+        (async () => {
+          // Validate barcode with API call immediately (no loading UI, no boxes)
+          const barcodeValue = String(code).trim();
+          console.log("🔍 Barcode detected, validating immediately:", barcodeValue);
           
-          // Show green box and play sound immediately (optimistic)
-              if (box && box.length === 4) {
-                setValidatedBox(box);
-                requestAnimationFrame(() => {
-                  drawBoxes([box], "green");
-                });
-                playSuccessSound();
-              }
+          try {
+            const searchResult = await searchOrder(barcodeValue);
+            
+            if (searchResult.success && searchResult.data) {
+              const { isAlreadyPacked, packingInfo } = searchResult.data;
 
-          // Navigate immediately (optimistic navigation)
-              if (onScanSuccess) {
-            // Stop Quagga and release camera immediately
-                try {
-                  Quagga.stop();
-                  Quagga.offDetected();
-                  Quagga.offProcessed();
-                } catch (error) {
-                  console.error("Error stopping Quagga:", error);
-                }
-
-            // Navigate with barcode immediately, API call happens in background
-            // Ensure barcode is a string and trimmed
-            const barcodeValue = String(code).trim();
-            console.log("📦 Navigating with barcode:", barcodeValue);
-            onScanSuccess(barcodeValue, { barcode: barcodeValue, isOptimistic: true });
-          }
-
-          // API call happens in background (non-blocking)
-          // If it fails, error will be handled in the destination page
-          // Use the same barcodeValue that was used for navigation
-          const barcodeForSearch = String(code).trim();
-          searchOrder(barcodeForSearch)
-            .then((searchResult) => {
-              if (searchResult.success && searchResult.data) {
-                const { isAlreadyPacked, packingInfo } = searchResult.data;
-
-                // Check if already packed - show warning but navigation already happened
-                if (isAlreadyPacked && packingInfo) {
-            Swal.fire({
-                    icon: "warning",
-                    title: "Order Already Packed",
-                    html: `
-                      <div class="text-left">
-                        <p class="mb-4 text-gray-700">This order has already been packed.</p>
-                        <div class="bg-gray-50 rounded-lg p-4 mb-4">
-                          <p class="text-sm"><span class="font-medium">Packing ID:</span> ${
-                            packingInfo.packingId || "N/A"
-                          }</p>
-                          <p class="text-sm"><span class="font-medium">Status:</span> ${
-                            packingInfo.status || "N/A"
-                          }</p>
-                        </div>
+              // Check if already packed - show warning and don't navigate
+              if (isAlreadyPacked && packingInfo) {
+                // Reset validating flag and scanned code
+                setIsValidating(false);
+                lastScannedCodeRef.current = "";
+                
+                // Show alert (Quagga already stopped above)
+                await Swal.fire({
+                  icon: "warning",
+                  title: "Order Already Packed",
+                  html: `
+                    <div class="text-left">
+                      <p class="mb-4 text-gray-700">This order has already been packed.</p>
+                      <div class="bg-gray-50 rounded-lg p-4 mb-4">
+                        <p class="text-sm"><span class="font-medium">Packing ID:</span> ${
+                          packingInfo.packingId || "N/A"
+                        }</p>
+                        <p class="text-sm"><span class="font-medium">Status:</span> ${
+                          packingInfo.status || "N/A"
+                        }</p>
                       </div>
-                    `,
+                    </div>
+                  `,
+                  confirmButtonColor: "#2563eb",
+                  confirmButtonText: "OK",
+                });
+                
+                // Close scanner and return to landing page
+                if (onClose) {
+                  onClose();
+                }
+                return;
+              }
+              
+              // Valid order - play sound and navigate immediately (no visual boxes)
+              playSuccessSound();
+
+              // Navigate immediately with validated data (Quagga already stopped above)
+              console.log("✅ Order validated, navigating immediately with barcode:", barcodeValue);
+              if (onScanSuccess) {
+                // Call navigation callback immediately - camera will open on next page
+                onScanSuccess(barcodeValue, searchResult.data);
+              }
+              
+              // Reset validating flag after navigation
+              setIsValidating(false);
+            } else {
+              throw new Error("Order not found");
+            }
+          } catch (error) {
+            console.error("Error validating barcode:", error);
+            
+            // Reset validating flag and scanned code on error (so user can scan again)
+            setIsValidating(false);
+            lastScannedCodeRef.current = "";
+            
+            // Show error alert (Quagga already stopped above)
+            await Swal.fire({
+              icon: "error",
+              title: "Order Not Found",
+              text: error.message || "No order found with this barcode. Please try again.",
               confirmButtonColor: "#2563eb",
               confirmButtonText: "OK",
             });
-                }
-              }
-            })
-            .catch((error) => {
-              console.error("Error validating barcode (background):", error);
-              // Error will be handled in the destination page
-            });
-        }, 100);
+            
+            // Close scanner and return to landing page
+            if (onClose) {
+              onClose();
+            }
+          }
+        })();
       });
 
-      // Handle process result for drawing boxes (shows red boxes on detected barcodes)
+      // Handle process result - no visual boxes, just update scanned code display
       Quagga.onProcessed((result) => {
-        if (!validatedBox && !isValidating) {
-          // Use requestAnimationFrame for smoother rendering
-          requestAnimationFrame(() => {
-            if (result && result.codeResult && result.codeResult.box) {
-              const box = result.codeResult.box;
-              const code = result.codeResult.code;
-              // Update scanned code in real time
-              if (code && code !== scannedCode) {
-                setScannedCode(code);
-              }
-              // Only draw if it's a different code or no code was scanned yet
-              if (
-                box &&
-                box.length === 4 &&
-                code !== lastScannedCodeRef.current
-              ) {
-                console.log("onProcessed: Drawing red box", { code, box });
-                setDetectedBoxes([box]);
-                drawBoxes([box], "red");
-              }
+        // Only update scanned code display if we haven't detected a code yet
+        if (!isValidating && !lastScannedCodeRef.current) {
+          if (result && result.codeResult && result.codeResult.code) {
+            const code = result.codeResult.code;
+            // Update scanned code in real time (only if no code detected yet)
+            if (code && code !== scannedCode) {
+              setScannedCode(code);
             }
-            // Don't clear boxes immediately - let them persist for better UX
-            // Only clear if we have a validated box or are validating
-          });
+          }
         }
       });
     });
@@ -533,46 +533,23 @@ export default function QuaggaBarcodeScanner({
         clearTimeout(resizeTimeoutRef.current);
       }
     };
-  }, [validatedBox, isValidating, onScanSuccess, onClose]);
+  }, [isValidating, onScanSuccess, onClose]);
 
   // Handle window resize and orientation changes (important for mobile)
+  // No box redrawing needed since we don't show boxes
   useEffect(() => {
     const handleResize = () => {
-      // Debounce resize to avoid excessive redraws
-      if (resizeTimeoutRef.current) {
-        clearTimeout(resizeTimeoutRef.current);
-      }
-      
-      resizeTimeoutRef.current = setTimeout(() => {
-        // Redraw boxes if we have any detected boxes
-        if (detectedBoxes.length > 0) {
-          requestAnimationFrame(() => {
-            drawBoxes(detectedBoxes, "red");
-          });
-        }
-        if (validatedBox) {
-          requestAnimationFrame(() => {
-            drawBoxes([validatedBox], "green");
-          });
-        }
-      }, 150);
+      // Resize handler - no boxes to redraw, just for future use if needed
     };
 
     window.addEventListener("resize", handleResize);
     window.addEventListener("orientationchange", handleResize);
-    
-    // Some mobile browsers fire resize on orientation change with delay
-    const orientationTimeout = setTimeout(handleResize, 500);
 
     return () => {
       window.removeEventListener("resize", handleResize);
       window.removeEventListener("orientationchange", handleResize);
-      clearTimeout(orientationTimeout);
-      if (resizeTimeoutRef.current) {
-        clearTimeout(resizeTimeoutRef.current);
-      }
     };
-  }, [detectedBoxes, validatedBox, scannedCode]);
+  }, []);
 
   // Draw blue L-shaped corner frame overlay with black background outside
   useEffect(() => {
@@ -786,7 +763,7 @@ export default function QuaggaBarcodeScanner({
         />
 
         {/* Scanned Code Display */}
-        {scannedCode && (
+        {scannedCode && !isValidating && (
           <div className="absolute top-24 left-1/2 transform -translate-x-1/2 z-[200] flex flex-col items-center gap-2">
             <div className="bg-black/70 backdrop-blur-sm rounded-lg p-3 flex items-center justify-center">
               <svg
