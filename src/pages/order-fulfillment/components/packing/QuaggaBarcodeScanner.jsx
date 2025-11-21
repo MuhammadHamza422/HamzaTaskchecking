@@ -20,6 +20,10 @@ export default function QuaggaBarcodeScanner({
   const lastScannedCodeRef = useRef("");
   const validationTimeoutRef = useRef(null);
   const resizeTimeoutRef = useRef(null);
+  // Stability tracking: require same code to appear multiple times
+  const candidateCodeRef = useRef("");
+  const candidateCountRef = useRef(0);
+  const requiredStableScans = 3; // Require code to be seen 3 times before accepting
 
   // Play success sound
   const playSuccessSound = () => {
@@ -301,16 +305,13 @@ export default function QuaggaBarcodeScanner({
       },
       numOfWorkers: 2,
       decoder: {
+        // Limit to most common barcode formats for better accuracy
+        // Reduced from 9 to 4 readers to minimize false positives
         readers: [
-          "code_128_reader",
-          "ean_reader",
-          "ean_8_reader",
-          "code_39_reader",
-          "code_39_vin_reader",
-          "codabar_reader",
-          "upc_reader",
-          "upc_e_reader",
-          "i2of5_reader",
+          "code_128_reader", // Most common for shipping/orders
+          "ean_reader",      // Common for products
+          "upc_reader",      // Common in retail
+          "code_39_reader",  // Common in logistics
         ],
       },
       locate: true,
@@ -376,106 +377,193 @@ export default function QuaggaBarcodeScanner({
       Quagga.start();
 
       // Handle detection
-      Quagga.onDetected((result) => {
+      Quagga.onDetected(async (result) => {
         const code = result.codeResult.code;
         const box = result.codeResult.box;
 
-        // Debug: Log the scanned barcode
         console.log("🔍 Barcode detected:", code, "Format:", result.codeResult.format);
 
-        // Avoid processing the same code multiple times
-        if (code === lastScannedCodeRef.current || isValidating) {
+        // If already validating, ignore new detections
+        if (isValidating) {
           return;
         }
 
-        lastScannedCodeRef.current = code;
+        // Step 1: Format Validation
+        // Only accept codes that match expected format
+        // Require at least 5 characters (most order barcodes are 5+ chars)
+        // Adjust this pattern based on your specific barcode requirements
+        const trimmedCode = String(code).trim();
+        if (trimmedCode.length < 5) {
+          console.log("❌ Code too short, ignoring:", trimmedCode);
+          return;
+        }
+
+        // Optional: Add more specific format validation
+        // Example: Only digits (uncomment if your barcodes are numeric only)
+        // if (!/^\d+$/.test(trimmedCode)) {
+        //   console.log("❌ Code not numeric, ignoring:", trimmedCode);
+        //   return;
+        // }
+
+        // Step 2: Stability Check
+        // Require the same code to be detected multiple times consecutively
+        if (trimmedCode !== candidateCodeRef.current) {
+          // New candidate code detected
+          candidateCodeRef.current = trimmedCode;
+          candidateCountRef.current = 1;
+          console.log(`📊 New candidate: ${trimmedCode} (count: 1/${requiredStableScans})`);
+          
+          // Show red box for detected barcode (candidate)
+          if (box && box.length === 4) {
+            setDetectedBoxes([box]);
+            requestAnimationFrame(() => {
+              drawBoxes([box], "red");
+            });
+          }
+          return; // Wait for more detections of same code
+        } else {
+          // Same code detected again
+          candidateCountRef.current += 1;
+          console.log(`📊 Candidate stable: ${trimmedCode} (count: ${candidateCountRef.current}/${requiredStableScans})`);
+          
+          // Show red box while building stability
+          if (box && box.length === 4) {
+            setDetectedBoxes([box]);
+            requestAnimationFrame(() => {
+              drawBoxes([box], "red");
+            });
+          }
+          
+          // Check if we've reached required stability
+          if (candidateCountRef.current < requiredStableScans) {
+            return; // Not stable enough yet
+          }
+        }
+
+        // Step 3: Code is stable and valid, proceed with validation
+        console.log("✅ Code stable and valid, validating:", trimmedCode);
+        
+        // Avoid processing the same code multiple times
+        if (trimmedCode === lastScannedCodeRef.current) {
+          return;
+        }
+        lastScannedCodeRef.current = trimmedCode;
 
         // Clear previous validation timeout
         if (validationTimeoutRef.current) {
           clearTimeout(validationTimeoutRef.current);
         }
 
-        // Show red box for detected barcode
+        // Set validating state to show UI feedback
+        setIsValidating(true);
+        
+        // Show green box to indicate code accepted
         if (box && box.length === 4) {
-          console.log("onDetected: Barcode detected", { code, box });
-          setDetectedBoxes([box]);
-          // Use requestAnimationFrame for smoother rendering
+          setValidatedBox(box);
           requestAnimationFrame(() => {
-            drawBoxes([box], "red");
+            drawBoxes([box], "green");
           });
-        } else {
-          console.warn("onDetected: Invalid box format", box);
+          playSuccessSound();
         }
 
-        // Optimized: Reduced debounce from 500ms to 100ms for faster response
-        validationTimeoutRef.current = setTimeout(async () => {
-          setIsValidating(true);
-          
-          // Show green box and play sound immediately (optimistic)
-              if (box && box.length === 4) {
-                setValidatedBox(box);
-                requestAnimationFrame(() => {
-                  drawBoxes([box], "green");
-                });
-                playSuccessSound();
+        // Step 4: Validate with API before navigating
+        try {
+          console.log("🔄 Calling searchOrder API...");
+          const searchResult = await searchOrder(trimmedCode);
+
+          if (searchResult.success && searchResult.data) {
+            console.log("✅ Order found:", searchResult.data);
+            const { isAlreadyPacked, packingInfo } = searchResult.data;
+
+            // Check if already packed
+            if (isAlreadyPacked && packingInfo) {
+              // Stop Quagga
+              try {
+                Quagga.stop();
+                Quagga.offDetected();
+                Quagga.offProcessed();
+              } catch (error) {
+                console.error("Error stopping Quagga:", error);
               }
 
-          // Navigate immediately (optimistic navigation)
-              if (onScanSuccess) {
-            // Stop Quagga and release camera immediately
-                try {
-                  Quagga.stop();
-                  Quagga.offDetected();
-                  Quagga.offProcessed();
-                } catch (error) {
-                  console.error("Error stopping Quagga:", error);
-                }
+              // Show alert for already packed order
+              await Swal.fire({
+                icon: "warning",
+                title: "Order Already Packed",
+                html: `
+                  <div class="text-left">
+                    <p class="mb-4 text-gray-700">This order has already been packed.</p>
+                    <div class="bg-gray-50 rounded-lg p-4 mb-4">
+                      <p class="text-sm"><span class="font-medium">Packing ID:</span> ${
+                        packingInfo.packingId || "N/A"
+                      }</p>
+                      <p class="text-sm"><span class="font-medium">Status:</span> ${
+                        packingInfo.status || "N/A"
+                      }</p>
+                    </div>
+                  </div>
+                `,
+                confirmButtonColor: "#2563eb",
+                confirmButtonText: "OK",
+              });
+              
+              // Reset and allow re-scanning
+              setIsValidating(false);
+              lastScannedCodeRef.current = "";
+              candidateCodeRef.current = "";
+              candidateCountRef.current = 0;
+              
+              // Restart scanning
+              try {
+                Quagga.start();
+              } catch (error) {
+                console.error("Error restarting Quagga:", error);
+                if (onClose) onClose();
+              }
+              return;
+            }
 
-            // Navigate with barcode immediately, API call happens in background
-            // Ensure barcode is a string and trimmed
-            const barcodeValue = String(code).trim();
-            console.log("📦 Navigating with barcode:", barcodeValue);
-            onScanSuccess(barcodeValue, { barcode: barcodeValue, isOptimistic: true });
+            // Order is valid and not packed - navigate with full data
+            console.log("📦 Navigating with validated order data");
+            
+            // Stop Quagga and release camera
+            try {
+              Quagga.stop();
+              Quagga.offDetected();
+              Quagga.offProcessed();
+            } catch (error) {
+              console.error("Error stopping Quagga:", error);
+            }
+
+            // Navigate with full search data (NOT optimistic)
+            if (onScanSuccess) {
+              onScanSuccess(trimmedCode, searchResult.data);
+            }
+          } else {
+            throw new Error("Order not found");
           }
-
-          // API call happens in background (non-blocking)
-          // If it fails, error will be handled in the destination page
-          // Use the same barcodeValue that was used for navigation
-          const barcodeForSearch = String(code).trim();
-          searchOrder(barcodeForSearch)
-            .then((searchResult) => {
-              if (searchResult.success && searchResult.data) {
-                const { isAlreadyPacked, packingInfo } = searchResult.data;
-
-                // Check if already packed - show warning but navigation already happened
-                if (isAlreadyPacked && packingInfo) {
-            Swal.fire({
-                    icon: "warning",
-                    title: "Order Already Packed",
-                    html: `
-                      <div class="text-left">
-                        <p class="mb-4 text-gray-700">This order has already been packed.</p>
-                        <div class="bg-gray-50 rounded-lg p-4 mb-4">
-                          <p class="text-sm"><span class="font-medium">Packing ID:</span> ${
-                            packingInfo.packingId || "N/A"
-                          }</p>
-                          <p class="text-sm"><span class="font-medium">Status:</span> ${
-                            packingInfo.status || "N/A"
-                          }</p>
-                        </div>
-                      </div>
-                    `,
-              confirmButtonColor: "#2563eb",
-              confirmButtonText: "OK",
-            });
-                }
-              }
-            })
-            .catch((error) => {
-              console.error("Error validating barcode (background):", error);
-              // Error will be handled in the destination page
-            });
-        }, 100);
+        } catch (error) {
+          console.error("❌ Error validating barcode:", error);
+          
+          // Show error alert
+          await Swal.fire({
+            icon: "error",
+            title: "Order Not Found",
+            text: error.message || "No order found with this barcode. Please try again.",
+            confirmButtonColor: "#2563eb",
+            confirmButtonText: "OK",
+          });
+          
+          // Reset validation state and allow re-scanning
+          setIsValidating(false);
+          lastScannedCodeRef.current = "";
+          candidateCodeRef.current = "";
+          candidateCountRef.current = 0;
+          
+          // Clear boxes
+          setDetectedBoxes([]);
+          setValidatedBox(null);
+        }
       });
 
       // Handle process result for drawing boxes (shows red boxes on detected barcodes)
@@ -496,13 +584,19 @@ export default function QuaggaBarcodeScanner({
                 box.length === 4 &&
                 code !== lastScannedCodeRef.current
               ) {
-                console.log("onProcessed: Drawing red box", { code, box });
                 setDetectedBoxes([box]);
                 drawBoxes([box], "red");
               }
+            } else {
+              // No barcode detected in this frame
+              // Reset candidate if we've gone several frames without detection
+              // This helps when user moves barcode out of view
+              if (candidateCodeRef.current && candidateCountRef.current < requiredStableScans) {
+                // Only reset if we haven't reached stability yet
+                candidateCodeRef.current = "";
+                candidateCountRef.current = 0;
+              }
             }
-            // Don't clear boxes immediately - let them persist for better UX
-            // Only clear if we have a validated box or are validating
           });
         }
       });
@@ -786,7 +880,7 @@ export default function QuaggaBarcodeScanner({
         />
 
         {/* Scanned Code Display */}
-        {scannedCode && (
+        {scannedCode && !isValidating && (
           <div className="absolute top-24 left-1/2 transform -translate-x-1/2 z-[200] flex flex-col items-center gap-2">
             <div className="bg-black/70 backdrop-blur-sm rounded-lg p-3 flex items-center justify-center">
               <svg
@@ -806,6 +900,38 @@ export default function QuaggaBarcodeScanner({
             <p className="text-white text-lg font-semibold bg-black/70 backdrop-blur-sm px-4 py-2 rounded-lg">
               {scannedCode}
             </p>
+          </div>
+        )}
+
+        {/* Validating Overlay */}
+        {isValidating && (
+          <div className="absolute inset-0 z-[300] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl p-8 flex flex-col items-center gap-4 max-w-sm mx-4">
+              <div className="relative">
+                <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <svg
+                    className="w-8 h-8 text-blue-600"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                </div>
+              </div>
+              <div className="text-center">
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Validating Order</h3>
+                <p className="text-sm text-gray-600">
+                  Please wait while we verify the barcode...
+                </p>
+              </div>
+            </div>
           </div>
         )}
       </div>

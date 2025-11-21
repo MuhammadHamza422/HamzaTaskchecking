@@ -9,6 +9,7 @@ import FulfillmentBreadcrumb from "../common/FulfillmentBreadcrumb";
 import FilterDrawer from "../common/FilterDrawer";
 import TableSkeleton from "../common/TableSkeleton";
 import MobileCardSkeleton from "../common/MobileCardSkeleton";
+import CustomPagination from "../common/CustomPagination";
 import { getAllPackingOrders } from "../../../../api/fulfillment";
 import apiClient from "../../../../api/client";
 import dayjs from "dayjs";
@@ -18,12 +19,16 @@ const { RangePicker } = DatePicker;
 
 export default function PackingOperationsTable() {
   const navigate = useNavigate();
+  
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState([]);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(30);
   const [pagination, setPagination] = useState({
-    current: 1,
-    pageSize: 30,
+    page: 1,
+    perPage: 30,
     total: 0,
+    totalPages: 1,
   });
   const [filters, setFilters] = useState({
     platform: null,
@@ -60,11 +65,11 @@ export default function PackingOperationsTable() {
     fetchPlatforms();
   }, []);
 
-  const loadPackingOrders = async (page = 1, pageSize = 30) => {
+  const loadPackingOrders = async (pageNum = page, pageSize = limit) => {
     setLoading(true);
     try {
       const params = {
-        page,
+        page: pageNum,
         limit: pageSize,
       };
 
@@ -87,9 +92,10 @@ export default function PackingOperationsTable() {
       if (result.success && result.data) {
         setData(result.data.orders || []);
         setPagination({
-          current: result.data.pagination?.page || page,
-          pageSize: result.data.pagination?.perPage || pageSize,
+          page: result.data.pagination?.page || pageNum,
+          perPage: result.data.pagination?.perPage || pageSize,
           total: result.data.pagination?.total || 0,
+          totalPages: result.data.pagination?.totalPages || 1,
         });
       }
     } catch (error) {
@@ -106,18 +112,26 @@ export default function PackingOperationsTable() {
     }
   };
 
+  // Load data when page, limit, or filters change
   useEffect(() => {
-    loadPackingOrders(1, pagination.pageSize);
+    loadPackingOrders(page, limit);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.platform, filters.status, filters.search, filters.dateRange]);
+  }, [page, limit, filters.platform, filters.status, filters.search, filters.dateRange]);
 
-  const handleTableChange = (newPagination) => {
-    loadPackingOrders(newPagination.current, newPagination.pageSize);
+  const handlePageChange = (newPage) => {
+    setPage(newPage);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleLimitChange = (newLimit) => {
+    setLimit(newLimit);
+    setPage(1); // Reset to page 1 when changing limit
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleFilterChange = (key, value) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
-    setPagination((prev) => ({ ...prev, current: 1 }));
+    setPage(1); // Reset to page 1 when filters change
   };
 
   const columns = [
@@ -263,7 +277,7 @@ export default function PackingOperationsTable() {
                   prefix={<Search className="w-4 h-4 text-gray-400" />}
                   value={filters.search}
                   onChange={(e) => handleFilterChange("search", e.target.value)}
-                  onPressEnter={() => loadPackingOrders(1, pagination.pageSize)}
+                  onPressEnter={() => handleFilterChange("search", filters.search)}
                   className="w-full h-11"
                   allowClear
                 />
@@ -336,15 +350,7 @@ export default function PackingOperationsTable() {
                 columns={columns}
                 dataSource={data}
                 rowKey="packingId"
-                pagination={{
-                  current: pagination.current,
-                  pageSize: pagination.pageSize,
-                  total: pagination.total,
-                  showSizeChanger: true,
-                  showTotal: (total) => `Total ${total} orders`,
-                  pageSizeOptions: ["10", "30", "50", "100"],
-                }}
-                onChange={handleTableChange}
+                pagination={false}
                 className="fulfillment-table"
                 onRow={(record) => ({
                   onClick: () => navigate(`/fulfillment/packing/${record.orderNumber}`, {
@@ -367,28 +373,23 @@ export default function PackingOperationsTable() {
             ) : (
               <>
                 {data.map(renderMobileCard)}
-                <div className="flex justify-center mt-6 gap-2">
-                  <button
-                    onClick={() => loadPackingOrders(pagination.current - 1, pagination.pageSize)}
-                    disabled={pagination.current === 1}
-                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Previous
-                  </button>
-                  <span className="px-4 py-2 text-gray-700">
-                    Page {pagination.current} of {Math.ceil(pagination.total / pagination.pageSize)}
-                  </span>
-                  <button
-                    onClick={() => loadPackingOrders(pagination.current + 1, pagination.pageSize)}
-                    disabled={pagination.current >= Math.ceil(pagination.total / pagination.pageSize)}
-                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Next
-                  </button>
-                </div>
               </>
             )}
           </div>
+
+          {/* Custom Pagination Component */}
+          {!loading && pagination.total > 0 && (
+            <CustomPagination
+              page={pagination.page}
+              limit={pagination.perPage}
+              total={pagination.total}
+              totalPages={pagination.totalPages}
+              onPageChange={handlePageChange}
+              onLimitChange={handleLimitChange}
+              itemName="orders"
+              limitOptions={[10, 20, 30, 50, 100]}
+            />
+          )}
         </motion.div>
 
         {/* Mobile Filter Drawer */}
@@ -404,7 +405,10 @@ export default function PackingOperationsTable() {
             { label: "Partially Fulfilled", value: "Partially Fulfilled" },
           ]}
           searchPlaceholder="Search by order number"
-          onApply={() => loadPackingOrders(1, pagination.pageSize)}
+          onApply={() => {
+            setPage(1);
+            loadPackingOrders(1, limit);
+          }}
         />
       </div>
     </div>
