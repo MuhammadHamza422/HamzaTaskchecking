@@ -288,78 +288,40 @@ export default function QuaggaBarcodeScanner({
   useEffect(() => {
     if (!scannerRef.current) return;
 
-    // Request camera permissions explicitly first
-    const requestCameraPermission = async () => {
-      try {
-        // Request permission explicitly
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: "environment" },
-            width: { min: 640, ideal: 1280, max: 1920 },
-            height: { min: 480, ideal: 720, max: 1080 },
-          },
-          audio: false,
-        });
-        
-        // Stop the test stream immediately
-        stream.getTracks().forEach(track => track.stop());
-        
-        return true;
-      } catch (error) {
-        console.error("Camera permission denied or unavailable:", error);
-        
-        let errorMessage = "Failed to access camera. Please check permissions.";
-        if (error.name === "NotAllowedError" || error.name === "PermissionDeniedError") {
-          errorMessage = "Camera access denied. Please allow camera permissions and try again.";
-        } else if (error.name === "NotFoundError" || error.name === "DevicesNotFoundError") {
-          errorMessage = "No camera found on this device.";
-        } else if (error.name === "NotReadableError" || error.name === "TrackStartError") {
-          errorMessage = "Camera is already in use by another application.";
-        } else if (error.name === "OverconstrainedError") {
-          errorMessage = "Camera does not meet requirements. Please try a different device.";
-        } else if (error.name === "SecurityError") {
-          errorMessage = "Camera access blocked by browser security. Please use HTTPS.";
-        }
-        
-        Swal.fire({
-          icon: "error",
-          title: "Camera Error",
-          text: errorMessage,
-          confirmButtonColor: "#2563eb",
-        });
-        
-        if (onClose) onClose();
-        return false;
-      }
-    };
+    let initializationAttempt = 0;
+    const maxAttempts = 2;
 
     const initializeScanner = async () => {
-      // Request permission first
-      const hasPermission = await requestCameraPermission();
-      if (!hasPermission) return;
+      initializationAttempt++;
+      
+      console.log(`📷 Camera initialization attempt ${initializationAttempt}/${maxAttempts}`);
+      console.log("🌐 Environment:", {
+        userAgent: navigator.userAgent,
+        protocol: window.location.protocol,
+        hostname: window.location.hostname,
+      });
 
+      // Simple, mobile-friendly camera constraints
+      // Remove complex constraints that cause issues on some devices
       const config = {
         inputStream: {
           name: "Live",
           type: "LiveStream",
           target: scannerRef.current,
           constraints: {
-            // More flexible constraints for mobile compatibility
-            width: { min: 640, ideal: 1280, max: 1920 },
-            height: { min: 480, ideal: 720, max: 1080 },
-            facingMode: { ideal: "environment" }, // Prefer back camera but allow front
-            aspectRatio: { ideal: 16/9 },
+            // Ultra-simple constraints for maximum compatibility
+            facingMode: "environment", // Just request back camera, no "ideal"
+            // Let browser choose best resolution (no width/height/aspectRatio)
           },
         },
         locator: {
           patchSize: "medium",
           halfSample: true,
         },
-        numOfWorkers: navigator.hardwareConcurrency || 2,
+        // Use fewer workers on mobile for better stability
+        numOfWorkers: navigator.hardwareConcurrency ? Math.min(navigator.hardwareConcurrency, 2) : 1,
         frequency: 10, // Process 10 frames per second
         decoder: {
-          // Limit to most common barcode formats for better accuracy
-          // Reduced from 9 to 4 readers to minimize false positives
           readers: [
               "code_128_reader",
               "ean_reader",
@@ -377,31 +339,81 @@ export default function QuaggaBarcodeScanner({
 
       Quagga.init(config, (err) => {
         if (err) {
-          console.error("Error initializing QuaggaJS:", err);
+          console.error("❌ QuaggaJS initialization error:", {
+            name: err.name,
+            message: err.message,
+            code: err.code,
+            constraint: err.constraint,
+            stack: err.stack,
+          });
           
+          // Detailed error message based on error type
           let errorMessage = "Failed to initialize camera. Please try again.";
-          if (err.name === "NotAllowedError" || err.message?.includes("permission")) {
-            errorMessage = "Camera access denied. Please allow camera permissions in your browser settings.";
-          } else if (err.name === "NotReadableError") {
-            errorMessage = "Camera is in use by another application. Please close other apps using the camera.";
+          let errorDetails = "";
+          
+          if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+            errorMessage = "Camera access denied.";
+            errorDetails = "Please allow camera permissions in your browser settings and reload the page.";
+          } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+            errorMessage = "No camera found on this device.";
+            errorDetails = "Please make sure your device has a working camera.";
+          } else if (err.name === "NotReadableError" || err.name === "TrackStartError") {
+            errorMessage = "Camera is already in use.";
+            errorDetails = "Please close other apps or tabs using the camera and try again.";
+          } else if (err.name === "OverconstrainedError" || err.name === "ConstraintNotSatisfiedError") {
+            errorMessage = "Camera doesn't meet requirements.";
+            errorDetails = `The camera doesn't support the required settings. Error: ${err.constraint || "unknown"}`;
+          } else if (err.name === "SecurityError") {
+            errorMessage = "Camera access blocked by security.";
+            errorDetails = "This site must be accessed via HTTPS. Please check your connection.";
+          } else if (err.name === "TypeError") {
+            errorMessage = "Camera initialization failed.";
+            errorDetails = "The camera might be in use or the browser doesn't support camera access.";
+          } else {
+            errorMessage = "Camera initialization failed.";
+            errorDetails = `Error: ${err.message || "Unknown error"}`;
+          }
+          
+          // Retry logic for transient errors
+          const shouldRetry = 
+            (err.name === "NotReadableError" || err.name === "AbortError") && 
+            initializationAttempt < maxAttempts;
+          
+          if (shouldRetry) {
+            console.log(`🔄 Retrying camera initialization in 1 second...`);
+            setTimeout(() => {
+              initializeScanner();
+            }, 1000);
+            return;
           }
           
           Swal.fire({
             icon: "error",
-            title: "Camera Error",
-            text: errorMessage,
+            title: errorMessage,
+            html: `
+              <p class="text-sm text-gray-600 mb-2">${errorDetails}</p>
+              <div class="bg-red-50 border border-red-200 rounded p-3 mt-3">
+                <p class="text-xs text-gray-700"><strong>Technical Details:</strong></p>
+                <p class="text-xs text-gray-600 font-mono">${err.name}: ${err.message}</p>
+              </div>
+            `,
             confirmButtonColor: "#2563eb",
+            confirmButtonText: "OK",
           });
+          
           if (onClose) onClose();
           return;
         }
+        
+        console.log("✅ QuaggaJS initialized successfully");
 
         // Ensure video element fills container after Quagga initializes
-        // Use multiple attempts to ensure video is ready
+        // CRITICAL: Use longer delays for mobile browsers to properly initialize
         const setupVideoStyles = (attempt = 0) => {
           const container = scannerRef.current;
-          if (!container && attempt < 10) {
-            setTimeout(() => setupVideoStyles(attempt + 1), 100);
+          if (!container && attempt < 15) {
+            // Increased max attempts for slower devices
+            setTimeout(() => setupVideoStyles(attempt + 1), 150);
             return;
           }
 
@@ -410,14 +422,16 @@ export default function QuaggaBarcodeScanner({
             const drawingBuffer = container.querySelector("canvas.drawingBuffer");
             
             if (video) {
-              console.log("Setting up video element, attempt:", attempt);
+              console.log(`📹 Setting up video element, attempt: ${attempt}`);
               
-              // Critical: Add mobile-required attributes to fix black screen on mobile
-              // These attributes are REQUIRED for video to display inline on mobile browsers
-              video.setAttribute("playsinline", "true"); // iOS Safari requirement
-              video.setAttribute("webkit-playsinline", "true"); // Older iOS versions
-              video.setAttribute("muted", "true"); // Required for autoplay on most mobile browsers
-              video.setAttribute("autoplay", "true"); // Ensure video starts playing
+              // CRITICAL: Mobile-required attributes
+              // These MUST be set before calling play() on mobile browsers
+              video.setAttribute("playsinline", ""); // iOS Safari requirement (empty string is correct)
+              video.setAttribute("webkit-playsinline", ""); // Older iOS versions
+              video.setAttribute("muted", ""); // Required for autoplay
+              video.setAttribute("autoplay", ""); // Ensure video starts
+              video.muted = true; // Also set as property for extra compatibility
+              video.playsInline = true; // Set as property too
               
               // Apply styles
               video.style.width = "100%";
@@ -427,30 +441,61 @@ export default function QuaggaBarcodeScanner({
               video.style.top = "0";
               video.style.left = "0";
               video.style.zIndex = "1";
+              video.style.backgroundColor = "#000"; // Black background while loading
               
-              // Force video to play (some browsers need this explicit call)
-              video.play().then(() => {
-                console.log("Video playing successfully");
-              }).catch((err) => {
-                console.error("Video play failed:", err);
-                // Try to reload the video source
-                if (video.srcObject) {
-                  const stream = video.srcObject;
-                  video.srcObject = null;
-                  setTimeout(() => {
-                    video.srcObject = stream;
-                    video.play().catch(e => console.error("Retry play failed:", e));
-                  }, 100);
+              // CRITICAL: Force video to play with aggressive retry
+              const attemptPlay = (playAttempt = 0) => {
+                if (playAttempt > 5) {
+                  console.error("❌ Failed to start video after 5 attempts");
+                  return;
                 }
-              });
+                
+                video.play()
+                  .then(() => {
+                    console.log("✅ Video playing successfully");
+                    
+                    // Verify video has dimensions after a delay
+                    setTimeout(() => {
+                      console.log(`📐 Video dimensions: ${video.videoWidth}x${video.videoHeight}`);
+                      
+                      if (video.videoWidth === 0 || video.videoHeight === 0) {
+                        console.warn("⚠️ Video has no dimensions, attempting restart...");
+                        
+                        // Try to restart video stream
+                        if (video.srcObject) {
+                          const stream = video.srcObject;
+                          const tracks = stream.getTracks();
+                          
+                          // Stop and restart tracks
+                          tracks.forEach(track => {
+                            track.stop();
+                          });
+                          
+                          // Wait for camera to fully release (CRITICAL for mobile)
+                          setTimeout(() => {
+                            // Reinitialize with same stream constraints
+                            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+                              .then(newStream => {
+                                video.srcObject = newStream;
+                                video.play().catch(e => console.error("Video restart failed:", e));
+                              })
+                              .catch(e => console.error("Failed to get new stream:", e));
+                          }, 500); // 500ms delay for camera release
+                        }
+                      }
+                    }, 800); // Check dimensions after 800ms
+                  })
+                  .catch((err) => {
+                    console.error(`❌ Video play attempt ${playAttempt + 1} failed:`, err.name, err.message);
+                    
+                    // Retry with exponential backoff
+                    const delay = Math.min(1000, 200 * Math.pow(2, playAttempt));
+                    setTimeout(() => attemptPlay(playAttempt + 1), delay);
+                  });
+              };
               
-              // Check if video has dimensions
-              setTimeout(() => {
-                console.log("Video dimensions:", video.videoWidth, "x", video.videoHeight);
-                if (video.videoWidth === 0 || video.videoHeight === 0) {
-                  console.warn("Video has no dimensions, might not be displaying");
-                }
-              }, 500);
+              // Start play attempts after a small delay to ensure video is ready
+              setTimeout(() => attemptPlay(), 200);
             }
             
             if (drawingBuffer) {
@@ -463,15 +508,16 @@ export default function QuaggaBarcodeScanner({
               drawingBuffer.style.pointerEvents = "none";
             }
 
-            // If video not ready yet, retry
-            if (!video && attempt < 10) {
-              setTimeout(() => setupVideoStyles(attempt + 1), 100);
+            // If video not ready yet, retry with longer delay
+            if (!video && attempt < 15) {
+              setTimeout(() => setupVideoStyles(attempt + 1), 200);
             }
           }
         };
 
-        // Start setup after a short delay
-        setTimeout(() => setupVideoStyles(), 100);
+        // CRITICAL: Wait longer before setup on mobile (allows camera to fully initialize)
+        // Production environments need more time than localhost/ngrok
+        setTimeout(() => setupVideoStyles(), 300); // Increased from 100ms to 300ms
 
         setIsScanning(true);
         
@@ -590,13 +636,24 @@ export default function QuaggaBarcodeScanner({
             console.log("✅ Order found:", searchResult.data);
             const { isAlreadyPacked, packingInfo } = searchResult.data;
 
-            // Check if already packed
+             // Check if already packed
             if (isAlreadyPacked && packingInfo) {
-              // Stop Quagga
+              console.log("⚠️ Order already packed, stopping scanner...");
+              
+              // Stop Quagga and release camera
               try {
                 Quagga.stop();
                 Quagga.offDetected();
                 Quagga.offProcessed();
+                
+                // CRITICAL: Stop video tracks for mobile
+                if (scannerRef.current) {
+                  const video = scannerRef.current.querySelector("video");
+                  if (video && video.srcObject) {
+                    const stream = video.srcObject;
+                    stream.getTracks().forEach(track => track.stop());
+                  }
+                }
               } catch (error) {
                 console.error("Error stopping Quagga:", error);
               }
@@ -622,32 +679,54 @@ export default function QuaggaBarcodeScanner({
                 confirmButtonText: "OK",
               });
               
-              // Reset and allow re-scanning
+              console.log("🔄 Restarting scanner for next scan...");
+              
+              // Reset validation state
               setIsValidating(false);
               lastScannedCodeRef.current = "";
               candidateCodeRef.current = "";
               candidateCountRef.current = 0;
               
-              // Restart scanning
-              try {
-                Quagga.start();
-              } catch (error) {
-                console.error("Error restarting Quagga:", error);
-                if (onClose) onClose();
-              }
+              // CRITICAL: Wait for camera to fully release before restarting (mobile requirement)
+              // This prevents "camera already in use" errors on mobile
+              setTimeout(() => {
+                try {
+                  Quagga.start();
+                  console.log("✅ Scanner restarted successfully");
+                } catch (error) {
+                  console.error("❌ Error restarting Quagga:", error);
+                  if (onClose) onClose();
+                }
+              }, 500); // 500ms delay for camera release
+              
               return;
             }
 
             // Order is valid and not packed - navigate with full data
             console.log("📦 Navigating with validated order data");
             
-            // Stop Quagga and release camera
+            // Stop Quagga and release camera before navigation
             try {
               Quagga.stop();
               Quagga.offDetected();
               Quagga.offProcessed();
+              
+              // CRITICAL: Stop video tracks for mobile
+              if (scannerRef.current) {
+                const video = scannerRef.current.querySelector("video");
+                if (video && video.srcObject) {
+                  const stream = video.srcObject;
+                  stream.getTracks().forEach(track => {
+                    track.stop();
+                    console.log(`🛑 Stopped track before navigation: ${track.kind}`);
+                  });
+                  video.srcObject = null;
+                }
+              }
+              
+              console.log("✅ Camera released before navigation");
             } catch (error) {
-              console.error("Error stopping Quagga:", error);
+              console.error("❌ Error stopping Quagga:", error);
             }
 
             // Navigate with full search data (NOT optimistic)
@@ -669,6 +748,8 @@ export default function QuaggaBarcodeScanner({
             confirmButtonText: "OK",
           });
           
+          console.log("🔄 Resetting scanner for retry...");
+          
           // Reset validation state and allow re-scanning
           setIsValidating(false);
           lastScannedCodeRef.current = "";
@@ -678,6 +759,9 @@ export default function QuaggaBarcodeScanner({
           // Clear boxes
           setDetectedBoxes([]);
           setValidatedBox(null);
+          
+          // Note: No need to restart Quagga here - it's still running
+          // Just reset the validation state to allow new scans
         }
       });
 
@@ -722,28 +806,55 @@ export default function QuaggaBarcodeScanner({
     initializeScanner();
 
     return () => {
-      // Properly stop Quagga and release camera
+      console.log("🧹 Cleaning up camera resources...");
+      
+      // CRITICAL: Properly release camera on mobile
+      // Mobile browsers need explicit cleanup to release camera for next use
       try {
+        // Stop Quagga first
         Quagga.stop();
         Quagga.offDetected();
         Quagga.offProcessed();
+        
+        // CRITICAL: Explicitly stop all video tracks (mobile requirement)
+        if (scannerRef.current) {
+          const video = scannerRef.current.querySelector("video");
+          if (video && video.srcObject) {
+            const stream = video.srcObject;
+            const tracks = stream.getTracks();
+            tracks.forEach(track => {
+              track.stop();
+              console.log(`🛑 Stopped track: ${track.kind}`);
+            });
+            video.srcObject = null;
+          }
+        }
+        
+        console.log("✅ Camera resources released");
       } catch (error) {
-        console.error("Error stopping Quagga:", error);
+        console.error("❌ Error stopping Quagga:", error);
       }
+      
+      // Clear timeouts
       if (validationTimeoutRef.current) {
         clearTimeout(validationTimeoutRef.current);
       }
-      // Clear canvas
-      if (canvasRef.current) {
-        const ctx = canvasRef.current.getContext("2d");
-        const containerWidth = scannerRef.current?.clientWidth || 0;
-        const containerHeight = scannerRef.current?.clientHeight || 0;
-        if (containerWidth > 0 && containerHeight > 0) {
-          ctx.clearRect(0, 0, containerWidth, containerHeight);
-        }
-      }
       if (resizeTimeoutRef.current) {
         clearTimeout(resizeTimeoutRef.current);
+      }
+      
+      // Clear canvas
+      if (canvasRef.current && scannerRef.current) {
+        try {
+          const ctx = canvasRef.current.getContext("2d");
+          const containerWidth = scannerRef.current.clientWidth || 0;
+          const containerHeight = scannerRef.current.clientHeight || 0;
+          if (containerWidth > 0 && containerHeight > 0) {
+            ctx.clearRect(0, 0, containerWidth, containerHeight);
+          }
+        } catch (error) {
+          console.error("Error clearing canvas:", error);
+        }
       }
     };
   }, [validatedBox, isValidating, onScanSuccess, onClose]);
@@ -914,29 +1025,55 @@ export default function QuaggaBarcodeScanner({
   }, []);
 
   const handleClose = () => {
-    // Properly stop Quagga and release camera
+    console.log("🚪 User closed scanner, cleaning up...");
+    
+    // CRITICAL: Properly release camera on mobile before closing
     try {
+      // Stop Quagga
       Quagga.stop();
       Quagga.offDetected();
       Quagga.offProcessed();
+      
+      // CRITICAL: Explicitly stop all video tracks for mobile
+      if (scannerRef.current) {
+        const video = scannerRef.current.querySelector("video");
+        if (video && video.srcObject) {
+          const stream = video.srcObject;
+          const tracks = stream.getTracks();
+          tracks.forEach(track => {
+            track.stop();
+            console.log(`🛑 Stopped track on close: ${track.kind}`);
+          });
+          video.srcObject = null;
+        }
+      }
     } catch (error) {
-      console.error("Error stopping Quagga:", error);
+      console.error("❌ Error stopping Quagga on close:", error);
     }
+    
+    // Clear timeouts
     if (validationTimeoutRef.current) {
       clearTimeout(validationTimeoutRef.current);
-    }
-    // Clear canvas
-    if (canvasRef.current && scannerRef.current) {
-      const ctx = canvasRef.current.getContext("2d");
-      const containerWidth = scannerRef.current.clientWidth || 0;
-      const containerHeight = scannerRef.current.clientHeight || 0;
-      if (containerWidth > 0 && containerHeight > 0) {
-        ctx.clearRect(0, 0, containerWidth, containerHeight);
-      }
     }
     if (resizeTimeoutRef.current) {
       clearTimeout(resizeTimeoutRef.current);
     }
+    
+    // Clear canvas
+    if (canvasRef.current && scannerRef.current) {
+      try {
+        const ctx = canvasRef.current.getContext("2d");
+        const containerWidth = scannerRef.current.clientWidth || 0;
+        const containerHeight = scannerRef.current.clientHeight || 0;
+        if (containerWidth > 0 && containerHeight > 0) {
+          ctx.clearRect(0, 0, containerWidth, containerHeight);
+        }
+      } catch (error) {
+        console.error("Error clearing canvas on close:", error);
+      }
+    }
+    
+    // Call parent's onClose after cleanup
     if (onClose) {
       onClose();
     }
