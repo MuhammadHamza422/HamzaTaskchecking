@@ -57,6 +57,7 @@ export default function PackingOrderDetails() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [isAlreadyPacked, setIsAlreadyPacked] = useState(false);
+  const [isLoadingOrderDetails, setIsLoadingOrderDetails] = useState(false);
 
   // Get storage key based on orderId
   const getStorageKey = () => {
@@ -237,16 +238,14 @@ export default function PackingOrderDetails() {
           const platform = location.state?.platform;
           const alreadyPackedFromSearch = location.state?.isAlreadyPacked;
           const packingInfoFromSearch = location.state?.packingInfo;
-          const isOptimistic = searchData?.isOptimistic;
 
           let orderIdToUse;
+          
+          // Use platform from location.state or fallback to orderData if available
+          const platformToUse = platform || orderData?.platform;
 
-          // For optimistic navigation, use barcode from state first (most reliable), then URL
-          // State barcode is set directly from scanner, URL might have encoding issues
-          if (isOptimistic) {
-            // Priority: searchData.barcode (from state) > orderId from URL
-            orderIdToUse = searchData?.barcode || decodeURIComponent(orderId || "");
-          } else if (platform === "shopify") {
+          // Get order ID based on platform
+          if (platformToUse === "shopify") {
             orderIdToUse = searchData?.orderId || location.state?.orderId;
           } else {
             orderIdToUse = decodeURIComponent(orderId);
@@ -256,81 +255,26 @@ export default function PackingOrderDetails() {
             throw new Error("Order ID is missing");
           }
 
-          // For optimistic navigation, platform will be determined after search
-          if (!isOptimistic && !platform) {
+          // Check if platform is missing - but allow if orderData already has it
+          if (!platformToUse) {
             setError("Platform information is missing");
             setLoading(false);
             return;
           }
 
           // If autoOpenCamera flag is set, immediately go to photo upload stage
-          // Don't wait for order details - load them in background
+          // Load order details in background while user takes photos
           if (autoOpenCamera) {
+            // Start API call immediately (don't wait for state updates)
+            const detailsPromise = getOrderDetails(orderIdToUse, platformToUse);
+            
+            // Update UI state immediately to allow camera to open
             setStage(STAGES.PHOTO_UPLOAD);
             setLoading(false); // Don't block UI, allow camera to open immediately
+            setIsLoadingOrderDetails(true); // Show background loading indicator
 
-            // For optimistic navigation, search order by barcode in background
-            const isOptimistic = location.state?.searchData?.isOptimistic;
-            if (isOptimistic && orderIdToUse) {
-              // Add small delay and retry logic for better reliability
-              const searchWithRetry = async (query, retries = 3, delay = 300) => {
-                // Ensure query is a clean string
-                const cleanQuery = String(query).trim();
-                
-                for (let attempt = 0; attempt < retries; attempt++) {
-                  try {
-                    // Add delay before each attempt (exponential backoff)
-                    if (attempt > 0) {
-                      await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, attempt - 1)));
-                    } else {
-                      // First attempt: small initial delay to ensure API is ready
-                      await new Promise(resolve => setTimeout(resolve, delay));
-                    }
-                    
-                    const searchResult = await searchOrder(cleanQuery);
-                    
-                    if (searchResult.success && searchResult.data) {
-                      const { orderId, orderNumber, platform: foundPlatform } = searchResult.data;
-                      const finalOrderId = orderId || orderNumber || query;
-                      const finalPlatform = foundPlatform || platform;
-                      
-                      if (!finalPlatform) {
-                        throw new Error("Platform not found in search result");
-                      }
-                      
-                      // Now get full order details
-                      const result = await getOrderDetails(finalOrderId, finalPlatform);
-                      
-                      if (result.success && result.data) {
-                        setOrderData(result.data);
-                        // Select all items by default
-                        setSelectedItems(result.data.orderLines?.map((item) => item.id) || []);
-                        setError(null); // Clear any previous errors
-                        return; // Success, exit retry loop
-                      }
-                    }
-                    throw new Error("Order not found");
-                  } catch (error) {
-                    
-                    // If this is the last attempt, set error (but don't block UI)
-                    if (attempt === retries - 1) {
-                      console.error("Error loading order details (optimistic):", error);
-                      // Only set error if we're not in photo upload stage (user might still be taking photos)
-                      // Error will be shown when user tries to proceed
-                      setError(error.message || "Failed to load order details");
-                    }
-                    // Otherwise, continue to next retry
-                  }
-                }
-              };
-              
-              // Start search with retry in background (non-blocking)
-              searchWithRetry(orderIdToUse).catch((error) => {
-                console.error("All search retries failed:", error);
-              });
-            } else {
-              // Load order details in background (non-blocking)
-              getOrderDetails(orderIdToUse, platform)
+            // Process API response in background (non-blocking)
+            detailsPromise
               .then((result) => {
                 if (result.success && result.data) {
                   setOrderData(result.data);
@@ -362,13 +306,18 @@ export default function PackingOrderDetails() {
                       })
                       .catch((err) => {
                         console.error("Error loading packing details:", err);
+                      })
+                      .finally(() => {
+                        setIsLoadingOrderDetails(false);
                       });
                   } else {
                     // Select all items by default
                     setSelectedItems(
                       result.data.orderLines.map((item) => item.id)
                     );
+                    setIsLoadingOrderDetails(false);
                   }
+                  setError(null); // Clear any previous errors
                 }
               })
               .catch((error) => {
@@ -376,17 +325,15 @@ export default function PackingOrderDetails() {
                   "Error loading order details in background:",
                   error
                 );
-                // Don't show error immediately, just log it
-                // User can still take photos, error will show if they try to proceed
                 setError(error.message || "Failed to load order details");
+                setIsLoadingOrderDetails(false);
               });
-            }
 
             return; // Exit early, don't wait for order details
           }
 
           // If not autoOpenCamera, load order details normally (blocking)
-          const result = await getOrderDetails(orderIdToUse, platform);
+          const result = await getOrderDetails(orderIdToUse, platformToUse);
 
           if (result.success && result.data) {
             setOrderData(result.data);
@@ -443,13 +390,26 @@ export default function PackingOrderDetails() {
     if (orderId) {
       loadOrderDetails();
     }
-  }, [orderId, location.state, navigate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderId]); // Only run when orderId changes, not when location.state changes
 
   // Don't show error if we're in autoOpenCamera mode and on photo upload stage
   // Order details are loading in background, allow camera to open immediately
+  // Also don't show error if we're in item selection stage and have orderData
   const isAutoOpenCameraMode = location.state?.autoOpenCamera && stage === STAGES.PHOTO_UPLOAD;
-  const shouldShowError = error && !isAutoOpenCameraMode;
-  const shouldShowNotFound = !loading && !orderData && !packingData && !isAutoOpenCameraMode;
+  const hasValidData = orderData || packingData;
+  const isInSelectionStage = stage === STAGES.SELECTION;
+  const isDataLoading = loading || isLoadingOrderDetails;
+  
+  // Show loading state if data is still loading,
+  // but allow camera to open immediately in auto-open camera mode
+  if (isDataLoading && !hasValidData && !isAutoOpenCameraMode) {
+    return <OrderDetailsSkeleton />;
+  }
+  
+  // Only show error/not found if we're sure data isn't loading and doesn't exist
+  const shouldShowError = error && !isAutoOpenCameraMode && !(isInSelectionStage && hasValidData) && !isDataLoading;
+  const shouldShowNotFound = !isDataLoading && !hasValidData && !isAutoOpenCameraMode;
 
   if (shouldShowError || shouldShowNotFound) {
     return (
@@ -516,7 +476,7 @@ export default function PackingOrderDetails() {
     ? packingData?.orderLines || []
     : orderData?.orderLines || [];
 
-  const handleContinueToItems = (force = false) => {
+  const handleContinueToItems = async (force = false) => {
     // If force is true, proceed even if photos.length is 0 (photos were just saved but state hasn't updated yet)
     // Otherwise, check that photos exist
     if (force || photos.length > 0) {
@@ -704,12 +664,13 @@ export default function PackingOrderDetails() {
     }
   };
 
-  // Fix: Ensure orderData and platform are available before allowing packing creation
-  // This prevents "Platform is required" error for optimistic navigation
+  // Ensure orderData and platform are available before allowing packing creation
+  // Also check that order details are not currently loading
   const canCompletePacking = 
     photos.length >= 1 && 
     selectedItems.length > 0 && 
     orderData && 
+    !isLoadingOrderDetails &&
     (location.state?.platform || orderData?.platform);
 
   const handleEditPacking = () => {
@@ -1131,10 +1092,10 @@ export default function PackingOrderDetails() {
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 md:p-6"
+                    className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 md:p-6 relative"
                   >
                     <div className="flex items-center justify-between flex-wrap gap-3">
-                      <div>
+                      <div className="flex-1">
                         <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-1">
                           Order{" "}
                           {order?.orderNumber ||
@@ -1144,13 +1105,16 @@ export default function PackingOrderDetails() {
                         </h3>
                         <p className="text-xs md:text-sm text-gray-600">
                           Step 1: Upload packing photos
-                          {!orderData && (
-                            <span className="ml-2 text-blue-600">
-                              (Loading order details in background...)
-                            </span>
-                          )}
                         </p>
                       </div>
+                      {isLoadingOrderDetails && (
+                        <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                          <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+                          <span className="text-xs md:text-sm text-blue-600 font-medium">
+                            Loading order details...
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </motion.div>
 
