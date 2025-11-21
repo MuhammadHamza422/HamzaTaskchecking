@@ -140,19 +140,33 @@ export default function PackingLandingPage() {
   };
 
   const handleScannerSuccess = (barcode, searchData) => {
-    // Scanner now always validates order before navigating
-    // No more optimistic navigation - we always receive full searchData
-    
+    // Handle optimistic navigation (immediate navigation with barcode)
+    if (searchData?.isOptimistic) {
+      // Navigate immediately with barcode, API call happens in background
+      navigate(`/fulfillment/packing/${encodeURIComponent(barcode)}`, {
+        state: {
+          orderId: null,
+          platform: null,
+          orderKey: barcode,
+          searchData: { barcode, isOptimistic: true },
+          isAlreadyPacked: false,
+          packingInfo: null,
+          autoOpenCamera: true, // Flag to auto-open camera immediately
+        },
+      });
+      return;
+    }
+
+    // Handle successful barcode scan (with full search data)
     const { orderId, orderNumber, platform, orderKey, order_key, isAlreadyPacked, packingInfo } = searchData;
     
-    // Check if order is already packed
     if (isAlreadyPacked && packingInfo) {
-      // Already packed - use standard handleOrderFound flow
+      // Already packed - handled in handleOrderFound
       handleOrderFound(barcode);
       return;
     }
     
-    // Navigate to order details with validated data
+    // Navigate to order details
     let urlIdentifier;
     if (platform === "shopify") {
       urlIdentifier = orderNumber || orderKey || order_key || orderId;
