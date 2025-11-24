@@ -22,62 +22,6 @@ export default function QuaggaBarcodeScanner({
   const DETECTION_WINDOW_MS = 500; // Within 0.5 second (fast response)
   const MAX_ERROR_THRESHOLD = 0.25; // Maximum average error per character (lower = stricter quality)
 
-  // Play success sound
-  const playSuccessSound = () => {
-    try {
-      // Try to play audio file first, fallback to Web Audio API
-      const audio = new Audio("/scansound.mp3");
-      audio.volume = 0.5;
-      audio.play().catch((err) => {
-        // Fallback to Web Audio API
-        const audioContext = new (window.AudioContext ||
-          window.webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-
-        oscillator.frequency.value = 800;
-        oscillator.type = "sine";
-
-        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(
-          0.01,
-          audioContext.currentTime + 0.3
-        );
-
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.3);
-      });
-    } catch (error) {
-      console.error("Error playing sound:", error);
-      // Final fallback - try Web Audio API directly
-      try {
-        const audioContext = new (window.AudioContext ||
-          window.webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-
-        oscillator.frequency.value = 800;
-        oscillator.type = "sine";
-
-        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(
-          0.01,
-          audioContext.currentTime + 0.3
-        );
-
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.3);
-      } catch (fallbackError) {
-        console.error("Fallback sound also failed:", fallbackError);
-      }
-    }
-  };
 
   useEffect(() => {
     if (!scannerRef.current) return;
@@ -297,10 +241,7 @@ export default function QuaggaBarcodeScanner({
                 return;
               }
 
-              // Valid order - play sound and navigate immediately
-              playSuccessSound();
-
-              // Navigate immediately with full order data (no need for second API call)
+              // Valid order - navigate immediately with full order data (no need for second API call)
               if (onScanSuccess) {
                 onScanSuccess(barcodeValue, order);
               }
