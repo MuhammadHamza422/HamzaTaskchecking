@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
-import { LayoutDashboard, Package, ShoppingCart, Truck } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingCart, Truck, FileText } from "lucide-react";
 import { motion } from "framer-motion";
 
 const cards = [
@@ -52,6 +52,18 @@ const cards = [
     iconColor: "text-orange-600",
     delay: 0.3,
   },
+  {
+    id: "activity-logs",
+    title: "Activity Logs",
+    description: "View and track all fulfillment activities and logs",
+    icon: FileText,
+    path: "/fulfillment/activity-logs",
+    gradient: "from-indigo-500 to-indigo-600",
+    hoverGradient: "from-indigo-600 to-indigo-700",
+    iconBg: "bg-indigo-100",
+    iconColor: "text-indigo-600",
+    delay: 0.4,
+  },
 ];
 
 export default function FulfillmentLandingPage() {
@@ -97,7 +109,7 @@ export default function FulfillmentLandingPage() {
                 className="group relative bg-white rounded-2xl shadow-lg border-2 border-gray-200 overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-2xl hover:border-transparent"
               >
                 <div className={`absolute inset-0 bg-gradient-to-br ${card.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-300`}></div>
-                
+
                 <div className="relative p-4 md:p-8">
                   <div className="flex items-start gap-4 md:gap-6 mb-4 md:mb-6">
                     <div className={`${card.iconBg} p-2 sm:p-4 rounded-xl group-hover:bg-white transition-colors duration-300`}>

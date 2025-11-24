@@ -36,6 +36,44 @@ export async function searchOrder(query) {
 }
 
 /**
+ * Scan order and get full details in a single API call (optimized for barcode scanning)
+ * Combines search + details into one request for better performance
+ * @param {string} query - Order ID, order number, or ShipStation packing slip barcode from ANY platform
+ * @returns {Promise<Object>} Combined search and order details
+ */
+export async function scanOrderWithDetails(query) {
+  if (!query || query.trim() === "") {
+    throw new Error("Query parameter is required");
+  }
+
+  try {
+    const response = await apiClient.get("/api/v1/fulfillment/orders/search", {
+      params: { 
+        query: query.trim(),
+        includeDetails: true
+      },
+    });
+
+    if (!response.data.success) {
+      const errorMsg = response.data.error?.message || "Failed to scan order";
+      const error = new Error(errorMsg);
+      error.code = response.data.error?.code;
+      throw error;
+    }
+
+    return response.data;
+  } catch (error) {
+    if (error.response?.data?.error) {
+      const errorMsg = error.response.data.error.message;
+      const newError = new Error(errorMsg);
+      newError.code = error.response.data.error.code;
+      throw newError;
+    }
+    throw error;
+  }
+}
+
+/**
  * Get complete order details including products, shipping info, and stock status
  * @param {string} orderId - Order ID from search API response (GID for Shopify, orderId for others)
  * @param {string} platform - Platform name: "woocommerce" | "shopify" | "walmart"

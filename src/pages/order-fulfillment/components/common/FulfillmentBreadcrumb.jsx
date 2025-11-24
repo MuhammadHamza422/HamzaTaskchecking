@@ -8,6 +8,7 @@ const pathMap = {
   dropship: "Drop-ship Management",
   shipping: "Shipping Operations",
   list: "All Orders",
+  activityLogs: "Activity Logs",
 };
 
 export default function FulfillmentBreadcrumb() {

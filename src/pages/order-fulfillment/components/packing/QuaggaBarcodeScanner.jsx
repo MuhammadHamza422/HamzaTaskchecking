@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import Quagga from "quagga";
 import { X, Search, Keyboard } from "lucide-react";
-import { searchOrder } from "../../../../api/fulfillment";
+import { scanOrderWithDetails } from "../../../../api/fulfillment";
 import Swal from "sweetalert2";
 
 export default function QuaggaBarcodeScanner({
@@ -133,7 +133,7 @@ export default function QuaggaBarcodeScanner({
         if (container) {
           const video = container.querySelector("video");
           const drawingBuffer = container.querySelector("canvas.drawingBuffer");
-          
+
           if (video) {
             video.style.width = "100%";
             video.style.height = "100%";
@@ -143,7 +143,7 @@ export default function QuaggaBarcodeScanner({
             video.style.left = "0";
             video.style.zIndex = "1";
           }
-          
+
           if (drawingBuffer) {
             drawingBuffer.style.width = "100%";
             drawingBuffer.style.height = "100%";
@@ -170,9 +170,6 @@ export default function QuaggaBarcodeScanner({
       Quagga.onDetected((result) => {
         const code = result.codeResult.code;
 
-        // Debug: Log the scanned barcode
-        console.log("🔍 Barcode detected:", code, "Format:", result.codeResult.format);
-
         // Avoid processing the same code multiple times
         if (code === lastScannedCodeRef.current || isValidating) {
           return;
@@ -196,23 +193,22 @@ export default function QuaggaBarcodeScanner({
           clearTimeout(validationTimeoutRef.current);
         }
 
-        // Validate barcode immediately
+        // Validate barcode immediately with combined API (search + details in one call)
         (async () => {
           const barcodeValue = String(code).trim();
-          console.log("🔍 Barcode detected, validating immediately:", barcodeValue);
-          
           try {
-            const searchResult = await searchOrder(barcodeValue);
-            
-            if (searchResult.success && searchResult.data) {
-              const { isAlreadyPacked, packingInfo } = searchResult.data;
+            // Single API call - gets both search metadata and full order details
+            const result = await scanOrderWithDetails(barcodeValue);
+
+            if (result.success && result.data) {
+              const { search, order } = result.data;
 
               // Check if already packed - show warning and don't navigate
-              if (isAlreadyPacked && packingInfo) {
+              if (search.isAlreadyPacked && search.packingInfo) {
                 // Reset validating flag and scanned code
                 setIsValidating(false);
                 lastScannedCodeRef.current = "";
-                
+
                 // Show alert
                 await Swal.fire({
                   icon: "warning",
@@ -221,35 +217,32 @@ export default function QuaggaBarcodeScanner({
                     <div class="text-left">
                       <p class="mb-4 text-gray-700">This order has already been packed.</p>
                       <div class="bg-gray-50 rounded-lg p-4 mb-4">
-                        <p class="text-sm"><span class="font-medium">Packing ID:</span> ${
-                          packingInfo.packingId || "N/A"
-                        }</p>
-                        <p class="text-sm"><span class="font-medium">Status:</span> ${
-                          packingInfo.status || "N/A"
-                        }</p>
+                        <p class="text-sm"><span class="font-medium">Packing ID:</span> ${search.packingInfo.packingId || "N/A"
+                    }</p>
+                        <p class="text-sm"><span class="font-medium">Status:</span> ${search.packingInfo.status || "N/A"
+                    }</p>
                       </div>
                     </div>
                   `,
                   confirmButtonColor: "#2563eb",
                   confirmButtonText: "OK",
                 });
-                
+
                 // Close scanner and return to landing page
                 if (onClose) {
                   onClose();
                 }
                 return;
               }
-              
+
               // Valid order - play sound and navigate immediately
               playSuccessSound();
 
-              // Navigate immediately with validated data
-              console.log("✅ Order validated, navigating immediately with barcode:", barcodeValue);
+              // Navigate immediately with full order data (no need for second API call)
               if (onScanSuccess) {
-                onScanSuccess(barcodeValue, searchResult.data);
+                onScanSuccess(barcodeValue, order);
               }
-              
+
               // Reset validating flag after navigation
               setIsValidating(false);
             } else {
@@ -257,11 +250,11 @@ export default function QuaggaBarcodeScanner({
             }
           } catch (error) {
             console.error("Error validating barcode:", error);
-            
+
             // Reset validating flag and scanned code on error
             setIsValidating(false);
             lastScannedCodeRef.current = "";
-            
+
             // Show error alert
             await Swal.fire({
               icon: "error",
@@ -270,7 +263,7 @@ export default function QuaggaBarcodeScanner({
               confirmButtonColor: "#2563eb",
               confirmButtonText: "OK",
             });
-            
+
             // Close scanner and return to landing page
             if (onClose) {
               onClose();
@@ -354,7 +347,7 @@ export default function QuaggaBarcodeScanner({
       // Calculate frame dimensions - responsive for large screens
       const isLargeScreen = containerWidth >= 1024; // Desktop/large screens
       let frameWidth, frameHeight;
-      
+
       if (isLargeScreen) {
         // Large screens: narrower width, taller height
         frameWidth = containerWidth * 0.5; // 50% width (narrower)
@@ -364,7 +357,7 @@ export default function QuaggaBarcodeScanner({
         frameWidth = containerWidth * 0.7; // 70% width
         frameHeight = containerHeight * 0.4; // 40% height
       }
-      
+
       const frameX = (containerWidth - frameWidth) / 2;
       const frameY = (containerHeight - frameHeight) / 2;
       const cornerLength = 40;

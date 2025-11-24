@@ -235,6 +235,7 @@ export default function PackingOrderDetails() {
         } else {
           setIsViewMode(false);
           const searchData = location.state?.searchData;
+          const orderDataFromState = location.state?.orderData; // New: full order data from combined API
           const platform = location.state?.platform;
           const alreadyPackedFromSearch = location.state?.isAlreadyPacked;
           const packingInfoFromSearch = location.state?.packingInfo;
@@ -242,11 +243,11 @@ export default function PackingOrderDetails() {
           let orderIdToUse;
           
           // Use platform from location.state or fallback to orderData if available
-          const platformToUse = platform || orderData?.platform;
+          const platformToUse = platform || orderDataFromState?.platform || orderData?.platform;
 
           // Get order ID based on platform
           if (platformToUse === "shopify") {
-            orderIdToUse = searchData?.orderId || location.state?.orderId;
+            orderIdToUse = searchData?.orderId || orderDataFromState?.orderId || location.state?.orderId;
           } else {
             orderIdToUse = decodeURIComponent(orderId);
           }
@@ -262,90 +263,23 @@ export default function PackingOrderDetails() {
             return;
           }
 
-          // If autoOpenCamera flag is set, immediately go to photo upload stage
-          // Load order details in background while user takes photos
-          if (autoOpenCamera) {
-            // Start API call immediately (don't wait for state updates)
-            const detailsPromise = getOrderDetails(orderIdToUse, platformToUse);
-            
-            // Update UI state immediately to allow camera to open
-            setStage(STAGES.PHOTO_UPLOAD);
-            setLoading(false); // Don't block UI, allow camera to open immediately
-            setIsLoadingOrderDetails(true); // Show background loading indicator
-
-            // Process API response in background (non-blocking)
-            detailsPromise
-              .then((result) => {
-                if (result.success && result.data) {
-                  setOrderData(result.data);
-
-                  // Check if order is already packed
-                  const isPacked =
-                    result.data.isAlreadyPacked ||
-                    alreadyPackedFromSearch ||
-                    false;
-                  const packingInfoData =
-                    result.data.packingInfo || packingInfoFromSearch || null;
-
-                  setIsAlreadyPacked(isPacked);
-                  setPackingInfo(packingInfoData);
-
-                  // If already packed, switch to view mode
-                  if (isPacked && packingInfoData) {
-                    setIsViewMode(true);
-                    setPackingId(packingInfoData.packingId);
-                    // Load packing details
-                    getPackingOrderDetails(packingInfoData.packingId)
-                      .then((packingResult) => {
-                        if (packingResult.success && packingResult.data) {
-                          setPackingData(packingResult.data);
-                          setSelectedItems(
-                            packingResult.data.selectedItems || []
-                          );
-                        }
-                      })
-                      .catch((err) => {
-                        console.error("Error loading packing details:", err);
-                      })
-                      .finally(() => {
-                        setIsLoadingOrderDetails(false);
-                      });
-                  } else {
-                    // Select all items by default
-                    setSelectedItems(
-                      result.data.orderLines.map((item) => item.id)
-                    );
-                    setIsLoadingOrderDetails(false);
-                  }
-                  setError(null); // Clear any previous errors
-                }
-              })
-              .catch((error) => {
-                console.error(
-                  "Error loading order details in background:",
-                  error
-                );
-                setError(error.message || "Failed to load order details");
-                setIsLoadingOrderDetails(false);
-              });
-
-            return; // Exit early, don't wait for order details
-          }
-
-          // If not autoOpenCamera, load order details normally (blocking)
-          const result = await getOrderDetails(orderIdToUse, platformToUse);
-
-          if (result.success && result.data) {
-            setOrderData(result.data);
+          // If we already have full order data from the combined API (new flow), use it directly
+          if (orderDataFromState) {
+            setOrderData(orderDataFromState);
 
             // Check if order is already packed
             const isPacked =
-              result.data.isAlreadyPacked || alreadyPackedFromSearch || false;
+              orderDataFromState.isAlreadyPacked || alreadyPackedFromSearch || false;
             const packingInfoData =
-              result.data.packingInfo || packingInfoFromSearch || null;
+              orderDataFromState.packingInfo || packingInfoFromSearch || null;
 
             setIsAlreadyPacked(isPacked);
             setPackingInfo(packingInfoData);
+
+            // If autoOpenCamera is set, go directly to photo upload stage
+            if (autoOpenCamera) {
+              setStage(STAGES.PHOTO_UPLOAD);
+            }
 
             // If already packed, switch to view mode
             if (isPacked && packingInfoData) {
@@ -365,7 +299,115 @@ export default function PackingOrderDetails() {
               }
             } else {
               // Select all items by default
-              setSelectedItems(result.data.orderLines.map((item) => item.id));
+              setSelectedItems(orderDataFromState.orderLines.map((item) => item.id));
+            }
+          } else {
+            // Fallback to old flow: fetch order details (for backwards compatibility)
+            // If autoOpenCamera flag is set, immediately go to photo upload stage
+            // Load order details in background while user takes photos
+            if (autoOpenCamera) {
+              // Start API call immediately (don't wait for state updates)
+              const detailsPromise = getOrderDetails(orderIdToUse, platformToUse);
+              
+              // Update UI state immediately to allow camera to open
+              setStage(STAGES.PHOTO_UPLOAD);
+              setLoading(false); // Don't block UI, allow camera to open immediately
+              setIsLoadingOrderDetails(true); // Show background loading indicator
+
+              // Process API response in background (non-blocking)
+              detailsPromise
+                .then((result) => {
+                  if (result.success && result.data) {
+                    setOrderData(result.data);
+
+                    // Check if order is already packed
+                    const isPacked =
+                      result.data.isAlreadyPacked ||
+                      alreadyPackedFromSearch ||
+                      false;
+                    const packingInfoData =
+                      result.data.packingInfo || packingInfoFromSearch || null;
+
+                    setIsAlreadyPacked(isPacked);
+                    setPackingInfo(packingInfoData);
+
+                    // If already packed, switch to view mode
+                    if (isPacked && packingInfoData) {
+                      setIsViewMode(true);
+                      setPackingId(packingInfoData.packingId);
+                      // Load packing details
+                      getPackingOrderDetails(packingInfoData.packingId)
+                        .then((packingResult) => {
+                          if (packingResult.success && packingResult.data) {
+                            setPackingData(packingResult.data);
+                            setSelectedItems(
+                              packingResult.data.selectedItems || []
+                            );
+                          }
+                        })
+                        .catch((err) => {
+                          console.error("Error loading packing details:", err);
+                        })
+                        .finally(() => {
+                          setIsLoadingOrderDetails(false);
+                        });
+                    } else {
+                      // Select all items by default
+                      setSelectedItems(
+                        result.data.orderLines.map((item) => item.id)
+                      );
+                      setIsLoadingOrderDetails(false);
+                    }
+                    setError(null); // Clear any previous errors
+                  }
+                })
+                .catch((error) => {
+                  console.error(
+                    "Error loading order details in background:",
+                    error
+                  );
+                  setError(error.message || "Failed to load order details");
+                  setIsLoadingOrderDetails(false);
+                });
+
+              return; // Exit early, don't wait for order details
+            }
+
+            // If not autoOpenCamera, load order details normally (blocking)
+            const result = await getOrderDetails(orderIdToUse, platformToUse);
+
+            if (result.success && result.data) {
+              setOrderData(result.data);
+
+              // Check if order is already packed
+              const isPacked =
+                result.data.isAlreadyPacked || alreadyPackedFromSearch || false;
+              const packingInfoData =
+                result.data.packingInfo || packingInfoFromSearch || null;
+
+              setIsAlreadyPacked(isPacked);
+              setPackingInfo(packingInfoData);
+
+              // If already packed, switch to view mode
+              if (isPacked && packingInfoData) {
+                setIsViewMode(true);
+                setPackingId(packingInfoData.packingId);
+                // Load packing details
+                try {
+                  const packingResult = await getPackingOrderDetails(
+                    packingInfoData.packingId
+                  );
+                  if (packingResult.success && packingResult.data) {
+                    setPackingData(packingResult.data);
+                    setSelectedItems(packingResult.data.selectedItems || []);
+                  }
+                } catch (err) {
+                  console.error("Error loading packing details:", err);
+                }
+              } else {
+                // Select all items by default
+                setSelectedItems(result.data.orderLines.map((item) => item.id));
+              }
             }
           }
         }
