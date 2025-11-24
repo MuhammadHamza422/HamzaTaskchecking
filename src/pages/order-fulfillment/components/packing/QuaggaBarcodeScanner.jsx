@@ -15,6 +15,12 @@ export default function QuaggaBarcodeScanner({
   const [scannedCode, setScannedCode] = useState("");
   const lastScannedCodeRef = useRef("");
   const validationTimeoutRef = useRef(null);
+  
+  // Buffer for tracking consecutive detections (for accuracy)
+  const detectionBufferRef = useRef([]);
+  const REQUIRED_DETECTIONS = 3; // Need 3 consecutive same reads
+  const DETECTION_WINDOW_MS = 500; // Within 0.5 second (fast response)
+  const MAX_ERROR_THRESHOLD = 0.25; // Maximum average error per character (lower = stricter quality)
 
   // Play success sound
   const playSuccessSound = () => {
@@ -169,17 +175,70 @@ export default function QuaggaBarcodeScanner({
       // Handle detection
       Quagga.onDetected((result) => {
         const code = result.codeResult.code;
+        const now = Date.now();
 
-        // Avoid processing the same code multiple times
-        if (code === lastScannedCodeRef.current || isValidating) {
+        // Skip if already validating
+        if (isValidating) {
           return;
         }
 
-        // Set validating flag immediately to prevent duplicate processing
+        // Quality check: Calculate average error per character
+        // Low error = high confidence (close, clear barcode)
+        // High error = low confidence (far, blurry, partial read)
+        const decodedCodes = result.codeResult.decodedCodes || [];
+        const errors = decodedCodes
+          .map((d) => d.error)
+          .filter((e) => typeof e === "number" && e >= 0);
+        
+        const avgError = errors.length > 0
+          ? errors.reduce((sum, e) => sum + e, 0) / errors.length
+          : 0;
+
+        // Reject low-quality detections (far, blurry, or partial reads)
+        if (avgError > MAX_ERROR_THRESHOLD) {
+          // Low confidence detection - ignore it, keep scanning
+          return;
+        }
+
+        // High-quality detection - add to buffer
+        detectionBufferRef.current.push({
+          code: code,
+          timestamp: now,
+          quality: avgError, // Store quality for debugging if needed
+        });
+
+        // Clean up old detections outside the time window
+        detectionBufferRef.current = detectionBufferRef.current.filter(
+          (detection) => now - detection.timestamp < DETECTION_WINDOW_MS
+        );
+
+        // Count consecutive detections of the same code
+        const recentDetections = detectionBufferRef.current;
+        const sameCodeCount = recentDetections.filter(
+          (detection) => detection.code === code
+        ).length;
+
+        // Update display with current code being scanned
+        if (code && code !== scannedCode) {
+          setScannedCode(code);
+        }
+
+        // Only proceed if we have enough consecutive detections of the same code
+        if (sameCodeCount < REQUIRED_DETECTIONS) {
+          // Not enough detections yet, keep scanning
+          return;
+        }
+
+        // Check if we've already processed this code
+        if (code === lastScannedCodeRef.current) {
+          return;
+        }
+
+        // Enough consecutive detections! Stop scanning and validate
         setIsValidating(true);
         lastScannedCodeRef.current = code;
 
-        // Stop Quagga immediately to prevent re-scanning the same barcode
+        // Stop Quagga immediately to prevent re-scanning
         try {
           Quagga.stop();
           Quagga.offDetected();
@@ -188,12 +247,15 @@ export default function QuaggaBarcodeScanner({
           console.error("Error stopping Quagga:", error);
         }
 
+        // Clear detection buffer
+        detectionBufferRef.current = [];
+
         // Clear previous validation timeout
         if (validationTimeoutRef.current) {
           clearTimeout(validationTimeoutRef.current);
         }
 
-        // Validate barcode immediately with combined API (search + details in one call)
+        // Validate barcode with combined API (search + details in one call)
         (async () => {
           const barcodeValue = String(code).trim();
           try {
@@ -251,7 +313,7 @@ export default function QuaggaBarcodeScanner({
           } catch (error) {
             console.error("Error validating barcode:", error);
 
-            // Reset validating flag and scanned code on error
+            // Reset validating flag and scanned code
             setIsValidating(false);
             lastScannedCodeRef.current = "";
 
@@ -299,6 +361,8 @@ export default function QuaggaBarcodeScanner({
       if (validationTimeoutRef.current) {
         clearTimeout(validationTimeoutRef.current);
       }
+      // Clear detection buffer
+      detectionBufferRef.current = [];
     };
   }, [onScanSuccess, onClose]);
 
