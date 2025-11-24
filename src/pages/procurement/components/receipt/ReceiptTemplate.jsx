@@ -255,8 +255,16 @@ const ReceiptTemplate = ({
           />
         </div>
 
-        {/* Terms and Conditions - Static Content (starts on new page) */}
-        <div className="terms-section receipt-section" style={{ marginTop: "1000px" }}>
+        {/* Terms and Conditions - Static Content (Hidden in UI, used for PDF generation) */}
+        <div
+          className="terms-section receipt-section"
+          style={{
+            position: "absolute",
+            left: "-10000px",
+            top: 0,
+            width: "100%",
+          }}
+        >
           <TermsAndConditions />
         </div>
       </div>
