@@ -618,10 +618,11 @@ const AdminProductsPage = () => {
     try {
       if (isEditModal && editingProduct) {
         // Update existing product
-        await updateProduct(editingProduct._id, {
-          values,
-          color_code: colorCode,
-        });
+        const updateData = {
+          ...values,
+          color_code: colorCode || values.color_code || "",
+        };
+        await updateProduct(editingProduct._id, updateData);
 
         // Show success message
         Swal.fire({
@@ -671,6 +672,7 @@ const AdminProductsPage = () => {
       setIsModalOpen(false);
       setIsEditModal(false);
       setEditingProduct(null);
+      setColorCode(null);
 
       // Refresh the product list
       refetch();
@@ -704,6 +706,7 @@ const AdminProductsPage = () => {
     setIsModalOpen(false);
     setIsEditModal(false);
     setEditingProduct(null);
+    setColorCode(null);
   };
 
   // Generate SKU based on product components
@@ -1095,6 +1098,7 @@ const AdminProductsPage = () => {
                   setIsEditModal(false);
                   setEditingProduct(null);
                   form.resetFields();
+                  setColorCode(null);
                   setIsModalOpen(true);
                 }}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
