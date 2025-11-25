@@ -180,12 +180,81 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
   const [facingMode, setFacingMode] = useState("environment");
   const [cameraError, setCameraError] = useState(null);
   const [isCameraReady, setIsCameraReady] = useState(false);
+  const [webcamKey, setWebcamKey] = useState(0); // Force remount of webcam component
 
   // Wait for camera to be available (after Quagga scanner releases it)
+  // NEW APPROACH: Actively poll and verify camera availability
   const waitForCameraAvailable = useCallback(async () => {
-    // Wait a bit longer to ensure previous camera stream is fully released
-    // This is critical when coming from Quagga scanner
-    await new Promise(resolve => setTimeout(resolve, 800));
+    console.log("Waiting for camera to become available...");
+    
+    // No initial wait - camera is already released, start checking immediately
+    // Now actively try to access and release the camera until it works
+    const maxAttempts = 6;
+    const delayBetweenAttempts = 200; // Reduced delay between attempts
+    let lastError = null;
+    
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        console.log(`Camera availability check attempt ${attempt}/${maxAttempts}`);
+        
+        // Check devices first
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(d => d.kind === 'videoinput');
+        
+        if (videoDevices.length === 0) {
+          throw new Error("No camera devices available");
+        }
+        
+        console.log(`Found ${videoDevices.length} camera device(s)`);
+        
+        // Try to actually request camera access to verify it's available
+        // This will fail if the previous stream hasn't released yet
+        try {
+          const testStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "environment" }
+          });
+          
+          // If we got here, camera is available! Release it immediately
+          console.log("Camera is available! Releasing test stream...");
+          testStream.getTracks().forEach(track => track.stop());
+          
+          console.log("Camera verified and ready for use");
+          return; // Success!
+          
+        } catch (streamError) {
+          console.warn(`Attempt ${attempt}: Cannot access camera yet:`, streamError.name);
+          lastError = streamError;
+          
+          // If it's a NotReadableError or similar, camera is still in use
+          if (streamError.name === "NotReadableError" || 
+              streamError.name === "AbortError" ||
+              streamError.name === "NotAllowedError") {
+            // Wait longer and retry
+            if (attempt < maxAttempts) {
+              await new Promise(resolve => setTimeout(resolve, delayBetweenAttempts));
+              continue;
+            }
+          } else {
+            // Other errors might not be recoverable
+            throw streamError;
+          }
+        }
+      } catch (error) {
+        console.warn(`Attempt ${attempt} failed:`, error);
+        lastError = error;
+        
+        if (attempt < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, delayBetweenAttempts));
+        }
+      }
+    }
+    
+    // If we get here, all attempts failed
+    console.error("Failed to verify camera availability after all attempts");
+    const errorMsg = lastError?.name === "NotReadableError" 
+      ? "Camera is still in use. Please wait a moment and try again."
+      : `Camera not available: ${lastError?.message || lastError?.name || 'Unknown error'}`;
+    throw new Error(errorMsg);
   }, []);
 
   // Helper function to stop webcam stream
@@ -224,29 +293,77 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
     const initializeCamera = async () => {
       if (mode !== "camera") return;
 
+      console.log("CameraCapture: Starting camera initialization");
+      
       // Wait for previous camera stream to be fully released
       // This is critical when coming from Quagga scanner
-      await waitForCameraAvailable();
+      // NEW: This now actively polls for camera availability
+      try {
+        await waitForCameraAvailable();
+      } catch (availabilityError) {
+        console.error("Camera not available after waiting:", availabilityError);
+        
+        if (!mounted) return;
+        
+        const errorDetails = availabilityError.message || "Unknown error";
+        setCameraError(
+          `Camera initialization failed: ${errorDetails}. ` +
+          "This usually happens if the camera is still releasing from the previous session. " +
+          "Please wait a moment and click Retry, or close and reopen the camera."
+        );
+        return;
+      }
 
       if (!mounted) return;
+      
+      console.log("CameraCapture: Waiting for camera to be ready after initial delay");
 
       // Check if webcam is ready (react-webcam handles permission request)
       // We just wait for it to initialize
+      let checkCount = 0;
+      const maxChecks = 60; // 6 seconds (60 * 100ms) - reduced since camera releases faster now
+      
       const checkReady = setInterval(() => {
+        checkCount++;
+        
         if (webcamRef.current?.video) {
           const video = webcamRef.current.video;
-          if (video.readyState >= 2) { // HAVE_CURRENT_DATA or higher
+          
+          // Check if video has valid dimensions (not blank)
+          const hasValidDimensions = video.videoWidth > 0 && video.videoHeight > 0;
+          const hasValidReadyState = video.readyState >= 2; // HAVE_CURRENT_DATA or higher
+          const hasStream = video.srcObject && video.srcObject instanceof MediaStream;
+          const hasActiveTracks = hasStream && video.srcObject.getTracks().length > 0 && 
+                                 video.srcObject.getTracks().some(t => t.readyState === 'live');
+          
+          if (hasValidReadyState && hasValidDimensions && hasActiveTracks) {
+            console.log("Camera ready - dimensions:", video.videoWidth, "x", video.videoHeight);
             setIsCameraReady(true);
             setCameraError(null);
             clearInterval(checkReady);
+            return;
+          }
+          
+          // If video element exists but no valid dimensions after 4 seconds, might be blank
+          if (checkCount > 40 && !hasValidDimensions) {
+            console.warn("Camera video element exists but has no valid dimensions after 4s");
+          }
+          
+          // If video has no stream or inactive tracks after 4 seconds
+          if (checkCount > 40 && (!hasStream || !hasActiveTracks)) {
+            console.warn("Camera video has no active stream/tracks after 4s");
+          }
+        }
+        
+        // If we've checked too many times, show error with retry option
+        if (checkCount >= maxChecks) {
+          clearInterval(checkReady);
+          if (!isCameraReady) {
+            console.error("Camera failed to initialize after max checks");
+            setCameraError("Camera is taking longer than expected to initialize. Please click Retry or close and reopen the camera.");
           }
         }
       }, 100);
-
-      // Clear interval after 5 seconds if camera doesn't initialize
-      setTimeout(() => {
-        clearInterval(checkReady);
-      }, 5000);
 
       return () => {
         clearInterval(checkReady);
@@ -497,11 +614,9 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
     stopWebcamStream();
     setIsCameraReady(false);
     
-    // Wait for camera to be fully released before switching
-    await new Promise(resolve => setTimeout(resolve, 300));
-    
-    // Switch facing mode (react-webcam will handle permission)
+    // Switch facing mode and force remount (react-webcam will handle permission)
     setFacingMode((prev) => (prev === "environment" ? "user" : "environment"));
+    setWebcamKey(prev => prev + 1);
   };
 
   const rotateImage = (direction) => {
@@ -563,16 +678,66 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
           >
             {/* Webcam for photo capture */}
             <Webcam
+              key={`webcam-${webcamKey}-${facingMode}`}
               audio={false}
               ref={webcamRef}
               screenshotFormat="image/jpeg"
               videoConstraints={getVideoConstraints(facingMode)}
               onUserMedia={(stream) => {
-                setIsCameraReady(true);
-                setCameraError(null);
+                console.log("Camera stream received");
+                
+                // Verify stream has active video tracks
+                const videoTracks = stream.getVideoTracks();
+                if (videoTracks.length === 0) {
+                  console.error("Camera stream has no video tracks");
+                  setCameraError("Camera stream has no video tracks. The camera may still be in use. Please wait a moment and try again.");
+                  setIsCameraReady(false);
+                  return;
+                }
+                
+                console.log(`Got ${videoTracks.length} video track(s):`, videoTracks.map(t => ({
+                  label: t.label,
+                  readyState: t.readyState,
+                  enabled: t.enabled
+                })));
+                
+                // Check if tracks are actually active
+                const activeTracks = videoTracks.filter(track => track.readyState === 'live');
+                if (activeTracks.length === 0) {
+                  console.error("No active camera tracks found");
+                  setCameraError("Camera tracks are not active. The camera may still be in use. Please wait a moment and try again.");
+                  setIsCameraReady(false);
+                  return;
+                }
+                
+                // Small delay for video element to initialize
+                setTimeout(() => {
+                  if (webcamRef.current?.video) {
+                    const video = webcamRef.current.video;
+                    console.log("Video element check:", {
+                      videoWidth: video.videoWidth,
+                      videoHeight: video.videoHeight,
+                      readyState: video.readyState
+                    });
+                    
+                    if (video.videoWidth > 0 && video.videoHeight > 0) {
+                      console.log("Camera ready with dimensions:", video.videoWidth, "x", video.videoHeight);
+                      setIsCameraReady(true);
+                      setCameraError(null);
+                    } else {
+                      // Video element exists but no dimensions - might be blank
+                      // Give it more time via the checkReady interval
+                      console.warn("Video element has no dimensions yet after initial stream assignment, waiting...");
+                    }
+                  }
+                }, 200);
               }}
               onUserMediaError={(error) => {
-                console.error("Webcam error:", error);
+                console.error("Webcam error:", error, {
+                  name: error.name,
+                  message: error.message,
+                  constraint: error.constraint
+                });
                 setIsCameraReady(false);
                 
                 let errorMessage = "Failed to access camera. Please check permissions.";
@@ -581,7 +746,13 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
                 } else if (error.name === "NotFoundError") {
                   errorMessage = "No camera found on this device.";
                 } else if (error.name === "NotReadableError") {
-                  errorMessage = "Camera is already in use by another application.";
+                  errorMessage = "Camera is temporarily unavailable. The previous camera session is still closing. Please wait 2-3 seconds and click Retry.";
+                } else if (error.name === "OverconstrainedError" || error.name === "ConstraintNotSatisfiedError") {
+                  errorMessage = "Camera constraints not supported. Please try switching cameras or wait a moment and retry.";
+                } else if (error.name === "AbortError") {
+                  errorMessage = "Camera access was interrupted. Please wait 2-3 seconds and click Retry.";
+                } else {
+                  errorMessage = `Camera error: ${error.message || error.name}. Please wait a moment and click Retry.`;
                 }
                 setCameraError(errorMessage);
               }}
@@ -602,27 +773,36 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
                 <div className="bg-white/10 backdrop-blur-sm rounded-lg p-6 max-w-sm mx-4 text-center">
                   <p className="text-white text-lg font-semibold mb-2">Camera Error</p>
                   <p className="text-gray-300 text-sm mb-4">{cameraError}</p>
-                  <button
-                    onClick={async () => {
-                      setCameraError(null);
-                      setIsCameraReady(false);
-                      
-                      // Stop any existing stream
-                      stopWebcamStream();
-                      
-                      // Wait for camera to be fully released
-                      await new Promise(resolve => setTimeout(resolve, 500));
-                      
-                      // Force webcam to retry by toggling facingMode
-                      setFacingMode(prev => prev === "environment" ? "user" : "environment");
-                      setTimeout(() => {
-                        setFacingMode(prev => prev === "user" ? "environment" : "user");
-                      }, 100);
-                    }}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    Retry
-                  </button>
+                  <div className="flex gap-2 justify-center">
+                    <button
+                      onClick={async () => {
+                        setCameraError(null);
+                        setIsCameraReady(false);
+                        
+                        console.log("Retrying camera initialization...");
+                        
+                        // Stop any existing stream thoroughly
+                        stopWebcamStream();
+                        
+                        console.log("Forcing webcam component remount");
+                        
+                        // Force complete remount of Webcam component
+                        setWebcamKey(prev => prev + 1);
+                      }}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      Retry
+                    </button>
+                    <button
+                      onClick={() => {
+                        stopWebcamStream();
+                        handleClose();
+                      }}
+                      className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -630,9 +810,25 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
             {/* Camera Loading Indicator */}
             {!isCameraReady && !cameraError && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-20">
-                <div className="text-center">
+                <div className="text-center max-w-md mx-4">
                   <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                  <p className="text-white text-sm">Initializing camera...</p>
+                  <p className="text-white text-base font-medium mb-2">Initializing camera...</p>
+                  <p className="text-gray-300 text-sm mb-2">
+                    Please wait while we prepare the camera.
+                  </p>
+                  <p className="text-gray-400 text-xs mb-4">
+                    After barcode scanning, the camera needs a moment to become available again. This is normal on mobile devices.
+                  </p>
+                  <button
+                    onClick={async () => {
+                      console.log("User requested manual close");
+                      stopWebcamStream();
+                      handleClose();
+                    }}
+                    className="px-4 py-2 bg-gray-600/80 text-white text-sm rounded-lg hover:bg-gray-700 transition-colors"
+                  >
+                    Cancel
+                  </button>
                 </div>
               </div>
             )}

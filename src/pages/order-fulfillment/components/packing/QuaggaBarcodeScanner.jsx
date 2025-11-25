@@ -97,17 +97,52 @@ export default function QuaggaBarcodeScanner({
     return null;
   };
 
-  // Properly release camera (async)
+  // Properly release camera (async) - optimized for immediate release
   const releaseCamera = async () => {
     try {
-      // Stop Quagga first
+      console.log("QuaggaBarcodeScanner: Starting IMMEDIATE camera release...");
+      
+      // STEP 1: Stop Quagga immediately (synchronous)
       Quagga.stop();
       // Remove event handlers
       Quagga.offDetected();
       Quagga.offProcessed();
-      // Explicitly release camera (critical for mobile)
-      await Quagga.CameraAccess.release();
+      
+      // STEP 2: CRITICAL - Explicitly stop all MediaStream tracks IMMEDIATELY
+      // Some mobile devices don't fully release camera without this
+      try {
+        const container = scannerRef.current;
+        if (container) {
+          const video = container.querySelector("video");
+          if (video && video.srcObject) {
+            const stream = video.srcObject;
+            if (stream instanceof MediaStream) {
+              const tracks = stream.getTracks();
+              tracks.forEach((track) => {
+                track.stop();
+                console.log("Stopped Quagga video track:", track.kind, track.label);
+              });
+              video.srcObject = null;
+            }
+          }
+        }
+      } catch (trackError) {
+        console.warn("Error stopping video tracks:", trackError);
+      }
+      
+      // STEP 3: Release camera via Quagga API (async but fast)
+      try {
+        await Quagga.CameraAccess.release();
+        console.log("Quagga.CameraAccess.release() completed");
+      } catch (releaseError) {
+        console.warn("Quagga.CameraAccess.release() error (may already be released):", releaseError);
+      }
+      
+      // STEP 4: Mark as released immediately (don't wait for verification)
+      // CameraCapture will handle verification when it tries to access
       isCameraReleasedRef.current = true;
+      
+      console.log("Camera release completed - ready for next component");
     } catch (error) {
       console.error("Error releasing camera:", error);
       // Still mark as released to prevent blocking
@@ -130,10 +165,13 @@ export default function QuaggaBarcodeScanner({
     lastScannedCodeRef.current = code;
     setScannedCode(code);
 
-    // Stop Quagga and release camera properly
+    // CRITICAL: Release camera IMMEDIATELY before validation
+    // This allows CameraCapture to start initializing while validation is happening
+    console.log("Releasing camera immediately before validation...");
     await releaseCamera();
+    console.log("Camera released, proceeding with validation...");
 
-    // Call API immediately
+    // Call API immediately (camera is already released)
     const barcodeValue = String(code).trim();
     try {
       const searchResult = await searchOrder(barcodeValue);
@@ -162,21 +200,21 @@ export default function QuaggaBarcodeScanner({
             confirmButtonText: "OK",
           });
 
+          // Camera already released, just close
           if (onClose) {
             onClose();
           }
           return;
         }
 
-        // Valid order found - ensure camera is fully released before navigation
-        // Add delay to ensure camera is completely released (critical for mobile)
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        // Valid order found - camera is already released, proceed immediately
+        console.log("Validation successful, camera already released, proceeding to next step");
+        
+        setIsValidating(false);
         
         if (onScanSuccess) {
           onScanSuccess(barcodeValue, searchData);
         }
-
-        setIsValidating(false);
       } else {
         throw new Error("Order not found");
       }
@@ -193,7 +231,7 @@ export default function QuaggaBarcodeScanner({
       setIsScanning(false);
       setScannedCode("");
 
-      // Set cooldown period (2 seconds)
+      // Set cooldown period
       cooldownUntilRef.current = Date.now() + COOLDOWN_AFTER_ERROR_MS;
 
       await Swal.fire({
@@ -204,29 +242,26 @@ export default function QuaggaBarcodeScanner({
         confirmButtonText: "OK",
       });
 
-      // Restart scanner for re-scan (ensure camera is released first)
-      // Wait for cooldown to end before restarting
-      await new Promise((resolve) => setTimeout(resolve, COOLDOWN_AFTER_ERROR_MS));
+      // Restart scanner for re-scan (camera was already released, just need to reinitialize)
+      console.log("Validation failed, restarting scanner...");
 
       try {
-        // Longer delay on mobile to ensure camera is fully released
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        
         // Request camera again (like initial setup)
         try {
           await Quagga.CameraAccess.request(null, {});
           await Quagga.CameraAccess.release();
-          await new Promise((resolve) => setTimeout(resolve, 200));
         } catch (permError) {
           console.warn("Permission request warning on restart:", permError);
         }
         
-        // Camera should be released now
+        // Camera should be released now, restart Quagga
         if (isCameraReleasedRef.current) {
+          console.log("Restarting Quagga scanner...");
           await Quagga.start();
           Quagga.onDetected(errorCheck);
           Quagga.onProcessed(handleProcessed);
           isCameraReleasedRef.current = false;
+          console.log("Scanner restarted successfully");
         }
       } catch (err) {
         console.error("Error restarting scanner:", err);
@@ -402,9 +437,6 @@ export default function QuaggaBarcodeScanner({
         
         // Step 2: Release it immediately (so Quagga can use it)
         await Quagga.CameraAccess.release();
-        
-        // Step 3: Small delay to ensure camera is fully released (longer on mobile)
-        await new Promise((resolve) => setTimeout(resolve, 500));
       } catch (error) {
         // If permission is denied, we'll catch it in Quagga.init
         // But don't block initialization - some browsers handle this differently
@@ -529,6 +561,22 @@ export default function QuaggaBarcodeScanner({
       
       // Start cleanup (fire and forget - React cleanup can't await)
       cleanup();
+      
+      // Also try to stop all media tracks immediately (synchronously)
+      try {
+        const container = scannerRef.current;
+        if (container) {
+          const video = container.querySelector("video");
+          if (video && video.srcObject instanceof MediaStream) {
+            video.srcObject.getTracks().forEach((track) => {
+              track.stop();
+            });
+            video.srcObject = null;
+          }
+        }
+      } catch (syncStopError) {
+        console.warn("Error in synchronous track stop:", syncStopError);
+      }
     };
   }, [errorCheck]);
 
