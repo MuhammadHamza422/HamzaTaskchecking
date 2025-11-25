@@ -43,11 +43,11 @@ export default function QuaggaBarcodeScanner({
   const cooldownUntilRef = useRef(0); // Timestamp when cooldown ends
   
   // Constants for stability and quality
-  const REQUIRED_CONSECUTIVE_DETECTIONS = 3; // Need 3 same codes in a row
-  const BUFFER_SIZE = 3; // Track last 5 detections
+  const REQUIRED_CONSECUTIVE_DETECTIONS = 2; // Need 2 same codes in a row
+  const BUFFER_SIZE = 3; // Track last 3 detections
   const MIN_DETECTION_DURATION_MS = 200; // Must detect for 300ms
   const CONFIDENCE_THRESHOLD = 0.12; // 85% confidence (was 0.25 = 75%)
-  const COOLDOWN_AFTER_ERROR_MS =12000; // 2 seconds cooldown after failed API
+  const COOLDOWN_AFTER_ERROR_MS =1000; // 2 seconds cooldown after failed API
   const MIN_CODE_LENGTH = 3; // Minimum barcode length
 
   // Validate code quality and length
