@@ -181,24 +181,12 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
   const [cameraError, setCameraError] = useState(null);
   const [isCameraReady, setIsCameraReady] = useState(false);
 
-  // Helper function to request camera permission first (like Quagga scanner)
-  const requestCameraPermission = useCallback(async () => {
-    try {
-      // Request camera access to trigger permission prompt on mobile
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facingMode || "environment" }
-      });
-      // Release immediately so react-webcam can use it
-      stream.getTracks().forEach(track => track.stop());
-      // Small delay to ensure camera is fully released
-      await new Promise(resolve => setTimeout(resolve, 300));
-      return true;
-    } catch (error) {
-      console.warn("Camera permission request:", error);
-      // Still return true - react-webcam will handle the error
-      return false;
-    }
-  }, [facingMode]);
+  // Wait for camera to be available (after Quagga scanner releases it)
+  const waitForCameraAvailable = useCallback(async () => {
+    // Wait a bit longer to ensure previous camera stream is fully released
+    // This is critical when coming from Quagga scanner
+    await new Promise(resolve => setTimeout(resolve, 800));
+  }, []);
 
   // Helper function to stop webcam stream
   const stopWebcamStream = useCallback(() => {
@@ -229,29 +217,40 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
     setIsCameraReady(false);
   }, []);
 
-  // Request camera permission and initialize when component mounts
+  // Wait for camera to be available and initialize when component mounts
   useEffect(() => {
     let mounted = true;
 
     const initializeCamera = async () => {
       if (mode !== "camera") return;
 
-      // Request camera permission first (important for mobile)
-      await requestCameraPermission();
+      // Wait for previous camera stream to be fully released
+      // This is critical when coming from Quagga scanner
+      await waitForCameraAvailable();
 
       if (!mounted) return;
 
-      // Small delay to ensure camera is ready
-      await new Promise(resolve => setTimeout(resolve, 200));
-
-      // Check if webcam is ready
-      if (webcamRef.current?.video) {
-        const video = webcamRef.current.video;
-        if (video.readyState >= 2) { // HAVE_CURRENT_DATA or higher
-          setIsCameraReady(true);
-          setCameraError(null);
+      // Check if webcam is ready (react-webcam handles permission request)
+      // We just wait for it to initialize
+      const checkReady = setInterval(() => {
+        if (webcamRef.current?.video) {
+          const video = webcamRef.current.video;
+          if (video.readyState >= 2) { // HAVE_CURRENT_DATA or higher
+            setIsCameraReady(true);
+            setCameraError(null);
+            clearInterval(checkReady);
+          }
         }
-      }
+      }, 100);
+
+      // Clear interval after 5 seconds if camera doesn't initialize
+      setTimeout(() => {
+        clearInterval(checkReady);
+      }, 5000);
+
+      return () => {
+        clearInterval(checkReady);
+      };
     };
 
     initializeCamera();
@@ -259,7 +258,7 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
     return () => {
       mounted = false;
     };
-  }, [mode, requestCameraPermission]);
+  }, [mode, waitForCameraAvailable]);
 
   // Cleanup: Stop webcam stream when component unmounts
   useEffect(() => {
@@ -498,14 +497,11 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
     stopWebcamStream();
     setIsCameraReady(false);
     
-    // Small delay before switching
-    await new Promise(resolve => setTimeout(resolve, 200));
+    // Wait for camera to be fully released before switching
+    await new Promise(resolve => setTimeout(resolve, 300));
     
-    // Switch facing mode
+    // Switch facing mode (react-webcam will handle permission)
     setFacingMode((prev) => (prev === "environment" ? "user" : "environment"));
-    
-    // Request permission for new camera
-    await requestCameraPermission();
   };
 
   const rotateImage = (direction) => {
@@ -609,7 +605,14 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
                   <button
                     onClick={async () => {
                       setCameraError(null);
-                      await requestCameraPermission();
+                      setIsCameraReady(false);
+                      
+                      // Stop any existing stream
+                      stopWebcamStream();
+                      
+                      // Wait for camera to be fully released
+                      await new Promise(resolve => setTimeout(resolve, 500));
+                      
                       // Force webcam to retry by toggling facingMode
                       setFacingMode(prev => prev === "environment" ? "user" : "environment");
                       setTimeout(() => {
