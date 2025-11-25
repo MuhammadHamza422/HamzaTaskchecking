@@ -430,15 +430,16 @@ export default function QuaggaBarcodeScanner({
       inputStream: {
         type: "LiveStream",
         constraints: {
-            width: { ideal: 640 },
-            height: { ideal: 480 },
+            width: { ideal: 1920, min: 1280 }, 
+            height: { ideal: 1080, min: 720 },
             facingMode: "environment",
+            focusMode: "continuous", 
           },
           target: scannerRef.current,
           willReadFrequently: true,
       },
       locator: {
-        patchSize: "medium",
+        patchSize: "large",
         halfSample: true,
           willReadFrequently: true,
       },
