@@ -5,11 +5,14 @@ import ReactCrop from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
 import { X, RotateCcw, Check, RotateCw, Plus, Save } from "lucide-react";
 
-const videoConstraints = {
-  width: { ideal: 1280 },
-  height: { ideal: 720 },
-  facingMode: { ideal: "environment" },
-};
+// More flexible video constraints for better mobile compatibility
+const getVideoConstraints = (facingMode) => ({
+  width: { ideal: 1280, min: 640 },
+  height: { ideal: 720, min: 480 },
+  facingMode: facingMode || "environment",
+  // Add focus mode for better image quality
+  focusMode: "continuous",
+});
 
 const createImage = (url) =>
   new Promise((resolve, reject) => {
@@ -175,6 +178,27 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
     };
   }, []);
   const [facingMode, setFacingMode] = useState("environment");
+  const [cameraError, setCameraError] = useState(null);
+  const [isCameraReady, setIsCameraReady] = useState(false);
+
+  // Helper function to request camera permission first (like Quagga scanner)
+  const requestCameraPermission = useCallback(async () => {
+    try {
+      // Request camera access to trigger permission prompt on mobile
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: facingMode || "environment" }
+      });
+      // Release immediately so react-webcam can use it
+      stream.getTracks().forEach(track => track.stop());
+      // Small delay to ensure camera is fully released
+      await new Promise(resolve => setTimeout(resolve, 300));
+      return true;
+    } catch (error) {
+      console.warn("Camera permission request:", error);
+      // Still return true - react-webcam will handle the error
+      return false;
+    }
+  }, [facingMode]);
 
   // Helper function to stop webcam stream
   const stopWebcamStream = useCallback(() => {
@@ -202,7 +226,40 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
         });
       }
     }
+    setIsCameraReady(false);
   }, []);
+
+  // Request camera permission and initialize when component mounts
+  useEffect(() => {
+    let mounted = true;
+
+    const initializeCamera = async () => {
+      if (mode !== "camera") return;
+
+      // Request camera permission first (important for mobile)
+      await requestCameraPermission();
+
+      if (!mounted) return;
+
+      // Small delay to ensure camera is ready
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Check if webcam is ready
+      if (webcamRef.current?.video) {
+        const video = webcamRef.current.video;
+        if (video.readyState >= 2) { // HAVE_CURRENT_DATA or higher
+          setIsCameraReady(true);
+          setCameraError(null);
+        }
+      }
+    };
+
+    initializeCamera();
+
+    return () => {
+      mounted = false;
+    };
+  }, [mode, requestCameraPermission]);
 
   // Cleanup: Stop webcam stream when component unmounts
   useEffect(() => {
@@ -436,8 +493,19 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
     }
   };
 
-  const switchCamera = () => {
+  const switchCamera = async () => {
+    // Stop current stream first
+    stopWebcamStream();
+    setIsCameraReady(false);
+    
+    // Small delay before switching
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
+    // Switch facing mode
     setFacingMode((prev) => (prev === "environment" ? "user" : "environment"));
+    
+    // Request permission for new camera
+    await requestCameraPermission();
   };
 
   const rotateImage = (direction) => {
@@ -502,9 +570,24 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
               audio={false}
               ref={webcamRef}
               screenshotFormat="image/jpeg"
-              videoConstraints={{
-                ...videoConstraints,
-                facingMode: facingMode,
+              videoConstraints={getVideoConstraints(facingMode)}
+              onUserMedia={(stream) => {
+                setIsCameraReady(true);
+                setCameraError(null);
+              }}
+              onUserMediaError={(error) => {
+                console.error("Webcam error:", error);
+                setIsCameraReady(false);
+                
+                let errorMessage = "Failed to access camera. Please check permissions.";
+                if (error.name === "NotAllowedError") {
+                  errorMessage = "Camera permission denied. Please allow camera access in your browser settings.";
+                } else if (error.name === "NotFoundError") {
+                  errorMessage = "No camera found on this device.";
+                } else if (error.name === "NotReadableError") {
+                  errorMessage = "Camera is already in use by another application.";
+                }
+                setCameraError(errorMessage);
               }}
               style={{
                 position: 'absolute',
@@ -516,6 +599,40 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
                 zIndex: 1,
               }}
             />
+            
+            {/* Camera Error Display */}
+            {cameraError && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-30">
+                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-6 max-w-sm mx-4 text-center">
+                  <p className="text-white text-lg font-semibold mb-2">Camera Error</p>
+                  <p className="text-gray-300 text-sm mb-4">{cameraError}</p>
+                  <button
+                    onClick={async () => {
+                      setCameraError(null);
+                      await requestCameraPermission();
+                      // Force webcam to retry by toggling facingMode
+                      setFacingMode(prev => prev === "environment" ? "user" : "environment");
+                      setTimeout(() => {
+                        setFacingMode(prev => prev === "user" ? "environment" : "user");
+                      }, 100);
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Retry
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            {/* Camera Loading Indicator */}
+            {!isCameraReady && !cameraError && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-20">
+                <div className="text-center">
+                  <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                  <p className="text-white text-sm">Initializing camera...</p>
+                </div>
+              </div>
+            )}
             
             <div className="absolute top-4 left-4 right-4 flex justify-between items-center z-20">
               <button
