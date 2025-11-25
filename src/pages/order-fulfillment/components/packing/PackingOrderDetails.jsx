@@ -301,6 +301,73 @@ export default function PackingOrderDetails() {
               // Select all items by default
               setSelectedItems(orderDataFromState.orderLines.map((item) => item.id));
             }
+          } else if (searchData && autoOpenCamera) {
+            // New optimized flow: searchData provided, load details in background
+            // Start API call immediately (don't wait for state updates)
+            const detailsPromise = getOrderDetails(orderIdToUse, platformToUse);
+            
+            // Update UI state immediately to allow camera to open
+            setStage(STAGES.PHOTO_UPLOAD);
+            setLoading(false); // Don't block UI, allow camera to open immediately
+            setIsLoadingOrderDetails(true); // Show background loading indicator
+
+            // Process API response in background (non-blocking)
+            detailsPromise
+              .then((result) => {
+                if (result.success && result.data) {
+                  setOrderData(result.data);
+
+                  // Check if order is already packed
+                  const isPacked =
+                    result.data.isAlreadyPacked ||
+                    alreadyPackedFromSearch ||
+                    false;
+                  const packingInfoData =
+                    result.data.packingInfo || packingInfoFromSearch || null;
+
+                  setIsAlreadyPacked(isPacked);
+                  setPackingInfo(packingInfoData);
+
+                  // If already packed, switch to view mode
+                  if (isPacked && packingInfoData) {
+                    setIsViewMode(true);
+                    setPackingId(packingInfoData.packingId);
+                    // Load packing details
+                    getPackingOrderDetails(packingInfoData.packingId)
+                      .then((packingResult) => {
+                        if (packingResult.success && packingResult.data) {
+                          setPackingData(packingResult.data);
+                          setSelectedItems(
+                            packingResult.data.selectedItems || []
+                          );
+                        }
+                      })
+                      .catch((err) => {
+                        console.error("Error loading packing details:", err);
+                      })
+                      .finally(() => {
+                        setIsLoadingOrderDetails(false);
+                      });
+                  } else {
+                    // Select all items by default
+                    setSelectedItems(
+                      result.data.orderLines.map((item) => item.id)
+                    );
+                    setIsLoadingOrderDetails(false);
+                  }
+                  setError(null); // Clear any previous errors
+                }
+              })
+              .catch((error) => {
+                console.error(
+                  "Error loading order details in background:",
+                  error
+                );
+                setError(error.message || "Failed to load order details");
+                setIsLoadingOrderDetails(false);
+              });
+
+            return; // Exit early, don't wait for order details
           } else {
             // Fallback to old flow: fetch order details (for backwards compatibility)
             // If autoOpenCamera flag is set, immediately go to photo upload stage

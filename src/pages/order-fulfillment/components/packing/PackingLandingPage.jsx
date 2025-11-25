@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import ScanInput from "../common/ScanInput";
 import FulfillmentBreadcrumb from "../common/FulfillmentBreadcrumb";
 import QuaggaBarcodeScanner from "./QuaggaBarcodeScanner";
-import { scanOrderWithDetails } from "../../../../api/fulfillment";
+import { searchOrder, getOrderDetails } from "../../../../api/fulfillment";
 import Swal from "sweetalert2";
 
 export default function PackingLandingPage() {
@@ -31,22 +31,22 @@ export default function PackingLandingPage() {
     setShowScanner(false); // Close scanner when processing
 
     try {
-      // Use combined API for faster response (search + details in one call)
-      const result = await scanOrderWithDetails(orderNumber.trim());
+      // Step 1: Fast search API call (<500ms)
+      const searchResult = await searchOrder(orderNumber.trim());
 
-      if (result.success && result.data) {
-        const { search, order } = result.data;
+      if (searchResult.success && searchResult.data) {
+        const searchData = searchResult.data;
         
         // Check if order is already packed
-        if (search.isAlreadyPacked && search.packingInfo) {
+        if (searchData.isAlreadyPacked && searchData.packingInfo) {
           setIsProcessing(false);
           
           // Set warning message to show under input
           setAlreadyPackedWarning({
-            packingId: search.packingInfo.packingId,
-            status: search.packingInfo.status,
-            packedBy: search.packingInfo.packedBy,
-            packedAt: search.packingInfo.packedAt,
+            packingId: searchData.packingInfo.packingId,
+            status: searchData.packingInfo.status,
+            packedBy: searchData.packingInfo.packedBy,
+            packedAt: searchData.packingInfo.packedAt,
           });
           
           // Show SweetAlert popup
@@ -60,19 +60,19 @@ export default function PackingLandingPage() {
                   <div class="grid grid-cols-2 gap-3 text-sm">
                     <div>
                       <p class="text-gray-500 font-medium mb-1">Packing ID:</p>
-                      <p class="text-gray-900 font-semibold">${search.packingInfo.packingId || "N/A"}</p>
+                      <p class="text-gray-900 font-semibold">${searchData.packingInfo.packingId || "N/A"}</p>
                     </div>
                     <div>
                       <p class="text-gray-500 font-medium mb-1">Status:</p>
-                      <p class="text-gray-900 font-semibold">${search.packingInfo.status || "N/A"}</p>
+                      <p class="text-gray-900 font-semibold">${searchData.packingInfo.status || "N/A"}</p>
                     </div>
                     <div>
                       <p class="text-gray-500 font-medium mb-1">Packed By:</p>
-                      <p class="text-gray-900 font-semibold">${search.packingInfo.packedBy || "N/A"}</p>
+                      <p class="text-gray-900 font-semibold">${searchData.packingInfo.packedBy || "N/A"}</p>
                     </div>
                     <div>
                       <p class="text-gray-500 font-medium mb-1">Packed At:</p>
-                      <p class="text-gray-900 font-semibold">${search.packingInfo.packedAt ? new Date(search.packingInfo.packedAt).toLocaleString() : "N/A"}</p>
+                      <p class="text-gray-900 font-semibold">${searchData.packingInfo.packedAt ? new Date(searchData.packingInfo.packedAt).toLocaleString() : "N/A"}</p>
                     </div>
                   </div>
                 </div>
@@ -85,11 +85,11 @@ export default function PackingLandingPage() {
             cancelButtonColor: "#6b7280",
           });
 
-          if (alertResult.isConfirmed && search.packingInfo.packingId) {
+          if (alertResult.isConfirmed && searchData.packingInfo.packingId) {
             // Navigate to packing list with packingId to show details
             setAlreadyPackedWarning(null);
             navigate("/fulfillment/packing/list", {
-              state: { packingId: search.packingInfo.packingId },
+              state: { packingId: searchData.packingInfo.packingId },
             });
           } else {
             // Reopen scanner after closing alert
@@ -101,23 +101,25 @@ export default function PackingLandingPage() {
         // Clear warning if order is not packed
         setAlreadyPackedWarning(null);
         
-        // Order is not packed, proceed to details page with full order data
+        // Order is not packed, proceed to details page
+        // Details API will be called in background by PackingOrderDetails component
         let urlIdentifier;
-        if (order.platform === "shopify") {
-          urlIdentifier = order.orderNumber || search.orderKey || search.order_key || order.orderId;
+        if (searchData.platform === "shopify") {
+          urlIdentifier = searchData.orderNumber || searchData.orderKey || searchData.order_key || searchData.orderId;
         } else {
-          urlIdentifier = order.orderId || order.orderNumber;
+          urlIdentifier = searchData.orderId || searchData.orderNumber;
         }
         
         navigate(`/fulfillment/packing/${encodeURIComponent(urlIdentifier)}`, {
           state: {
-            orderId: order.orderId,
-            platform: order.platform,
-            orderKey: order.orderNumber || search.orderKey || search.order_key,
-            orderData: order, // Pass full order data (no need for second API call)
+            orderId: searchData.orderId,
+            platform: searchData.platform,
+            orderKey: searchData.orderNumber || searchData.orderKey || searchData.order_key,
+            searchData: searchData, // Pass search result (fast API response)
             isAlreadyPacked: false,
             packingInfo: null,
             autoOpenCamera: true, // Flag to auto-open camera
+            // Details API will be called in background by PackingOrderDetails
           },
         });
       }
@@ -140,12 +142,13 @@ export default function PackingLandingPage() {
     }
   };
 
-  const handleScannerSuccess = (barcode, orderData) => {
-    // Scanner now provides full order data (from combined API)
-    // No need for additional API calls
-    const { orderId, orderNumber, platform } = orderData;
+  const handleScannerSuccess = async (barcode, searchData) => {
+    // Scanner provides search result (fast API call)
+    // Details will be loaded in background by PackingOrderDetails component
+    const { orderId, orderNumber, platform } = searchData;
     
-    // Navigate to order details with full order data
+    // Navigate immediately with search result
+    // PackingOrderDetails will load full order details in background
     let urlIdentifier;
     if (platform === "shopify") {
       urlIdentifier = orderNumber || orderId;
@@ -158,10 +161,11 @@ export default function PackingLandingPage() {
         orderId,
         platform,
         orderKey: orderNumber,
-        orderData: orderData, // Pass full order data (no need for second API call)
-        isAlreadyPacked: false,
-        packingInfo: null,
+        searchData: searchData, // Pass search result (fast API response)
+        isAlreadyPacked: searchData.isAlreadyPacked || false,
+        packingInfo: searchData.packingInfo || null,
         autoOpenCamera: true, // Flag to auto-open camera
+        // Details API will be called in background by PackingOrderDetails
       },
     });
   };

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import Quagga from "quagga";
 import { X, Search, Keyboard } from "lucide-react";
-import { scanOrderWithDetails } from "../../../../api/fulfillment";
+import { searchOrder } from "../../../../api/fulfillment";
 import Swal from "sweetalert2";
 
 export default function QuaggaBarcodeScanner({
@@ -199,18 +199,18 @@ export default function QuaggaBarcodeScanner({
           clearTimeout(validationTimeoutRef.current);
         }
 
-        // Validate barcode with combined API (search + details in one call)
+        // Step 1: Fast search API call (<500ms) - immediate response
         (async () => {
           const barcodeValue = String(code).trim();
           try {
-            // Single API call - gets both search metadata and full order details
-            const result = await scanOrderWithDetails(barcodeValue);
+            // Fast search API call - database only, returns orderId and platform
+            const searchResult = await searchOrder(barcodeValue);
 
-            if (result.success && result.data) {
-              const { search, order } = result.data;
+            if (searchResult.success && searchResult.data) {
+              const searchData = searchResult.data;
 
               // Check if already packed - show warning and don't navigate
-              if (search.isAlreadyPacked && search.packingInfo) {
+              if (searchData.isAlreadyPacked && searchData.packingInfo) {
                 // Reset validating flag and scanned code
                 setIsValidating(false);
                 lastScannedCodeRef.current = "";
@@ -223,9 +223,9 @@ export default function QuaggaBarcodeScanner({
                     <div class="text-left">
                       <p class="mb-4 text-gray-700">This order has already been packed.</p>
                       <div class="bg-gray-50 rounded-lg p-4 mb-4">
-                        <p class="text-sm"><span class="font-medium">Packing ID:</span> ${search.packingInfo.packingId || "N/A"
+                        <p class="text-sm"><span class="font-medium">Packing ID:</span> ${searchData.packingInfo.packingId || "N/A"
                     }</p>
-                        <p class="text-sm"><span class="font-medium">Status:</span> ${search.packingInfo.status || "N/A"
+                        <p class="text-sm"><span class="font-medium">Status:</span> ${searchData.packingInfo.status || "N/A"
                     }</p>
                       </div>
                     </div>
@@ -241,9 +241,10 @@ export default function QuaggaBarcodeScanner({
                 return;
               }
 
-              // Valid order - navigate immediately with full order data (no need for second API call)
+              // Valid order found - navigate immediately with search result
+              // Details API will be called in background by parent component
               if (onScanSuccess) {
-                onScanSuccess(barcodeValue, order);
+                onScanSuccess(barcodeValue, searchData);
               }
 
               // Reset validating flag after navigation
