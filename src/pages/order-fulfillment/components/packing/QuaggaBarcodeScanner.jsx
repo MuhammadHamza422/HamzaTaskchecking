@@ -31,32 +31,71 @@ export default function QuaggaBarcodeScanner({
   const frameCanvasRef = useRef(null);
   const [isValidating, setIsValidating] = useState(false);
   const [scannedCode, setScannedCode] = useState("");
+  const [isScanning, setIsScanning] = useState(false); // Visual feedback: detecting but not confirmed
   const lastScannedCodeRef = useRef("");
   const isCameraReleasedRef = useRef(true);
   const isInitializingRef = useRef(false);
+  
+  // Stability check: Detection buffer
+  const detectionBufferRef = useRef([]);
+  const stableCodeRef = useRef(null);
+  const stableCodeStartTimeRef = useRef(null);
+  const cooldownUntilRef = useRef(0); // Timestamp when cooldown ends
+  
+  // Constants for stability and quality
+  const REQUIRED_CONSECUTIVE_DETECTIONS = 3; // Need 3 same codes in a row
+  const BUFFER_SIZE = 5; // Track last 5 detections
+  const MIN_DETECTION_DURATION_MS = 300; // Must detect for 300ms
+  const CONFIDENCE_THRESHOLD = 0.15; // 85% confidence (was 0.25 = 75%)
+  const COOLDOWN_AFTER_ERROR_MS = 2000; // 2 seconds cooldown after failed API
+  const MIN_CODE_LENGTH = 3; // Minimum barcode length
 
-  // Error check callback - accepts code if median error < 0.25 (75% confidence)
-  const errorCheck = useCallback(
-    (result) => {
-      if (isValidating) return;
-      if (!result || !result.codeResult || !result.codeResult.code) return;
+  // Validate code quality and length
+  const isValidCode = (code, error) => {
+    if (!code || typeof code !== 'string') return false;
+    
+    const trimmedCode = code.trim();
+    
+    // Check minimum length
+    if (trimmedCode.length < MIN_CODE_LENGTH) return false;
+    
+    // Check confidence threshold (85% confidence)
+    if (error >= CONFIDENCE_THRESHOLD) return false;
+    
+    return true;
+  };
 
-      const code = result.codeResult.code;
+  // Check if we have a stable code (same code detected multiple times)
+  const checkStableCode = () => {
+    const buffer = detectionBufferRef.current;
+    if (buffer.length < REQUIRED_CONSECUTIVE_DETECTIONS) {
+      return null;
+    }
 
-      // Skip if already processed
-      if (code === lastScannedCodeRef.current) {
-        return;
+    // Get last N detections
+    const recent = buffer.slice(-REQUIRED_CONSECUTIVE_DETECTIONS);
+    
+    // Check if all recent detections are the same code
+    const firstCode = recent[0].code;
+    const allSame = recent.every(detection => detection.code === firstCode);
+    
+    if (allSame) {
+      // Check if we've been detecting this code for minimum duration
+      const firstDetection = recent[0];
+      const now = Date.now();
+      const duration = now - firstDetection.timestamp;
+      
+      if (duration >= MIN_DETECTION_DURATION_MS) {
+        return {
+          code: firstCode,
+          error: recent[0].error, // Use first detection's error
+          timestamp: firstDetection.timestamp
+        };
       }
-
-      const err = getMedianOfCodeErrors(result.codeResult.decodedCodes || []);
-
-      // If Quagga is at least 75% certain that it read correctly, accept the code
-      if (err < 0.25) {
-        handleBarcodeDetected(code, result);
-      }
-    },
-    [isValidating]
-  );
+    }
+    
+    return null;
+  };
 
   // Properly release camera (async)
   const releaseCamera = async () => {
@@ -76,10 +115,16 @@ export default function QuaggaBarcodeScanner({
     }
   };
 
-  // Handle barcode detection - call API immediately
-  const handleBarcodeDetected = async (code, result) => {
+  // Handle barcode detection - call API after stable code confirmed
+  const handleBarcodeDetected = useCallback(async (code, result) => {
     if (isValidating) return;
     if (code === lastScannedCodeRef.current) return;
+
+    // Clear detection buffer and stable code tracking
+    detectionBufferRef.current = [];
+    stableCodeRef.current = null;
+    stableCodeStartTimeRef.current = null;
+    setIsScanning(false);
 
     setIsValidating(true);
     lastScannedCodeRef.current = code;
@@ -137,6 +182,16 @@ export default function QuaggaBarcodeScanner({
 
       setIsValidating(false);
       lastScannedCodeRef.current = "";
+      
+      // Clear detection buffer on error
+      detectionBufferRef.current = [];
+      stableCodeRef.current = null;
+      stableCodeStartTimeRef.current = null;
+      setIsScanning(false);
+      setScannedCode("");
+
+      // Set cooldown period (2 seconds)
+      cooldownUntilRef.current = Date.now() + COOLDOWN_AFTER_ERROR_MS;
 
       await Swal.fire({
         icon: "error",
@@ -147,6 +202,9 @@ export default function QuaggaBarcodeScanner({
       });
 
       // Restart scanner for re-scan (ensure camera is released first)
+      // Wait for cooldown to end before restarting
+      await new Promise((resolve) => setTimeout(resolve, COOLDOWN_AFTER_ERROR_MS));
+
       try {
         // Longer delay on mobile to ensure camera is fully released
         await new Promise((resolve) => setTimeout(resolve, 500));
@@ -172,7 +230,82 @@ export default function QuaggaBarcodeScanner({
         isCameraReleasedRef.current = true;
       }
     }
-  };
+  }, [isValidating, onScanSuccess, onClose]);
+
+  // Error check callback - with stability and quality checks
+  const errorCheck = useCallback(
+    (result) => {
+      // Skip if in cooldown period
+      if (Date.now() < cooldownUntilRef.current) {
+        return;
+      }
+
+      if (isValidating) return;
+      if (!result || !result.codeResult || !result.codeResult.code) {
+        setIsScanning(false);
+        return;
+      }
+
+      const code = result.codeResult.code;
+      const err = getMedianOfCodeErrors(result.codeResult.decodedCodes || []);
+
+      // Skip if already processed and validated
+      if (code === lastScannedCodeRef.current) {
+        return;
+      }
+
+      // Validate code quality
+      if (!isValidCode(code, err)) {
+        setIsScanning(false);
+        return;
+      }
+
+      // Add to detection buffer
+      const now = Date.now();
+      detectionBufferRef.current.push({
+        code: code.trim(),
+        error: err,
+        timestamp: now
+      });
+
+      // Keep buffer size manageable
+      if (detectionBufferRef.current.length > BUFFER_SIZE) {
+        detectionBufferRef.current.shift();
+      }
+
+      // Show "Scanning..." feedback
+      setIsScanning(true);
+      setScannedCode(code);
+
+      // Check for stable code
+      const stable = checkStableCode();
+      
+      if (stable) {
+        // We have a stable code - check if it's the same as previous stable code
+        if (stableCodeRef.current?.code === stable.code) {
+          // Same stable code - check duration
+          const stableDuration = now - stableCodeStartTimeRef.current;
+          if (stableDuration >= MIN_DETECTION_DURATION_MS) {
+            // Stable code detected for minimum duration - accept it
+            stableCodeRef.current = null;
+            stableCodeStartTimeRef.current = null;
+            detectionBufferRef.current = [];
+            setIsScanning(false);
+            handleBarcodeDetected(stable.code, result);
+          }
+        } else {
+          // New stable code - start tracking
+          stableCodeRef.current = stable;
+          stableCodeStartTimeRef.current = now;
+        }
+      } else {
+        // Not stable yet - reset stable code tracking
+        stableCodeRef.current = null;
+        stableCodeStartTimeRef.current = null;
+      }
+    },
+    [isValidating, handleBarcodeDetected]
+  );
 
   // Handle processed result - draw blue rectangle and red line (from official example)
   const handleProcessed = (result) => {
@@ -306,6 +439,7 @@ export default function QuaggaBarcodeScanner({
           halfSample: true,
           willReadFrequently: true,
         },
+        frequency: 5, // Scan every 5th frame (was 1 = every frame) - reduces false positives
         decoder: {
           readers: [
             "code_128_reader",
@@ -538,6 +672,13 @@ export default function QuaggaBarcodeScanner({
   }, []);
 
   const handleClose = async () => {
+    // Clear all buffers and state
+    detectionBufferRef.current = [];
+    stableCodeRef.current = null;
+    stableCodeStartTimeRef.current = null;
+    setIsScanning(false);
+    setScannedCode("");
+    
     // Properly release camera before closing
     await releaseCamera();
     if (onClose) {
@@ -584,12 +725,12 @@ export default function QuaggaBarcodeScanner({
           }}
         />
 
-        {/* Scanned Code Display */}
-        {scannedCode && !isValidating && (
+        {/* Scanning Status Display */}
+        {isScanning && !isValidating && scannedCode && (
           <div className="absolute top-24 left-1/2 transform -translate-x-1/2 z-[200] flex flex-col items-center gap-2">
-            <div className="bg-black/70 backdrop-blur-sm rounded-lg p-3 flex items-center justify-center">
+            <div className="bg-blue-500/70 backdrop-blur-sm rounded-lg p-3 flex items-center justify-center">
               <svg
-                className="w-8 h-8 text-white"
+                className="w-8 h-8 text-white animate-pulse"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -602,6 +743,9 @@ export default function QuaggaBarcodeScanner({
                 />
               </svg>
             </div>
+            <p className="text-blue-200 text-sm font-medium bg-blue-500/70 backdrop-blur-sm px-4 py-2 rounded-lg">
+              Scanning...
+            </p>
             <p className="text-white text-lg font-semibold bg-black/70 backdrop-blur-sm px-4 py-2 rounded-lg">
               {scannedCode}
             </p>
