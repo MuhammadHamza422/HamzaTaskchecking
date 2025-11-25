@@ -44,10 +44,10 @@ export default function QuaggaBarcodeScanner({
   
   // Constants for stability and quality
   const REQUIRED_CONSECUTIVE_DETECTIONS = 3; // Need 3 same codes in a row
-  const BUFFER_SIZE = 5; // Track last 5 detections
-  const MIN_DETECTION_DURATION_MS = 300; // Must detect for 300ms
-  const CONFIDENCE_THRESHOLD = 0.15; // 85% confidence (was 0.25 = 75%)
-  const COOLDOWN_AFTER_ERROR_MS = 2000; // 2 seconds cooldown after failed API
+  const BUFFER_SIZE = 3; // Track last 5 detections
+  const MIN_DETECTION_DURATION_MS = 200; // Must detect for 300ms
+  const CONFIDENCE_THRESHOLD = 0.12; // 85% confidence (was 0.25 = 75%)
+  const COOLDOWN_AFTER_ERROR_MS =12000; // 2 seconds cooldown after failed API
   const MIN_CODE_LENGTH = 3; // Minimum barcode length
 
   // Validate code quality and length
@@ -168,7 +168,10 @@ export default function QuaggaBarcodeScanner({
           return;
         }
 
-        // Valid order found
+        // Valid order found - ensure camera is fully released before navigation
+        // Add delay to ensure camera is completely released (critical for mobile)
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        
         if (onScanSuccess) {
           onScanSuccess(barcodeValue, searchData);
         }
@@ -423,40 +426,40 @@ export default function QuaggaBarcodeScanner({
 
       isInitializingRef.current = true;
 
-      const config = {
-        inputStream: {
-          type: "LiveStream",
-          constraints: {
+    const config = {
+      inputStream: {
+        type: "LiveStream",
+        constraints: {
             width: { ideal: 640 },
             height: { ideal: 480 },
             facingMode: "environment",
           },
           target: scannerRef.current,
           willReadFrequently: true,
-        },
-        locator: {
-          patchSize: "medium",
-          halfSample: true,
+      },
+      locator: {
+        patchSize: "medium",
+        halfSample: true,
           willReadFrequently: true,
-        },
+      },
         frequency: 5, // Scan every 5th frame (was 1 = every frame) - reduces false positives
-        decoder: {
-          readers: [
-            "code_128_reader",
-            "ean_reader",
-            "ean_8_reader",
-            "code_39_reader",
-            "upc_reader",
-            "upc_e_reader",
-          ],
-        },
-        locate: true,
-      };
+      decoder: {
+        readers: [
+          "code_128_reader",
+          "ean_reader",
+          "ean_8_reader",
+          "code_39_reader",
+          "upc_reader",
+          "upc_e_reader",
+        ],
+      },
+      locate: true,
+    };
 
       Quagga.init(config, async (err) => {
         if (ignoreStart || !scannerRef.current) return;
 
-        if (err) {
+      if (err) {
           console.error("Error initializing Quagga2:", err);
 
           let errorTitle = "Camera Error";
@@ -473,16 +476,16 @@ export default function QuaggaBarcodeScanner({
             errorText = "Camera is already being used by another application.";
           }
 
-          Swal.fire({
-            icon: "error",
+        Swal.fire({
+          icon: "error",
             title: errorTitle,
             text: errorText,
-            confirmButtonColor: "#2563eb",
-          });
+          confirmButtonColor: "#2563eb",
+        });
 
-          if (onClose) onClose();
-          return;
-        }
+        if (onClose) onClose();
+        return;
+      }
 
         // Setup event handlers
         Quagga.onProcessed(handleProcessed);
@@ -534,27 +537,27 @@ export default function QuaggaBarcodeScanner({
       if (!scannerRef.current) return;
 
       const container = scannerRef.current;
-      const video = container.querySelector("video");
-      const drawingBuffer = container.querySelector("canvas.drawingBuffer");
+          const video = container.querySelector("video");
+          const drawingBuffer = container.querySelector("canvas.drawingBuffer");
 
-      if (video) {
-        video.style.width = "100%";
-        video.style.height = "100%";
-        video.style.objectFit = "cover";
-        video.style.position = "absolute";
-        video.style.top = "0";
-        video.style.left = "0";
-        video.style.zIndex = "1";
-      }
+          if (video) {
+            video.style.width = "100%";
+            video.style.height = "100%";
+            video.style.objectFit = "cover";
+            video.style.position = "absolute";
+            video.style.top = "0";
+            video.style.left = "0";
+            video.style.zIndex = "1";
+          }
 
-      if (drawingBuffer) {
-        drawingBuffer.style.width = "100%";
-        drawingBuffer.style.height = "100%";
-        drawingBuffer.style.position = "absolute";
-        drawingBuffer.style.top = "0";
-        drawingBuffer.style.left = "0";
+          if (drawingBuffer) {
+            drawingBuffer.style.width = "100%";
+            drawingBuffer.style.height = "100%";
+            drawingBuffer.style.position = "absolute";
+            drawingBuffer.style.top = "0";
+            drawingBuffer.style.left = "0";
         drawingBuffer.style.zIndex = "2";
-        drawingBuffer.style.pointerEvents = "none";
+            drawingBuffer.style.pointerEvents = "none";
       }
     };
 
