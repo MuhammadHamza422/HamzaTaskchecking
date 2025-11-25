@@ -1,8 +1,26 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useLayoutEffect, useCallback } from "react";
 import Quagga from "@ericblade/quagga2";
 import { X, Search, Keyboard } from "lucide-react";
 import { searchOrder } from "../../../../api/fulfillment";
 import Swal from "sweetalert2";
+
+// Helper function to get median (from official example)
+function getMedian(arr) {
+  const newArr = [...arr];
+  newArr.sort((a, b) => a - b);
+  const half = Math.floor(newArr.length / 2);
+  if (newArr.length % 2 === 1) {
+    return newArr[half];
+  }
+  return (newArr[half - 1] + newArr[half]) / 2;
+}
+
+// Helper function to get median of code errors (from official example)
+function getMedianOfCodeErrors(decodedCodes) {
+  const errors = decodedCodes.flatMap((x) => x.error);
+  const medianOfErrors = getMedian(errors);
+  return medianOfErrors;
+}
 
 export default function QuaggaBarcodeScanner({
   onScanSuccess,
@@ -14,449 +32,386 @@ export default function QuaggaBarcodeScanner({
   const [isValidating, setIsValidating] = useState(false);
   const [scannedCode, setScannedCode] = useState("");
   const lastScannedCodeRef = useRef("");
-  const validationTimeoutRef = useRef(null);
-  
-  // Refs to access latest state values in event handlers
-  const isValidatingRef = useRef(false);
-  const scannedCodeRef = useRef("");
-  const stableCodeTimeoutRef = useRef(null);
-  const stableCodeRef = useRef("");
-  
-  // Buffer for tracking consecutive detections (for accuracy)
-  const detectionBufferRef = useRef([]);
-  const REQUIRED_DETECTIONS = 2; // Need 2 consecutive same reads (reduced for mobile)
-  const DETECTION_WINDOW_MS = 1500; // Within 1.5 seconds (increased for mobile)
-  const MAX_ERROR_THRESHOLD = 0.35; // Maximum average error per character (relaxed for mobile)
-  const STABLE_CODE_DELAY_MS = 1000; // If same code for 1 second, proceed
-  
-  // Keep refs in sync with state
-  useEffect(() => {
-    isValidatingRef.current = isValidating;
-  }, [isValidating]);
-  
-  useEffect(() => {
-    scannedCodeRef.current = scannedCode;
-  }, [scannedCode]);
+  const isCameraReleasedRef = useRef(true);
+  const isInitializingRef = useRef(false);
 
-  useEffect(() => {
-    if (!scannerRef.current) return;
+  // Error check callback - accepts code if median error < 0.25 (75% confidence)
+  const errorCheck = useCallback(
+    (result) => {
+      if (isValidating) return;
+      if (!result || !result.codeResult || !result.codeResult.code) return;
 
-    let isMounted = true;
-    let isQuaggaInitialized = false;
-    let isQuaggaStarted = false;
-    let handlersSetup = false;
+      const code = result.codeResult.code;
 
-    // Global error handler for Quagga2 internal errors
-    const handleQuaggaError = (error) => {
-      // Only log if it's not the null 'x' error (which we handle gracefully)
-      if (error && error.message && error.message.includes("Cannot read properties of null")) {
-        console.warn("Quagga2 dimension error (handled):", error);
+      // Skip if already processed
+      if (code === lastScannedCodeRef.current) {
         return;
       }
-      console.warn("Quagga2 internal error (handled):", error);
-    };
 
-    // Add error event listener
-    window.addEventListener('error', handleQuaggaError);
+      const err = getMedianOfCodeErrors(result.codeResult.decodedCodes || []);
 
-    // Wait for container to have dimensions before initializing
-    const waitForContainer = (attempt = 0) => {
-      if (!isMounted || !scannerRef.current) return;
+      // If Quagga is at least 75% certain that it read correctly, accept the code
+      if (err < 0.25) {
+        handleBarcodeDetected(code, result);
+      }
+    },
+    [isValidating]
+  );
 
-      const container = scannerRef.current;
-      const rect = container.getBoundingClientRect();
-      
-      // Check if container has valid dimensions
-      if (rect.width === 0 || rect.height === 0) {
-        if (attempt < 20) {
-          setTimeout(() => waitForContainer(attempt + 1), 100);
+  // Properly release camera (async)
+  const releaseCamera = async () => {
+    try {
+      // Stop Quagga first
+      Quagga.stop();
+      // Remove event handlers
+      Quagga.offDetected();
+      Quagga.offProcessed();
+      // Explicitly release camera (critical for mobile)
+      await Quagga.CameraAccess.release();
+      isCameraReleasedRef.current = true;
+    } catch (error) {
+      console.error("Error releasing camera:", error);
+      // Still mark as released to prevent blocking
+      isCameraReleasedRef.current = true;
+    }
+  };
+
+  // Handle barcode detection - call API immediately
+  const handleBarcodeDetected = async (code, result) => {
+    if (isValidating) return;
+    if (code === lastScannedCodeRef.current) return;
+
+    setIsValidating(true);
+    lastScannedCodeRef.current = code;
+    setScannedCode(code);
+
+    // Stop Quagga and release camera properly
+    await releaseCamera();
+
+    // Call API immediately
+    const barcodeValue = String(code).trim();
+    try {
+      const searchResult = await searchOrder(barcodeValue);
+
+      if (searchResult.success && searchResult.data) {
+        const searchData = searchResult.data;
+
+        // Check if already packed
+        if (searchData.isAlreadyPacked && searchData.packingInfo) {
+          setIsValidating(false);
+          lastScannedCodeRef.current = "";
+
+          await Swal.fire({
+            icon: "warning",
+            title: "Order Already Packed",
+            html: `
+              <div class="text-left">
+                <p class="mb-4 text-gray-700">This order has already been packed.</p>
+                <div class="bg-gray-50 rounded-lg p-4 mb-4">
+                  <p class="text-sm"><span class="font-medium">Packing ID:</span> ${searchData.packingInfo.packingId || "N/A"}</p>
+                  <p class="text-sm"><span class="font-medium">Status:</span> ${searchData.packingInfo.status || "N/A"}</p>
+                </div>
+              </div>
+            `,
+            confirmButtonColor: "#2563eb",
+            confirmButtonText: "OK",
+          });
+
+          if (onClose) {
+            onClose();
+          }
           return;
         }
-        console.warn("Container dimensions not available after retries");
+
+        // Valid order found
+        if (onScanSuccess) {
+          onScanSuccess(barcodeValue, searchData);
+        }
+
+        setIsValidating(false);
+      } else {
+        throw new Error("Order not found");
+      }
+    } catch (error) {
+      console.error("Error validating barcode:", error);
+
+      setIsValidating(false);
+      lastScannedCodeRef.current = "";
+
+      await Swal.fire({
+        icon: "error",
+        title: "Order Not Found",
+        text: error.message || "No order found with this barcode. Please try again.",
+        confirmButtonColor: "#2563eb",
+        confirmButtonText: "OK",
+      });
+
+      // Restart scanner for re-scan (ensure camera is released first)
+      try {
+        // Longer delay on mobile to ensure camera is fully released
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        
+        // Request camera again (like initial setup)
+        try {
+          await Quagga.CameraAccess.request(null, {});
+          await Quagga.CameraAccess.release();
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        } catch (permError) {
+          console.warn("Permission request warning on restart:", permError);
+        }
+        
+        // Camera should be released now
+        if (isCameraReleasedRef.current) {
+          await Quagga.start();
+          Quagga.onDetected(errorCheck);
+          Quagga.onProcessed(handleProcessed);
+          isCameraReleasedRef.current = false;
+        }
+      } catch (err) {
+        console.error("Error restarting scanner:", err);
+        isCameraReleasedRef.current = true;
+      }
+    }
+  };
+
+  // Handle processed result - draw blue rectangle and red line (from official example)
+  const handleProcessed = (result) => {
+    try {
+      const drawingCtx = Quagga.canvas.ctx.overlay;
+      const drawingCanvas = Quagga.canvas.dom.overlay;
+
+      if (!drawingCtx || !drawingCanvas) return;
+
+      drawingCtx.font = "24px Arial";
+      drawingCtx.fillStyle = "green";
+
+      if (result) {
+        // Clear previous drawings
+        drawingCtx.clearRect(
+          0,
+          0,
+          parseInt(drawingCanvas.getAttribute("width")),
+          parseInt(drawingCanvas.getAttribute("height"))
+        );
+
+        // Draw boxes (purple)
+        if (result.boxes) {
+          result.boxes
+            .filter((box) => box !== result.box)
+            .forEach((box) => {
+              Quagga.ImageDebug.drawPath(
+                box,
+                { x: 0, y: 1 },
+                drawingCtx,
+                { color: "purple", lineWidth: 2 }
+              );
+            });
+        }
+
+        // Draw main box (blue rectangle)
+        if (result.box) {
+          Quagga.ImageDebug.drawPath(
+            result.box,
+            { x: 0, y: 1 },
+            drawingCtx,
+            { color: "blue", lineWidth: 2 }
+          );
+        }
+
+        // Draw scan line (red line)
+        if (result.codeResult && result.codeResult.code && result.line) {
+          Quagga.ImageDebug.drawPath(
+            result.line,
+            { x: "x", y: "y" },
+            drawingCtx,
+            { color: "red", lineWidth: 3 }
+          );
+
+          // Display code text
+          drawingCtx.font = "24px Arial";
+          drawingCtx.fillStyle = "green";
+          drawingCtx.fillText(result.codeResult.code, 10, 20);
+        }
+      }
+    } catch (error) {
+      // Silently ignore drawing errors
+    }
+  };
+
+  // Initialize Quagga (following official example pattern)
+  useLayoutEffect(() => {
+    if (!scannerRef.current) return;
+
+    let ignoreStart = false;
+
+    const init = async () => {
+      // Prevent concurrent initialization
+      if (isInitializingRef.current) {
+        return;
       }
 
-      initializeQuagga();
-    };
+      // Wait one tick to see if component unmounts
+      await new Promise((resolve) => setTimeout(resolve, 1));
 
-    const initializeQuagga = () => {
-      if (!isMounted || !scannerRef.current) return;
+      if (ignoreStart || !scannerRef.current) {
+        return;
+      }
+
+      // CRITICAL: Request camera permission first (triggers prompt on mobile)
+      // Then release it immediately, then initialize Quagga
+      // This is the pattern from the official example
+      try {
+        // Step 1: Request camera access (triggers permission prompt)
+        await Quagga.CameraAccess.request(null, {});
+        
+        // Step 2: Release it immediately (so Quagga can use it)
+        await Quagga.CameraAccess.release();
+        
+        // Step 3: Small delay to ensure camera is fully released (longer on mobile)
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      } catch (error) {
+        // If permission is denied, we'll catch it in Quagga.init
+        // But don't block initialization - some browsers handle this differently
+        console.warn("Camera permission request warning:", error);
+        
+        // If it's a permission error, try to release anyway
+        try {
+          await Quagga.CameraAccess.release();
+        } catch (releaseError) {
+          // Ignore release errors if we never got access
+        }
+        
+        // Still proceed with initialization - Quagga.init will handle permission errors
+      }
+
+      if (ignoreStart || !scannerRef.current) {
+        return;
+      }
+
+      isInitializingRef.current = true;
 
       const config = {
         inputStream: {
-          name: "Live",
           type: "LiveStream",
-          target: scannerRef.current,
           constraints: {
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            facingMode: "environment", // Back camera
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            facingMode: "environment",
           },
+          target: scannerRef.current,
+          willReadFrequently: true,
         },
         locator: {
           patchSize: "medium",
           halfSample: true,
+          willReadFrequently: true,
         },
-        frequency: 10, // Scan every 10th frame to reduce errors
-        numOfWorkers: navigator.hardwareConcurrency || 2,
         decoder: {
           readers: [
             "code_128_reader",
             "ean_reader",
             "ean_8_reader",
             "code_39_reader",
-            "code_39_vin_reader",
-            "codabar_reader",
             "upc_reader",
             "upc_e_reader",
-            "i2of5_reader",
           ],
-          multiple: false,
-          debug: {
-            drawBoundingBox: false,
-            showFrequency: false,
-            drawScanline: false,
-            showPattern: false,
-          },
         },
         locate: true,
       };
 
-      Quagga.init(config, (err) => {
-        if (!isMounted) return;
+      Quagga.init(config, async (err) => {
+        if (ignoreStart || !scannerRef.current) return;
 
         if (err) {
           console.error("Error initializing Quagga2:", err);
-          
-          // Detailed error handling
+
           let errorTitle = "Camera Error";
           let errorText = "Failed to access camera. Please check permissions.";
-          
-          if (err.name === 'NotAllowedError') {
+
+          if (err.name === "NotAllowedError") {
             errorTitle = "Camera Permission Denied";
             errorText = "Please allow camera access in your browser settings.";
-          } else if (err.name === 'NotFoundError') {
+          } else if (err.name === "NotFoundError") {
             errorTitle = "No Camera Found";
             errorText = "No camera device detected on this device.";
-          } else if (err.name === 'NotReadableError') {
+          } else if (err.name === "NotReadableError") {
             errorTitle = "Camera In Use";
             errorText = "Camera is already being used by another application.";
-          } else if (err.name === 'OverconstrainedError') {
-            errorTitle = "Camera Constraints Error";
-            errorText = "Camera does not meet the required specifications.";
           }
-          
+
           Swal.fire({
             icon: "error",
             title: errorTitle,
             text: errorText,
             confirmButtonColor: "#2563eb",
           });
-          
+
           if (onClose) onClose();
           return;
         }
 
-        isQuaggaInitialized = true;
+        // Setup event handlers
+        Quagga.onProcessed(handleProcessed);
 
-        // Wait for video element to be created and have dimensions before starting
-        const waitForVideo = (attempt = 0) => {
-          if (!isMounted || !scannerRef.current) return;
+        if (scannerRef && scannerRef.current) {
+          await Quagga.start();
+          isCameraReleasedRef.current = false;
+        }
 
-          const container = scannerRef.current;
-          const video = container.querySelector("video");
-          const drawingBuffer = container.querySelector("canvas.drawingBuffer");
-
-          if (video) {
-            // Check if video has valid dimensions
-            const videoRect = video.getBoundingClientRect();
-            const videoWidth = video.videoWidth || videoRect.width;
-            const videoHeight = video.videoHeight || videoRect.height;
-
-            if (videoWidth > 0 && videoHeight > 0) {
-              // Video is ready, setup styles and start
-              setupVideoStyles(video, drawingBuffer);
-              
-              if (!isQuaggaStarted) {
-                try {
-                  Quagga.start();
-                  isQuaggaStarted = true;
-                  
-                  // Setup event handlers after Quagga starts (only once)
-                  if (!handlersSetup) {
-                    setupEventHandlers();
-                    handlersSetup = true;
-                  }
-                } catch (error) {
-                  console.error("Error starting Quagga2:", error);
-                }
-              }
-              return;
-            }
-          }
-
-          // Retry if video not ready yet
-          if (attempt < 30) {
-            setTimeout(() => waitForVideo(attempt + 1), 100);
-          } else {
-            console.warn("Video element not ready after retries, starting anyway");
-            if (!isQuaggaStarted) {
-              try {
-                Quagga.start();
-                isQuaggaStarted = true;
-                
-                // Setup event handlers after Quagga starts (only once)
-                if (!handlersSetup) {
-                  setupEventHandlers();
-                  handlersSetup = true;
-                }
-              } catch (error) {
-                console.error("Error starting Quagga2:", error);
-              }
-            }
-          }
-        };
-
-        // Start checking for video element
-        setTimeout(() => waitForVideo(), 200);
+        Quagga.onDetected(errorCheck);
+        isInitializingRef.current = false;
       });
     };
 
-    // Trigger validation - can be called from detection or timeout
-    const triggerValidation = async (code) => {
-      if (!isMounted) return;
-      if (isValidatingRef.current) return;
-      if (code === lastScannedCodeRef.current) return;
+    init();
 
-      // Clear stable code timeout
-      if (stableCodeTimeoutRef.current) {
-        clearTimeout(stableCodeTimeoutRef.current);
-      }
-
-      setIsValidating(true);
-      isValidatingRef.current = true;
-      lastScannedCodeRef.current = code;
-
-      // Stop Quagga immediately to prevent re-scanning
-      try {
-        Quagga.stop();
-        Quagga.offDetected();
-        Quagga.offProcessed();
-      } catch (error) {
-        console.error("Error stopping Quagga2:", error);
-      }
-
-      // Clear detection buffer
-      detectionBufferRef.current = [];
-
-      // Clear previous validation timeout
-      if (validationTimeoutRef.current) {
-        clearTimeout(validationTimeoutRef.current);
-      }
-
-      // Fast search API call
-      const barcodeValue = String(code).trim();
-      try {
-        console.log("Calling searchOrder API for:", barcodeValue);
-        const searchResult = await searchOrder(barcodeValue);
-        console.log("searchOrder result:", searchResult);
-
-        if (searchResult.success && searchResult.data) {
-          const searchData = searchResult.data;
-
-          // Check if already packed
-          if (searchData.isAlreadyPacked && searchData.packingInfo) {
-            setIsValidating(false);
-            isValidatingRef.current = false;
-            lastScannedCodeRef.current = "";
-
-            await Swal.fire({
-              icon: "warning",
-              title: "Order Already Packed",
-              html: `
-                <div class="text-left">
-                  <p class="mb-4 text-gray-700">This order has already been packed.</p>
-                  <div class="bg-gray-50 rounded-lg p-4 mb-4">
-                    <p class="text-sm"><span class="font-medium">Packing ID:</span> ${searchData.packingInfo.packingId || "N/A"}</p>
-                    <p class="text-sm"><span class="font-medium">Status:</span> ${searchData.packingInfo.status || "N/A"}</p>
-                  </div>
-                </div>
-              `,
-              confirmButtonColor: "#2563eb",
-              confirmButtonText: "OK",
-            });
-
-            if (onClose) {
-              onClose();
-            }
-            return;
-          }
-
-          // Valid order found
-          console.log("Valid order found, calling onScanSuccess");
-          if (onScanSuccess) {
-            onScanSuccess(barcodeValue, searchData);
-          }
-
-          setIsValidating(false);
-          isValidatingRef.current = false;
-        } else {
-          throw new Error("Order not found");
-        }
-      } catch (error) {
-        console.error("Error validating barcode:", error);
-
-        setIsValidating(false);
-        isValidatingRef.current = false;
-        lastScannedCodeRef.current = "";
-
-        await Swal.fire({
-          icon: "error",
-          title: "Order Not Found",
-          text: error.message || "No order found with this barcode. Please try again.",
-          confirmButtonColor: "#2563eb",
-          confirmButtonText: "OK",
-        });
-
-        if (onClose) {
-          onClose();
-        }
-      }
-    };
-
-    const setupEventHandlers = () => {
-      if (!isMounted) return;
-
-      console.log("Setting up Quagga event handlers");
-
-      // Handle detection
-      Quagga.onDetected((result) => {
-        if (!isMounted) return;
-        
+    // Cleanup - properly release camera
+    return () => {
+      ignoreStart = true;
+      isInitializingRef.current = false;
+      
+      // Cleanup must be synchronous, but we can start async cleanup
+      // React cleanup functions can't be async, so we fire and forget
+      const cleanup = async () => {
         try {
-          // Safety check for result structure
-          if (!result || !result.codeResult || !result.codeResult.code) {
-            return;
-          }
-
-          const code = result.codeResult.code;
-          const now = Date.now();
-
-          console.log("=== Barcode detected ===", code);
-
-          // Skip if already validating (use ref to get latest value)
-          if (isValidatingRef.current) {
-            console.log("Already validating, skipping...");
-            return;
-          }
-
-          // Check if we've already processed this code
-          if (code === lastScannedCodeRef.current) {
-            console.log("Code already processed, skipping...");
-            return;
-          }
-
-          // Quality check: Calculate average error per character
-          const decodedCodes = result.codeResult.decodedCodes || [];
-          const errors = decodedCodes
-            .map((d) => d && d.error)
-            .filter((e) => typeof e === "number" && e >= 0 && !isNaN(e));
-          
-          const avgError = errors.length > 0
-            ? errors.reduce((sum, e) => sum + e, 0) / errors.length
-            : 0;
-
-          console.log("Quality check - avgError:", avgError.toFixed(3), "threshold:", MAX_ERROR_THRESHOLD);
-
-          // Reject low-quality detections (but log it)
-          if (avgError > MAX_ERROR_THRESHOLD) {
-            console.log("Detection rejected due to quality:", avgError.toFixed(3));
-            return;
-          }
-
-          // High-quality detection - add to buffer
-          detectionBufferRef.current.push({
-            code: code,
-            timestamp: now,
-            quality: avgError,
-          });
-
-          // Clean up old detections outside the time window
-          detectionBufferRef.current = detectionBufferRef.current.filter(
-            (detection) => now - detection.timestamp < DETECTION_WINDOW_MS
-          );
-
-          // Count consecutive detections of the same code
-          const recentDetections = detectionBufferRef.current;
-          const sameCodeCount = recentDetections.filter(
-            (detection) => detection.code === code
-          ).length;
-
-          console.log("Detection count:", sameCodeCount, "/", REQUIRED_DETECTIONS, "for code:", code);
-
-          // Update display with current code being scanned
-          if (code && code !== scannedCodeRef.current) {
-            setScannedCode(code);
-            scannedCodeRef.current = code;
-            
-            // Set up stable code fallback timer
-            if (stableCodeTimeoutRef.current) {
-              clearTimeout(stableCodeTimeoutRef.current);
-            }
-            stableCodeRef.current = code;
-            stableCodeTimeoutRef.current = setTimeout(() => {
-              console.log("Stable code timeout triggered for:", code);
-              triggerValidation(code);
-            }, STABLE_CODE_DELAY_MS);
-          }
-
-          // Proceed if we have enough consecutive detections
-          if (sameCodeCount >= REQUIRED_DETECTIONS) {
-            console.log("Enough detections! Triggering validation for:", code);
-            triggerValidation(code);
-          } else {
-            console.log(`Waiting for more detections: ${sameCodeCount}/${REQUIRED_DETECTIONS}`);
-          }
+          // Stop Quagga first
+          Quagga.stop();
+          // Remove event handlers
+          Quagga.offDetected(errorCheck);
+          Quagga.offProcessed(handleProcessed);
+          // Explicitly release camera (critical for mobile)
+          await Quagga.CameraAccess.release();
+          isCameraReleasedRef.current = true;
         } catch (error) {
-          console.error("Error in onDetected handler:", error);
-          // Reset state on error
-          setIsValidating(false);
-          isValidatingRef.current = false;
-          lastScannedCodeRef.current = "";
+          console.error("Error in cleanup:", error);
+          // Still mark as released to prevent blocking
+          isCameraReleasedRef.current = true;
         }
-      });
-
-      // Handle process result - with error handling
-      Quagga.onProcessed((result) => {
-        if (!isMounted) return;
-        
-        try {
-          // Use refs to get latest values
-          if (!isValidatingRef.current && !lastScannedCodeRef.current) {
-            if (result && result.codeResult && result.codeResult.code) {
-              const code = result.codeResult.code;
-              if (code && code !== scannedCodeRef.current) {
-                setScannedCode(code);
-                scannedCodeRef.current = code;
-              }
-            }
-          }
-        } catch (error) {
-          // Silently ignore processing errors to prevent crashes
-          console.warn("Processing error (non-critical):", error);
-        }
-      });
+      };
+      
+      // Start cleanup (fire and forget - React cleanup can't await)
+      cleanup();
     };
+  }, [errorCheck]);
 
-    const setupVideoStyles = (video, drawingBuffer) => {
-      if (!video) return;
+  // Setup video styles after Quagga initializes
+  useEffect(() => {
+    const setupStyles = () => {
+      if (!scannerRef.current) return;
 
-      video.style.width = "100%";
-      video.style.height = "100%";
-      video.style.objectFit = "cover";
-      video.style.position = "absolute";
-      video.style.top = "0";
-      video.style.left = "0";
-      video.style.zIndex = "1";
+      const container = scannerRef.current;
+      const video = container.querySelector("video");
+      const drawingBuffer = container.querySelector("canvas.drawingBuffer");
+
+      if (video) {
+        video.style.width = "100%";
+        video.style.height = "100%";
+        video.style.objectFit = "cover";
+        video.style.position = "absolute";
+        video.style.top = "0";
+        video.style.left = "0";
+        video.style.zIndex = "1";
+      }
 
       if (drawingBuffer) {
         drawingBuffer.style.width = "100%";
@@ -464,60 +419,22 @@ export default function QuaggaBarcodeScanner({
         drawingBuffer.style.position = "absolute";
         drawingBuffer.style.top = "0";
         drawingBuffer.style.left = "0";
-        drawingBuffer.style.zIndex = "1";
+        drawingBuffer.style.zIndex = "2";
         drawingBuffer.style.pointerEvents = "none";
       }
     };
 
-    // Start initialization process
-    setTimeout(() => waitForContainer(), 100);
+    // Try to setup styles after a delay
+    const timeoutId = setTimeout(setupStyles, 300);
+    const intervalId = setInterval(setupStyles, 500);
 
     return () => {
-      // Mark as unmounted to prevent further operations
-      isMounted = false;
-      
-      // Remove error handler
-      window.removeEventListener('error', handleQuaggaError);
-      
-      // Clear all timeouts
-      if (validationTimeoutRef.current) {
-        clearTimeout(validationTimeoutRef.current);
-      }
-      if (stableCodeTimeoutRef.current) {
-        clearTimeout(stableCodeTimeoutRef.current);
-      }
-      
-      // Only stop Quagga if it was initialized
-      if (isQuaggaInitialized || isQuaggaStarted) {
-        try {
-          Quagga.stop();
-          Quagga.offDetected();
-          Quagga.offProcessed();
-        } catch (error) {
-          console.error("Error stopping Quagga2:", error);
-        }
-      }
-      
-      detectionBufferRef.current = [];
-    };
-  }, [onScanSuccess, onClose, isValidating, scannedCode]);
-
-  // Handle window resize and orientation changes
-  useEffect(() => {
-    const handleResize = () => {
-      // Resize handler - for future use if needed
-    };
-
-    window.addEventListener("resize", handleResize);
-    window.addEventListener("orientationchange", handleResize);
-
-    return () => {
-      window.removeEventListener("resize", handleResize);
-      window.removeEventListener("orientationchange", handleResize);
+      clearTimeout(timeoutId);
+      clearInterval(intervalId);
     };
   }, []);
 
-  // Draw blue L-shaped corner frame overlay with black background outside
+  // Draw blue L-shaped corner frame overlay
   useEffect(() => {
     let animationFrameId;
     let blinkPhase = 0;
@@ -527,10 +444,11 @@ export default function QuaggaBarcodeScanner({
 
       const canvas = frameCanvasRef.current;
       const ctx = canvas.getContext("2d");
-      const containerWidth = scannerRef.current.clientWidth || window.innerWidth;
-      const containerHeight = scannerRef.current.clientHeight || window.innerHeight;
+      const containerWidth =
+        scannerRef.current.clientWidth || window.innerWidth;
+      const containerHeight =
+        scannerRef.current.clientHeight || window.innerHeight;
 
-      // Set canvas size
       const devicePixelRatio = window.devicePixelRatio || 1;
       canvas.width = containerWidth * devicePixelRatio;
       canvas.height = containerHeight * devicePixelRatio;
@@ -538,11 +456,8 @@ export default function QuaggaBarcodeScanner({
       canvas.style.height = `${containerHeight}px`;
 
       ctx.scale(devicePixelRatio, devicePixelRatio);
-
-      // Clear canvas
       ctx.clearRect(0, 0, containerWidth, containerHeight);
 
-      // Calculate frame dimensions - responsive for large screens
       const isLargeScreen = containerWidth >= 1024;
       let frameWidth, frameHeight;
 
@@ -563,12 +478,10 @@ export default function QuaggaBarcodeScanner({
       ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
       ctx.fillRect(0, 0, containerWidth, containerHeight);
 
-      // Cut out the scanning area
+      // Cut out scanning area
       ctx.globalCompositeOperation = "destination-out";
       ctx.fillStyle = "rgba(0, 0, 0, 1)";
       ctx.fillRect(frameX, frameY, frameWidth, frameHeight);
-
-      // Reset composite operation
       ctx.globalCompositeOperation = "source-over";
 
       // Calculate blinking opacity
@@ -611,42 +524,22 @@ export default function QuaggaBarcodeScanner({
       ctx.lineTo(frameX + frameWidth, frameY + frameHeight - cornerLength);
       ctx.stroke();
 
-      // Reset shadow
       ctx.shadowBlur = 0;
-
-      // Continue animation loop
       animationFrameId = requestAnimationFrame(drawFrame);
     };
 
     drawFrame();
 
-    const handleResize = () => {
-      // Animation will automatically redraw
-    };
-
-    window.addEventListener("resize", handleResize);
-    window.addEventListener("orientationchange", handleResize);
-
     return () => {
-      window.removeEventListener("resize", handleResize);
-      window.removeEventListener("orientationchange", handleResize);
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId);
       }
     };
   }, []);
 
-  const handleClose = () => {
-    try {
-      Quagga.stop();
-      Quagga.offDetected();
-      Quagga.offProcessed();
-    } catch (error) {
-      console.error("Error stopping Quagga2:", error);
-    }
-    if (validationTimeoutRef.current) {
-      clearTimeout(validationTimeoutRef.current);
-    }
+  const handleClose = async () => {
+    // Properly release camera before closing
+    await releaseCamera();
     if (onClose) {
       onClose();
     }
@@ -718,8 +611,7 @@ export default function QuaggaBarcodeScanner({
 
       {/* Global styles for Quagga video */}
       <style>{`
-        .quagga-scanner-container video,
-        .quagga-scanner-container canvas.drawingBuffer {
+        .quagga-scanner-container video {
           width: 100% !important;
           height: 100% !important;
           object-fit: cover !important;
@@ -728,6 +620,22 @@ export default function QuaggaBarcodeScanner({
           left: 0 !important;
           z-index: 1 !important;
           pointer-events: none !important;
+        }
+        .quagga-scanner-container canvas.drawingBuffer {
+          width: 100% !important;
+          height: 100% !important;
+          object-fit: cover !important;
+          position: absolute !important;
+          top: 0 !important;
+          left: 0 !important;
+          z-index: 2 !important;
+          pointer-events: none !important;
+          display: block !important;
+          opacity: 1 !important;
+        }
+        .quagga-scanner-container canvas:not(.drawingBuffer) {
+          display: block !important;
+          opacity: 1 !important;
         }
         .quagga-scanner-container > div {
           width: 100% !important;
