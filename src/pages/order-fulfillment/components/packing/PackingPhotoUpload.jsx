@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { Upload, Image as ImageIcon, Camera } from "lucide-react";
-import CameraCapture from "./CameraCapture";
+import CameraCapture from "./camera";
 import PhotoPreview from "./PhotoPreview";
 import ImageModal from "../common/ImageModal";
 

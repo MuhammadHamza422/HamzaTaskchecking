@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { PackageCheck, Package, TrendingUp, Clock, Loader2, Calendar, X } from "lucide-react";
+import { PackageCheck, Package, TrendingUp, Clock, Loader2, Calendar, X, ShoppingCart, DollarSign, Store } from "lucide-react";
 import { DatePicker } from "antd";
 import { motion } from "framer-motion";
 import dayjs from "dayjs";
@@ -124,7 +124,8 @@ export default function FulfillmentDashboardPage() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            {/* Main Statistics Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
               <StatCard
                 icon={Package}
                 title="Total Packed"
@@ -143,7 +144,80 @@ export default function FulfillmentDashboardPage() {
                 color="text-green-600"
                 delay={0.1}
               />
+              <StatCard
+                icon={ShoppingCart}
+                title="Total Dropship Orders"
+                value={stats?.totalDropshipOrders?.toLocaleString() || "0"}
+                change={null}
+                changeType="neutral"
+                color="text-purple-600"
+                delay={0.2}
+              />
+              <StatCard
+                icon={DollarSign}
+                title="Total Order Value"
+                value={
+                  stats?.totalOrderValue
+                    ? `$${stats.totalOrderValue.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}`
+                    : "$0.00"
+                }
+                change={null}
+                changeType="neutral"
+                color="text-amber-600"
+                delay={0.3}
+              />
             </div>
+
+            {/* Platform Distribution Cards */}
+            {stats?.platformDistribution && (
+              <>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.4 }}
+                  className="mb-4"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-indigo-100 rounded-lg">
+                      <Store className="w-5 h-5 text-indigo-600" />
+                    </div>
+                    <h2 className="text-xl font-bold text-gray-900">Platform Distribution</h2>
+                  </div>
+                </motion.div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                  <StatCard
+                    icon={Store}
+                    title="Shopify Orders"
+                    value={stats.platformDistribution.shopify?.toLocaleString() || "0"}
+                    change={null}
+                    changeType="neutral"
+                    color="text-blue-600"
+                    delay={0.5}
+                  />
+                  <StatCard
+                    icon={Store}
+                    title="Walmart Orders"
+                    value={stats.platformDistribution.walmart?.toLocaleString() || "0"}
+                    change={null}
+                    changeType="neutral"
+                    color="text-orange-600"
+                    delay={0.6}
+                  />
+                  <StatCard
+                    icon={Store}
+                    title="WooCommerce Orders"
+                    value={stats.platformDistribution.woocommerce?.toLocaleString() || "0"}
+                    change={null}
+                    changeType="neutral"
+                    color="text-green-600"
+                    delay={0.7}
+                  />
+                </div>
+              </>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
               <QuickActionCard

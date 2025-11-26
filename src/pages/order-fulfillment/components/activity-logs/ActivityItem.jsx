@@ -1,17 +1,34 @@
 import React, { memo } from "react";
 import { format } from "date-fns";
-import { User, Package, Truck, AlertCircle, MessageSquare, Info } from "lucide-react";
-import { ACTIVITY_COLORS, ACTIVITY_TYPES } from "./activityConstants";
+import { User, Package, Truck, AlertCircle, MessageSquare, Info, Trash2 } from "lucide-react";
+import { ACTIVITY_TYPES } from "./activityConstants";
 
 const ActivityItem = memo(({ activity }) => {
-    const { type, message, user, timestamp, metadata, packingId, dropshipId } = activity;
-    const colorConfig = ACTIVITY_COLORS[type] || ACTIVITY_COLORS[ACTIVITY_TYPES.SYSTEM];
+    const { 
+        type, 
+        message, 
+        user, 
+        timestamp, 
+        metadata,
+        // Use API-provided display fields and color
+        displayPackingId,
+        displayDropshipId,
+        platform,
+        // Use API-provided color object directly (with fallback for backward compatibility)
+        color: colorConfig = { 
+            primary: "#6B7280", 
+            background: "#F3F4F6", 
+            text: "#1F2937" 
+        }
+    } = activity;
 
     const getIcon = () => {
         switch (type) {
             case ACTIVITY_TYPES.PACKING_CREATED:
             case ACTIVITY_TYPES.PACKING_UPDATED:
                 return <Package className="w-4 h-4" />;
+            case ACTIVITY_TYPES.PACKING_DELETED:
+                return <Trash2 className="w-4 h-4" />;
             case ACTIVITY_TYPES.DROPSHIP_CREATED:
             case ACTIVITY_TYPES.DROPSHIP_STATUS_CHANGED:
                 return <Truck className="w-4 h-4" />;
@@ -49,22 +66,37 @@ const ActivityItem = memo(({ activity }) => {
 
                     {/* Metadata & Context */}
                     <div className="flex flex-wrap gap-3 text-xs text-gray-500">
-                        {packingId && (
+                        {displayPackingId && (
                             <span className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded">
                                 <Package className="w-3 h-3" />
-                                Packing #{packingId.orderNumber || packingId.orderId || "N/A"}
+                                Packing #{displayPackingId}
                             </span>
                         )}
-                        {dropshipId && (
+                        {displayDropshipId && (
                             <span className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded">
                                 <Truck className="w-3 h-3" />
-                                Dropship: {dropshipId}
+                                Dropship: {displayDropshipId}
                             </span>
                         )}
-                        {metadata?.platform && (
+                        {platform && (
                             <span className="capitalize bg-gray-50 px-2 py-1 rounded">
-                                {metadata.platform}
+                                {platform}
                             </span>
+                        )}
+                        {/* Packing Deleted metadata */}
+                        {type === ACTIVITY_TYPES.PACKING_DELETED && metadata && (
+                            <>
+                                {metadata.deletedMissingProductsCount !== undefined && metadata.deletedMissingProductsCount > 0 && (
+                                    <span className="text-red-600 bg-red-50 px-2 py-1 rounded">
+                                        {metadata.deletedMissingProductsCount} missing product{metadata.deletedMissingProductsCount !== 1 ? 's' : ''} deleted
+                                    </span>
+                                )}
+                                {metadata.deletedDropshipOrdersCount !== undefined && metadata.deletedDropshipOrdersCount > 0 && (
+                                    <span className="text-red-600 bg-red-50 px-2 py-1 rounded">
+                                        {metadata.deletedDropshipOrdersCount} dropship{metadata.deletedDropshipOrdersCount !== 1 ? 's' : ''} deleted
+                                    </span>
+                                )}
+                            </>
                         )}
                     </div>
                 </div>

@@ -1,9 +1,12 @@
 import { useState, useCallback } from "react";
 
 const INITIAL_FILTERS = {
-  packingId: "",
-  dropshipId: "",
+  search: "",           // Unified search (replaces packingId and dropshipId)
   type: "",
+  userId: "",
+  platform: "",
+  sortBy: "timestamp",  // Default sort by timestamp
+  sortOrder: "desc",    // Default descending (newest first)
   startDate: "",
   endDate: "",
 };
@@ -40,11 +43,14 @@ export function useActivityFilters() {
   }, []);
 
   const hasActiveFilters = 
-    filters.packingId || 
-    filters.dropshipId || 
+    filters.search || 
     filters.type || 
+    filters.userId ||
+    filters.platform ||
     filters.startDate || 
-    filters.endDate;
+    filters.endDate ||
+    filters.sortBy !== "timestamp" ||
+    filters.sortOrder !== "desc";
 
   return {
     filters,

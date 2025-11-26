@@ -1,7 +1,6 @@
 import React, { memo } from "react";
 import { Timeline, Empty } from "antd";
 import ActivityItem from "./ActivityItem";
-import { ACTIVITY_COLORS, ACTIVITY_TYPES } from "./activityConstants";
 
 const ActivityTimeline = memo(({ activities, isLoading }) => {
     if (!isLoading && (!activities || activities.length === 0)) {
@@ -17,7 +16,8 @@ const ActivityTimeline = memo(({ activities, isLoading }) => {
             <Timeline
                 mode="left"
                 items={activities.map((activity) => {
-                    const colorConfig = ACTIVITY_COLORS[activity.type] || ACTIVITY_COLORS[ACTIVITY_TYPES.SYSTEM];
+                    // Use API-provided color object directly
+                    const colorConfig = activity.color || { primary: "#6B7280" };
                     return {
                         color: colorConfig.primary,
                         children: <ActivityItem activity={activity} />,

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Camera, Upload, CheckCircle, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
-import CameraCapture from "./CameraCapture";
+import CameraCapture from "./camera";
 import PhotoPreview from "./PhotoPreview";
 import ImageModal from "../common/ImageModal";
 import Swal from "sweetalert2";

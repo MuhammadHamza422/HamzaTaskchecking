@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "antd";
 import { format } from "date-fns";
-import { User, Package, Truck, AlertCircle, MessageSquare, Info, CheckCircle2, ExternalLink } from "lucide-react";
+import { User, Package, Truck, AlertCircle, MessageSquare, Info, CheckCircle2, ExternalLink, Trash2 } from "lucide-react";
 
 import ActivityFilters from "./ActivityFilters";
 import ActivityStats from "./ActivityStats";
@@ -10,7 +10,7 @@ import CustomPagination from "../common/CustomPagination";
 import { useActivities } from "./hooks/useActivities";
 import { useActivityFilters } from "./hooks/useActivityFilters";
 import FulfillmentBreadcrumb from "../common/FulfillmentBreadcrumb";
-import { ACTIVITY_COLORS, ACTIVITY_TYPES, ACTIVITY_LABELS } from "./activityConstants";
+import { ACTIVITY_TYPES, ACTIVITY_LABELS } from "./activityConstants";
 
 export default function ActivityLogsPage() {
   const [page, setPage] = useState(1);
@@ -19,11 +19,17 @@ export default function ActivityLogsPage() {
   const { filters, updateFilter, setDateRange, clearFilters } =
     useActivityFilters();
 
-  const { activities, total, totalPages, isLoading, error } = useActivities(
+  const { activities, total, totalPages, isLoading, error, stats, pagination } = useActivities(
     filters,
     page,
-    limit
+    limit,
+    true // includeStats = true to get stats from API
   );
+
+  // Reset to page 1 when filters change (except page itself)
+  useEffect(() => {
+    setPage(1);
+  }, [filters.search, filters.type, filters.userId, filters.platform, filters.startDate, filters.endDate, filters.sortBy, filters.sortOrder]);
 
   const handlePageChange = (newPage) => {
     setPage(newPage);
@@ -64,7 +70,7 @@ export default function ActivityLogsPage() {
         </div>
 
         {/* Stats */}
-        <ActivityStats activities={activities} total={total} />
+        <ActivityStats activities={activities} total={total} stats={stats} />
 
         {/* Filters */}
         <ActivityFilters
@@ -116,14 +122,27 @@ export default function ActivityLogsPage() {
                   </tr>
                 ) : (
                   activities.map((activity, idx) => {
-                    const { type, message, user, timestamp, metadata, packingId, dropshipId } = activity;
-                    const colorConfig = ACTIVITY_COLORS[type] || ACTIVITY_COLORS[ACTIVITY_TYPES.SYSTEM];
+                    const { 
+                      type, 
+                      message, 
+                      user, 
+                      timestamp, 
+                      metadata,
+                      platform,
+                      color: colorConfig = { 
+                        primary: "#6B7280", 
+                        background: "#F3F4F6", 
+                        text: "#1F2937" 
+                      }
+                    } = activity;
                     
                     const getIcon = () => {
                       switch (type) {
                         case ACTIVITY_TYPES.PACKING_CREATED:
                         case ACTIVITY_TYPES.PACKING_UPDATED:
                           return <Package className="w-4 h-4" />;
+                        case ACTIVITY_TYPES.PACKING_DELETED:
+                          return <Trash2 className="w-4 h-4" />;
                         case ACTIVITY_TYPES.DROPSHIP_CREATED:
                         case ACTIVITY_TYPES.DROPSHIP_STATUS_CHANGED:
                           return <Truck className="w-4 h-4" />;
@@ -149,14 +168,14 @@ export default function ActivityLogsPage() {
                       if (type === ACTIVITY_TYPES.ITEM_FULFILLED) {
                         if (metadata.marketplaceName) {
                           details.push(
-                            <span key="marketplace" className="text-xs text-gray-600">
+                            <span key="marketplace" className="text-xs text-gray-600 pl-1">
                               via {metadata.marketplaceName}
                             </span>
                           );
                         }
                         if (metadata.marketplaceOrderNumber) {
                           details.push(
-                            <span key="order" className="text-xs text-gray-600">
+                            <span key="order" className="text-xs text-gray-600 pl-1">
                               Order: {metadata.marketplaceOrderNumber}
                             </span>
                           );
@@ -181,7 +200,7 @@ export default function ActivityLogsPage() {
                         }
                         if (metadata.remainingItemsCount !== undefined) {
                           details.push(
-                            <span key="progress" className="text-xs text-blue-600 font-medium mt-1 block">
+                            <span key="progress" className="text-xs text-blue-600 font-medium mt-1 block pl-1">
                               Progress: {metadata.fulfilledItemsCount || 0}/{metadata.totalItemsCount || 0} fulfilled
                               {metadata.remainingItemsCount > 0 && ` (${metadata.remainingItemsCount} remaining)`}
                             </span>
@@ -193,14 +212,14 @@ export default function ActivityLogsPage() {
                       if (type === ACTIVITY_TYPES.DROPSHIP_STATUS_CHANGED) {
                         if (metadata.oldStatus && metadata.newStatus) {
                           details.push(
-                            <span key="status" className="text-xs text-gray-600">
+                            <span key="status" className="text-xs text-gray-600 pl-1">
                               {metadata.oldStatus} → {metadata.newStatus}
                             </span>
                           );
                         }
                         if (metadata.remainingItemsCount !== undefined) {
                           details.push(
-                            <span key="counts" className="text-xs text-gray-600">
+                            <span key="counts" className="text-xs text-gray-600 pl-1">
                               {metadata.fulfilledItemsCount || 0} fulfilled, {metadata.remainingItemsCount} remaining
                             </span>
                           );
@@ -211,15 +230,61 @@ export default function ActivityLogsPage() {
                       if (type === ACTIVITY_TYPES.PACKING_UPDATED && metadata.source === "dropship_completion") {
                         if (metadata.dropshipId) {
                           details.push(
-                            <span key="dropship" className="text-xs text-gray-600">
+                            <span key="dropship" className="text-xs text-gray-600 pl-1">
                               Dropship: {metadata.dropshipId}
                             </span>
                           );
                         }
                         if (metadata.fulfilledItemsCount) {
                           details.push(
-                            <span key="items" className="text-xs text-green-600 font-medium">
+                            <span key="items" className="text-xs text-green-600 font-medium pl-1">
                               {metadata.fulfilledItemsCount} items moved back
+                            </span>
+                          );
+                        }
+                      }
+
+                      // Packing Deleted metadata
+                      if (type === ACTIVITY_TYPES.PACKING_DELETED) {
+                        if (metadata.orderNumber) {
+                          details.push(
+                            <span key="order" className="text-xs text-gray-600">
+                              Order: {metadata.orderNumber}
+                            </span>
+                          );
+                        }
+                        if (metadata.platform) {
+                          details.push(
+                            <span key="platform" className="text-xs text-gray-600 pl-1">
+                              Platform: {metadata.platform}
+                            </span>
+                          );
+                        }
+                        if (metadata.status) {
+                          details.push(
+                            <span key="status" className="text-xs text-gray-600 pl-1">
+                              Status: {metadata.status}
+                            </span>
+                          );
+                        }
+                        if (metadata.deletedMissingProductsCount !== undefined && metadata.deletedMissingProductsCount > 0) {
+                          details.push(
+                            <span key="missing" className="text-xs text-red-600 font-medium pl-1">
+                              {metadata.deletedMissingProductsCount} missing product{metadata.deletedMissingProductsCount !== 1 ? 's' : ''} deleted
+                            </span>
+                          );
+                        }
+                        if (metadata.deletedDropshipOrdersCount !== undefined && metadata.deletedDropshipOrdersCount > 0) {
+                          details.push(
+                            <span key="dropships" className="text-xs text-red-600 font-medium pl-1">
+                              {metadata.deletedDropshipOrdersCount} dropship order{metadata.deletedDropshipOrdersCount !== 1 ? 's' : ''} deleted
+                            </span>
+                          );
+                        }
+                        if (metadata.deletedBy) {
+                          details.push(
+                            <span key="deletedBy" className="text-xs text-gray-500 mt-1 block pl-1">
+                              Deleted by: {metadata.deletedBy.name || metadata.deletedBy.email || "Unknown"}
                             </span>
                           );
                         }
@@ -275,21 +340,18 @@ export default function ActivityLogsPage() {
                           {format(new Date(timestamp), "MMM d, yyyy h:mm a")}
                         </td>
                         <td className="px-4 py-3 border-b">
-                          {packingId ? (
-                            <span className="inline-flex items-center gap-1 text-xs text-gray-700 bg-gray-50 px-2 py-1 rounded">
+                          {/* show order ID here not packing ID */}
+                          {metadata.orderNumber ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-gray-700 bg-gray-50 px-2 py-1 rounded hover:bg-gray-100 transition-colors cursor-pointer">
                               <Package className="w-3 h-3" />
-                              {typeof packingId === 'object' 
-                                ? (packingId.orderNumber || packingId.orderId || packingId._id || "N/A")
-                                : packingId}
+                              {metadata.orderNumber}
                             </span>
-                          ) : (
-                            <span className="text-xs text-gray-400">-</span>
-                          )}
+                          ) : null}
                         </td>
                         <td className="px-4 py-3 border-b">
-                          {metadata?.platform || metadata?.marketplaceName ? (
+                          {platform ? (
                             <span className="text-xs text-gray-700 bg-gray-50 px-2 py-1 rounded capitalize">
-                              {metadata.platform || metadata.marketplaceName}
+                              {platform}
                             </span>
                           ) : (
                             <span className="text-xs text-gray-400">-</span>
@@ -308,10 +370,10 @@ export default function ActivityLogsPage() {
         {/* Pagination */}
         {total > 0 && (
           <CustomPagination
-            page={page}
+            page={pagination?.page || page}
             limit={limit}
             total={total}
-            totalPages={totalPages}
+            totalPages={pagination?.totalPages || totalPages}
             onPageChange={handlePageChange}
             onLimitChange={handleLimitChange}
             itemName="activities"
