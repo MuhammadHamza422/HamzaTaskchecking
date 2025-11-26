@@ -3,26 +3,49 @@ import apiClient from "./client";
 /**
  * Get all fulfillment activities with optional filtering and pagination
  * @param {Object} filters - Filter parameters
- * @param {string} filters.packingId - Filter by packing order ID
- * @param {string} filters.dropshipId - Filter by dropship order ID
+ * @param {string} filters.search - Unified search across packingId, dropshipId, orderNumber, user name/email, tracking
+ * @param {string} filters.packingId - Filter by packing order ID (backward compatibility)
+ * @param {string} filters.dropshipId - Filter by dropship order ID (backward compatibility)
  * @param {string} filters.type - Filter by activity type
+ * @param {string} filters.userId - Filter by user ID who performed the action
+ * @param {string} filters.platform - Filter by platform/marketplace
+ * @param {string} filters.sortBy - Sort field: "timestamp" | "type" | "user" (default: "timestamp")
+ * @param {string} filters.sortOrder - Sort order: "asc" | "desc" (default: "desc")
+ * @param {boolean} filters.includeStats - Include statistics in response (default: false)
  * @param {number} filters.limit - Items per page (max: 100, default: 50)
  * @param {number} filters.offset - Offset for pagination (default: 0)
- * @param {string} filters.startDate - Filter by start date (ISO format: 2024-01-01)
- * @param {string} filters.endDate - Filter by end date (ISO format: 2024-01-31)
- * @returns {Promise<Object>} List of activities and pagination info
+ * @param {string} filters.startDate - Filter by start date (YYYY-MM-DD format)
+ * @param {string} filters.endDate - Filter by end date (YYYY-MM-DD format)
+ * @returns {Promise<Object>} List of activities, pagination info, and optional stats
  */
 export async function getActivities(filters = {}) {
   try {
     const params = {};
 
-    if (filters.packingId) params.packingId = filters.packingId;
-    if (filters.dropshipId) params.dropshipId = filters.dropshipId;
+    // New unified search (takes priority over packingId/dropshipId)
+    if (filters.search) {
+      params.search = filters.search;
+    } else {
+      // Backward compatibility: only use packingId/dropshipId if search is not provided
+      if (filters.packingId) params.packingId = filters.packingId;
+      if (filters.dropshipId) params.dropshipId = filters.dropshipId;
+    }
+
+    // Existing filters
     if (filters.type) params.type = filters.type;
     if (filters.limit) params.limit = filters.limit;
     if (filters.offset !== undefined) params.offset = filters.offset;
     if (filters.startDate) params.startDate = filters.startDate;
     if (filters.endDate) params.endDate = filters.endDate;
+
+    // New filters
+    if (filters.userId) params.userId = filters.userId;
+    if (filters.platform) params.platform = filters.platform;
+    if (filters.sortBy) params.sortBy = filters.sortBy;
+    if (filters.sortOrder) params.sortOrder = filters.sortOrder;
+    if (filters.includeStats !== undefined) {
+      params.includeStats = filters.includeStats;
+    }
 
     const response = await apiClient.get("/api/v1/fulfillment/activities", {
       params,

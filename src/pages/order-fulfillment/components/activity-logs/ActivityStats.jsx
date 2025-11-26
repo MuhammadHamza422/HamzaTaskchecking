@@ -3,8 +3,19 @@ import { Statistic, Card } from "antd";
 import { Activity, CheckCircle, AlertTriangle, MessageSquare } from "lucide-react";
 import { ACTIVITY_TYPES } from "./activityConstants";
 
-export default function ActivityStats({ activities, total }) {
+export default function ActivityStats({ activities, total, stats: apiStats }) {
+    // Use API stats if available, otherwise calculate from activities (backward compatibility)
     const stats = useMemo(() => {
+        // If API stats are provided, use them
+        if (apiStats) {
+            return {
+                packing: apiStats.packing || 0,
+                dropship: apiStats.dropship || 0,
+                issues: apiStats.issues || 0,
+            };
+        }
+
+        // Fallback: Calculate from activities (for backward compatibility)
         if (!activities) return { packing: 0, dropship: 0, issues: 0 };
 
         return activities.reduce((acc, curr) => {
@@ -13,7 +24,7 @@ export default function ActivityStats({ activities, total }) {
             if (curr.type.includes("missing") || curr.type.includes("deleted")) acc.issues++;
             return acc;
         }, { packing: 0, dropship: 0, issues: 0 });
-    }, [activities]);
+    }, [activities, apiStats]);
 
     return (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
