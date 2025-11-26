@@ -932,18 +932,44 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
               align-items: center !important;
               justify-content: center !important;
               width: 100% !important;
+              touch-action: none !important;
             }
             .ReactCrop__crop-selection {
               margin: 0 auto !important;
+              touch-action: none !important;
             }
             .ReactCrop__image {
               max-width: 100% !important;
               height: auto !important;
               display: block !important;
               margin: 0 auto !important;
+              touch-action: none !important;
+            }
+            /* Ensure bottom buttons are always clickable on mobile */
+            @media (max-width: 768px) {
+              .camera-edit-bottom-bar {
+                position: fixed !important;
+                bottom: 0 !important;
+                left: 0 !important;
+                right: 0 !important;
+                z-index: 99999 !important;
+                pointer-events: auto !important;
+                touch-action: manipulation !important;
+              }
+              .camera-edit-bottom-bar button {
+                pointer-events: auto !important;
+                touch-action: manipulation !important;
+                -webkit-tap-highlight-color: transparent !important;
+              }
             }
           `}</style>
-          <div className="flex-1 flex flex-col bg-black overflow-hidden">
+          <div 
+            className="flex-1 flex flex-col bg-black overflow-hidden"
+            style={{
+              position: 'relative',
+              touchAction: 'pan-y', // Allow vertical scrolling
+            }}
+          >
             {/* Fixed rotate controls - always visible at top */}
             <div className="sticky top-0 z-40 bg-black/95 backdrop-blur-md border-b border-white/10 p-3">
               <div className="max-w-4xl mx-auto">
@@ -972,7 +998,13 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto flex items-center justify-center p-0 sm:p-4 pb-20">
+            <div 
+              className="flex-1 overflow-y-auto flex items-center justify-center p-0 sm:p-4 pb-24"
+              style={{
+                paddingBottom: '100px', // Extra space for fixed bottom bar on mobile
+                touchAction: 'pan-y', // Allow vertical scrolling but prevent horizontal
+              }}
+            >
               <div className="w-full max-w-4xl mx-auto flex flex-col items-center justify-center min-h-full">
                 <div className="w-full flex items-center justify-center bg-black/60 backdrop-blur-sm rounded-none sm:rounded-lg p-1 sm:p-4 mb-1 sm:mb-4">
                   <div className="w-full flex items-center justify-center">
@@ -983,6 +1015,9 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
                       aspect={undefined}
                       minWidth={50}
                       minHeight={50}
+                      style={{
+                        touchAction: 'none', // Prevent ReactCrop from interfering with button touches
+                      }}
                     >
                       <img
                         ref={imgRef}
@@ -995,6 +1030,7 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
                           transform: `rotate(${rotation}deg)`,
                           transition: "transform 0.3s",
                           margin: "0 auto",
+                          touchAction: 'none', // Prevent image drag from interfering
                         }}
                       />
                     </ReactCrop>
@@ -1010,12 +1046,41 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
             </div>
 
             {/* Fixed bottom button bar - icon-only with better visibility */}
-            <div className="fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-md border-t border-white/10 p-3 z-50">
+            <div 
+              className="camera-edit-bottom-bar fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-md border-t border-white/10 p-3"
+              style={{
+                zIndex: 9999,
+                pointerEvents: 'auto',
+                touchAction: 'manipulation',
+                WebkitTouchCallout: 'none',
+                WebkitUserSelect: 'none',
+                userSelect: 'none',
+              }}
+            >
               <div className="max-w-4xl mx-auto">
                 <div className="flex items-center justify-center gap-4">
                   <button
-                    onClick={retakeCurrent}
-                    className="flex flex-col items-center justify-center gap-1 p-3 bg-gray-700/90 hover:bg-gray-600 rounded-full text-white transition-all duration-200 shadow-lg active:scale-95 min-w-[70px]"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      retakeCurrent();
+                    }}
+                    onTouchStart={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onTouchEnd={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      retakeCurrent();
+                    }}
+                    className="flex flex-col items-center justify-center gap-1 p-3 bg-gray-700/90 active:bg-gray-600 rounded-full text-white transition-all duration-200 shadow-lg active:scale-95 min-w-[70px] touch-manipulation"
+                    style={{
+                      pointerEvents: 'auto',
+                      touchAction: 'manipulation',
+                      WebkitTapHighlightColor: 'transparent',
+                      cursor: 'pointer',
+                    }}
                     title="Retake"
                   >
                     <RotateCcw className="w-6 h-6" />
@@ -1023,8 +1088,27 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
                   </button>
                   {canAddPhoto && (
                     <button
-                      onClick={addPhoto}
-                      className="flex flex-col items-center justify-center gap-1 p-3 bg-blue-600/90 hover:bg-blue-700 rounded-full text-white transition-all duration-200 shadow-lg active:scale-95 min-w-[70px]"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        addPhoto();
+                      }}
+                      onTouchStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onTouchEnd={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        addPhoto();
+                      }}
+                      className="flex flex-col items-center justify-center gap-1 p-3 bg-blue-600/90 active:bg-blue-700 rounded-full text-white transition-all duration-200 shadow-lg active:scale-95 min-w-[70px] touch-manipulation"
+                      style={{
+                        pointerEvents: 'auto',
+                        touchAction: 'manipulation',
+                        WebkitTapHighlightColor: 'transparent',
+                        cursor: 'pointer',
+                      }}
                       title="Add Photo"
                     >
                       <Plus className="w-6 h-6" />
@@ -1033,8 +1117,27 @@ export default function CameraCapture({ onCapture, onClose, onAddPhoto, maxPhoto
                   )}
                   {canSaveAll && (
                     <button
-                      onClick={saveAllPhotos}
-                      className="flex flex-col items-center justify-center gap-1 p-3 bg-green-600/90 hover:bg-green-700 rounded-full text-white transition-all duration-200 shadow-lg active:scale-95 min-w-[70px]"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        saveAllPhotos();
+                      }}
+                      onTouchStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onTouchEnd={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        saveAllPhotos();
+                      }}
+                      className="flex flex-col items-center justify-center gap-1 p-3 bg-green-600/90 active:bg-green-700 rounded-full text-white transition-all duration-200 shadow-lg active:scale-95 min-w-[70px] touch-manipulation"
+                      style={{
+                        pointerEvents: 'auto',
+                        touchAction: 'manipulation',
+                        WebkitTapHighlightColor: 'transparent',
+                        cursor: 'pointer',
+                      }}
                       title={`Save All (${totalPhotosToSave})`}
                     >
                       <Check className="w-6 h-6" />
