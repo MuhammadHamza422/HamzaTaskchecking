@@ -153,9 +153,13 @@ export default function ShopifyDetails({
     setIsMerging(true);
     try {
       // Build items to merge from selected nodes
+      // Check both product.id and node.id for backward compatibility
       const itemsToMerge =
         order?.lineItems?.edges
-          ?.filter((edge) => selectedItems.includes(edge.node.id))
+          ?.filter((edge) => 
+            selectedItems.includes(edge.node?.product?.id) ||
+            selectedItems.includes(edge.node?.id)
+          )
           ?.map((edge) => edge.node) || [];
 
       if (!itemsToMerge || itemsToMerge.length < 2) {
@@ -301,7 +305,10 @@ export default function ShopifyDetails({
 
       const attrs = extractProductAttributes(itemsToMerge);
 
-      const productIdsList = itemsToMerge.map((it) => String(it.id));
+      // Use product.id as primary ID, fallback to node.id for backward compatibility
+      const productIdsList = itemsToMerge.map((it) => 
+        String(it?.product?.id || it?.id)
+      );
       let skuString =
         itemsToMerge
           .map((it) => it?.sku)
@@ -349,7 +356,8 @@ export default function ShopifyDetails({
       const safeCond = attrs.conditionCode || "U";
 
       const combinedData = {
-        wc_id: itemsToMerge?.[0]?.id, // align with WooCommerce payload key expected by API
+        // Use product.id as primary ID, fallback to node.id for backward compatibility
+        wc_id: itemsToMerge?.[0]?.product?.id || itemsToMerge?.[0]?.id, // align with WooCommerce payload key expected by API
         pro_title: itemsToMerge.map((it) => it?.name).join(" + "),
         sku: skuString,
         type_code: safeType,
@@ -434,7 +442,10 @@ export default function ShopifyDetails({
     if (!order?.lineItems?.edges) return 0;
 
     return order.lineItems.edges
-      .filter((edge) => selectedItems.includes(edge.node.id))
+      .filter((edge) => 
+        selectedItems.includes(edge.node?.product?.id) ||
+        selectedItems.includes(edge.node?.id)
+      )
       .reduce((total, edge) => {
         const price = parseFloat(
           edge.node.originalUnitPriceSet?.shopMoney?.amount || "0"
@@ -445,18 +456,31 @@ export default function ShopifyDetails({
   }, [selectedItems, order?.lineItems?.edges]);
 
   // Get all line items as array
+  // Use product.id as the primary identifier, fallback to node.id for backward compatibility
   const lineItems = useMemo(() => {
     if (!order?.lineItems?.edges) return [];
-    return order.lineItems.edges.map((edge) => edge.node);
+    return order.lineItems.edges.map((edge) => ({
+      ...edge.node,
+      id: edge.node?.product?.id || edge.node?.id, // Use product.id as primary ID
+      originalNodeId: edge.node?.id, // Keep original for reference
+    }));
   }, [order?.lineItems?.edges]);
 
   // Get line items (excluding merged ones)
+  // Use product.id as the primary identifier, fallback to node.id for backward compatibility
   const visibleLineItems = useMemo(() => {
     if (!order?.lineItems?.edges) return [];
 
     return order.lineItems.edges
-      .map((edge) => edge.node)
-      .filter((item) => !hiddenLineItemIds.has(item.id));
+      .map((edge) => ({
+        ...edge.node,
+        id: edge.node?.product?.id || edge.node?.id, // Use product.id as primary ID
+        originalNodeId: edge.node?.id, // Keep original for reference
+      }))
+      .filter((item) => 
+        !hiddenLineItemIds.has(item.id) && 
+        !hiddenLineItemIds.has(item.originalNodeId)
+      );
   }, [order?.lineItems?.edges, hiddenLineItemIds]);
 
   const statusMessage = getOrderStatusMessage(selectedOrder);
@@ -474,6 +498,8 @@ export default function ShopifyDetails({
           </div>
         </div>
       )}
+
+  
 
       {/* Order Information */}
       <Card

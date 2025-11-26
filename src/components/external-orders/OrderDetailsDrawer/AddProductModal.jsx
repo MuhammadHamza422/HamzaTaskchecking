@@ -164,6 +164,7 @@ export default function AddProductModal({
   const fetchExistingMappedProducts = async (productId) => {
     try {
       // For Walmart, we need to use the SKU for the API call
+      // For Shopify, productId is already product.id (not node.id)
       let productIdToSend = productId;
       if (activeTab === "walmart") {
         const order = orderDetails?.order?.order;
@@ -171,20 +172,46 @@ export default function AddProductModal({
           (line) => (line.lineNumber || line.orderLineId) === productId
         );
         productIdToSend = lineItem?.item?.sku || productId;
+      } else if (activeTab === "shopify") {
+        // For Shopify, productId should already be product.id
+        // But we can also check if it's node.id and convert it
+        const order = orderDetails?.order;
+        const edge = order?.lineItems?.edges?.find(
+          (edge) => 
+            String(edge?.node?.product?.id) === String(productId) ||
+            String(edge?.node?.id) === String(productId)
+        );
+        // Use product.id if found, otherwise use the provided productId
+        productIdToSend = edge?.node?.product?.id || productId;
       }
 
       const response = await apiClient.get(
         `/api/v1/kit/details/${encodeURIComponent(productIdToSend)}`
       );
-      if (response.data.success) {
+      if (response.data.success && response.data.kit) {
+        const kit = response.data.kit;
+        
+        // Set the kit title to show in "Use Existing Kit" section
+        if (kit.product_title) {
+          setSelectedKitTitle(kit.product_title);
+        }
+        
+        // Set the platform if available
+        if (kit.plateform_id?._id) {
+          setSelectedPlatformId(kit.plateform_id._id);
+        }
+        
+        // Map and set the products
         const mappedProducts =
-          response.data.kit?.skus?.map((sku) => ({
-            _id: sku.pId._id,
+          kit.skus?.map((sku) => ({
+            _id: sku.pId?._id || sku.pId,
             pro_title: sku?.pId?.pro_title || "Product",
             quantity: parseInt(sku.quantity) || 1,
             sale_price: sku?.pId?.sale_price || 0,
           })) || [];
         setSelectedProducts(mappedProducts);
+        
+        console.log("✅ Existing kit found and auto-selected:", kit.kit_id);
       }
     } catch (error) {
       // Only log error if it's not a 404 (which is expected when adding new products)
@@ -445,7 +472,9 @@ export default function AddProductModal({
       if (activeTab === "shopify") {
         const order = orderDetails?.order;
         const node = order?.lineItems?.edges?.find(
-          (edge) => String(edge?.node?.id) === String(selectedLineItemId)
+          (edge) => 
+            String(edge?.node?.product?.id) === String(selectedLineItemId) ||
+            String(edge?.node?.id) === String(selectedLineItemId) // Fallback for backward compatibility
         )?.node;
         const candidate =
           node?.title || node?.name || node?.sku || node?.product?.title;
@@ -492,7 +521,9 @@ export default function AddProductModal({
       // For Shopify, compute line item total from GraphQL line item (price x qty)
       const order = orderDetails?.order;
       const node = order?.lineItems?.edges?.find(
-        (edge) => edge?.node?.id === selectedLineItemId
+        (edge) => 
+          String(edge?.node?.product?.id) === String(selectedLineItemId) ||
+          String(edge?.node?.id) === String(selectedLineItemId) // Fallback for backward compatibility
       )?.node;
       let lineItemTotal = 0;
       if (node) {
@@ -559,7 +590,9 @@ export default function AddProductModal({
       if (activeTab === "shopify") {
         const order = orderDetails?.order;
         const node = order?.lineItems?.edges?.find(
-          (edge) => String(edge?.node?.id) === String(selectedLineItemId)
+          (edge) => 
+            String(edge?.node?.product?.id) === String(selectedLineItemId) ||
+            String(edge?.node?.id) === String(selectedLineItemId) // Fallback for backward compatibility
         )?.node;
         const qty = Number(node?.quantity || 1);
         return Number.isFinite(qty) && qty > 0 ? qty : 1;
@@ -644,6 +677,15 @@ export default function AddProductModal({
           (line) => (line.lineNumber || line.orderLineId) === selectedLineItemId
         );
         productIdToSend = lineItem?.item?.sku || selectedLineItemId;
+      } else if (activeTab === "shopify") {
+        // For Shopify, use product.id instead of node.id
+        const order = orderDetails?.order;
+        const edge = order?.lineItems?.edges?.find(
+          (edge) => 
+            String(edge?.node?.product?.id) === String(selectedLineItemId) ||
+            String(edge?.node?.id) === String(selectedLineItemId) // Fallback for backward compatibility
+        );
+        productIdToSend = edge?.node?.product?.id || selectedLineItemId;
       }
 
       // Get the total number of line items/orders in the order
@@ -724,14 +766,22 @@ export default function AddProductModal({
       const response = await apiClient.post("/api/v1/kit/add", payload);
       console.log("response", response);
       if (response?.data?.success) {
+        // Check if kit was auto-linked
+        const isAutoLinked = response?.data?.autoLinked === true;
+        const kitId = response?.data?.kit?.kit_id;
+
         Swal.fire({
           icon: "success",
-          title: "Products Added Successfully",
-          text: `${selectedProducts.length} product(s) have been added to the order!`,
+          title: isAutoLinked
+            ? "Kit Auto-Linked Successfully"
+            : "Products Added Successfully",
+          text: isAutoLinked
+            ? `Existing kit ${kitId} was automatically linked to this order. ${selectedProducts.length} product(s) have been added!`
+            : `${selectedProducts.length} product(s) have been added to the order!`,
           toast: true,
           position: "top-end",
           showConfirmButton: false,
-          timer: 3000,
+          timer: isAutoLinked ? 4000 : 3000,
           timerProgressBar: true,
           background: "#10b981",
           color: "#fff",
@@ -740,7 +790,9 @@ export default function AddProductModal({
           },
         });
 
-        onSuccess(productIdToSend);
+        // Use the linkedProductId from auto-link response if available, otherwise use productIdToSend
+        const productIdForSuccess = response?.data?.linkedProductId || response?.data?.productId || productIdToSend;
+        onSuccess(productIdForSuccess);
         // Auto-link same kit to remaining merged product ids so backend marks all mapped
         try {
           if (
@@ -830,27 +882,12 @@ export default function AddProductModal({
       fetchPlatforms();
       fetchMergedProducts();
       if (selectedLineItemId) {
-        // Check if this line item already has mapped products
-        let productIdToCheck = selectedLineItemId;
-
-        // For Walmart, we need to check using the SKU since that's what's stored in mapped_products
-        if (activeTab === "walmart") {
-          const order = orderDetails?.order?.order;
-          const lineItem = order?.orderLines?.orderLine?.find(
-            (line) =>
-              (line.lineNumber || line.orderLineId) === selectedLineItemId
-          );
-          productIdToCheck = lineItem?.item?.sku || selectedLineItemId;
-        }
-
-        const isEditing = selectedOrder?.kit_products?.includes(
-          productIdToCheck?.toString()
-        );
-        if (isEditing) {
-          fetchExistingMappedProducts(selectedLineItemId);
-        }
+        // Always check if a kit exists for this productId (including linked kits)
+        // This will auto-select products if a kit already exists
+        fetchExistingMappedProducts(selectedLineItemId);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, activeTab, selectedOrder?.plateform_id, selectedLineItemId]);
 
   return (
@@ -1032,50 +1069,56 @@ export default function AddProductModal({
                   <div className="p-4 text-center">
                     <Spin size="small" />
                   </div>
-                ) : productsData?.products?.length > 0 ? (
-                  <div>
-                    {productsData.products.map((product) => {
-                      const isSelected = selectedProducts.find(
-                        (p) => p._id === product._id
-                      );
-                      return (
-                        <div
-                          key={product._id}
-                          className={`p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0 ${
-                            isSelected ? "bg-blue-50" : ""
-                          }`}
-                          onClick={() => handleProductSelect(product)}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <div className="font-medium text-gray-900">
-                                {product.pro_title}
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                ${product?.sale_price}
+                ) : (
+                  <div className="space-y-3">
+                    {productsData?.products?.length > 0 ? (
+                      <div>
+                        {productsData.products.map((product) => {
+                          const isSelected = selectedProducts.find(
+                            (p) => p._id === product._id
+                          );
+                          return (
+                            <div
+                              key={product._id}
+                              className={`p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0 ${
+                                isSelected ? "bg-blue-50" : ""
+                              }`}
+                              onClick={() => handleProductSelect(product)}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <div className="font-medium text-gray-900">
+                                    {product.pro_title}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    ${product?.sale_price}
+                                  </div>
+                                </div>
+                                {isSelected && (
+                                  <CheckOutlined className="text-blue-600 text-lg" />
+                                )}
                               </div>
                             </div>
-                            {isSelected && (
-                              <CheckOutlined className="text-blue-600 text-lg" />
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="p-4 text-center text-gray-500 space-y-3">
-                    <div>No products found</div>
-                    <Button
-                      type="primary"
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openCreateModal();
-                      }}
-                    >
-                      Create and use new product
-                    </Button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="p-4 text-center text-gray-500">
+                        No products found
+                      </div>
+                    )}
+                    <div className="p-3 pt-0 text-center">
+                      <Button
+                        type="primary"
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openCreateModal();
+                        }}
+                      >
+                        Create and use new product
+                      </Button>
+                    </div>
                   </div>
                 )}
               </div>

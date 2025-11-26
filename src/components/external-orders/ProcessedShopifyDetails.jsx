@@ -96,7 +96,12 @@ export default function ProcessedShopifyDetails({
     return null;
   };
 
-  const lineItems = (order?.lineItems?.edges || []).map((e) => e.node);
+  // Use product.id as the primary identifier, fallback to node.id for backward compatibility
+  const lineItems = (order?.lineItems?.edges || []).map((e) => ({
+    ...e.node,
+    id: e.node?.product?.id || e.node?.id, // Use product.id as primary ID
+    originalNodeId: e.node?.id, // Keep original for reference
+  }));
 
   const resolveProductUrl = (node) => {
     if (!node) return null;
@@ -355,10 +360,15 @@ export default function ProcessedShopifyDetails({
         {/* Show individual unmapped products */}
         <div className="space-y-3">
           {lineItems
-            .filter((node) => !hiddenLineItemIds.has(String(node?.id)))
+            .filter((node) => 
+              !hiddenLineItemIds.has(String(node?.id)) && 
+              !hiddenLineItemIds.has(String(node?.originalNodeId))
+            )
             .map((node) => {
+              // Check both product.id and originalNodeId for backward compatibility
               const isMapped = Array.isArray(selectedOrder?.kit_products)
-                ? selectedOrder.kit_products.includes(String(node?.id))
+                ? selectedOrder.kit_products.includes(String(node?.id)) ||
+                  selectedOrder.kit_products.includes(String(node?.originalNodeId))
                 : false;
 
               const unitAmount = parseFloat(
