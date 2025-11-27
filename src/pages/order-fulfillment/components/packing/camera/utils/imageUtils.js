@@ -114,6 +114,45 @@ export const getCroppedImg = async (imageSrc, crop, rotation = 0, displayedWidth
   });
 };
 
+// Handle rotation without cropping
+export const getRotatedImg = async (imageSrc, rotation = 0) => {
+  if (rotation === 0 || !rotation) {
+    return imageSrc;
+  }
+
+  const image = await createImage(imageSrc);
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+
+  const rotateRads = (rotation * Math.PI) / 180;
+  
+  // Calculate the bounding box needed for rotation
+  const rotatedWidth = Math.abs(image.naturalWidth * Math.cos(rotateRads)) + Math.abs(image.naturalHeight * Math.sin(rotateRads));
+  const rotatedHeight = Math.abs(image.naturalWidth * Math.sin(rotateRads)) + Math.abs(image.naturalHeight * Math.cos(rotateRads));
+
+  canvas.width = rotatedWidth;
+  canvas.height = rotatedHeight;
+  ctx.imageSmoothingQuality = "high";
+
+  // Draw the image onto the rotated canvas with rotation
+  ctx.save();
+  ctx.translate(rotatedWidth / 2, rotatedHeight / 2);
+  ctx.rotate(rotateRads);
+  ctx.drawImage(image, -image.naturalWidth / 2, -image.naturalHeight / 2);
+  ctx.restore();
+
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        resolve(imageSrc);
+        return;
+      }
+      const fileUrl = URL.createObjectURL(blob);
+      resolve(fileUrl);
+    }, "image/jpeg", 0.9);
+  });
+};
+
 export const convertToFile = async (imageUrl) => {
   try {
     const response = await fetch(imageUrl);

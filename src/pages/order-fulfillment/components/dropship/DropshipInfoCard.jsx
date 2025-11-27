@@ -12,6 +12,7 @@ export default function DropshipInfoCard({
   deselectedItemsCount = 0,
   fulfilledItemsCount = 0,
   remainingItemsCount = 0,
+  missingProductsCount = 0,
   createdAt,
   marketplaceName,
   marketplaceOrderNumber,
@@ -63,6 +64,12 @@ export default function DropshipInfoCard({
           <div>
             <p className="text-xs font-medium text-gray-500 mb-1">Remaining Items</p>
             <p className="text-sm font-semibold text-amber-600">{remainingItemsCount}</p>
+          </div>
+        )}
+        {missingProductsCount !== undefined && missingProductsCount > 0 && (
+          <div>
+            <p className="text-xs font-medium text-gray-500 mb-1">Missing Products</p>
+            <p className="text-sm font-semibold text-amber-600">{missingProductsCount}</p>
           </div>
         )}
         <div>

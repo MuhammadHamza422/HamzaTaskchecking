@@ -14,6 +14,7 @@ import OrderItemsDisplay from "../common/OrderItemsDisplay";
 import DropshipItemsDisplay from "./DropshipItemsDisplay";
 import AuditLogsCard from "../common/AuditLogsCard";
 import DropshipInfoCard from "./DropshipInfoCard";
+import MissingProductsCard from "./MissingProductsCard";
 import StatusUpdateModal from "./StatusUpdateModal";
 import MarketplaceOrderModal from "./MarketplaceOrderModal";
 import ItemFulfillmentModal from "./ItemFulfillmentModal";
@@ -433,6 +434,7 @@ export default function DropshipDetails() {
                 deselectedItemsCount={dropshipData.deselectedItems?.length || 0}
                 fulfilledItemsCount={dropshipData.fulfilledItemsCount || 0}
                 remainingItemsCount={dropshipData.remainingItemsCount || dropshipData.deselectedItems?.length || 0}
+                missingProductsCount={dropshipData.missingProductsCount || 0}
                 createdAt={dropshipData.createdAt}
                 marketplaceName={dropshipData.marketplaceName}
                 marketplaceOrderNumber={dropshipData.marketplaceOrderNumber}
@@ -443,6 +445,14 @@ export default function DropshipDetails() {
                 phone={dropshipData.phone || dropshipData.shipTo?.phone}
               />
             </div>
+
+            {/* Missing Products Card */}
+            {/* {dropshipData.missingProducts && dropshipData.missingProducts.length > 0 && (
+              <MissingProductsCard
+                missingProducts={dropshipData.missingProducts}
+                missingProductsCount={dropshipData.missingProductsCount || dropshipData.missingProducts.length}
+              />
+            )} */}
 
             <ShippingAddressCard shipTo={dropshipData.shipTo} />
 

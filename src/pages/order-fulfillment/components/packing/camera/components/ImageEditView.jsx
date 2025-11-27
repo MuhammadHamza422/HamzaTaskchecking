@@ -1,7 +1,7 @@
 import { useRef, useCallback, useEffect } from "react";
 import ReactCrop from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
-import { getCroppedImg } from "../utils/imageUtils";
+import { getCroppedImg, getRotatedImg } from "../utils/imageUtils";
 import RotateControls from "./RotateControls";
 import EditControls from "./EditControls";
 
@@ -37,12 +37,40 @@ export default function ImageEditView({
   }, [setCrop]);
 
   const applyCropAndRotation = useCallback(async () => {
-    if (!currentImage || !completedCrop) {
-      setCroppedImageUrl(currentImage);
+    if (!currentImage) {
+      setCroppedImageUrl(null);
       return;
     }
 
     try {
+      // If no crop is set or crop covers the entire image, just apply rotation
+      if (!completedCrop || !crop) {
+        if (rotation !== 0) {
+          const rotated = await getRotatedImg(currentImage, rotation);
+          setCroppedImageUrl(rotated);
+        } else {
+          setCroppedImageUrl(currentImage);
+        }
+        return;
+      }
+
+      // Check if crop covers the entire image (within 1% tolerance)
+      const cropWidth = crop.unit === "%" ? crop.width : (crop.width / (imgRef.current?.width || 1)) * 100;
+      const cropHeight = crop.unit === "%" ? crop.height : (crop.height / (imgRef.current?.height || 1)) * 100;
+      const cropX = crop.unit === "%" ? crop.x : (crop.x / (imgRef.current?.width || 1)) * 100;
+      const cropY = crop.unit === "%" ? crop.y : (crop.y / (imgRef.current?.height || 1)) * 100;
+
+      // If crop covers entire image (within tolerance), treat as no crop
+      if (cropWidth >= 99 && cropHeight >= 99 && cropX <= 1 && cropY <= 1) {
+        if (rotation !== 0) {
+          const rotated = await getRotatedImg(currentImage, rotation);
+          setCroppedImageUrl(rotated);
+        } else {
+          setCroppedImageUrl(currentImage);
+        }
+        return;
+      }
+
       // Get the actual displayed image dimensions from the ref
       const displayedWidth = imgRef.current?.width || 0;
       const displayedHeight = imgRef.current?.height || 0;
@@ -53,7 +81,7 @@ export default function ImageEditView({
       console.error("Error cropping image:", error);
       setCroppedImageUrl(currentImage);
     }
-  }, [currentImage, completedCrop, rotation, setCroppedImageUrl]);
+  }, [currentImage, completedCrop, crop, rotation, setCroppedImageUrl]);
 
   useEffect(() => {
     if (currentImage) {
@@ -89,22 +117,36 @@ export default function ImageEditView({
           margin: 0 auto !important;
           touch-action: none !important;
         }
-        /* Ensure bottom buttons are always clickable on mobile */
-        @media (max-width: 768px) {
-          .camera-edit-bottom-bar {
-            position: fixed !important;
-            bottom: 0 !important;
-            left: 0 !important;
-            right: 0 !important;
-            z-index: 99999 !important;
-            pointer-events: auto !important;
-            touch-action: manipulation !important;
-          }
-          .camera-edit-bottom-bar button {
-            pointer-events: auto !important;
-            touch-action: manipulation !important;
-            -webkit-tap-highlight-color: transparent !important;
-          }
+        /* Ensure bottom buttons are always clickable - prevent ReactCrop from blocking */
+        .camera-edit-bottom-bar {
+          position: fixed !important;
+          bottom: 0 !important;
+          left: 0 !important;
+          right: 0 !important;
+          z-index: 100000 !important;
+          pointer-events: auto !important;
+          touch-action: manipulation !important;
+          isolation: isolate !important;
+        }
+        .camera-edit-bottom-bar * {
+          pointer-events: auto !important;
+          touch-action: manipulation !important;
+        }
+        .camera-edit-bottom-bar button {
+          pointer-events: auto !important;
+          touch-action: manipulation !important;
+          -webkit-tap-highlight-color: transparent !important;
+          position: relative !important;
+          z-index: 100001 !important;
+        }
+        /* Prevent ReactCrop overlay from blocking bottom bar */
+        .ReactCrop__drag-handle,
+        .ReactCrop__drag-bar {
+          touch-action: none !important;
+        }
+        /* Ensure scrollable area doesn't block bottom bar */
+        .camera-edit-scroll-area {
+          padding-bottom: 120px !important;
         }
       `}</style>
       <div 
@@ -120,26 +162,50 @@ export default function ImageEditView({
         />
 
         <div 
-          className="flex-1 overflow-y-auto flex items-center justify-center p-0 sm:p-4 pb-24"
+          className="flex-1 overflow-y-auto flex items-center justify-center p-0 sm:p-4 pb-24 camera-edit-scroll-area"
           style={{
-            paddingBottom: '100px', // Extra space for fixed bottom bar on mobile
+            paddingBottom: '120px', // Extra space for fixed bottom bar
             touchAction: 'pan-y', // Allow vertical scrolling but prevent horizontal
+            position: 'relative',
+            zIndex: 1,
+          }}
+          onTouchStart={(e) => {
+            // Allow scrolling but don't let touches propagate to bottom bar
+            const target = e.target;
+            if (target.closest('.camera-edit-bottom-bar')) {
+              e.stopPropagation();
+            }
           }}
         >
           <div className="w-full max-w-4xl mx-auto flex flex-col items-center justify-center min-h-full">
             <div className="w-full flex items-center justify-center bg-black/60 backdrop-blur-sm rounded-none sm:rounded-lg p-1 sm:p-4 mb-1 sm:mb-4">
               <div className="w-full flex items-center justify-center">
-                <ReactCrop
-                  crop={crop}
-                  onChange={(c) => setCrop(c)}
-                  onComplete={(c) => setCompletedCrop(c)}
-                  aspect={undefined}
-                  minWidth={50}
-                  minHeight={50}
+                <div
                   style={{
-                    touchAction: 'none', // Prevent ReactCrop from interfering with button touches
+                    position: 'relative',
+                    zIndex: 1,
+                  }}
+                  onTouchStart={(e) => {
+                    // Prevent ReactCrop touches from blocking bottom bar
+                    const bottomBar = document.querySelector('.camera-edit-bottom-bar');
+                    if (bottomBar && bottomBar.contains(e.target)) {
+                      e.stopPropagation();
+                    }
                   }}
                 >
+                  <ReactCrop
+                    crop={crop}
+                    onChange={(c) => setCrop(c)}
+                    onComplete={(c) => setCompletedCrop(c)}
+                    aspect={undefined}
+                    minWidth={50}
+                    minHeight={50}
+                    style={{
+                      touchAction: 'none', // Prevent ReactCrop from interfering with button touches
+                      position: 'relative',
+                      zIndex: 1,
+                    }}
+                  >
                   <img
                     ref={imgRef}
                     src={currentImage}
@@ -154,7 +220,8 @@ export default function ImageEditView({
                       touchAction: 'none', // Prevent image drag from interfering
                     }}
                   />
-                </ReactCrop>
+                  </ReactCrop>
+                </div>
               </div>
             </div>
 
@@ -167,8 +234,7 @@ export default function ImageEditView({
         </div>
 
         <EditControls
-          canAddPhoto={canAddPhoto}
-          canSaveAll={canSaveAll}
+          currentImage={currentImage}
           totalPhotosToSave={totalPhotosToSave}
           onRetake={onRetake}
           onAddPhoto={onAddPhoto}

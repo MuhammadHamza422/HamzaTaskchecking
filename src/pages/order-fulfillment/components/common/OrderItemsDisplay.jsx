@@ -67,9 +67,9 @@ export default function OrderItemsDisplay({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay }}
-      className="bg-white rounded-xl border-2 border-gray-200 shadow-lg p-6"
+      className="bg-white rounded-xl border-2 border-gray-200 shadow-lg p-3 sm:p-6"
     >
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-y-2">
         <div className="flex items-center gap-2">
           <div className="p-2 bg-indigo-100 rounded-lg">
             <Package className="w-5 h-5 text-indigo-600" />
@@ -77,7 +77,7 @@ export default function OrderItemsDisplay({
           <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
         </div>
         {(packedCount !== undefined || deselectedCount !== undefined) && (
-          <div className="flex items-center gap-4 text-sm">
+          <div className="flex items-center max-sm:justify-end gap-4 text-sm">
             {packedCount !== undefined && (
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-green-500"></span>
@@ -143,30 +143,10 @@ export default function OrderItemsDisplay({
                   <tr
                     key={item.id || index}
                     className={`hover:bg-gray-50 transition-colors ${
-                      hasMissingProducts ? "bg-amber-50/50 border-l-4 border-l-amber-400" : ""
+                      hasMissingProducts ? "bg-amber-50/50" : ""
                     }`}
                   >
-                  {/* {showStatus && (
-                    <td className="px-4 py-4 whitespace-nowrap">
-                      {isSelected ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          <span>✅</span>
-                          <span>Packed</span>
-                        </span>
-                      ) : isDeselected ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-                          <span>❌</span>
-                          <span>Deselected</span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                          <span>—</span>
-                          <span>N/A</span>
-                        </span>
-                      )}
-                    </td>
-                  )} */}
-                  <td className="px-4 py-4">
+                  <td className={`px-4 py-4 ${hasMissingProducts ? "border-l-4 border-l-amber-400" : ""}`}>
                     <div className="flex items-center gap-3">
                       {item.image && (
                         <div className="w-12 h-12 bg-gray-100 rounded border border-gray-200 flex items-center justify-center shrink-0">
@@ -231,7 +211,7 @@ export default function OrderItemsDisplay({
                 </tr>
                 {isExpanded && isViewMode && packingId && hasMissingProducts && (
                   <tr key={`${item.id}-expanded`} className="bg-gray-50">
-                    <td colSpan={isViewMode && packingId ? 6 : 5} className="px-4 py-4">
+                    <td colSpan={isViewMode && packingId ? 6 : 5} className={`px-4 py-4 ${hasMissingProducts ? "border-l-4 border-l-amber-400" : ""}`}>
                       <div className="space-y-4">
                         {/* Missing Products List */}
                         {missingProducts.length > 0 && (
