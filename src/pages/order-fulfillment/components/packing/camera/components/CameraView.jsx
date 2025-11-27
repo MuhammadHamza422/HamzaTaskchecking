@@ -13,7 +13,6 @@ export default function CameraView({
   cameraError,
   capturedPhotos,
   canCaptureMore,
-  canSaveAll,
   totalPhotosToSave,
   maxPhotos,
   onCapture,
@@ -219,7 +218,7 @@ export default function CameraView({
           <p className="text-white text-sm font-medium bg-black/50 px-4 py-1 rounded-full backdrop-blur-sm">
             Tap to capture
           </p>
-          {canSaveAll && (
+          {totalPhotosToSave > 0 && (
             <button
               onClick={onSaveAll}
               className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center gap-2 shadow-lg"

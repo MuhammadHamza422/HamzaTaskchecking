@@ -143,30 +143,10 @@ export default function OrderItemsDisplay({
                   <tr
                     key={item.id || index}
                     className={`hover:bg-gray-50 transition-colors ${
-                      hasMissingProducts ? "bg-amber-50/50 border-l-4 border-l-amber-400" : ""
+                      hasMissingProducts ? "bg-amber-50/50" : ""
                     }`}
                   >
-                  {/* {showStatus && (
-                    <td className="px-4 py-4 whitespace-nowrap">
-                      {isSelected ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          <span>✅</span>
-                          <span>Packed</span>
-                        </span>
-                      ) : isDeselected ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-                          <span>❌</span>
-                          <span>Deselected</span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                          <span>—</span>
-                          <span>N/A</span>
-                        </span>
-                      )}
-                    </td>
-                  )} */}
-                  <td className="px-4 py-4">
+                  <td className={`px-4 py-4 ${hasMissingProducts ? "border-l-4 border-l-amber-400" : ""}`}>
                     <div className="flex items-center gap-3">
                       {item.image && (
                         <div className="w-12 h-12 bg-gray-100 rounded border border-gray-200 flex items-center justify-center shrink-0">
@@ -231,7 +211,7 @@ export default function OrderItemsDisplay({
                 </tr>
                 {isExpanded && isViewMode && packingId && hasMissingProducts && (
                   <tr key={`${item.id}-expanded`} className="bg-gray-50">
-                    <td colSpan={isViewMode && packingId ? 6 : 5} className="px-4 py-4">
+                    <td colSpan={isViewMode && packingId ? 6 : 5} className={`px-4 py-4 ${hasMissingProducts ? "border-l-4 border-l-amber-400" : ""}`}>
                       <div className="space-y-4">
                         {/* Missing Products List */}
                         {missingProducts.length > 0 && (

@@ -85,36 +85,42 @@ export default function CameraCapture({
   }, [currentImage, croppedImageUrl]);
 
   const addPhoto = async () => {
-    if (croppedImageUrl) {
-      try {
-        // Convert the cropped image to a file BEFORE resetting state
-        const file = await convertToFile(croppedImageUrl);
-        
-        // Revoke the old blob URL to free memory
-        if (croppedImageUrl.startsWith('blob:')) {
-          URL.revokeObjectURL(croppedImageUrl);
-        }
-        
-        // Create a new preview URL from the file
-        const previewUrl = URL.createObjectURL(file);
-        const newPhotos = [...capturedPhotos, { file, preview: previewUrl }];
-        setCapturedPhotos(newPhotos);
-        
-        // Notify parent component about the new photo
-        if (onAddPhoto) {
-          onAddPhoto(file);
-        }
-        
-        // Reset all state AFTER converting to file
-        setCurrentImage(null);
-        setCroppedImageUrl(null);
-        setCrop(null);
-        setCompletedCrop(null);
-        setRotation(0);
-        setMode("camera");
-      } catch (error) {
-        console.error("Error adding photo:", error);
+    if (!currentImage) return;
+
+    try {
+      // Use cropped image if available, otherwise use current image (with rotation if applied)
+      const imageToSave = croppedImageUrl || currentImage;
+      
+      // Convert the image to a file BEFORE resetting state
+      const file = await convertToFile(imageToSave);
+      
+      // Revoke the old blob URL to free memory
+      if (croppedImageUrl && croppedImageUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(croppedImageUrl);
       }
+      if (currentImage && currentImage.startsWith('blob:') && currentImage !== croppedImageUrl) {
+        URL.revokeObjectURL(currentImage);
+      }
+      
+      // Create a new preview URL from the file
+      const previewUrl = URL.createObjectURL(file);
+      const newPhotos = [...capturedPhotos, { file, preview: previewUrl }];
+      setCapturedPhotos(newPhotos);
+      
+      // Notify parent component about the new photo
+      if (onAddPhoto) {
+        onAddPhoto(file);
+      }
+      
+      // Reset all state AFTER converting to file
+      setCurrentImage(null);
+      setCroppedImageUrl(null);
+      setCrop(null);
+      setCompletedCrop(null);
+      setRotation(0);
+      setMode("camera");
+    } catch (error) {
+      console.error("Error adding photo:", error);
     }
   };
 
@@ -223,9 +229,8 @@ export default function CameraCapture({
     }
   }, [pendingPhotos]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const canCaptureMore = currentCount + capturedPhotos.length + (croppedImageUrl && mode === "edit" ? 1 : 0) < maxPhotos;
-  const canAddPhoto = mode === "edit" && currentImage && canCaptureMore;
-  const canSaveAll = capturedPhotos.length > 0 || (mode === "edit" && currentImage);
+  const canCaptureMore = currentCount + capturedPhotos.length + (mode === "edit" && currentImage ? 1 : 0) < maxPhotos;
+  // Buttons are always enabled - no need for canAddPhoto or canSaveAll checks
   const totalPhotosToSave = capturedPhotos.length + (mode === "edit" && currentImage ? 1 : 0);
 
   const cameraModal = (
@@ -252,7 +257,6 @@ export default function CameraCapture({
           cameraError={cameraError}
           capturedPhotos={capturedPhotos}
           canCaptureMore={canCaptureMore}
-          canSaveAll={canSaveAll}
           totalPhotosToSave={totalPhotosToSave}
           maxPhotos={maxPhotos}
           onCapture={capture}
@@ -278,8 +282,6 @@ export default function CameraCapture({
           setCompletedCrop={setCompletedCrop}
           setRotation={setRotation}
           setCroppedImageUrl={setCroppedImageUrl}
-          canAddPhoto={canAddPhoto}
-          canSaveAll={canSaveAll}
           totalPhotosToSave={totalPhotosToSave}
           onRetake={retakeCurrent}
           onAddPhoto={addPhoto}
