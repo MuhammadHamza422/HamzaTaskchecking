@@ -7,6 +7,7 @@ export default function ItemFulfillmentModal({
   open,
   onCancel,
   item,
+  missingProduct = null,
   onSubmit,
   submitting,
 }) {
@@ -46,14 +47,20 @@ export default function ItemFulfillmentModal({
     }
   };
 
+  const modalTitle = missingProduct 
+    ? `Fulfill Missing Product: ${missingProduct.productName || "N/A"}`
+    : `Fulfill Item: ${item?.name || "N/A"}`;
+  
+  const okText = missingProduct ? "Fulfill Missing Product" : "Fulfill Item";
+
   return (
     <Modal
-      title={`Fulfill Item: ${item?.name || "N/A"}`}
+      title={modalTitle}
       open={open}
       onCancel={onCancel}
       onOk={handleSubmit}
       confirmLoading={submitting}
-      okText="Fulfill Item"
+      okText={okText}
       cancelText="Cancel"
       width={600}
       destroyOnClose
@@ -67,11 +74,11 @@ export default function ItemFulfillmentModal({
           name="marketplaceName"
           label="Marketplace Name"
           rules={[
-            { required: true, message: "Marketplace name is required" },
+            { required: !missingProduct, message: "Marketplace name is required" },
             { max: 100, message: "Marketplace name cannot exceed 100 characters" },
           ]}
           validateStatus={errors.marketplaceName ? "error" : ""}
-          help={errors.marketplaceName}
+          help={errors.marketplaceName || (missingProduct ? "Optional for missing products" : "")}
         >
           <Input
             placeholder="e.g., Shopify, WooCommerce"
@@ -100,11 +107,11 @@ export default function ItemFulfillmentModal({
           name="trackingId"
           label="Tracking ID"
           rules={[
-            { required: true, message: "Tracking ID is required" },
+            { required: !missingProduct, message: "Tracking ID is required" },
             { max: 100, message: "Tracking ID cannot exceed 100 characters" },
           ]}
           validateStatus={errors.trackingId ? "error" : ""}
-          help={errors.trackingId}
+          help={errors.trackingId || (missingProduct ? "Optional for missing products" : "")}
         >
           <Input
             placeholder="e.g., 1Z999AA10123456784"
@@ -117,12 +124,12 @@ export default function ItemFulfillmentModal({
           name="trackingLink"
           label="Tracking Link"
           rules={[
-            { required: true, message: "Tracking link is required" },
-            { validator: validateTrackingLink },
+            { required: !missingProduct, message: "Tracking link is required" },
+            { validator: missingProduct ? undefined : validateTrackingLink },
             { max: 500, message: "Tracking link cannot exceed 500 characters" },
           ]}
           validateStatus={errors.trackingLink ? "error" : ""}
-          help={errors.trackingLink}
+          help={errors.trackingLink || (missingProduct ? "Optional for missing products" : "")}
         >
           <Input
             placeholder="https://tracking.example.com/1Z999AA10123456784"

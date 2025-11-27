@@ -147,11 +147,19 @@ export async function createPacking(packingData) {
   if (!orderNumber) {
     throw new Error("Order number is required");
   }
+  // Allow all items deselected - will create only dropship order
+  // Photos are optional when all items are deselected
   if (!selectedItems || selectedItems.length === 0) {
-    throw new Error("At least one item must be selected");
-  }
-  if (!photos || photos.length === 0) {
-    throw new Error("At least 1 photo is required");
+    // All items deselected - photos are optional
+    if (!photos || photos.length === 0) {
+      // Allow creating without photos when all items deselected
+      console.log("All items deselected - creating dropship order only");
+    }
+  } else {
+    // At least one item selected - photos are required
+    if (!photos || photos.length === 0) {
+      throw new Error("At least 1 photo is required when items are selected");
+    }
   }
   if (photos.length > 5) {
     throw new Error("Maximum 5 photos allowed");
@@ -184,9 +192,12 @@ export async function createPacking(packingData) {
       deselectedItemsJSON: JSON.stringify(deselectedItems || []),
     });
 
-    photos.forEach((photo) => {
-      formData.append("photos", photo);
-    });
+    // Only append photos if provided (optional when all items deselected)
+    if (photos && photos.length > 0) {
+      photos.forEach((photo) => {
+        formData.append("photos", photo);
+      });
+    }
 
     const response = await apiClient.post("/api/v1/fulfillment/packing/create", formData, {
       headers: {
@@ -563,6 +574,82 @@ export async function createMarketplaceOrder(dropshipId, orderData) {
       throw newError;
     }
     throw error;
+  }
+}
+
+/**
+ * Fulfill a missing product from dropship order
+ * @param {string} dropshipId - Dropship order ID
+ * @param {string} itemId - Deselected item ID (line item ID)
+ * @param {string} missingProductId - Missing product ID to fulfill
+ * @param {Object} fulfillmentData - Fulfillment data
+ * @param {string} fulfillmentData.marketplaceName - Marketplace name (optional)
+ * @param {string} fulfillmentData.marketplaceOrderNumber - Marketplace order number (optional)
+ * @param {string} fulfillmentData.trackingId - Tracking ID (optional)
+ * @param {string} fulfillmentData.trackingLink - Tracking link URL (optional)
+ * @param {string} fulfillmentData.notes - Notes (optional)
+ * @returns {Promise<Object>} Fulfillment result with updated dropship order
+ */
+export async function fulfillDropshipMissingProduct(dropshipId, itemId, missingProductId, fulfillmentData) {
+  if (!dropshipId || !itemId || !missingProductId) {
+    throw new Error("Dropship ID, item ID, and missing product ID are required");
+  }
+
+  try {
+    const encodedItemId = encodeURIComponent(itemId);
+    const encodedMissingProductId = encodeURIComponent(missingProductId);
+    
+    const response = await apiClient.post(
+      `/api/v1/fulfillment/dropship/${dropshipId}/items/${encodedItemId}/missing-products/${encodedMissingProductId}/fulfill`,
+      {
+        marketplaceName: fulfillmentData.marketplaceName?.trim() || null,
+        marketplaceOrderNumber: fulfillmentData.marketplaceOrderNumber?.trim() || null,
+        trackingId: fulfillmentData.trackingId?.trim() || null,
+        trackingLink: fulfillmentData.trackingLink?.trim() || null,
+        notes: fulfillmentData.notes?.trim() || null,
+      }
+    );
+
+    if (!response.data.success) {
+      const errorMsg = response.data.error?.message || response.data.message || "Failed to fulfill missing product";
+      const error = new Error(errorMsg);
+      error.code = response.data.error?.code;
+      throw error;
+    }
+
+    return response.data;
+  } catch (error) {
+    if (error.response?.status) {
+      error.status = error.response.status;
+    }
+    
+    console.error("Fulfill missing product error:", {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+      dropshipId,
+      itemId,
+      missingProductId,
+    });
+
+    if (error.response?.data) {
+      const errorData = error.response.data;
+      const errorMsg = 
+        errorData.error?.message || 
+        errorData.message || 
+        errorData.error ||
+        `Failed to fulfill missing product (${error.response.status})`;
+      
+      const newError = new Error(errorMsg);
+      newError.code = errorData.error?.code || errorData.code;
+      throw newError;
+    }
+    
+    if (error.message) {
+      throw error;
+    }
+    
+    throw new Error(error.message || "Network error: Unable to connect to server");
   }
 }
 
