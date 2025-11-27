@@ -9,7 +9,7 @@ export default function ShippingAddressCard({ shipTo, delay = 0.3 }) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay }}
-      className="bg-gradient-to-br from-white to-purple-50 rounded-xl border-2 border-purple-100 shadow-lg p-6"
+      className="bg-gradient-to-br from-white to-purple-50 rounded-xl border-2 border-purple-100 shadow-lg p-3 sm:p-6"
     >
       <div className="flex items-center gap-2 mb-4">
         <div className="p-2 bg-purple-100 rounded-lg">

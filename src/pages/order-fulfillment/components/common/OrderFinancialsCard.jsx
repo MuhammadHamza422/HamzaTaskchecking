@@ -15,7 +15,7 @@ export default function OrderFinancialsCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay }}
-      className="bg-gradient-to-br from-white to-emerald-50 rounded-xl border-2 border-emerald-100 shadow-lg p-6"
+      className="bg-gradient-to-br from-white to-emerald-50 rounded-xl border-2 border-emerald-100 shadow-lg p-3 sm:p-6"
     >
       <div className="flex items-center gap-2 mb-4">
         <div className="p-2 bg-emerald-100 rounded-lg">
