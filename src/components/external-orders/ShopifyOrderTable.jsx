@@ -42,6 +42,8 @@ function ShopifyOrderTable({
   activeTab,
   fetchProcessedOrders,
   onDeleteSuccess = () => {},
+  // When true, allow selecting orders even if they already have a ShipStation order id
+  ignoreShipStationLock = false,
 }) {
   const isMobile = useMediaQuery({ maxWidth: 768 });
   const [isDeleting, setIsDeleting] = useState(false);
@@ -251,28 +253,7 @@ function ShopifyOrderTable({
     return null;
   };
 
-  // Get tags (compact)
-  const getTags = (tags) => {
-    if (!tags || !Array.isArray(tags) || tags.length === 0) {
-      return <span className="text-xs text-gray-400">—</span>;
-    }
-
-    return (
-      <div className="flex flex-wrap gap-0.5">
-        {tags.slice(0, 2).map((tag, index) => (
-          <span
-            key={index}
-            className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-700 border border-gray-200"
-          >
-            {tag}
-          </span>
-        ))}
-        {tags.length > 2 && (
-          <span className="text-[10px] text-gray-500">+{tags.length - 2}</span>
-        )}
-      </div>
-    );
-  };
+  // (placeholder) tag rendering helper – currently unused
 
   // Handle bulk delete
   const handleBulkDelete = async () => {
@@ -369,7 +350,8 @@ function ShopifyOrderTable({
           key: "checkbox",
           width: 40,
           render: (_, record) => {
-            const isDisabled = !!record?.shipStation_OrderId;
+            const isDisabled =
+              !ignoreShipStationLock && !!record?.shipStation_OrderId;
             return (
               <div className="flex items-center justify-center">
                 {isDisabled ? (

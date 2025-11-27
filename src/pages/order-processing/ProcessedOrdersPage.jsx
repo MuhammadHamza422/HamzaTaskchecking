@@ -1261,57 +1261,53 @@ export default function ProcessedOrdersPage() {
         const platformTagId = platformsData?.platforms?.find(
           (p) => String(p?._id) === String(platformId)
         )?.tagId;
-        // Fetch kits and details for each order in parallel
+        // Fetch kits (by productIds) and details for each order in parallel
         const results = await Promise.all(
           orders.map(async (ord) => {
-            // Try to get kits from cache first (check both original orderId and numeric version)
-            const numericOrderId =
-              activeTab === "shopify"
-                ? String(ord?.orderId).replace("gid://shopify/Order/", "")
-                : ord?.orderId;
-            
-            let kitsData = kitsByOrderId[ord?.orderId] || kitsByOrderId[numericOrderId];
-            
-            if (kitsData && Array.isArray(kitsData?.allKits) && kitsData.allKits.length > 0) {
-              console.log("✅ Using cached kits for move", ord?.orderId, {
-                allKitsCount: kitsData.allKits.length,
-              });
-            } else {
-              console.log("🔄 Fetching kits for move", ord?.orderId, "numericOrderId:", numericOrderId);
+            // ✅ Fetch kits by productIds instead of orderId
+            let kitsData = { success: false, allKits: [] };
+            const productIds = Array.isArray(ord?.kit_products)
+              ? ord.kit_products
+              : [];
+
+            if (productIds.length > 0) {
               try {
-                const kitsRes = await apiClient.get(
-                  `/api/v1/kit/order/kits/${encodeURIComponent(numericOrderId)}`
+                const kitResults = await Promise.all(
+                  productIds.map(async (productId) => {
+                    try {
+                      const res = await apiClient.get(
+                        `/api/v1/kit/details/${encodeURIComponent(productId)}`
+                      );
+                      return res?.data?.kit || null;
+                    } catch (e) {
+                      console.error(
+                        `❌ Error fetching kit for productId ${productId}:`,
+                        e
+                      );
+                      return null;
+                    }
+                  })
                 );
-                kitsData = kitsRes?.data;
-                
-                // Validate response structure
-                if (!kitsData || !kitsData.success) {
-                  console.warn("⚠️ Kits API returned unsuccessful response:", kitsData);
-                  kitsData = { success: false, allKits: [] };
-                } else if (!Array.isArray(kitsData.allKits)) {
-                  console.warn("⚠️ Kits API response missing allKits array:", kitsData);
-                  kitsData = { success: true, allKits: [] };
-                }
-                
-                console.log("📦 Kits response for", ord?.orderId, ":", {
-                  success: kitsData?.success,
-                  allKitsCount: Array.isArray(kitsData?.allKits) ? kitsData.allKits.length : 0,
-                  hasKits: Array.isArray(kitsData?.allKits) && kitsData.allKits.length > 0,
+
+                const allKits = kitResults.filter(Boolean);
+                kitsData = {
+                  success: true,
+                  allKits,
+                };
+
+                console.log("📦 Kits by productIds for", ord?.orderId, {
+                  productIds,
+                  allKitsCount: allKits.length,
                 });
-                
-                // Cache the kits for future use
-                if (kitsData && kitsData.success) {
-                  setKitsByOrderId((prev) => ({
-                    ...prev,
-                    [ord?.orderId]: kitsData,
-                    [numericOrderId]: kitsData,
-                  }));
-                }
-              } catch (kitsError) {
-                console.error(`❌ Error fetching kits for order ${ord?.orderId}:`, kitsError);
+              } catch (e) {
+                console.error(
+                  `❌ Error fetching kits by productIds for order ${ord?.orderId}:`,
+                  e
+                );
                 kitsData = { success: false, allKits: [] };
               }
             }
+
             let detailsRes;
             if (activeTab === "shopify") {
               detailsRes = await apiClient.get(

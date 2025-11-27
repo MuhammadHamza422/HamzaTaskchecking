@@ -42,6 +42,8 @@ function OrderTable({
   onSelectAll = null,
   fetchProcessedOrders = () => {},
   onDeleteSuccess = () => {},
+  // When true, allow selecting orders even if they already have a ShipStation order id
+  ignoreShipStationLock = false,
 }) {
   const isMobile = useMediaQuery({ maxWidth: 768 });
   const [isDeleting, setIsDeleting] = useState(false);
@@ -203,7 +205,8 @@ function OrderTable({
             key: "checkbox",
             width: 50,
             render: (_, record) => {
-              const isDisabled = !!record?.shipStation_OrderId;
+            const isDisabled =
+              !ignoreShipStationLock && !!record?.shipStation_OrderId;
               return (
                 <div className="flex items-center justify-center">
                   {isDisabled ? (

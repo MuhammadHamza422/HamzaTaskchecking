@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { notification } from "antd";
-import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
 
@@ -34,6 +33,8 @@ export default function ShippedOrdersPage() {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editingOrder, setEditingOrder] = useState(null);
   const [updateOrderStatusLoading, setUpdateOrderStatusLoading] = useState(false);
+  const [selectedOrders, setSelectedOrders] = useState([]);
+  const [selectAll, setSelectAll] = useState(false);
 
   // Filter state - Filter for shipped orders
   const [filters, setFilters] = useState({
@@ -208,6 +209,28 @@ export default function ShippedOrdersPage() {
   }, [ordersData]);
 
   const totalFilteredOrders = ordersData?.totalOrders || 0;
+  // Handle bulk selection (shipped orders)
+  const handleSelectAll = useCallback(
+    (checked) => {
+      setSelectAll(checked);
+      if (checked) {
+        const allOrderIds = filteredOrders.map((order) => order._id);
+        setSelectedOrders(allOrderIds);
+      } else {
+        setSelectedOrders([]);
+      }
+    },
+    [filteredOrders]
+  );
+
+  // Handle individual order selection
+  const handleOrderSelect = useCallback((orderId, checked) => {
+    if (checked) {
+      setSelectedOrders((prev) => [...prev, orderId]);
+    } else {
+      setSelectedOrders((prev) => prev.filter((id) => id !== orderId));
+    }
+  }, []);
 
   // Handle page change
   const handlePageChange = useCallback((page, size) => {
@@ -256,6 +279,8 @@ export default function ShippedOrdersPage() {
   const handleTabChange = useCallback((tab) => {
     setActiveTab(tab);
     setCurrentPage(1);
+    setSelectedOrders([]);
+    setSelectAll(false);
   }, []);
 
   // Fetch order details
@@ -375,9 +400,16 @@ export default function ShippedOrdersPage() {
             onRowClick={handleDrawerOpen}
             showPagination={true}
             onEditClick={handleEditClick}
-            showCheckboxes={false}
+            showCheckboxes={true}
+            selectedOrders={selectedOrders}
+            onOrderSelect={handleOrderSelect}
+            selectAll={selectAll}
+            onSelectAll={handleSelectAll}
+            ignoreShipStationLock={true}
             fetchProcessedOrders={refetch}
             onDeleteSuccess={() => {
+              setSelectedOrders([]);
+              setSelectAll(false);
               refetch();
             }}
           />
@@ -393,9 +425,16 @@ export default function ShippedOrdersPage() {
             showPagination={true}
             platform={activeTab}
             onEditClick={handleEditClick}
-            showCheckboxes={false}
+            showCheckboxes={true}
+            selectedOrders={selectedOrders}
+            onOrderSelect={handleOrderSelect}
+            selectAll={selectAll}
+            onSelectAll={handleSelectAll}
+            ignoreShipStationLock={true}
             fetchProcessedOrders={refetch}
             onDeleteSuccess={() => {
+              setSelectedOrders([]);
+              setSelectAll(false);
               refetch();
             }}
           />
@@ -405,12 +444,7 @@ export default function ShippedOrdersPage() {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      className="min-h-screen bg-gray-50 p-4 md:p-6"
-    >
+    <div className="min-h-screen bg-gray-50 p-4 md:p-6">
       <div className="max-w-[1800px] mx-auto">
         {/* Stepper - Moved to top */}
         <OrderStepper />
@@ -502,7 +536,7 @@ export default function ShippedOrdersPage() {
           platform={activeTab}
         />
       </div>
-    </motion.div>
+    </div>
   );
 }
 

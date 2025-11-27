@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Typography, notification } from "antd";
 import { motion } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -79,6 +79,8 @@ export default function ExternalOrdersPage() {
   const [updateOrderStatusLoading, setUpdateOrderStatusLoading] =
     useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [selectedOrders, setSelectedOrders] = useState([]);
+  const [selectAll, setSelectAll] = useState(false);
 
   // Filter state
   const [filters, setFilters] = useState({
@@ -518,6 +520,60 @@ export default function ExternalOrdersPage() {
   const filteredOrders = getFilteredOrders();
   const totalFilteredOrders = filteredOrders.length;
 
+  // Handle bulk selection (pending orders)
+  const handleSelectAll = useCallback(
+    (checked) => {
+      setSelectAll(checked);
+      if (checked) {
+        const allOrderIds = filteredOrders
+          .filter((order) => !order?.shipStation_OrderId)
+          .map((order) => order._id);
+        setSelectedOrders(allOrderIds);
+      } else {
+        setSelectedOrders([]);
+      }
+    },
+    [filteredOrders]
+  );
+
+  // Handle individual order selection
+  const handleOrderSelect = useCallback((orderId, checked) => {
+    if (checked) {
+      setSelectedOrders((prev) => [...prev, orderId]);
+    } else {
+      setSelectedOrders((prev) => prev.filter((id) => id !== orderId));
+    }
+  }, []);
+
+  // Sync selectAll when orders list changes
+  useEffect(() => {
+    const selectableCount = filteredOrders.filter(
+      (o) => !o?.shipStation_OrderId
+    ).length;
+    if (selectableCount > 0 && selectedOrders.length === selectableCount) {
+      setSelectAll(true);
+    } else {
+      setSelectAll(false);
+    }
+  }, [selectedOrders, filteredOrders]);
+
+  // Ensure disabled (ShipStation) orders are not kept selected
+  useEffect(() => {
+    setSelectedOrders((prev) => {
+      const allowedIds = new Set(
+        filteredOrders
+          .filter((o) => !o?.shipStation_OrderId)
+          .map((o) => o._id)
+      );
+      const next = prev.filter((id) => allowedIds.has(id));
+      if (next.length !== prev.length) return next;
+      for (let i = 0; i < next.length; i += 1) {
+        if (next[i] !== prev[i]) return next;
+      }
+      return prev;
+    });
+  }, [filteredOrders]);
+
   // Error handling
   useEffect(() => {
     if (error) {
@@ -553,7 +609,17 @@ export default function ExternalOrdersPage() {
             showPagination={true}
             onEditClick={handleEditClick}
             activeTab={activeTab}
-            fetchProcessedOrders={fetchOrders}
+            fetchProcessedOrders={refetch}
+            showCheckboxes={true}
+            selectedOrders={selectedOrders}
+            onOrderSelect={handleOrderSelect}
+            selectAll={selectAll}
+            onSelectAll={handleSelectAll}
+            onDeleteSuccess={() => {
+              setSelectedOrders([]);
+              setSelectAll(false);
+              refetch();
+            }}
           />
         ) : (
           <OrderTable
@@ -567,7 +633,17 @@ export default function ExternalOrdersPage() {
             showPagination={true}
             onEditClick={handleEditClick}
             activeTab={activeTab}
-            fetchProcessedOrders={fetchOrders}
+            fetchProcessedOrders={refetch}
+            showCheckboxes={true}
+            selectedOrders={selectedOrders}
+            onOrderSelect={handleOrderSelect}
+            selectAll={selectAll}
+            onSelectAll={handleSelectAll}
+            onDeleteSuccess={() => {
+              setSelectedOrders([]);
+              setSelectAll(false);
+              refetch();
+            }}
           />
         )}
       </div>

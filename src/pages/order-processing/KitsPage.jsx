@@ -13,13 +13,13 @@ import {
   Input,
   message,
 } from "antd";
-import { motion } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   EyeOutlined,
   ShoppingOutlined,
   CalendarOutlined,
   EditOutlined,
+  DeleteOutlined,
 } from "@ant-design/icons";
 import Swal from "sweetalert2";
 import apiClient from "../../api/client";
@@ -50,6 +50,8 @@ export default function KitsPage() {
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editingKit, setEditingKit] = useState(null);
+  const [selectedKitIds, setSelectedKitIds] = useState([]);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [form] = Form.useForm();
   const queryClient = useQueryClient();
   const { ref: fullscreenRef, isFullscreen, getContainer } = useFullscreen();
@@ -161,6 +163,94 @@ export default function KitsPage() {
     setEditModalVisible(false);
     setEditingKit(null);
     form.resetFields();
+  };
+
+  // Handle bulk delete of selected kits
+  const handleBulkDeleteKits = async () => {
+    if (!selectedKitIds.length) {
+      Swal.fire({
+        icon: "warning",
+        title: "No kits selected",
+        text: "Please select at least one kit to delete.",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+        background: "#f59e0b",
+        color: "#111827",
+        customClass: { popup: "rounded-lg" },
+      });
+      return;
+    }
+
+    const result = await Swal.fire({
+      icon: "warning",
+      title: "Delete selected kits?",
+      text: `You are about to delete ${selectedKitIds.length} kit${
+        selectedKitIds.length > 1 ? "s" : ""
+      }. This action cannot be undone.`,
+      showCancelButton: true,
+      confirmButtonColor: "#ef4444",
+      cancelButtonColor: "#6b7280",
+      confirmButtonText: "Yes, delete",
+      cancelButtonText: "Cancel",
+      reverseButtons: true,
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      setIsBulkDeleting(true);
+
+      await Promise.all(
+        selectedKitIds.map((id) =>
+          apiClient.delete(`/api/v1/kit/delete/${id}`).catch((err) => {
+            console.error(`Failed to delete kit ${id}`, err);
+          })
+        )
+      );
+
+      Swal.fire({
+        icon: "success",
+        title: "Kits Deleted",
+        text: `Successfully processed ${selectedKitIds.length} kit${
+          selectedKitIds.length > 1 ? "s" : ""
+        }.`,
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+        background: "#10b981",
+        color: "#fff",
+        customClass: { popup: "rounded-lg" },
+      });
+
+      setSelectedKitIds([]);
+      queryClient.invalidateQueries({ queryKey: ["kits"] });
+      await refetch();
+    } catch (error) {
+      console.error("Bulk delete error:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Delete Failed",
+        text:
+          error?.response?.data?.message ||
+          error?.message ||
+          "Failed to delete selected kits",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 4000,
+        timerProgressBar: true,
+        background: "#ef4444",
+        color: "#fff",
+        customClass: { popup: "rounded-lg" },
+      });
+    } finally {
+      setIsBulkDeleting(false);
+    }
   };
 
   // Calculate total value of kit
@@ -327,34 +417,43 @@ export default function KitsPage() {
   }, [error]);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="bg-gray-50 min-h-screen"
-    >
+    <div className="bg-gray-50 min-h-screen">
       <div className="max-w-[1550px] mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex sm:flex-row flex-col justify-between items-start max-md:gap-4">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-black mb-2">
-                Kits Management
-              </h1>
-              <p className="text-black text-sm sm:text-base">
-                View and manage product kits across all platforms
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <ShoppingOutlined className="text-2xl text-blue-600" />
-              <div className="text-right">
-                <p className="text-lg font-semibold text-gray-900">
-                  {kitsData?.totalCount || 0}
+            <div className="flex sm:flex-row flex-col justify-between items-start max-md:gap-4">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold text-black mb-2">
+                  Kits Management
+                </h1>
+                <p className="text-black text-sm sm:text-base">
+                  View and manage product kits across all platforms
                 </p>
-                <p className="text-sm text-gray-600">Total Kits</p>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <ShoppingOutlined className="text-2xl text-blue-600" />
+                  <div className="text-right">
+                    <p className="text-lg font-semibold text-gray-900">
+                      {kitsData?.totalCount || 0}
+                    </p>
+                    <p className="text-sm text-gray-600">Total Kits</p>
+                  </div>
+                </div>
+                <Button
+                  danger
+                  type="primary"
+                  icon={<DeleteOutlined />}
+                  size="middle"
+                  disabled={!selectedKitIds.length || isBulkDeleting}
+                  loading={isBulkDeleting}
+                  onClick={handleBulkDeleteKits}
+                >
+                  Delete Selected
+                  {selectedKitIds.length > 0 ? ` (${selectedKitIds.length})` : ""}
+                </Button>
               </div>
             </div>
-          </div>
         </div>
 
         {/* Kits Table */}
@@ -365,6 +464,10 @@ export default function KitsPage() {
               dataSource={kitsData?.allKits || []}
               loading={isLoading}
               rowKey="_id"
+              rowSelection={{
+                selectedRowKeys: selectedKitIds,
+                onChange: (keys) => setSelectedKitIds(keys),
+              }}
               pagination={{
                 pageSize: 30,
                 showSizeChanger: true,
@@ -558,7 +661,7 @@ export default function KitsPage() {
                   className="border-gray-200"
                 >
                   <div className="space-y-4">
-                    {selectedKit?.skus?.map((sku, index) => (
+                    {selectedKit?.skus?.map((sku) => (
                       <div
                         key={sku._id}
                         className="border border-gray-200 rounded-lg p-4 bg-gray-50"
@@ -623,6 +726,6 @@ export default function KitsPage() {
           </Drawer>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
