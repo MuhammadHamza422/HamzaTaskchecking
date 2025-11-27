@@ -234,9 +234,9 @@ export default function PackingOrderLines({
                   onClick={() => handleToggleItem(item.id)}
                   className={`cursor-pointer hover:bg-gray-50 transition-colors ${
                     !isSelected ? "bg-amber-50/50" : ""
-                  } ${itemHasMissingProducts ? "bg-amber-50/70 border-l-4 border-l-amber-400" : ""}`}
+                  } ${itemHasMissingProducts ? "bg-amber-50/70" : ""}`}
                 >
-                  <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                  <td className={`px-6 py-4 whitespace-nowrap ${itemHasMissingProducts ? "border-l-4 border-l-amber-400" : ""}`} onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={isSelected}
@@ -292,7 +292,7 @@ export default function PackingOrderLines({
                 </tr>
                 {isExpanded && onMissingProductAdd && (
                   <tr key={`${item.id}-expanded`}>
-                    <td colSpan={onMissingProductAdd ? 6 : 5} className="px-6 py-4 bg-gray-50">
+                    <td colSpan={onMissingProductAdd ? 6 : 5} className={`px-6 py-4 bg-gray-50 ${itemHasMissingProducts ? "border-l-4 border-l-amber-400" : ""}`}>
                       <div className="space-y-4">
                         {/* Missing Products List */}
                         {itemMissingProducts.length > 0 && (

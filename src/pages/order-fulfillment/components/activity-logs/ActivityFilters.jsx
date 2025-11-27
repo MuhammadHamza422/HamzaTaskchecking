@@ -20,11 +20,11 @@ const PLATFORMS = [
   "magento",
 ];
 
-const SORT_OPTIONS = [
-  { value: "timestamp", label: "Timestamp" },
-  { value: "type", label: "Activity Type" },
-  { value: "user", label: "User" },
-];
+// const SORT_OPTIONS = [
+//   { value: "timestamp", label: "Timestamp" },
+//   { value: "type", label: "Activity Type" },
+//   { value: "user", label: "User" },
+// ];
 
 const ActivityFilters = memo(({ filters, onUpdateFilter, onSetDateRange, onClearFilters }) => {
     const [searchValue, setSearchValue] = useState(filters.search || "");
@@ -129,7 +129,7 @@ const ActivityFilters = memo(({ filters, onUpdateFilter, onSetDateRange, onClear
                 />
 
                 {/* Sort By */}
-                <Select
+                {/* <Select
                     placeholder="Sort By"
                     value={filters.sortBy || "timestamp"}
                     onChange={(value) => onUpdateFilter("sortBy", value)}
@@ -141,7 +141,7 @@ const ActivityFilters = memo(({ filters, onUpdateFilter, onSetDateRange, onClear
                             {option.label}
                         </Option>
                     ))}
-                </Select>
+                </Select> */}
 
                 {/* Sort Order */}
                 <Select
@@ -184,11 +184,7 @@ const ActivityFilters = memo(({ filters, onUpdateFilter, onSetDateRange, onClear
                                 {filters.startDate} - {filters.endDate}
                             </span>
                         )}
-                        {(filters.sortBy !== "timestamp" || filters.sortOrder !== "desc") && (
-                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-50 text-yellow-700 rounded text-xs">
-                                Sort: {SORT_OPTIONS.find(o => o.value === filters.sortBy)?.label || filters.sortBy} ({filters.sortOrder === "desc" ? "Newest" : "Oldest"})
-                            </span>
-                        )}
+                       
                     </div>
 
                     <Button
