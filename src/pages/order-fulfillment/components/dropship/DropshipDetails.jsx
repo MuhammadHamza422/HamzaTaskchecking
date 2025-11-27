@@ -447,12 +447,12 @@ export default function DropshipDetails() {
             </div>
 
             {/* Missing Products Card */}
-            {dropshipData.missingProducts && dropshipData.missingProducts.length > 0 && (
+            {/* {dropshipData.missingProducts && dropshipData.missingProducts.length > 0 && (
               <MissingProductsCard
                 missingProducts={dropshipData.missingProducts}
                 missingProductsCount={dropshipData.missingProductsCount || dropshipData.missingProducts.length}
               />
-            )}
+            )} */}
 
             <ShippingAddressCard shipTo={dropshipData.shipTo} />
 

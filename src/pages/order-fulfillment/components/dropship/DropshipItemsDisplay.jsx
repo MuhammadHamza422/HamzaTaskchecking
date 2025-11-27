@@ -323,7 +323,7 @@ export default function DropshipItemsDisplay({
               }`}
             >
               <div className="flex items-start justify-between mb-3">
-                <div className="flex items-start gap-3 flex-1">
+                <div className="flex sm:flex-row flex-col items-start gap-3 flex-1">
                   {item.image && (
                     <div className="w-16 h-16 bg-gray-100 rounded border border-gray-200 flex items-center justify-center shrink-0">
                       <img
@@ -347,19 +347,6 @@ export default function DropshipItemsDisplay({
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-2">
-                  {hasMissingProducts && (
-                    <button
-                      onClick={(e) => toggleRowExpansion(item.id, e)}
-                      className="p-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded transition-colors"
-                      title={isExpanded ? "Hide missing products" : "Show missing products"}
-                    >
-                      {isExpanded ? (
-                        <ChevronUp className="w-4 h-4" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4" />
-                      )}
-                    </button>
-                  )}
                   {isFulfilled ? (
                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
                       <CheckCircle className="w-3 h-3" />
@@ -447,7 +434,51 @@ export default function DropshipItemsDisplay({
                 </div>
               </div>
 
-              {/* Missing Products Section */}
+             
+
+              {/* Fulfill Button for Unfulfilled Items */}
+              {isUnfulfilled && (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <Button
+                    type="primary"
+                    block
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRowClick(item);
+                    }}
+                    disabled={!isUnfulfilled}
+                  >
+                    Fulfill Item
+                  </Button>
+                </div>
+              )}
+               {/* Missing Products Toggle Button - Show above fulfill button if item has missing products */}
+               {hasMissingProducts && (
+                <div className="mt-3 pt-3 border-t border-gray-200">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleRowExpansion(item.id, e);
+                    }}
+                    className="w-full flex items-center justify-between text-blue-600 hover:text-blue-700 text-sm font-medium py-2"
+                  >
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-600" />
+                      <span>Missing Products</span>
+                      <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full text-xs">
+                        {item.missingProductsCount || missingProducts.length}
+                      </span>
+                    </div>
+                    {isExpanded ? (
+                      <ChevronUp className="w-4 h-4" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* Missing Products Section - Show after Fulfill Button */}
               <AnimatePresence>
                 {isExpanded && hasMissingProducts && missingProducts.length > 0 && (
                   <motion.div
@@ -498,23 +529,6 @@ export default function DropshipItemsDisplay({
                   </motion.div>
                 )}
               </AnimatePresence>
-
-              {/* Fulfill Button for Unfulfilled Items */}
-              {isUnfulfilled && (
-                <div className="mt-3 pt-3 border-t border-gray-100">
-                  <Button
-                    type="primary"
-                    block
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleRowClick(item);
-                    }}
-                    disabled={!isUnfulfilled}
-                  >
-                    Fulfill Item
-                  </Button>
-                </div>
-              )}
             </motion.div>
           );
         })}
