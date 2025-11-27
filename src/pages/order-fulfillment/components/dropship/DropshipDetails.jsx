@@ -19,7 +19,7 @@ import StatusUpdateModal from "./StatusUpdateModal";
 import MarketplaceOrderModal from "./MarketplaceOrderModal";
 import ItemFulfillmentModal from "./ItemFulfillmentModal";
 import OrderDetailsSkeleton from "../common/OrderDetailsSkeleton";
-import { getDropshipOrderDetails, updateDropshipStatus, createMarketplaceOrder, fulfillDropshipItem, getPackingOrderDetails } from "../../../../api/fulfillment";
+import { getDropshipOrderDetails, updateDropshipStatus, createMarketplaceOrder, fulfillDropshipItem, fulfillDropshipMissingProduct, getPackingOrderDetails } from "../../../../api/fulfillment";
 import Swal from "sweetalert2";
 
 export default function DropshipDetails() {
@@ -32,6 +32,7 @@ export default function DropshipDetails() {
   const [showMarketplaceModal, setShowMarketplaceModal] = useState(false);
   const [showFulfillmentModal, setShowFulfillmentModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
+  const [selectedMissingProduct, setSelectedMissingProduct] = useState(null);
   const [statusForm, setStatusForm] = useState({
     status: "",
     marketplaceName: "",
@@ -44,7 +45,7 @@ export default function DropshipDetails() {
   useEffect(() => {
     // Scroll to top on mount
     window.scrollTo({ top: 0, behavior: "smooth" });
-    
+
     const loadDropshipDetails = async () => {
       if (!dropshipId) return;
 
@@ -204,7 +205,34 @@ export default function DropshipDetails() {
     if (item.fulfillmentStatus === "Fulfilled") {
       return; // Don't open modal for already fulfilled items
     }
+
+    // Check if item can be fulfilled - all missing products must be fulfilled
+    const missingProducts = item.missingProducts || [];
+    const allMissingFulfilled = missingProducts.length === 0 ||
+      missingProducts.every(mp => mp.fulfillmentStatus === "Fulfilled");
+
+    if (!allMissingFulfilled) {
+      Swal.fire({
+        icon: "warning",
+        title: "Cannot Fulfill Main Item",
+        text: "This item has missing products. Please fulfill the missing products first.",
+        confirmButtonColor: "#2563eb",
+        confirmButtonText: "OK",
+      });
+      return;
+    }
+
     setSelectedItem(item);
+    setSelectedMissingProduct(null);
+    setShowFulfillmentModal(true);
+  };
+
+  const handleFulfillMissingProductClick = (item, missingProduct) => {
+    if (missingProduct.fulfillmentStatus === "Fulfilled") {
+      return; // Don't open modal for already fulfilled missing products
+    }
+    setSelectedItem(item);
+    setSelectedMissingProduct(missingProduct);
     setShowFulfillmentModal(true);
   };
 
@@ -214,7 +242,27 @@ export default function DropshipDetails() {
     setFulfillingItem(true);
 
     try {
-      const result = await fulfillDropshipItem(dropshipId, selectedItem.id, fulfillmentData);
+      let result;
+      // inside handleFulfillItem, right after the call:
+      if (result) {
+        console.log("fulfill API result:", result);
+        console.log("result.data keys:", Object.keys(result.data || {}));
+      }
+
+
+      // Check if fulfilling missing product or main item
+      if (selectedMissingProduct) {
+        // Fulfill missing product
+        result = await fulfillDropshipMissingProduct(
+          dropshipId,
+          selectedItem.id,
+          selectedMissingProduct.missingProductId,
+          fulfillmentData
+        );
+      } else {
+        // Fulfill main item
+        result = await fulfillDropshipItem(dropshipId, selectedItem.id, fulfillmentData);
+      }
 
       if (result.success) {
         const packingOrderNumber = result.data.packingOrderNumber || result.data.packingId;
@@ -231,9 +279,9 @@ export default function DropshipDetails() {
             title: "All Items Fulfilled!",
             html: `
               <p>${result.data.message || "All items have been fulfilled successfully."}</p>
-              <p class="mt-2 text-sm text-gray-600">
+              ${packingOrderNumber ? `<p class="mt-2 text-sm text-gray-600">
                 Packing Order: <strong>${packingOrderNumber}</strong>
-              </p>
+              </p>` : ''}
               <p class="mt-2 text-xs text-gray-500">
                 The dropship order has been removed and the packing order has been updated.
               </p>
@@ -258,41 +306,51 @@ export default function DropshipDetails() {
           return;
         }
 
-        // Show success message for partial fulfillment
+        // Show success message
+        const title = selectedMissingProduct ? "Missing Product Fulfilled" : "Item Fulfilled";
+        const message = selectedMissingProduct
+          ? `The missing product "${selectedMissingProduct.productName}" has been fulfilled successfully.`
+          : "The item has been fulfilled successfully.";
+
         await Swal.fire({
           icon: "success",
-          title: "Item Fulfilled",
+          title: title,
           html: `
-            <p>The item has been fulfilled successfully.</p>
-            <p class="mt-2 text-sm text-gray-600">
+            <p>${message}</p>
+            ${packingOrderNumber ? `<p class="mt-2 text-sm text-gray-600">
               Packing Order: <strong>${packingOrderNumber}</strong>
-            </p>
+            </p>` : ''}
             ${dropshipStatus === "Partially Fulfilled" ? '<p class="mt-2 text-xs text-gray-500">Some items are still pending fulfillment.</p>' : ''}
           `,
           confirmButtonColor: "#2563eb",
           confirmButtonText: "OK",
         });
 
-        // Try to reload dropship details to get updated data
-        try {
-          const updatedResult = await getDropshipOrderDetails(dropshipId);
-          if (updatedResult.success && updatedResult.data) {
-            setDropshipData(updatedResult.data);
+        // Update dropship data from response if available, otherwise reload
+        if (result.data.dropshipOrder) {
+          setDropshipData(result.data.dropshipOrder);
+        } else {
+          // Try to reload dropship details to get updated data
+          try {
+            const updatedResult = await getDropshipOrderDetails(dropshipId);
+            if (updatedResult.success && updatedResult.data) {
+              setDropshipData(updatedResult.data);
+            }
+          } catch (reloadError) {
+            // If 404, dropship order was deleted (shouldn't happen here, but handle gracefully)
+            if (reloadError.response?.status === 404 || reloadError.status === 404 || reloadError.code === "DROPSHIP_NOT_FOUND") {
+              await Swal.fire({
+                icon: "info",
+                title: "Order Completed",
+                text: "This dropship order has been completed and removed.",
+                confirmButtonColor: "#2563eb",
+                confirmButtonText: "OK",
+              });
+              navigate("/fulfillment/dropship");
+              return;
+            }
+            console.warn("Failed to reload dropship details:", reloadError);
           }
-        } catch (reloadError) {
-          // If 404, dropship order was deleted (shouldn't happen here, but handle gracefully)
-          if (reloadError.response?.status === 404 || reloadError.status === 404 || reloadError.code === "DROPSHIP_NOT_FOUND") {
-            await Swal.fire({
-              icon: "info",
-              title: "Order Completed",
-              text: "This dropship order has been completed and removed.",
-              confirmButtonColor: "#2563eb",
-              confirmButtonText: "OK",
-            });
-            navigate("/fulfillment/dropship");
-            return;
-          }
-          console.warn("Failed to reload dropship details:", reloadError);
         }
 
         // If packing order was updated (not created new), refresh packing order details
@@ -310,13 +368,19 @@ export default function DropshipDetails() {
 
         setShowFulfillmentModal(false);
         setSelectedItem(null);
+        setSelectedMissingProduct(null);
       }
     } catch (error) {
       console.error("Error fulfilling item:", error);
+      const title = selectedMissingProduct ? "Failed to Fulfill Missing Product" : "Failed to Fulfill Item";
+      const message = error.code === "ITEM_HAS_MISSING_PRODUCTS"
+        ? "Cannot fulfill main item. Please fulfill missing products first."
+        : error.message || "Unable to fulfill item. Please try again.";
+
       Swal.fire({
         icon: "error",
-        title: "Failed to Fulfill Item",
-        text: error.message || "Unable to fulfill item. Please try again.",
+        title: title,
+        text: message,
         confirmButtonColor: "#2563eb",
         confirmButtonText: "OK",
       });
@@ -399,9 +463,9 @@ export default function DropshipDetails() {
                   </Button>
                 </>
               )} */}
+              </div>
             </div>
-          </div>
-        </motion.div>
+          </motion.div>
         )}
 
         {loading ? (
@@ -410,69 +474,70 @@ export default function DropshipDetails() {
           <>
             {/* Mobile-first: Order Items on top, other info below */}
             <div className="flex flex-col lg:flex-col-reverse gap-6 mb-6">
-          {/* Order Items - First on mobile, last on desktop */}
-          <div className="order-1 lg:order-2">
-            <DropshipItemsDisplay
-              items={dropshipData.deselectedItems || []}
-              currency={dropshipData.currency}
-              title="Dropship Items"
-              dropshipId={dropshipData.dropshipId}
-              onFulfillClick={handleFulfillItemClick}
-              fulfilledItemsCount={dropshipData.fulfilledItemsCount || 0}
-              remainingItemsCount={dropshipData.remainingItemsCount || dropshipData.deselectedItems?.length || 0}
-            />
-          </div>
+              {/* Order Items - First on mobile, last on desktop */}
+              <div className="order-1 lg:order-2">
+                <DropshipItemsDisplay
+                  items={dropshipData.deselectedItems || []}
+                  currency={dropshipData.currency}
+                  title="Dropship Items"
+                  dropshipId={dropshipData.dropshipId}
+                  onFulfillClick={handleFulfillItemClick}
+                  onFulfillMissingProductClick={handleFulfillMissingProductClick}
+                  fulfilledItemsCount={dropshipData.fulfilledItemsCount || 0}
+                  remainingItemsCount={dropshipData.remainingItemsCount || dropshipData.deselectedItems?.length || 0}
+                />
+              </div>
 
-          {/* Other Info Sections - Second on mobile, first on desktop */}
-          <div className="order-2 lg:order-1 space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <DropshipInfoCard
-                dropshipId={dropshipData.dropshipId}
-                originalOrderNumber={dropshipData.originalOrderNumber}
-                platform={dropshipData.platform}
-                status={dropshipData.status}
-                deselectedItemsCount={dropshipData.deselectedItems?.length || 0}
-                fulfilledItemsCount={dropshipData.fulfilledItemsCount || 0}
-                remainingItemsCount={dropshipData.remainingItemsCount || dropshipData.deselectedItems?.length || 0}
-                missingProductsCount={dropshipData.missingProductsCount || 0}
-                createdAt={dropshipData.createdAt}
-                marketplaceName={dropshipData.marketplaceName}
-                marketplaceOrderNumber={dropshipData.marketplaceOrderNumber}
-              />
-              <CustomerInfoCard
-                customerName={dropshipData.customerName || dropshipData.shipTo?.name}
-                customerEmail={dropshipData.customerEmail || dropshipData.shipTo?.email}
-                phone={dropshipData.phone || dropshipData.shipTo?.phone}
-              />
-            </div>
+              {/* Other Info Sections - Second on mobile, first on desktop */}
+              <div className="order-2 lg:order-1 space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <DropshipInfoCard
+                    dropshipId={dropshipData.dropshipId}
+                    originalOrderNumber={dropshipData.originalOrderNumber}
+                    platform={dropshipData.platform}
+                    status={dropshipData.status}
+                    deselectedItemsCount={dropshipData.deselectedItems?.length || 0}
+                    fulfilledItemsCount={dropshipData.fulfilledItemsCount || 0}
+                    remainingItemsCount={dropshipData.remainingItemsCount || dropshipData.deselectedItems?.length || 0}
+                    missingProductsCount={dropshipData.missingProductsCount || 0}
+                    createdAt={dropshipData.createdAt}
+                    marketplaceName={dropshipData.marketplaceName}
+                    marketplaceOrderNumber={dropshipData.marketplaceOrderNumber}
+                  />
+                  <CustomerInfoCard
+                    customerName={dropshipData.customerName || dropshipData.shipTo?.name}
+                    customerEmail={dropshipData.customerEmail || dropshipData.shipTo?.email}
+                    phone={dropshipData.phone || dropshipData.shipTo?.phone}
+                  />
+                </div>
 
-            {/* Missing Products Card */}
-            {/* {dropshipData.missingProducts && dropshipData.missingProducts.length > 0 && (
+                {/* Missing Products Card */}
+                {/* {dropshipData.missingProducts && dropshipData.missingProducts.length > 0 && (
               <MissingProductsCard
                 missingProducts={dropshipData.missingProducts}
                 missingProductsCount={dropshipData.missingProductsCount || dropshipData.missingProducts.length}
               />
             )} */}
 
-            <ShippingAddressCard shipTo={dropshipData.shipTo} />
+                <ShippingAddressCard shipTo={dropshipData.shipTo} />
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <OrderFinancialsCard
-                currency={dropshipData.currency}
-                subtotal={dropshipData.subtotal}
-                tax={dropshipData.tax}
-                shipping={dropshipData.shipping}
-                discount={dropshipData.discount}
-                totalValue={dropshipData.totalValue}
-              />
-              <OrderTimelineCard
-                createdAt={dropshipData.createdAt}
-                updatedAt={dropshipData.updatedAt}
-                createdBy={dropshipData.createdBy}
-              />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <OrderFinancialsCard
+                    currency={dropshipData.currency}
+                    subtotal={dropshipData.subtotal}
+                    tax={dropshipData.tax}
+                    shipping={dropshipData.shipping}
+                    discount={dropshipData.discount}
+                    totalValue={dropshipData.totalValue}
+                  />
+                  <OrderTimelineCard
+                    createdAt={dropshipData.createdAt}
+                    updatedAt={dropshipData.updatedAt}
+                    createdBy={dropshipData.createdBy}
+                  />
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
 
             <AuditLogsCard auditLogs={dropshipData.auditLogs} />
 
@@ -541,8 +606,10 @@ export default function DropshipDetails() {
             onCancel={() => {
               setShowFulfillmentModal(false);
               setSelectedItem(null);
+              setSelectedMissingProduct(null);
             }}
             item={selectedItem}
+            missingProduct={selectedMissingProduct}
             onSubmit={handleFulfillItem}
             submitting={fulfillingItem}
           />

@@ -11,6 +11,7 @@ export default function DropshipItemsDisplay({
   title = "Dropship Items",
   dropshipId = null,
   onFulfillClick = null,
+  onFulfillMissingProductClick = null,
   fulfilledItemsCount = 0,
   remainingItemsCount = 0,
 }) {
@@ -18,10 +19,17 @@ export default function DropshipItemsDisplay({
 
   if (!items || items.length === 0) return null;
 
-  const handleRowClick = (item) => {
-    // Only allow clicking unfulfilled items
-    if (item.fulfillmentStatus === "Unfulfilled" && onFulfillClick) {
-      onFulfillClick(item);
+  // const handleRowClick = (item) => {
+  //   // Only allow clicking unfulfilled items that can be fulfilled
+  //   if (item.fulfillmentStatus === "Unfulfilled" && item.canFulfillMainProduct && onFulfillClick) {
+  //     onFulfillClick(item);
+  //   }
+  // };
+
+  const handleMissingProductClick = (item, missingProduct, e) => {
+    e.stopPropagation();
+    if (missingProduct.fulfillmentStatus === "Unfulfilled" && onFulfillMissingProductClick) {
+      onFulfillMissingProductClick(item, missingProduct);
     }
   };
 
@@ -48,6 +56,24 @@ export default function DropshipItemsDisplay({
           packingId: packingId,
         },
       });
+    }
+  };
+
+  // Helper function to check if main product can be fulfilled
+  const canFulfillMainProduct = (item) => {
+    if (item.fulfillmentStatus === "Fulfilled") return false;
+
+    const missingProducts = item.missingProducts || [];
+    if (missingProducts.length === 0) return true;
+
+    // Check if all missing products are fulfilled
+    return missingProducts.every(mp => mp.fulfillmentStatus === "Fulfilled");
+  };
+
+  const handleRowClick = (item) => {
+    // Only allow clicking unfulfilled items that can be fulfilled
+    if (item.fulfillmentStatus === "Unfulfilled" && canFulfillMainProduct(item) && onFulfillClick) {
+      onFulfillClick(item);
     }
   };
 
@@ -121,10 +147,10 @@ export default function DropshipItemsDisplay({
               const hasMissingProducts = item.hasMissingProducts || (item.missingProductsCount > 0);
               const missingProducts = item.missingProducts || [];
               const isExpanded = expandedRows.has(item.id);
-              
+
               return (
                 <>
-                <tr
+                  <tr
                     key={item.id || index}
                     onClick={() => handleRowClick(item)}
                     className={`
@@ -134,161 +160,203 @@ export default function DropshipItemsDisplay({
                       ${isUnfulfilled ? "cursor-pointer" : ""}
                     `}
                   >
-                  <td className={`px-4 py-4 whitespace-nowrap ${hasMissingProducts ? "border-l-4 border-l-amber-400" : ""}`}>
-                    {isFulfilled ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        <CheckCircle className="w-3 h-3" />
-                        Fulfilled
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-                        <XCircle className="w-3 h-3" />
-                        Unfulfilled
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="flex items-center gap-3">
-                      {item.image && (
-                        <div className="w-12 h-12 bg-gray-100 rounded border border-gray-200 flex items-center justify-center shrink-0">
-                          <img
-                            src={item.image}
-                            alt={item.name}
-                            className="w-full h-full object-cover rounded"
-                          />
-                        </div>
-                      )}
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium text-gray-900">{item.name || "N/A"}</p>
-                          {hasMissingProducts && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-                              <AlertTriangle className="w-3 h-3" />
-                              {item.missingProductsCount || missingProducts.length}
-                            </span>
-                          )}
-                        </div>
-                        {item.variant && <p className="text-xs text-gray-500">{item.variant}</p>}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <p className="text-sm text-gray-900">{item.sku || "N/A"}</p>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <p className="text-sm font-medium text-gray-900">{item.quantity || 0}</p>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <p className="text-sm text-gray-900">
-                      {currency} {item.price?.toFixed(2) || "0.00"}
-                    </p>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <p className="text-sm font-semibold text-gray-900">
-                      {currency} {item.total?.toFixed(2) || "0.00"}
-                    </p>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center gap-2">
-                      {hasMissingProducts && (
-                        <button
-                          onClick={(e) => toggleRowExpansion(item.id, e)}
-                          className="p-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded transition-colors"
-                          title={isExpanded ? "Hide missing products" : "Show missing products"}
-                        >
-                          {isExpanded ? (
-                            <ChevronUp className="w-4 h-4" />
-                          ) : (
-                            <ChevronDown className="w-4 h-4" />
-                          )}
-                        </button>
-                      )}
+                    <td className={`px-4 py-4 whitespace-nowrap ${hasMissingProducts ? "border-l-4 border-l-amber-400" : ""}`}>
                       {isFulfilled ? (
-                        <div className="space-y-1">
-                          {item.packingId && (
-                            <Button
-                              type="link"
-                              size="small"
-                              icon={<ExternalLink className="w-3 h-3" />}
-                              onClick={(e) => handlePackingOrderClick(item.packingId, e)}
-                              className="p-0 h-auto text-blue-600 hover:text-blue-700"
-                            >
-                              View Packing
-                            </Button>
-                          )}
-                          {item.trackingLink && (
-                            <a
-                              href={item.trackingLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-blue-600 hover:text-blue-700 block"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              Track
-                            </a>
-                          )}
-                        </div>
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          <CheckCircle className="w-3 h-3" />
+                          Fulfilled
+                        </span>
                       ) : (
-                        <Button
-                          type="primary"
-                          size="small"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRowClick(item);
-                          }}
-                          disabled={!isUnfulfilled}
-                        >
-                          Fulfill
-                        </Button>
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                          <XCircle className="w-3 h-3" />
+                          Unfulfilled
+                        </span>
                       )}
-                    </div>
-                  </td>
-                </tr>
-                {isExpanded && hasMissingProducts && missingProducts.length > 0 && (
-                  <tr key={`${item.id}-expanded`} className="bg-amber-50/30">
-                    <td colSpan={7} className={`px-4 py-4 ${hasMissingProducts ? "border-l-4 border-l-amber-400" : ""}`}>
-                      <div className="space-y-3">
-                        <h5 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                          <AlertTriangle className="w-4 h-4 text-amber-600" />
-                          Missing Products ({missingProducts.length})
-                        </h5>
-                        <div className="space-y-2">
-                          {missingProducts.map((missingProduct) => (
-                            <div
-                              key={missingProduct.missingProductId}
-                              className="flex items-start justify-between bg-white border border-amber-200 rounded-lg p-3"
-                            >
-                              <div className="flex-1">
-                                <p className="text-sm font-medium text-gray-900">
-                                  {missingProduct.productName}
-                                </p>
-                                {missingProduct.notes && (
-                                  <p className="text-xs text-gray-500 mt-1">{missingProduct.notes}</p>
-                                )}
-                                <div className="flex flex-wrap items-center gap-3 text-xs text-gray-400 mt-2">
-                                  {missingProduct.addedBy && (
-                                    <div className="flex items-center gap-1">
-                                      <User className="w-3 h-3" />
-                                      <span>
-                                        {missingProduct.addedBy.name || missingProduct.addedBy.email || "Unknown"}
-                                      </span>
-                                    </div>
-                                  )}
-                                  {missingProduct.addedAt && (
-                                    <div className="flex items-center gap-1">
-                                      <Clock className="w-3 h-3" />
-                                      <span>{dayjs(missingProduct.addedAt).format("MMM DD, YYYY HH:mm")}</span>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-3">
+                        {item.image && (
+                          <div className="w-12 h-12 bg-gray-100 rounded border border-gray-200 flex items-center justify-center shrink-0">
+                            <img
+                              src={item.image}
+                              alt={item.name}
+                              className="w-full h-full object-cover rounded"
+                            />
+                          </div>
+                        )}
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium text-gray-900">{item.name || "N/A"}</p>
+                            {hasMissingProducts && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                                <AlertTriangle className="w-3 h-3" />
+                                {item.missingProductsCount || missingProducts.length}
+                              </span>
+                            )}
+                          </div>
+                          {item.variant && <p className="text-xs text-gray-500">{item.variant}</p>}
                         </div>
                       </div>
                     </td>
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <p className="text-sm text-gray-900">{item.sku || "N/A"}</p>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <p className="text-sm font-medium text-gray-900">{item.quantity || 0}</p>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <p className="text-sm text-gray-900">
+                        {currency} {item.price?.toFixed(2) || "0.00"}
+                      </p>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <p className="text-sm font-semibold text-gray-900">
+                        {currency} {item.total?.toFixed(2) || "0.00"}
+                      </p>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-2">
+                        {hasMissingProducts && (
+                          <button
+                            onClick={(e) => toggleRowExpansion(item.id, e)}
+                            className="p-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded transition-colors"
+                            title={isExpanded ? "Hide missing products" : "Show missing products"}
+                          >
+                            {isExpanded ? (
+                              <ChevronUp className="w-4 h-4" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4" />
+                            )}
+                          </button>
+                        )}
+                        {isFulfilled ? (
+                          <div className="space-y-1">
+                            {item.packingId && (
+                              <Button
+                                type="link"
+                                size="small"
+                                icon={<ExternalLink className="w-3 h-3" />}
+                                onClick={(e) => handlePackingOrderClick(item.packingId, e)}
+                                className="p-0 h-auto text-blue-600 hover:text-blue-700"
+                              >
+                                View Packing
+                              </Button>
+                            )}
+                            {item.trackingLink && (
+                              <a
+                                href={item.trackingLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-blue-600 hover:text-blue-700 block"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                Track
+                              </a>
+                            )}
+                          </div>
+                        ) : (
+                          <>
+                            {canFulfillMainProduct(item) ? (
+                              <Button
+                                type="primary"
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRowClick(item);
+                                }}
+                                disabled={!isUnfulfilled}
+                              >
+                                Fulfill
+                              </Button>
+                            ) : (
+                              <span className="text-xs text-gray-500 italic">
+                                Missing first
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </td>
                   </tr>
-                )}
+                  {isExpanded && hasMissingProducts && missingProducts.length > 0 && (
+                    <tr key={`${item.id}-expanded`} className="bg-amber-50/30">
+                      <td colSpan={7} className={`px-4 py-4 ${hasMissingProducts ? "border-l-4 border-l-amber-400" : ""}`}>
+                        <div className="space-y-3">
+                          <h5 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                            <AlertTriangle className="w-4 h-4 text-amber-600" />
+                            Missing Products ({missingProducts.length})
+                          </h5>
+                          <div className="space-y-2">
+                            {missingProducts.map((missingProduct) => {
+                              const isFulfilled = missingProduct.fulfillmentStatus === "Fulfilled";
+                              return (
+                                <div
+                                  key={missingProduct.missingProductId}
+                                  className={`flex items-start justify-between bg-white border rounded-lg p-3 ${isFulfilled ? "border-green-200 bg-green-50/30" : "border-amber-200"
+                                    }`}
+                                >
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <p className="text-sm font-medium text-gray-900">
+                                        {missingProduct.productName}
+                                      </p>
+                                      {isFulfilled && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                          <CheckCircle className="w-3 h-3" />
+                                          Fulfilled
+                                        </span>
+                                      )}
+                                    </div>
+                                    {missingProduct.notes && (
+                                      <p className="text-xs text-gray-500 mt-1">{missingProduct.notes}</p>
+                                    )}
+                                    {isFulfilled && missingProduct.packingOrderNumber && (
+                                      <p className="text-xs text-green-600 mt-1">
+                                        Packing Order: {missingProduct.packingOrderNumber}
+                                      </p>
+                                    )}
+                                    {isFulfilled && missingProduct.fulfilledAt && (
+                                      <p className="text-xs text-gray-400 mt-1">
+                                        Fulfilled: {dayjs(missingProduct.fulfilledAt).format("MMM DD, YYYY HH:mm")}
+                                      </p>
+                                    )}
+                                    {!isFulfilled && (
+                                      <div className="flex flex-wrap items-center gap-3 text-xs text-gray-400 mt-2">
+                                        {missingProduct.addedBy && (
+                                          <div className="flex items-center gap-1">
+                                            <User className="w-3 h-3" />
+                                            <span>
+                                              {missingProduct.addedBy.name || missingProduct.addedBy.email || "Unknown"}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {missingProduct.addedAt && (
+                                          <div className="flex items-center gap-1">
+                                            <Clock className="w-3 h-3" />
+                                            <span>{dayjs(missingProduct.addedAt).format("MMM DD, YYYY HH:mm")}</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                  {!isFulfilled && onFulfillMissingProductClick && (
+                                    <Button
+                                      type="primary"
+                                      size="small"
+                                      onClick={(e) => handleMissingProductClick(item, missingProduct, e)}
+                                      className="ml-2"
+                                    >
+                                      Fulfill
+                                    </Button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                 </>
               );
             })}
@@ -304,7 +372,7 @@ export default function DropshipItemsDisplay({
           const hasMissingProducts = item.hasMissingProducts || (item.missingProductsCount > 0);
           const missingProducts = item.missingProducts || [];
           const isExpanded = expandedRows.has(item.id);
-          
+
           return (
             <motion.div
               key={item.id || index}
@@ -312,15 +380,14 @@ export default function DropshipItemsDisplay({
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.05 }}
               onClick={() => handleRowClick(item)}
-              className={`rounded-lg border-2 p-4 shadow-sm ${
-                hasMissingProducts
-                  ? "bg-amber-50/50 border-amber-400 border-l-4"
-                  : isFulfilled
+              className={`rounded-lg border-2 p-4 shadow-sm ${hasMissingProducts
+                ? "bg-amber-50/50 border-amber-400 border-l-4"
+                : isFulfilled
                   ? "bg-green-50/30 border-green-300"
                   : isUnfulfilled
-                  ? "bg-white border-gray-200 cursor-pointer hover:border-blue-300"
-                  : "bg-white border-gray-200"
-              }`}
+                    ? "bg-white border-gray-200 cursor-pointer hover:border-blue-300"
+                    : "bg-white border-gray-200"
+                }`}
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex sm:flex-row flex-col items-start gap-3 flex-1">
@@ -434,10 +501,10 @@ export default function DropshipItemsDisplay({
                 </div>
               </div>
 
-             
+
 
               {/* Fulfill Button for Unfulfilled Items */}
-              {isUnfulfilled && (
+              {isUnfulfilled && canFulfillMainProduct(item) && (
                 <div className="mt-3 pt-3 border-t border-gray-100">
                   <Button
                     type="primary"
@@ -452,8 +519,15 @@ export default function DropshipItemsDisplay({
                   </Button>
                 </div>
               )}
-               {/* Missing Products Toggle Button - Show above fulfill button if item has missing products */}
-               {hasMissingProducts && (
+              {isUnfulfilled && !canFulfillMainProduct(item) && hasMissingProducts && (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <p className="text-xs text-amber-600 text-center italic">
+                    Missing first
+                  </p>
+                </div>
+              )}
+              {/* Missing Products Toggle Button - Show above fulfill button if item has missing products */}
+              {hasMissingProducts && (
                 <div className="mt-3 pt-3 border-t border-gray-200">
                   <button
                     onClick={(e) => {
@@ -494,37 +568,66 @@ export default function DropshipItemsDisplay({
                       Missing Products ({missingProducts.length})
                     </h5>
                     <div className="space-y-2">
-                      {missingProducts.map((missingProduct) => (
-                        <div
-                          key={missingProduct.missingProductId}
-                          className="flex items-start justify-between bg-white border border-amber-200 rounded-lg p-2"
-                        >
-                          <div className="flex-1">
-                            <p className="text-xs font-medium text-gray-900">
-                              {missingProduct.productName}
-                            </p>
-                            {missingProduct.notes && (
-                              <p className="text-xs text-gray-500 mt-1">{missingProduct.notes}</p>
-                            )}
-                            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400 mt-1">
-                              {missingProduct.addedBy && (
-                                <div className="flex items-center gap-1">
-                                  <User className="w-3 h-3" />
-                                  <span>
-                                    {missingProduct.addedBy.name || missingProduct.addedBy.email || "Unknown"}
+                      {missingProducts.map((missingProduct) => {
+                        const isFulfilled = missingProduct.fulfillmentStatus === "Fulfilled";
+                        return (
+                          <div
+                            key={missingProduct.missingProductId}
+                            className={`flex items-start justify-between bg-white border rounded-lg p-2 ${isFulfilled ? "border-green-200 bg-green-50/30" : "border-amber-200"
+                              }`}
+                          >
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <p className="text-xs font-medium text-gray-900">
+                                  {missingProduct.productName}
+                                </p>
+                                {isFulfilled && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    <CheckCircle className="w-3 h-3" />
+                                    Fulfilled
                                   </span>
-                                </div>
+                                )}
+                              </div>
+                              {missingProduct.notes && (
+                                <p className="text-xs text-gray-500 mt-1">{missingProduct.notes}</p>
                               )}
-                              {missingProduct.addedAt && (
-                                <div className="flex items-center gap-1">
-                                  <Clock className="w-3 h-3" />
-                                  <span>{dayjs(missingProduct.addedAt).format("MMM DD, YYYY HH:mm")}</span>
+                              {isFulfilled && missingProduct.packingOrderNumber && (
+                                <p className="text-xs text-green-600 mt-1">
+                                  PO: {missingProduct.packingOrderNumber}
+                                </p>
+                              )}
+                              {!isFulfilled && (
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400 mt-1">
+                                  {missingProduct.addedBy && (
+                                    <div className="flex items-center gap-1">
+                                      <User className="w-3 h-3" />
+                                      <span>
+                                        {missingProduct.addedBy.name || missingProduct.addedBy.email || "Unknown"}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {missingProduct.addedAt && (
+                                    <div className="flex items-center gap-1">
+                                      <Clock className="w-3 h-3" />
+                                      <span>{dayjs(missingProduct.addedAt).format("MMM DD, YYYY HH:mm")}</span>
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>
+                            {!isFulfilled && onFulfillMissingProductClick && (
+                              <Button
+                                type="primary"
+                                size="small"
+                                onClick={(e) => handleMissingProductClick(item, missingProduct, e)}
+                                className="ml-2"
+                              >
+                                Fulfill
+                              </Button>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </motion.div>
                 )}
