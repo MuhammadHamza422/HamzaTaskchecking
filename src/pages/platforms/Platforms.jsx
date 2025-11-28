@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Edit, Eye, X, Calendar, Hash, Tag } from "lucide-react";
+import { Plus, Edit, Eye, X, Calendar, Hash, Tag, Trash2 } from "lucide-react";
 import apiClient from "../../api/client";
 import Swal from "sweetalert2";
 import { Spin } from "antd";
@@ -14,6 +14,8 @@ export default function PlatformsPage() {
   const [selectedPlatform, setSelectedPlatform] = useState(null);
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [deleting, setDeleting] = useState(false);
   const [formData, setFormData] = useState({
     plt_id: "",
     plt_name: "",
@@ -196,6 +198,144 @@ export default function PlatformsPage() {
     });
   };
 
+  // Handle checkbox selection
+  const handleSelectPlatform = (platformId) => {
+    setSelectedIds((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(platformId)) {
+        newSet.delete(platformId);
+      } else {
+        newSet.add(platformId);
+      }
+      return newSet;
+    });
+  };
+
+  // Handle select all
+  const handleSelectAll = (checked) => {
+    if (checked) {
+      setSelectedIds(new Set(platforms.map((p) => p._id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  // Handle bulk delete
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) {
+      Swal.fire({
+        icon: "warning",
+        title: "No Selection",
+        text: "Please select at least one platform to delete",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+        background: "#f59e0b",
+        color: "#fff",
+        customClass: {
+          popup: "rounded-lg",
+        },
+      });
+      return;
+    }
+
+    const result = await Swal.fire({
+      title: "Delete Platforms",
+      html: `Are you sure you want to delete <strong>${selectedIds.size}</strong> platform${selectedIds.size !== 1 ? "s" : ""}?<br/>This action cannot be undone.`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#ef4444",
+      cancelButtonColor: "#6b7280",
+      confirmButtonText: "Yes, Delete",
+      cancelButtonText: "Cancel",
+      reverseButtons: true,
+      customClass: {
+        popup: "rounded-lg",
+        confirmButton: "rounded-md",
+        cancelButton: "rounded-md",
+      },
+    });
+
+    if (!result.isConfirmed) {
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      const idsArray = Array.from(selectedIds);
+      const results = await Promise.allSettled(
+        idsArray.map((id) =>
+          apiClient.delete(`/api/v1/plateforms/delete/${id}`)
+        )
+      );
+
+      const successCount = results.filter(
+        (r) => r.status === "fulfilled" && r.value.data.success
+      ).length;
+      const failedCount = results.length - successCount;
+
+      if (successCount > 0) {
+        setSelectedIds(new Set());
+        await fetchPlatforms();
+
+        Swal.fire({
+          icon: "success",
+          title: "Bulk Delete Successful!",
+          text: `Successfully deleted ${successCount} platform${successCount !== 1 ? "s" : ""}${failedCount > 0 ? ` (${failedCount} failed)` : ""}`,
+          toast: true,
+          position: "top-end",
+          showConfirmButton: false,
+          timer: 3000,
+          timerProgressBar: true,
+          background: "#10b981",
+          color: "#fff",
+          customClass: {
+            popup: "rounded-lg",
+          },
+        });
+      }
+
+      if (failedCount > 0) {
+        Swal.fire({
+          icon: "warning",
+          title: "Some Deletions Failed",
+          text: `${failedCount} platform${failedCount !== 1 ? "s" : ""} could not be deleted`,
+          toast: true,
+          position: "top-end",
+          showConfirmButton: false,
+          timer: 4000,
+          timerProgressBar: true,
+          background: "#f59e0b",
+          color: "#fff",
+          customClass: {
+            popup: "rounded-lg",
+          },
+        });
+      }
+    } catch (error) {
+      console.error("Error deleting platforms:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Bulk Delete Failed",
+        text: error.response?.data?.message || error.message || "Failed to delete selected platforms",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 4000,
+        timerProgressBar: true,
+        background: "#ef4444",
+        color: "#fff",
+        customClass: {
+          popup: "rounded-lg",
+        },
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen">
       <div className="relative z-10 max-w-7xl mx-auto">
@@ -214,15 +354,38 @@ export default function PlatformsPage() {
                 Manage your e-commerce platforms and integrations
               </p>
             </div>
-            <motion.button
-              onClick={() => openModal("add")}
-              className="flex items-center gap-2 px-4 sm:px-6 py-3 bg-blue-500 text-white font-semibold rounded-xl transition-all duration-300 shadow-lg hover:shadow-blue-300/25 transform hover:scale-105 w-full sm:w-auto justify-center"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <Plus className="w-5 h-5" />
-              Add Platform
-            </motion.button>
+            <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+              {selectedIds.size > 0 && (
+                <motion.button
+                  onClick={handleBulkDelete}
+                  disabled={deleting}
+                  className="flex items-center gap-2 px-4 sm:px-6 py-3 bg-red-500 text-white font-semibold rounded-xl transition-all duration-300 shadow-lg hover:shadow-red-300/25 transform hover:scale-105 w-full sm:w-auto justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                  whileHover={{ scale: deleting ? 1 : 1.05 }}
+                  whileTap={{ scale: deleting ? 1 : 0.95 }}
+                >
+                  {deleting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-5 h-5" />
+                      Delete Selected ({selectedIds.size})
+                    </>
+                  )}
+                </motion.button>
+              )}
+              <motion.button
+                onClick={() => openModal("add")}
+                className="flex items-center gap-2 px-4 sm:px-6 py-3 bg-blue-500 text-white font-semibold rounded-xl transition-all duration-300 shadow-lg hover:shadow-blue-300/25 transform hover:scale-105 w-full sm:w-auto justify-center"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <Plus className="w-5 h-5" />
+                Add Platform
+              </motion.button>
+            </div>
           </div>
         </motion.div>
 
@@ -239,13 +402,25 @@ export default function PlatformsPage() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
-                className="border border-blue-300/20 rounded-2xl p-6 shadow-lg"
+                className={`border rounded-2xl p-6 shadow-lg ${
+                  selectedIds.has(platform._id)
+                    ? "border-blue-500 bg-blue-50/30"
+                    : "border-blue-300/20"
+                }`}
               >
                 {/* Card Header */}
                 <div className="flex justify-between items-start mb-4">
-                  <p className="text-black font-mono text-lg font-semibold">
-                    #{platform.plt_id}
-                  </p>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(platform._id)}
+                      onChange={() => handleSelectPlatform(platform._id)}
+                      className="w-5 h-5 text-blue-500 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                    />
+                    <p className="text-black font-mono text-lg font-semibold">
+                      #{platform.plt_id}
+                    </p>
+                  </div>
                   <div className="flex gap-2">
                     <button
                       onClick={() => openModal("edit", platform)}
@@ -306,6 +481,17 @@ export default function PlatformsPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b text-black">
+                  <th className="text-left p-6 font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={
+                        platforms.length > 0 &&
+                        selectedIds.size === platforms.length
+                      }
+                      onChange={(e) => handleSelectAll(e.target.checked)}
+                      className="w-5 h-5 text-blue-500 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                    />
+                  </th>
                   <th className="text-left p-6 font-semibold">ID</th>
                   <th className="text-left p-6 font-semibold">Platform Name</th>
                   <th className="text-left p-6 font-semibold">Prefix</th>
@@ -318,7 +504,7 @@ export default function PlatformsPage() {
               <tbody>
                 {fetching ? (
                   <tr>
-                    <td colSpan={7} className="p-32 text-center">
+                    <td colSpan={8} className="p-32 text-center">
                       <Spin size="large" />
                     </td>
                   </tr>
@@ -329,8 +515,18 @@ export default function PlatformsPage() {
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: index * 0.05 }}
-                      className="border-b border-yellow-300/10 transition-colors duration-200"
+                      className={`border-b border-yellow-300/10 transition-colors duration-200 ${
+                        selectedIds.has(platform._id) ? "bg-blue-50/30" : ""
+                      }`}
                     >
+                      <td className="p-6">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(platform._id)}
+                          onChange={() => handleSelectPlatform(platform._id)}
+                          className="w-5 h-5 text-blue-500 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                        />
+                      </td>
                       <td className="p-6">
                         <div className="flex items-center gap-2">
                           <Hash className="w-4 h-4 text-black" />
@@ -381,7 +577,7 @@ export default function PlatformsPage() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={7} className="p-10 text-center text-black">
+                    <td colSpan={8} className="p-10 text-center text-black">
                       No platforms found
                     </td>
                   </tr>
