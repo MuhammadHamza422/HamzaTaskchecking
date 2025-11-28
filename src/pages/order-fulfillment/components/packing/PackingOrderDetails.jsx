@@ -62,7 +62,7 @@ export default function PackingOrderDetails() {
   // Get storage key based on orderId
   const getStorageKey = () => {
     if (isViewMode) return null; // Don't use storage in view mode
-    
+
     const orderIdFromParams = orderId;
     const orderIdFromState = location.state?.orderId || location.state?.searchData?.orderId;
     const platform = location.state?.platform;
@@ -97,7 +97,7 @@ export default function PackingOrderDetails() {
   // Load persisted data from localStorage on mount
   useEffect(() => {
     if (isViewMode) return; // Don't load persisted data in view mode
-    
+
     const storageKey = getStorageKey();
     if (!storageKey) return;
 
@@ -105,22 +105,22 @@ export default function PackingOrderDetails() {
       const persisted = localStorage.getItem(storageKey);
       if (persisted) {
         const data = JSON.parse(persisted);
-        
+
         // Restore stage
         if (data.stage) {
           setStage(data.stage);
         }
-        
+
         // Restore selected items
         if (data.selectedItems && Array.isArray(data.selectedItems)) {
           setSelectedItems(data.selectedItems);
         }
-        
+
         // Restore missing products
         if (data.missingProducts && Array.isArray(data.missingProducts)) {
           setMissingProducts(data.missingProducts);
         }
-        
+
         // Restore photos (convert base64 back to File objects)
         if (data.photos && Array.isArray(data.photos) && data.photos.length > 0) {
           Promise.all(
@@ -153,7 +153,7 @@ export default function PackingOrderDetails() {
   useEffect(() => {
     if (isViewMode) return; // Don't save in view mode
     if (!orderData) return; // Don't save until order data is loaded
-    
+
     const storageKey = getStorageKey();
     if (!storageKey) return;
 
@@ -198,7 +198,7 @@ export default function PackingOrderDetails() {
   const clearPersistedData = () => {
     const storageKey = getStorageKey();
     if (!storageKey) return;
-    
+
     try {
       localStorage.removeItem(storageKey);
     } catch (error) {
@@ -241,7 +241,7 @@ export default function PackingOrderDetails() {
           const packingInfoFromSearch = location.state?.packingInfo;
 
           let orderIdToUse;
-          
+
           // Use platform from location.state or fallback to orderData if available
           const platformToUse = platform || orderDataFromState?.platform || orderData?.platform;
 
@@ -305,7 +305,7 @@ export default function PackingOrderDetails() {
             // New optimized flow: searchData provided, load details in background
             // Start API call immediately (don't wait for state updates)
             const detailsPromise = getOrderDetails(orderIdToUse, platformToUse);
-            
+
             // Update UI state immediately to allow camera to open
             setStage(STAGES.PHOTO_UPLOAD);
             setLoading(false); // Don't block UI, allow camera to open immediately
@@ -375,7 +375,7 @@ export default function PackingOrderDetails() {
             if (autoOpenCamera) {
               // Start API call immediately (don't wait for state updates)
               const detailsPromise = getOrderDetails(orderIdToUse, platformToUse);
-              
+
               // Update UI state immediately to allow camera to open
               setStage(STAGES.PHOTO_UPLOAD);
               setLoading(false); // Don't block UI, allow camera to open immediately
@@ -509,13 +509,13 @@ export default function PackingOrderDetails() {
   const hasValidData = orderData || packingData;
   const isInSelectionStage = stage === STAGES.SELECTION;
   const isDataLoading = loading || isLoadingOrderDetails;
-  
+
   // Show loading state if data is still loading,
   // but allow camera to open immediately in auto-open camera mode
   if (isDataLoading && !hasValidData && !isAutoOpenCameraMode) {
     return <OrderDetailsSkeleton />;
   }
-  
+
   // Only show error/not found if we're sure data isn't loading and doesn't exist
   const shouldShowError = error && !isAutoOpenCameraMode && !(isInSelectionStage && hasValidData) && !isDataLoading;
   const shouldShowNotFound = !isDataLoading && !hasValidData && !isAutoOpenCameraMode;
@@ -550,31 +550,27 @@ export default function PackingOrderDetails() {
   const order = loading
     ? null
     : isViewMode
-    ? {
+      ? {
         orderNumber: packingData?.orderNumber || packingData?.orderId || "N/A",
         customerName: packingData?.customerName || "N/A",
         platform: packingData?.platform,
         shipTo: packingData?.shipTo
-          ? `${packingData.shipTo.address1}${
-              packingData.shipTo.address2
-                ? `, ${packingData.shipTo.address2}`
-                : ""
-            }, ${packingData.shipTo.city}, ${packingData.shipTo.state} ${
-              packingData.shipTo.zip
-            }, ${packingData.shipTo.country}`
+          ? `${packingData.shipTo.address1}${packingData.shipTo.address2
+            ? `, ${packingData.shipTo.address2}`
+            : ""
+          }, ${packingData.shipTo.city}, ${packingData.shipTo.state} ${packingData.shipTo.zip
+          }, ${packingData.shipTo.country}`
           : "N/A",
         totalValue: packingData?.totalValue || 0,
       }
-    : {
+      : {
         orderNumber: orderData?.orderNumber || orderData?.orderId || "N/A",
         customerName: orderData?.customerName || "N/A",
         platform: orderData?.platform,
         shipTo: orderData?.shipTo
-          ? `${orderData.shipTo.address1}${
-              orderData.shipTo.address2 ? `, ${orderData.shipTo.address2}` : ""
-            }, ${orderData.shipTo.city}, ${orderData.shipTo.state} ${
-              orderData.shipTo.zip
-            }, ${orderData.shipTo.country}`
+          ? `${orderData.shipTo.address1}${orderData.shipTo.address2 ? `, ${orderData.shipTo.address2}` : ""
+          }, ${orderData.shipTo.city}, ${orderData.shipTo.state} ${orderData.shipTo.zip
+          }, ${orderData.shipTo.country}`
           : "N/A",
         totalValue: orderData?.totalValue || 0,
       };
@@ -582,8 +578,8 @@ export default function PackingOrderDetails() {
   const orderLines = loading
     ? []
     : isViewMode
-    ? packingData?.orderLines || []
-    : orderData?.orderLines || [];
+      ? packingData?.orderLines || []
+      : orderData?.orderLines || [];
 
   const handleContinueToItems = async (force = false) => {
     // If force is true, proceed even if photos.length is 0 (photos were just saved but state hasn't updated yet)
@@ -594,7 +590,11 @@ export default function PackingOrderDetails() {
   };
 
   const handleCompletePacking = async () => {
-    if (photos.length < 1) {
+    const allItemsDeselected = selectedItems.length === 0;
+
+    // Photos are required only if items are selected
+    // If all items deselected, photos are optional (will create only dropship order)
+    if (!allItemsDeselected && photos.length < 1) {
       Swal.fire({
         icon: "warning",
         title: "Photos Required",
@@ -605,22 +605,14 @@ export default function PackingOrderDetails() {
       return;
     }
 
-    if (selectedItems.length === 0) {
-      Swal.fire({
-        icon: "warning",
-        title: "Items Required",
-        text: "Please select at least one item to pack.",
-        confirmButtonColor: "#2563eb",
-        confirmButtonText: "OK",
-      });
-      return;
-    }
+    // Allow all items deselected - will create only dropship order
+    // No validation needed for selectedItems.length === 0
 
     // Fix: Use orderData.platform as fallback for optimistic navigation
     // This ensures platform is available even when location.state.platform is null
     const searchData = location.state?.searchData;
     const platform = location.state?.platform || orderData?.platform;
-    
+
     // Validate platform exists before proceeding
     if (!platform) {
       Swal.fire({
@@ -647,7 +639,7 @@ export default function PackingOrderDetails() {
     const deselectedItems = allItemIds.filter(
       (id) => !selectedItemsNormalized.includes(String(id))
     );
-    
+
     // Transform deselectedItemsData to match API specification
     // Each item must have: id, name, quantity, price (required)
     // Optional: total, productId, sku, variant, image
@@ -656,7 +648,7 @@ export default function PackingOrderDetails() {
       .map((item) => {
         // Calculate total if not present
         const total = item.total ?? (item.quantity && item.price ? item.quantity * item.price : 0);
-        
+
         // Normalize variant: ensure it's an object or null, not a string
         let normalizedVariant = null;
         if (item.variant) {
@@ -667,7 +659,7 @@ export default function PackingOrderDetails() {
             normalizedVariant = null; // Backend expects object or null
           }
         }
-        
+
         return {
           id: String(item.id), // Required - must match deselectedItems ID
           name: item.name || "", // Required
@@ -680,7 +672,7 @@ export default function PackingOrderDetails() {
           image: item.image || null, // Optional (null if missing)
         };
       });
-    
+
     const photoFiles = photos.map((photo) => photo.file);
 
 
@@ -715,34 +707,49 @@ export default function PackingOrderDetails() {
       });
 
       if (result.success) {
-        const status = result.data.status;
-        const dropshipCreated = result.data.dropshipCreated; // Can be true, false, or undefined
-        const dropshipId = result.data.dropshipId; // Only present if dropshipCreated is true
+        const packingOrderId = result.data.packingOrderId || result.data.packingId;
+        const packingOrderNumber = result.data.packingOrderNumber;
+        const dropshipId = result.data.dropshipOrderId || result.data.dropshipId;
+        const dropshipOrderNumber = result.data.dropshipOrderNumber;
         const deselectedItemsCount = result.data.deselectedItemsCount || 0;
         const missingProductsCount = result.data.missingProductsCount || 0;
+        const allItemsDeselected = selectedItemsNormalized.length === 0;
 
-        let message = `Order ${orderNumber} has been packed successfully. Status: ${status}`;
-        
-        // Handle dropship creation status
-        if (deselectedItemsCount > 0) {
-          if (dropshipCreated === true && dropshipId) {
-            message += ` Dropship order ${dropshipId} created for ${deselectedItemsCount} deselected item(s).`;
-          } else if (dropshipCreated === false) {
-            message += ` ${deselectedItemsCount} item(s) were deselected but dropship creation failed.`;
-          } else {
-            // dropshipCreated is undefined (shouldn't happen if deselectedItemsCount > 0, but handle it)
-            message += ` ${deselectedItemsCount} item(s) were deselected.`;
+        let title, message;
+
+        if (allItemsDeselected) {
+          // All items deselected - only dropship order created
+          title = "Dropship Order Created";
+          message = `All items were deselected. Dropship order ${dropshipOrderNumber || dropshipId || "created"} has been created.`;
+          if (missingProductsCount > 0) {
+            message += ` ${missingProductsCount} missing product(s) recorded.`;
           }
-        }
-        
-        // Handle missing products count
-        if (missingProductsCount > 0) {
-          message += ` ${missingProductsCount} missing product(s) recorded.`;
+        } else {
+          // Normal packing order created
+          title = "Packing Complete!";
+          const status = result.data.status;
+          message = `Order ${orderNumber} has been packed successfully.`;
+          if (packingOrderNumber) {
+            message += ` Packing Order: ${packingOrderNumber}.`;
+          }
+          if (status) {
+            message += ` Status: ${status}.`;
+          }
+
+          // Handle dropship creation status
+          if (deselectedItemsCount > 0 && dropshipId) {
+            message += ` Dropship order ${dropshipOrderNumber || dropshipId} created for ${deselectedItemsCount} deselected item(s).`;
+          }
+
+          // Handle missing products count
+          if (missingProductsCount > 0) {
+            message += ` ${missingProductsCount} missing product(s) recorded.`;
+          }
         }
 
         await Swal.fire({
           icon: "success",
-          title: "Packing Complete!",
+          title: title,
           text: message,
           confirmButtonColor: "#2563eb",
           confirmButtonText: "OK",
@@ -750,9 +757,15 @@ export default function PackingOrderDetails() {
 
         // Clear persisted data after successful packing creation
         clearPersistedData();
-        
-        // Auto-redirect to landing page which will auto-open scanner for next order
-        navigate("/fulfillment/packing");
+
+        // Redirect based on what was created
+        if (allItemsDeselected && dropshipId) {
+          // All items deselected - only dropship order created, navigate to dropship management
+          navigate("/fulfillment/packing");
+        } else {
+          // Packing order created - navigate to packing landing page which will auto-open scanner for next order
+          navigate("/fulfillment/packing");
+        }
       }
     } catch (error) {
       console.error("Error creating packing:", error);
@@ -775,12 +788,15 @@ export default function PackingOrderDetails() {
 
   // Ensure orderData and platform are available before allowing packing creation
   // Also check that order details are not currently loading
-  const canCompletePacking = 
-    photos.length >= 1 && 
-    selectedItems.length > 0 && 
-    orderData && 
+  const allItemsDeselected = selectedItems.length === 0;
+  const hasRequiredPhotos = photos.length >= 1;
+  const platformAvailable = location.state?.platform || orderData?.platform;
+
+  const canCompletePacking =
+    orderData &&
     !isLoadingOrderDetails &&
-    (location.state?.platform || orderData?.platform);
+    platformAvailable &&
+    (allItemsDeselected || hasRequiredPhotos);
 
   const handleEditPacking = () => {
     if (!packingData) return;
@@ -932,14 +948,14 @@ export default function PackingOrderDetails() {
                         notes: notes || null,
                       };
                       setMissingProducts([...missingProducts, newMissingProduct]);
-                      
+
                       // Show success toast notification
                       message.success(`"${productName}" has been added. It will be saved when you create the packing order.`);
                     }}
                     onMissingProductDelete={(missingProductId) => {
                       const deletedProduct = missingProducts.find(mp => mp.id === missingProductId);
                       setMissingProducts(missingProducts.filter(mp => mp.id !== missingProductId));
-                      
+
                       // Show success toast notification
                       if (deletedProduct) {
                         message.success(`"${deletedProduct.productName}" has been removed.`);
@@ -1160,11 +1176,10 @@ export default function PackingOrderDetails() {
                   <motion.button
                     onClick={handleCompletePacking}
                     disabled={!canCompletePacking || submitting}
-                    className={`flex-1 px-4 md:px-6 py-3 md:py-3.5 rounded-xl font-semibold text-sm md:text-base transition-all duration-300 shadow-lg flex items-center justify-center gap-2 ${
-                      canCompletePacking && !submitting
-                        ? "bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800"
-                        : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                    }`}
+                    className={`flex-1 px-4 md:px-6 py-3 md:py-3.5 rounded-xl font-semibold text-sm md:text-base transition-all duration-300 shadow-lg flex items-center justify-center gap-2 ${canCompletePacking && !submitting
+                      ? "bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800"
+                      : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                      }`}
                     whileHover={
                       canCompletePacking && !submitting ? { scale: 1.01 } : {}
                     }

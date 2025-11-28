@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, X, ChevronDown, ChevronUp } from "lucide-react";
 import { Input, Button } from "antd";
@@ -19,15 +19,23 @@ export default function PackingOrderLines({
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [missingProductInputs, setMissingProductInputs] = useState({});
   const [addingMissingProduct, setAddingMissingProduct] = useState({});
+  const hasInitialized = useRef(false);
+  const prevOrderIdsRef = useRef("");
 
   useEffect(() => {
+    const currentOrderIds = orderLines.map((item) => item.id).join("|");
+    if (currentOrderIds !== prevOrderIdsRef.current) {
+      prevOrderIdsRef.current = currentOrderIds;
+      hasInitialized.current = false;
+    }
+
     if (initialSelectedItems.length > 0) {
       setSelectedItems(new Set(initialSelectedItems));
-    } else {
-      // Select all items by default
-      setSelectedItems(
-        new Set(orderLines.map((item) => item.id))
-      );
+      hasInitialized.current = true;
+    } else if (!hasInitialized.current && orderLines.length > 0) {
+      // Select all items by default only on first load of this order
+      setSelectedItems(new Set(orderLines.map((item) => item.id)));
+      hasInitialized.current = true;
     }
   }, [initialSelectedItems, orderLines]);
 
@@ -35,18 +43,21 @@ export default function PackingOrderLines({
     const newSelected = new Set(selectedItems);
     if (newSelected.has(itemId)) {
       // Trying to deselect an item
-      // Prevent if this is the last selected item
-      if (newSelected.size === 1) {
+      // Allow deselecting - will create dropship order for deselected items
+      newSelected.delete(itemId);
+      
+      // Clear missing products for this item if it's being deselected
+      const itemMissingProducts = getMissingProductsForItem(itemId);
+      if (itemMissingProducts.length > 0 && onMissingProductDelete) {
+        // Show warning that missing products will be removed
         Swal.fire({
-          icon: "warning",
-          title: "Cannot Deselect All Items",
-          text: "At least one item must be selected for packing. If you need to deselect all items, please cancel this packing operation.",
+          icon: "info",
+          title: "Missing Products Will Be Removed",
+          text: `This item has ${itemMissingProducts.length} missing product(s). Deselected items cannot have missing products.`,
           confirmButtonColor: "#2563eb",
           confirmButtonText: "OK",
         });
-        return; // Don't allow deselection
       }
-      newSelected.delete(itemId);
     } else {
       newSelected.add(itemId);
     }
@@ -65,15 +76,11 @@ export default function PackingOrderLines({
   };
 
   const handleDeselectAll = () => {
-    // Prevent deselecting all items
-    Swal.fire({
-      icon: "warning",
-      title: "Cannot Deselect All Items",
-      text: "At least one item must be selected for packing. If you need to deselect all items, please cancel this packing operation.",
-      confirmButtonColor: "#2563eb",
-      confirmButtonText: "OK",
-    });
-    return; // Don't allow deselection
+    const allDeselected = new Set();
+    setSelectedItems(allDeselected);
+    if (onSelectionChange) {
+      onSelectionChange(Array.from(allDeselected));
+    }
   };
 
   const allSelected = selectedItems.size === orderLines.length && orderLines.length > 0;
@@ -96,6 +103,13 @@ export default function PackingOrderLines({
       return;
     }
 
+    // Check if item is selected - missing products can only be added to selected items
+    const isSelected = selectedItems.has(lineItemId);
+    if (!isSelected) {
+      message.warning("Missing products can only be added to selected items. Deselected items cannot have missing products.");
+      return;
+    }
+
     setAddingMissingProduct(prev => ({ ...prev, [lineItemId]: true }));
     
     try {
@@ -108,6 +122,7 @@ export default function PackingOrderLines({
       }
     } catch (error) {
       console.error("Error adding missing product:", error);
+      message.error("Failed to add missing product. Please try again.");
     } finally {
       // Always reset input field after adding (or on error)
       setMissingProductInputs(prev => ({ ...prev, [lineItemId]: "" }));
@@ -155,22 +170,17 @@ export default function PackingOrderLines({
             <span className="text-gray-300">|</span>
             <button
               onClick={handleDeselectAll}
-              disabled={selectedItems.size <= 1}
-              className={`text-sm font-medium ${
-                selectedItems.size <= 1
-                  ? "text-gray-400 cursor-not-allowed"
-                  : "text-gray-600 hover:text-gray-700"
-              }`}
-              title={selectedItems.size <= 1 ? "At least one item must be selected" : "Clear All"}
+              className="text-sm font-medium text-gray-600 hover:text-gray-700"
+              title="Clear All"
             >
               Clear All
             </button>
           </div>
         </div>
         {hasNoSelection && (
-          <div className="bg-red-50 border-2 border-red-300 rounded-lg p-2 md:p-4">
-            <p className="text-xs sm:text-sm text-red-800 font-semibold">
-              ❌ Error: At least one item must be selected for packing. Please select at least one item to continue.
+          <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-2 md:p-4">
+            <p className="text-xs sm:text-sm text-amber-800 font-semibold">
+              ⚠️ All items are deselected. A dropship order will be created instead of a packing order. You can fulfill these items later from the dropship order.
             </p>
           </div>
         )}
@@ -272,25 +282,31 @@ export default function PackingOrderLines({
                   </td>
                   {onMissingProductAdd && (
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleRow(item.id);
-                        }}
-                        className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1"
-                      >
-                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                        <span>Missing Products</span>
-                        {itemHasMissingProducts && (
-                          <span className="ml-1 px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full text-xs">
-                            {itemMissingProducts.length}
-                          </span>
-                        )}
-                      </button>
+                      {isSelected ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleRow(item.id);
+                          }}
+                          className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1"
+                        >
+                          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                          <span>Missing Products</span>
+                          {itemHasMissingProducts && (
+                            <span className="ml-1 px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full text-xs">
+                              {itemMissingProducts.length}
+                            </span>
+                          )}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-gray-400">
+                          Select item
+                        </span>
+                      )}
                     </td>
                   )}
                 </tr>
-                {isExpanded && onMissingProductAdd && (
+                {isExpanded && onMissingProductAdd && isSelected && (
                   <tr key={`${item.id}-expanded`}>
                     <td colSpan={onMissingProductAdd ? 6 : 5} className={`px-6 py-4 bg-gray-50 ${itemHasMissingProducts ? "border-l-4 border-l-amber-400" : ""}`}>
                       <div className="space-y-4">
@@ -398,7 +414,7 @@ export default function PackingOrderLines({
                   <p className="text-xs sm:text-sm font-semibold text-blue-600">${item.price}</p>
                 </div>
               </div>
-              {onMissingProductAdd && (
+              {onMissingProductAdd && isSelected && (
                 <>
                   <div className="flex items-center justify-between pt-3 border-t border-gray-200">
                     <button
