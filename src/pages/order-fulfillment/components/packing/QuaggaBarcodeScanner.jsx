@@ -17,6 +17,7 @@ export default function QuaggaBarcodeScanner({
   const scanningActiveRef = useRef(false);
   const barcodeDetectorRef = useRef(null);
   const zxingReaderRef = useRef(null);
+  const isScannerActiveRef = useRef(true); // Track if scanner is still active/mounted
   
   const [isValidating, setIsValidating] = useState(false);
   const [scannedCode, setScannedCode] = useState("");
@@ -88,7 +89,6 @@ export default function QuaggaBarcodeScanner({
   // Properly release camera - stop all tracks
   const releaseCamera = async () => {
     try {
-      console.log("QuaggaBarcodeScanner: Starting camera release...");
       
       // Stop scanning loop
       scanningActiveRef.current = false;
@@ -97,7 +97,6 @@ export default function QuaggaBarcodeScanner({
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => {
           track.stop();
-          console.log("Stopped video track:", track.kind, track.label);
         });
         streamRef.current = null;
       }
@@ -110,7 +109,6 @@ export default function QuaggaBarcodeScanner({
       setIsCameraReady(false);
       setIsScanning(false);
       
-      console.log("Camera release completed");
     } catch (error) {
       console.error("Error releasing camera:", error);
     }
@@ -132,9 +130,7 @@ export default function QuaggaBarcodeScanner({
     setScannedCode(code);
 
     // Release camera IMMEDIATELY before validation
-    console.log("Releasing camera immediately before validation...");
     await releaseCamera();
-    console.log("Camera released, proceeding with validation...");
 
     // Call API immediately (camera is already released)
     const barcodeValue = String(code).trim();
@@ -172,8 +168,6 @@ export default function QuaggaBarcodeScanner({
           return;
         }
 
-        // Valid order found - camera is already released, proceed immediately
-        console.log("Validation successful, camera already released, proceeding to next step");
         
         setIsValidating(false);
         
@@ -207,8 +201,6 @@ export default function QuaggaBarcodeScanner({
         confirmButtonText: "OK",
       });
 
-      // Restart scanner for re-scan
-      console.log("Validation failed, restarting scanner...");
       try {
         await startCamera();
       } catch (err) {
@@ -305,19 +297,33 @@ export default function QuaggaBarcodeScanner({
         },
       });
 
+      // Check if scanner is still active after async camera init
+      if (!isScannerActiveRef.current) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+
       streamRef.current = stream;
       videoRef.current.srcObject = stream;
 
       videoRef.current.onloadedmetadata = () => {
-        if (videoRef.current) {
+        // Check again if scanner is still active
+        if (videoRef.current && isScannerActiveRef.current) {
           videoRef.current.play().then(() => {
-            setIsCameraReady(true);
-            startBarcodeScanning();
+            if (isScannerActiveRef.current) {
+              setIsCameraReady(true);
+              startBarcodeScanning();
+            }
           });
         }
       };
     } catch (error) {
       console.error("Error accessing camera:", error);
+      
+      // Only show error and close if scanner is still active
+      if (!isScannerActiveRef.current) {
+        return;
+      }
       
       let errorTitle = "Camera Error";
       let errorText = "Failed to access camera. Please check permissions.";
@@ -342,7 +348,10 @@ export default function QuaggaBarcodeScanner({
         confirmButtonColor: "#2563eb",
       });
 
-      if (onClose) onClose();
+      // Only call onClose if scanner is still active
+      if (isScannerActiveRef.current && onClose) {
+        onClose();
+      }
     }
   };
 
@@ -351,7 +360,6 @@ export default function QuaggaBarcodeScanner({
     try {
       // Check if BarcodeDetector is supported (mainly mobile browsers)
       if ('BarcodeDetector' in window) {
-        console.log("Using native BarcodeDetector API (mobile)");
         setScannerMethod('native');
         
         // Initialize BarcodeDetector with supported formats
@@ -421,7 +429,6 @@ export default function QuaggaBarcodeScanner({
         requestAnimationFrame(animationFrame);
       } else {
         // Fallback to ZXing for desktop browsers
-        console.log("BarcodeDetector not supported, using ZXing fallback (desktop)");
         setScannerMethod('zxing');
         
         // Initialize ZXing reader
@@ -493,10 +500,14 @@ export default function QuaggaBarcodeScanner({
 
   // Initialize camera on mount
   useEffect(() => {
+    // Mark scanner as active on mount
+    isScannerActiveRef.current = true;
     startCamera();
 
     // Cleanup on unmount
     return () => {
+      // Mark scanner as inactive immediately on unmount
+      isScannerActiveRef.current = false;
       scanningActiveRef.current = false;
       
       // Clean up ZXing reader
@@ -627,6 +638,9 @@ export default function QuaggaBarcodeScanner({
   }, []);
 
   const handleClose = async () => {
+    // Mark scanner as inactive immediately to prevent any pending operations
+    isScannerActiveRef.current = false;
+    
     // Clear all buffers and state
     detectionBufferRef.current = [];
     stableCodeRef.current = null;

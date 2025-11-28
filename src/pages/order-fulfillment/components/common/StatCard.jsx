@@ -2,7 +2,14 @@ import { motion } from "framer-motion";
 
 export default function StatCard({ icon: Icon, title, value, change, changeType, color, delay = 0 }) {
   const isPositive = changeType === "increase";
-  const changeColor = isPositive ? "text-green-600" : "text-red-600";
+  const isNegative = changeType === "decrease";
+  const isNeutral = changeType === "neutral";
+  
+  const changeColor = isPositive 
+    ? "text-green-600" 
+    : isNegative 
+    ? "text-red-600" 
+    : "text-gray-600";
 
   return (
     <motion.div
@@ -16,18 +23,21 @@ export default function StatCard({ icon: Icon, title, value, change, changeType,
         <div className={`p-3 rounded-lg ${color} bg-opacity-10`}>
           {Icon && <Icon className={`w-6 h-6 ${color}`} />}
         </div>
-        {change !== undefined && (
+        {change !== null && change !== undefined && !isNaN(change) && (
           <div className={`flex items-center gap-1 text-sm font-medium ${changeColor}`}>
-            <span>{isPositive ? "↑" : "↓"}</span>
-            <span>{Math.abs(change)}%</span>
+            {!isNeutral && <span>{isPositive ? "↑" : "↓"}</span>}
+            <span>{isNeutral ? "—" : `${Math.abs(change).toFixed(1)}%`}</span>
           </div>
         )}
       </div>
       <h3 className="text-sm font-medium text-gray-600 mb-2">{title}</h3>
       <p className={`text-3xl font-bold ${color}`}>{value}</p>
-      {change !== null && change !== undefined && (
+      {change !== null && change !== undefined && !isNaN(change) && (
         <p className="text-xs text-gray-500 mt-1">
-          {isPositive ? "Increase" : "Decrease"} from last period
+          {isNeutral 
+            ? "No change from last period" 
+            : `${isPositive ? "Increase" : "Decrease"} from previous period`
+          }
         </p>
       )}
     </motion.div>
