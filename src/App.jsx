@@ -364,7 +364,7 @@ function App() {
               }
             />
             <Route
-              path="fulfillment/shipping"
+              path="fulfillment/shipping/*"
               element={
                 <RequireRoles allow={["admin"]}>
                   <ShippingOperationsPage />

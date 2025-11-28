@@ -539,45 +539,8 @@ export default function DropshipDetails() {
               </div>
             </div>
 
-            <AuditLogsCard auditLogs={dropshipData.auditLogs} />
+            {/* <AuditLogsCard auditLogs={dropshipData.auditLogs} /> */}
 
-            {/* Packing Orders Section */}
-            {dropshipData.packingOrders && dropshipData.packingOrders.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-xl border-2 border-gray-200 shadow-lg p-6"
-              >
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <Package className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900">Linked Packing Orders</h3>
-                </div>
-                <div className="space-y-3">
-                  {dropshipData.packingOrders.map((packingOrder) => (
-                    <div
-                      key={packingOrder.packingId}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer"
-                      onClick={() => navigate(`/fulfillment/packing/${packingOrder.packingId}`)}
-                    >
-                      <div>
-                        <p className="text-sm font-semibold text-gray-900">
-                          {packingOrder.packingOrderNumber || packingOrder.packingId}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {packingOrder.itemsCount} item{packingOrder.itemsCount !== 1 ? "s" : ""} •{" "}
-                          {packingOrder.createdAt
-                            ? new Date(packingOrder.createdAt).toLocaleDateString()
-                            : "N/A"}
-                        </p>
-                      </div>
-                      <StatusBadge status={packingOrder.status} />
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
           </>
         ) : null}
 

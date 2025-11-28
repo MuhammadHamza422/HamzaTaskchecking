@@ -83,10 +83,10 @@ export default function RecentPackingTable({ data = [], loading = false }) {
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold text-gray-900 mb-1">
-              Recent Packing Operations
+              Fulfillment Operations
             </h3>
             <p className="text-sm text-gray-600">
-              Latest {data.length} packing operations
+              Latest {data.length} fulfillment operations
             </p>
           </div>
           <button

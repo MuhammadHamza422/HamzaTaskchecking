@@ -583,16 +583,22 @@ export async function createMarketplaceOrder(dropshipId, orderData) {
  * @param {string} itemId - Deselected item ID (line item ID)
  * @param {string} missingProductId - Missing product ID to fulfill
  * @param {Object} fulfillmentData - Fulfillment data
- * @param {string} fulfillmentData.marketplaceName - Marketplace name (optional)
+ * @param {string} fulfillmentData.fulfillmentType - Fulfillment type: "japan" | "marketplace" (required)
+ * @param {string} fulfillmentData.courierService - Courier service (required if fulfillmentType === "japan")
+ * @param {string} fulfillmentData.marketplaceName - Marketplace name (required if fulfillmentType === "marketplace")
  * @param {string} fulfillmentData.marketplaceOrderNumber - Marketplace order number (optional)
- * @param {string} fulfillmentData.trackingId - Tracking ID (optional)
- * @param {string} fulfillmentData.trackingLink - Tracking link URL (optional)
+ * @param {string} fulfillmentData.trackingId - Tracking ID (required)
+ * @param {string} fulfillmentData.trackingLink - Tracking link URL (required if fulfillmentType === "marketplace")
  * @param {string} fulfillmentData.notes - Notes (optional)
  * @returns {Promise<Object>} Fulfillment result with updated dropship order
  */
 export async function fulfillDropshipMissingProduct(dropshipId, itemId, missingProductId, fulfillmentData) {
   if (!dropshipId || !itemId || !missingProductId) {
     throw new Error("Dropship ID, item ID, and missing product ID are required");
+  }
+
+  if (!fulfillmentData.fulfillmentType) {
+    throw new Error("Fulfillment type is required");
   }
 
   try {
@@ -602,6 +608,8 @@ export async function fulfillDropshipMissingProduct(dropshipId, itemId, missingP
     const response = await apiClient.post(
       `/api/v1/fulfillment/dropship/${dropshipId}/items/${encodedItemId}/missing-products/${encodedMissingProductId}/fulfill`,
       {
+        fulfillmentType: fulfillmentData.fulfillmentType,
+        courierService: fulfillmentData.courierService?.trim() || null,
         marketplaceName: fulfillmentData.marketplaceName?.trim() || null,
         marketplaceOrderNumber: fulfillmentData.marketplaceOrderNumber?.trim() || null,
         trackingId: fulfillmentData.trackingId?.trim() || null,
@@ -658,11 +666,13 @@ export async function fulfillDropshipMissingProduct(dropshipId, itemId, missingP
  * @param {string} dropshipId - Dropship order ID
  * @param {string} lineItemId - Order line item ID (will be URL-encoded)
  * @param {Object} fulfillmentData - Fulfillment data
- * @param {string} fulfillmentData.marketplaceName - Marketplace name (required)
+ * @param {string} fulfillmentData.fulfillmentType - Fulfillment type: "japan" | "marketplace" (required)
+ * @param {string} fulfillmentData.courierService - Courier service (required if fulfillmentType === "japan")
+ * @param {string} fulfillmentData.marketplaceName - Marketplace name (required if fulfillmentType === "marketplace")
  * @param {string} fulfillmentData.marketplaceOrderNumber - Marketplace order number (optional)
  * @param {string} fulfillmentData.notes - Notes (optional)
  * @param {string} fulfillmentData.trackingId - Tracking ID (required)
- * @param {string} fulfillmentData.trackingLink - Tracking link URL (required)
+ * @param {string} fulfillmentData.trackingLink - Tracking link URL (required if fulfillmentType === "marketplace")
  * @returns {Promise<Object>} Fulfillment result with packing order details
  */
 export async function fulfillDropshipItem(dropshipId, lineItemId, fulfillmentData) {
@@ -670,8 +680,19 @@ export async function fulfillDropshipItem(dropshipId, lineItemId, fulfillmentDat
     throw new Error("Dropship ID and line item ID are required");
   }
 
-  if (!fulfillmentData.marketplaceName || !fulfillmentData.trackingId || !fulfillmentData.trackingLink) {
-    throw new Error("Marketplace name, tracking ID, and tracking link are required");
+  if (!fulfillmentData.fulfillmentType) {
+    throw new Error("Fulfillment type is required");
+  }
+
+  // Validation based on fulfillmentType
+  if (fulfillmentData.fulfillmentType === "japan") {
+    if (!fulfillmentData.trackingId || !fulfillmentData.courierService) {
+      throw new Error("Tracking ID and courier service are required for Japan fulfillment");
+    }
+  } else if (fulfillmentData.fulfillmentType === "marketplace") {
+    if (!fulfillmentData.marketplaceName || !fulfillmentData.trackingId || !fulfillmentData.trackingLink) {
+      throw new Error("Marketplace name, tracking ID, and tracking link are required for marketplace fulfillment");
+    }
   }
 
   try {
@@ -681,11 +702,13 @@ export async function fulfillDropshipItem(dropshipId, lineItemId, fulfillmentDat
     const response = await apiClient.post(
       `/api/v1/fulfillment/dropship/${dropshipId}/items/${encodedLineItemId}/fulfill`,
       {
-        marketplaceName: fulfillmentData.marketplaceName.trim(),
+        fulfillmentType: fulfillmentData.fulfillmentType,
+        courierService: fulfillmentData.courierService?.trim() || null,
+        marketplaceName: fulfillmentData.marketplaceName?.trim() || null,
         marketplaceOrderNumber: fulfillmentData.marketplaceOrderNumber?.trim() || null,
         notes: fulfillmentData.notes?.trim() || null,
-        trackingId: fulfillmentData.trackingId.trim(),
-        trackingLink: fulfillmentData.trackingLink.trim(),
+        trackingId: fulfillmentData.trackingId?.trim() || null,
+        trackingLink: fulfillmentData.trackingLink?.trim() || null,
       }
     );
 

@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
-import { PackageCheck, Package, TrendingUp, Clock, Loader2, Calendar, X, ShoppingCart, DollarSign, Store } from "lucide-react";
+import { PackageCheck, Package, TrendingUp, Clock, Loader2, Calendar, X, ShoppingCart, Store } from "lucide-react";
 import { DatePicker } from "antd";
 import { motion } from "framer-motion";
 import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
 import StatCard from "./components/common/StatCard";
 import QuickActionCard from "./components/common/QuickActionCard";
 import RecentPackingTable from "./components/packing/RecentPackingTable";
@@ -10,21 +12,50 @@ import FulfillmentBreadcrumb from "./components/common/FulfillmentBreadcrumb";
 import { getFulfillmentStats, getRecentPacking } from "../../api/fulfillment";
 import Swal from "sweetalert2";
 
+// Extend dayjs with timezone support
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
 const { RangePicker } = DatePicker;
+const US_EASTERN_TZ = "America/New_York";
+
+// Utility function to calculate percentage change
+const calculatePercentageChange = (current, previous) => {
+  if (previous === 0 && current === 0) return 0;
+  if (previous === 0 && current > 0) return 100;
+  if (previous === 0 && current < 0) return -100;
+  return ((current - previous) / previous) * 100;
+};
+
+// Utility function to determine change type
+const getChangeType = (changePercent) => {
+  if (changePercent > 0) return "increase";
+  if (changePercent < 0) return "decrease";
+  return "neutral";
+};
+
+// Get default date range (last 1 month in US Eastern)
+const getDefaultDateRange = () => {
+  const now = dayjs().tz(US_EASTERN_TZ);
+  const oneMonthAgo = now.subtract(1, "month").add(1, "day");
+  return [oneMonthAgo, now];
+};
 
 export default function FulfillmentDashboardPage() {
   const [stats, setStats] = useState(null);
   const [recentPacking, setRecentPacking] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [dateRange, setDateRange] = useState(null);
+  const [dateRange, setDateRange] = useState(getDefaultDateRange());
 
   const loadDashboardData = async () => {
     setLoading(true);
     try {
-      const params = {};
+      const params = { timezone: US_EASTERN_TZ };
+      
       if (dateRange && dateRange.length === 2) {
-        params.startDate = dateRange[0].startOf("day").toISOString();
-        params.endDate = dateRange[1].endOf("day").toISOString();
+        // Convert dates to US Eastern timezone boundaries and then to UTC
+        params.startDate = dateRange[0].tz(US_EASTERN_TZ).startOf("day").utc().toISOString();
+        params.endDate = dateRange[1].tz(US_EASTERN_TZ).endOf("day").utc().toISOString();
       }
 
       const [statsResult, recentPackingResult] = await Promise.all([
@@ -68,8 +99,35 @@ export default function FulfillmentDashboardPage() {
   };
 
   const clearDateRange = () => {
-    setDateRange(null);
+    setDateRange(getDefaultDateRange());
   };
+
+  // Date range presets for US Eastern timezone
+  const rangePresets = [
+    {
+      label: "Today",
+      value: [dayjs().tz(US_EASTERN_TZ).startOf("day"), dayjs().tz(US_EASTERN_TZ).endOf("day")],
+    },
+    {
+      label: "Last 7 Days",
+      value: [dayjs().tz(US_EASTERN_TZ).subtract(6, "day").startOf("day"), dayjs().tz(US_EASTERN_TZ).endOf("day")],
+    },
+    {
+      label: "This Week",
+      value: [dayjs().tz(US_EASTERN_TZ).startOf("week"), dayjs().tz(US_EASTERN_TZ).endOf("day")],
+    },
+    {
+      label: "This Month",
+      value: [dayjs().tz(US_EASTERN_TZ).startOf("month"), dayjs().tz(US_EASTERN_TZ).endOf("day")],
+    },
+    {
+      label: "Last Month",
+      value: [
+        dayjs().tz(US_EASTERN_TZ).subtract(1, "month").startOf("month"),
+        dayjs().tz(US_EASTERN_TZ).subtract(1, "month").endOf("month"),
+      ],
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
@@ -101,16 +159,16 @@ export default function FulfillmentDashboardPage() {
                 className="h-10"
                 placeholder={["Start Date", "End Date"]}
                 suffixIcon={<Calendar className="w-4 h-4 text-gray-400" />}
+                presets={rangePresets}
               />
-              {dateRange && (
-                <button
-                  onClick={clearDateRange}
-                  className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium"
-                >
-                  <X className="w-4 h-4" />
-                  Clear
-                </button>
-              )}
+              <button
+                onClick={clearDateRange}
+                className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium"
+                title="Reset to default (Last 1 Month)"
+              >
+                <X className="w-4 h-4" />
+                Reset
+              </button>
             </div>
           </div>
         </motion.div>
@@ -125,49 +183,81 @@ export default function FulfillmentDashboardPage() {
         ) : (
           <>
             {/* Main Statistics Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
               <StatCard
                 icon={Package}
-                title="Total Packed"
-                value={stats?.totalPackedOrders?.toLocaleString() || "0"}
-                change={null}
-                changeType="neutral"
+                title="Total Fulfilled"
+                value={stats?.totalPackedOrders?.current?.toLocaleString() || "0"}
+                change={
+                  stats?.totalPackedOrders
+                    ? calculatePercentageChange(
+                        stats.totalPackedOrders.current,
+                        stats.totalPackedOrders.previous
+                      )
+                    : null
+                }
+                changeType={
+                  stats?.totalPackedOrders
+                    ? getChangeType(
+                        calculatePercentageChange(
+                          stats.totalPackedOrders.current,
+                          stats.totalPackedOrders.previous
+                        )
+                      )
+                    : "neutral"
+                }
                 color="text-blue-600"
                 delay={0}
               />
               <StatCard
-                icon={Clock}
-                title="Today's Packed"
-                value={stats?.todayPackedOrders?.toLocaleString() || "0"}
-                change={null}
-                changeType="neutral"
-                color="text-green-600"
+                icon={ShoppingCart}
+                title="Total Dropship Orders"
+                value={stats?.totalDropshipOrders?.current?.toLocaleString() || "0"}
+                change={
+                  stats?.totalDropshipOrders
+                    ? calculatePercentageChange(
+                        stats.totalDropshipOrders.current,
+                        stats.totalDropshipOrders.previous
+                      )
+                    : null
+                }
+                changeType={
+                  stats?.totalDropshipOrders
+                    ? getChangeType(
+                        calculatePercentageChange(
+                          stats.totalDropshipOrders.current,
+                          stats.totalDropshipOrders.previous
+                        )
+                      )
+                    : "neutral"
+                }
+                color="text-purple-600"
                 delay={0.1}
               />
               <StatCard
-                icon={ShoppingCart}
-                title="Total Dropship Orders"
-                value={stats?.totalDropshipOrders?.toLocaleString() || "0"}
-                change={null}
-                changeType="neutral"
-                color="text-purple-600"
-                delay={0.2}
-              />
-              <StatCard
-                icon={DollarSign}
-                title="Total Order Value"
-                value={
-                  stats?.totalOrderValue
-                    ? `$${stats.totalOrderValue.toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}`
-                    : "$0.00"
+                icon={Clock}
+                title="Packed Today"
+                value={stats?.packedToday?.current?.toLocaleString() || "0"}
+                change={
+                  stats?.packedToday
+                    ? calculatePercentageChange(
+                        stats.packedToday.current,
+                        stats.packedToday.previous
+                      )
+                    : null
                 }
-                change={null}
-                changeType="neutral"
-                color="text-amber-600"
-                delay={0.3}
+                changeType={
+                  stats?.packedToday
+                    ? getChangeType(
+                        calculatePercentageChange(
+                          stats.packedToday.current,
+                          stats.packedToday.previous
+                        )
+                      )
+                    : "neutral"
+                }
+                color="text-green-600"
+                delay={0.2}
               />
             </div>
 
@@ -191,35 +281,83 @@ export default function FulfillmentDashboardPage() {
                   <StatCard
                     icon={Store}
                     title="Shopify Orders"
-                    value={stats.platformDistribution.shopify?.toLocaleString() || "0"}
-                    change={null}
-                    changeType="neutral"
+                    value={stats.platformDistribution.shopify?.current?.toLocaleString() || "0"}
+                    change={
+                      stats.platformDistribution.shopify
+                        ? calculatePercentageChange(
+                            stats.platformDistribution.shopify.current,
+                            stats.platformDistribution.shopify.previous
+                          )
+                        : null
+                    }
+                    changeType={
+                      stats.platformDistribution.shopify
+                        ? getChangeType(
+                            calculatePercentageChange(
+                              stats.platformDistribution.shopify.current,
+                              stats.platformDistribution.shopify.previous
+                            )
+                          )
+                        : "neutral"
+                    }
                     color="text-blue-600"
-                    delay={0.5}
+                    delay={0.3}
                   />
                   <StatCard
                     icon={Store}
                     title="Walmart Orders"
-                    value={stats.platformDistribution.walmart?.toLocaleString() || "0"}
-                    change={null}
-                    changeType="neutral"
+                    value={stats.platformDistribution.walmart?.current?.toLocaleString() || "0"}
+                    change={
+                      stats.platformDistribution.walmart
+                        ? calculatePercentageChange(
+                            stats.platformDistribution.walmart.current,
+                            stats.platformDistribution.walmart.previous
+                          )
+                        : null
+                    }
+                    changeType={
+                      stats.platformDistribution.walmart
+                        ? getChangeType(
+                            calculatePercentageChange(
+                              stats.platformDistribution.walmart.current,
+                              stats.platformDistribution.walmart.previous
+                            )
+                          )
+                        : "neutral"
+                    }
                     color="text-orange-600"
-                    delay={0.6}
+                    delay={0.4}
                   />
                   <StatCard
                     icon={Store}
                     title="WooCommerce Orders"
-                    value={stats.platformDistribution.woocommerce?.toLocaleString() || "0"}
-                    change={null}
-                    changeType="neutral"
+                    value={stats.platformDistribution.woocommerce?.current?.toLocaleString() || "0"}
+                    change={
+                      stats.platformDistribution.woocommerce
+                        ? calculatePercentageChange(
+                            stats.platformDistribution.woocommerce.current,
+                            stats.platformDistribution.woocommerce.previous
+                          )
+                        : null
+                    }
+                    changeType={
+                      stats.platformDistribution.woocommerce
+                        ? getChangeType(
+                            calculatePercentageChange(
+                              stats.platformDistribution.woocommerce.current,
+                              stats.platformDistribution.woocommerce.previous
+                            )
+                          )
+                        : "neutral"
+                    }
                     color="text-green-600"
-                    delay={0.7}
+                    delay={0.5}
                   />
                 </div>
               </>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            {/* <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
               <QuickActionCard
                 icon={PackageCheck}
                 title="Start Packing"
@@ -241,7 +379,7 @@ export default function FulfillmentDashboardPage() {
                 path="/fulfillment/dropship"
                 color="text-amber-600"
               />
-            </div>
+            </div> */}
 
             <motion.div
               initial={{ opacity: 0, y: 20 }}

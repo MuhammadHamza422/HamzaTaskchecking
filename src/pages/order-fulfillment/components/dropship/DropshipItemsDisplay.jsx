@@ -431,24 +431,53 @@ export default function DropshipItemsDisplay({
               {/* Fulfillment Details for Fulfilled Items */}
               {isFulfilled && (
                 <div className="mb-3 p-3 bg-white rounded border border-green-200 space-y-2">
-                  {item.marketplaceName && (
+                  {/* Fulfillment Type Display */}
+                  {(item.fulfillmentType || item.marketplaceName || item.courierService) && (
+                    <div className="flex items-center justify-between text-xs mb-2 pb-2 border-b border-gray-200">
+                      <span className="text-gray-500">Fulfilled via:</span>
+                      <span className="font-medium text-gray-900">
+                        {item.fulfillmentType === "japan" && item.courierService
+                          ? item.courierService
+                          : item.fulfillmentType === "marketplace" && item.marketplaceName
+                          ? item.marketplaceName
+                          : item.marketplaceName || item.courierService || "Marketplace"}
+                      </span>
+                    </div>
+                  )}
+                  
+                  {/* Courier Service (Japan fulfillment) */}
+                  {item.fulfillmentType === "japan" && item.courierService && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-500">Courier Service:</span>
+                      <span className="font-medium text-gray-900">{item.courierService}</span>
+                    </div>
+                  )}
+                  
+                  {/* Marketplace Name (Marketplace fulfillment) */}
+                  {item.fulfillmentType === "marketplace" && item.marketplaceName && (
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-gray-500">Marketplace:</span>
                       <span className="font-medium text-gray-900">{item.marketplaceName}</span>
                     </div>
                   )}
+                  
+                  {/* Marketplace Order Number */}
                   {item.marketplaceOrderNumber && (
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-gray-500">Order #:</span>
                       <span className="font-medium text-gray-900">{item.marketplaceOrderNumber}</span>
                     </div>
                   )}
+                  
+                  {/* Tracking ID */}
                   {item.trackingId && (
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-gray-500">Tracking:</span>
                       <span className="font-medium text-gray-900">{item.trackingId}</span>
                     </div>
                   )}
+                  
+                  {/* Tracking Link (only for marketplace) */}
                   {item.trackingLink && (
                     <a
                       href={item.trackingLink}
@@ -461,6 +490,8 @@ export default function DropshipItemsDisplay({
                       Track Package
                     </a>
                   )}
+                  
+                  {/* Packing Order Link */}
                   {item.packingId && (
                     <Button
                       type="link"
@@ -591,10 +622,49 @@ export default function DropshipItemsDisplay({
                               {missingProduct.notes && (
                                 <p className="text-xs text-gray-500 mt-1">{missingProduct.notes}</p>
                               )}
-                              {isFulfilled && missingProduct.packingOrderNumber && (
-                                <p className="text-xs text-green-600 mt-1">
-                                  PO: {missingProduct.packingOrderNumber}
-                                </p>
+                              {isFulfilled && (
+                                <div className="mt-2 space-y-1">
+                                  {/* Fulfillment Type Display */}
+                                  {(missingProduct.fulfillmentType || missingProduct.marketplaceName || missingProduct.courierService) && (
+                                    <p className="text-xs text-gray-600">
+                                      <span className="text-gray-500">Fulfilled via:</span>{" "}
+                                      <span className="font-medium">
+                                        {missingProduct.fulfillmentType === "japan" && missingProduct.courierService
+                                          ? missingProduct.courierService
+                                          : missingProduct.fulfillmentType === "marketplace" && missingProduct.marketplaceName
+                                          ? missingProduct.marketplaceName
+                                          : missingProduct.marketplaceName || missingProduct.courierService || "Marketplace"}
+                                      </span>
+                                    </p>
+                                  )}
+                                  {/* Courier Service (Japan) */}
+                                  {missingProduct.fulfillmentType === "japan" && missingProduct.courierService && (
+                                    <p className="text-xs text-gray-600">
+                                      <span className="text-gray-500">Courier:</span>{" "}
+                                      <span className="font-medium">{missingProduct.courierService}</span>
+                                    </p>
+                                  )}
+                                  {/* Marketplace Name */}
+                                  {missingProduct.fulfillmentType === "marketplace" && missingProduct.marketplaceName && (
+                                    <p className="text-xs text-gray-600">
+                                      <span className="text-gray-500">Marketplace:</span>{" "}
+                                      <span className="font-medium">{missingProduct.marketplaceName}</span>
+                                    </p>
+                                  )}
+                                  {/* Tracking ID */}
+                                  {missingProduct.trackingId && (
+                                    <p className="text-xs text-gray-600">
+                                      <span className="text-gray-500">Tracking:</span>{" "}
+                                      <span className="font-medium">{missingProduct.trackingId}</span>
+                                    </p>
+                                  )}
+                                  {/* Packing Order Number */}
+                                  {missingProduct.packingOrderNumber && (
+                                    <p className="text-xs text-green-600">
+                                      PO: {missingProduct.packingOrderNumber}
+                                    </p>
+                                  )}
+                                </div>
                               )}
                               {!isFulfilled && (
                                 <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400 mt-1">
