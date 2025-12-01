@@ -1,17 +1,33 @@
 import { Routes, Route } from "react-router-dom";
-import ShippingLandingPage from "./components/shipping/ShippingLandingPage";
-import ShippingProcess from "./components/shipping/ShippingProcess";
+import ShippingLandingPageNew from "./components/shipping/ShippingLandingPageNew";
+import ShippingOrderDetailsNew from "./components/shipping/ShippingOrderDetailsNew";
+import ShippingOperationsTable from "./components/shipping/ShippingOperationsTable";
+import ShippingRecordDetailsPage from "./components/shipping/ShippingRecordDetailsPage";
+import ShippingOperationsMain from "./components/shipping/ShippingOperationsMain";
 
 export default function ShippingOperationsPage() {
   return (
     <Routes>
-      <Route index element={<ShippingLandingPage />} />
+      {/* Main shipping landing page with scanner */}
+      <Route index element={<ShippingLandingPageNew />} />
+      
+      {/* Shipping order details with steps (photo upload + details) */}
+      <Route path=":trackingNumber" element={<ShippingOrderDetailsNew />} />
+      
+      {/* List all shipping records */}
       <Route path="list" element={
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-          <p className="text-gray-500">Shipping List - Coming Soon</p>
+        <div className="min-h-screen bg-gray-50">
+          <div className="max-w-[1550px] mx-auto">
+            <ShippingOperationsTable />
+          </div>
         </div>
       } />
-      <Route path=":packingId" element={<ShippingProcess />} />
+      
+      {/* Shipping record details page */}
+      <Route path="details/:shippingRecordId" element={<ShippingRecordDetailsPage />} />
+      
+      {/* Alternative: Full operations view with list and process toggle */}
+      <Route path="operations" element={<ShippingOperationsMain />} />
     </Routes>
   );
 }

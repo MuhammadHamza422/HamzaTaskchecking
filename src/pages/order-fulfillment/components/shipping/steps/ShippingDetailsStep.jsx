@@ -21,8 +21,8 @@ export default function ShippingDetailsStep({ data, onNext }) {
             <MapPin className="w-5 h-5 text-gray-400 mt-1" />
             <div>
               <p className="text-sm font-medium text-gray-500">Ship To</p>
-              <p className="font-semibold text-gray-900">{data.customer.name}</p>
-              <p className="text-gray-600">{data.customer.address}</p>
+              <p className="font-semibold text-gray-900">{data?.customer?.name}</p>
+              <p className="text-gray-600">{data?.customer?.address}</p>
             </div>
           </div>
 
@@ -48,7 +48,7 @@ export default function ShippingDetailsStep({ data, onNext }) {
           <div>
             <p className="text-sm font-medium text-gray-500 mb-2">Packed Items</p>
             <div className="border border-gray-200 rounded-lg divide-y divide-gray-200">
-              {data.items.map((item) => (
+              {data?.items?.map((item) => (
                 <div key={item.id} className="p-3 flex justify-between items-center">
                   <span className="text-gray-700">{item.name}</span>
                   <span className="font-medium bg-gray-100 px-2 py-1 rounded text-sm">
