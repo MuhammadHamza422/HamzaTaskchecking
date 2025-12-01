@@ -124,6 +124,7 @@ const rolesOptions = [
       "packing",              // access packing module
       "dropship",              // access dropship module
       "shipping",              // access shipping module
+      "ssot",                  // access SSOT module
     ],
   },
 ];

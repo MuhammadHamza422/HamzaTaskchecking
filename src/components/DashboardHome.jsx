@@ -11,6 +11,7 @@ import {
   FileText,
   QrCode,
   PackageCheck,
+  Database,
 } from "lucide-react";
 import { LuWarehouse } from "react-icons/lu";
 
@@ -150,6 +151,16 @@ export default function DashboardCards() {
       link: "/fulfillment",
       bgColor: "bg-teal-50",
       border: "border-teal-500",
+    },
+    {
+      title: "SSOT",
+      icon: Database,
+      color: "text-indigo-500",
+      accessKey: "fulfillment",
+      hoverColor: "group-hover:text-indigo-600",
+      link: "/fulfillment/ssot",
+      bgColor: "bg-indigo-50",
+      border: "border-indigo-500",
     },
     // {
     //   title: "Products",

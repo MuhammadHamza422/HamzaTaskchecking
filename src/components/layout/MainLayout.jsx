@@ -263,6 +263,11 @@ const MainLayout = () => {
         hasAppAccess(user, link.app) &&
         hasMenuAccess(user, link.app, link.menuItem) &&
         (link.label !== "Dashboard" || link.to === "/procurement")) ||
+      // Fulfillment context
+      (pathName.startsWith("/fulfillment") &&
+        link.app === "fulfillment" &&
+        link.roles?.includes(user.roles.role) &&
+        hasAppAccess(user, link.app)) ||
       // Scan context
       (pathName.startsWith("/scan") &&
         link.app === "scan" &&

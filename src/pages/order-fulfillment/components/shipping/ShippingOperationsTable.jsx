@@ -363,7 +363,7 @@ export default function ShippingOperationsTable() {
               <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">All Shipping Operations</h1>
               <p className="text-gray-600">View and manage all shipping records</p>
             </div>
-            <motion.button
+            {/* <motion.button
               onClick={() => navigate("/fulfillment/shipping")}
               className="hidden md:flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors"
               whileHover={{ scale: 1.05 }}
@@ -371,7 +371,7 @@ export default function ShippingOperationsTable() {
             >
               <Truck className="w-4 h-4" />
               New Shipping
-            </motion.button>
+            </motion.button> */}
           </div>
         </motion.div>
 
@@ -399,7 +399,7 @@ export default function ShippingOperationsTable() {
                   allowClear
                 />
               </div>
-              <Select
+              {/* <Select
                 placeholder="Status"
                 allowClear
                 value={filters.status}
@@ -407,23 +407,14 @@ export default function ShippingOperationsTable() {
                 className="w-full h-11"
                 suffixIcon={<Filter className="w-4 h-4 text-gray-400" />}
                 options={STATUS_OPTIONS}
-              />
-              <Select
-                placeholder="Sort By"
-                value={filters.sortBy}
-                onChange={(value) => handleFilterChange("sortBy", value)}
-                className="w-full h-11"
-                options={SORT_BY_OPTIONS}
-              />
-            </div>
-            <div className="mt-4 flex items-center gap-4">
-              <RangePicker
-                value={filters.dateRange}
-                onChange={(dates) => handleFilterChange("dateRange", dates)}
-                className="h-11"
-                suffixIcon={<Calendar className="w-4 h-4 text-gray-400" />}
-              />
-              <Select
+              /> */}
+                <RangePicker
+                  value={filters.dateRange}
+                  onChange={(dates) => handleFilterChange("dateRange", dates)}
+                  className="h-11"
+                  suffixIcon={<Calendar className="w-4 h-4 text-gray-400" />}
+                />
+                <Select
                 placeholder="Sort Order"
                 value={filters.sortOrder}
                 onChange={(value) => handleFilterChange("sortOrder", value)}
@@ -433,7 +424,17 @@ export default function ShippingOperationsTable() {
                   { label: "Ascending", value: "asc" },
                 ]}
               />
+              {/* <Select
+                placeholder="Sort By"
+                value={filters.sortBy}
+                onChange={(value) => handleFilterChange("sortBy", value)}
+                className="w-full h-11"
+                options={SORT_BY_OPTIONS}
+              /> */}
             </div>
+            {/* <div className="mt-4 flex items-center gap-4">
+              
+            </div> */}
           </div>
 
           {/* Mobile Filter Button */}

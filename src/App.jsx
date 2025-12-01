@@ -65,6 +65,8 @@ import FulfillmentDashboardPage from "./pages/order-fulfillment/FulfillmentDashb
 import FulfillmentLandingPage from "./pages/order-fulfillment/FulfillmentLandingPage";
 import DropshipDetails from "./pages/order-fulfillment/components/dropship/DropshipDetails";
 import ActivityLogsPage from "./pages/order-fulfillment/components/activity-logs/ActivityLogsPage";
+import SsotPage from "./pages/ssot/SsotPage";
+import SsotDetailsPage from "./pages/ssot/SsotDetailsPage";
 
 // 🔹 Role guard for specific routes
 const RequireRoles = ({ allow, children }) => {
@@ -336,6 +338,22 @@ function App() {
               element={
                 <RequireRoles allow={["admin"]}>
                   <ActivityLogsPage />
+                </RequireRoles>
+              }
+            />
+            <Route
+              path="fulfillment/ssot"
+              element={
+                <RequireRoles allow={["admin"]}>
+                  <SsotPage />
+                </RequireRoles>
+              }
+            />
+            <Route
+              path="fulfillment/ssot/details/:orderNo"
+              element={
+                <RequireRoles allow={["admin"]}>
+                  <SsotDetailsPage />
                 </RequireRoles>
               }
             />
