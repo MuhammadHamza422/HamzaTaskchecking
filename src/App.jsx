@@ -350,7 +350,7 @@ function App() {
               }
             />
             <Route
-              path="fulfillment/ssot/details/:orderNo"
+              path="fulfillment/ssot/details/:platform/:orderId"
               element={
                 <RequireRoles allow={["admin"]}>
                   <SsotDetailsPage />
