@@ -9,6 +9,8 @@ export default function ShippingCameraScreen({
   orderDetails,
   isLoadingDetails,
   detailsError,
+  isValidatingTracking,
+  trackingError,
   onPhotosUploaded,
   onCancel,
 }) {
@@ -95,6 +97,17 @@ export default function ShippingCameraScreen({
               <div className="text-xs text-blue-100 mt-0.5">
                 Tracking: {trackingNumber}
               </div>
+              {isValidatingTracking && (
+                <div className="mt-1 flex items-center gap-2 text-xs text-blue-100">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <span>Validating tracking in background...</span>
+                </div>
+              )}
+              {trackingError && (
+                <div className="mt-1 text-xs text-red-100 bg-red-500/30 rounded px-2 py-1">
+                  {trackingError}
+                </div>
+              )}
             </div>
           </div>
           <button
