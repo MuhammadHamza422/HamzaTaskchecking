@@ -1,11 +1,14 @@
 import { useState, useRef, useEffect } from "react";
 import { Camera, Search, Package, Loader2 } from "lucide-react";
+import { scanTracking } from "../../../../api/shipping";
 import ShippingBarcodeScanner from "./ShippingBarcodeScanner";
 import Swal from "sweetalert2";
 
 export default function ShippingScanScreen({ onScanSuccess }) {
   const [trackingInput, setTrackingInput] = useState("");
+  const [isScanning, setIsScanning] = useState(false);
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(true); // Auto-open scanner by default
+  const [isValidating, setIsValidating] = useState(false);
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -15,7 +18,7 @@ export default function ShippingScanScreen({ onScanSuccess }) {
     }
   }, [showBarcodeScanner]);
 
-  const handleScan = () => {
+  const handleScan = async () => {
     if (!trackingInput.trim()) {
       Swal.fire({
         icon: "warning",
@@ -27,16 +30,83 @@ export default function ShippingScanScreen({ onScanSuccess }) {
       return;
     }
 
+    setIsValidating(true);
     const trackingNumber = trackingInput.trim();
 
-    console.log("✅ Manual tracking entered, emitting tracking number:", trackingNumber);
+    try {
+      console.log("🔍 Calling scan-tracking API with:", trackingNumber);
+      const result = await scanTracking(trackingNumber);
+      console.log("✅ Scan result:", result);
 
-    if (onScanSuccess) {
-      onScanSuccess(trackingNumber);
+      if (result.success && result.data) {
+        const scanData = result.data;
+
+        if (scanData.alreadyProcessed) {
+          Swal.fire({
+            icon: "warning",
+            title: "Already Processed",
+            text: "This tracking number has already been processed.",
+            confirmButtonColor: "#2563eb",
+            confirmButtonText: "OK",
+          });
+          setTrackingInput("");
+          setIsValidating(false);
+          return;
+        }
+
+        // Immediately move to camera after successful scan
+        if (onScanSuccess) {
+          onScanSuccess(trackingNumber, scanData);
+        }
+      } else {
+        Swal.fire({
+          icon: "error",
+          title: "Tracking Not Found",
+          text: "Tracking number not found. Please check and try again.",
+          confirmButtonColor: "#2563eb",
+          confirmButtonText: "OK",
+        });
+        setTrackingInput("");
+      }
+    } catch (error) {
+      console.error("❌ Error scanning tracking:", error);
+      console.error("Error details:", {
+        message: error.message,
+        code: error.code,
+        response: error.response?.data,
+      });
+      
+      if (error.code === "FULFILLMENT_NOT_FOUND") {
+        Swal.fire({
+          icon: "error",
+          title: "Tracking Not Found",
+          text: "Tracking number not found in ShipStation. Please verify and try again.",
+          confirmButtonColor: "#2563eb",
+          confirmButtonText: "OK",
+        });
+      } else if (error.code === "ALREADY_PROCESSED") {
+        Swal.fire({
+          icon: "warning",
+          title: "Already Processed",
+          text: "This tracking has already been processed.",
+          confirmButtonColor: "#2563eb",
+          confirmButtonText: "OK",
+        });
+      } else {
+        Swal.fire({
+          icon: "error",
+          title: "Validation Failed",
+          text: error.message || "Failed to validate tracking number. Please try again.",
+          confirmButtonColor: "#2563eb",
+          confirmButtonText: "OK",
+        });
+      }
+      
+      setTrackingInput("");
+    } finally {
+      setIsValidating(false);
+      inputRef.current?.focus();
     }
-
-    setTrackingInput("");
-    inputRef.current?.focus();
   };
 
   const handleKeyDown = (e) => {
@@ -48,7 +118,7 @@ export default function ShippingScanScreen({ onScanSuccess }) {
   const handleBarcodeScanSuccess = (trackingNumber, scanData) => {
     setShowBarcodeScanner(false);
     if (onScanSuccess) {
-      onScanSuccess(trackingNumber);
+      onScanSuccess(trackingNumber, scanData);
     }
   };
 
@@ -95,18 +165,26 @@ export default function ShippingScanScreen({ onScanSuccess }) {
                   onChange={(e) => setTrackingInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder="Enter or scan tracking number..."
+                  disabled={isValidating}
                   className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed text-lg"
                   autoFocus
                 />
                 <button
                   onClick={handleScan}
-                  disabled={!trackingInput.trim()}
+                  disabled={isValidating || !trackingInput.trim()}
                   className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
                 >
-                  <>
-                    <Search className="w-5 h-5" />
-                    <span className="hidden sm:inline">Scan</span>
-                  </>
+                  {isValidating ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span className="hidden sm:inline">Validating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Search className="w-5 h-5" />
+                      <span className="hidden sm:inline">Scan</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -124,6 +202,7 @@ export default function ShippingScanScreen({ onScanSuccess }) {
             {/* Barcode Scanner Button */}
             <button
               onClick={() => setShowBarcodeScanner(true)}
+              disabled={isValidating}
               className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
             >
               <Camera className="w-6 h-6" />
@@ -157,4 +236,3 @@ export default function ShippingScanScreen({ onScanSuccess }) {
     </>
   );
 }
-

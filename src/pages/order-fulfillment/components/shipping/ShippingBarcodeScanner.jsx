@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { X, Search, Keyboard, Camera, Loader2 } from "lucide-react";
-import { BrowserMultiFormatReader } from "@zxing/library";
+import { scanTracking } from "../../../../api/shipping";
 import Swal from "sweetalert2";
+import { BrowserMultiFormatReader } from "@zxing/library";
 
 export default function ShippingBarcodeScanner({
   onScanSuccess,
@@ -18,6 +19,7 @@ export default function ShippingBarcodeScanner({
   const zxingReaderRef = useRef(null);
   const isScannerActiveRef = useRef(true);
   
+  const [isValidating, setIsValidating] = useState(false);
   const [scannedCode, setScannedCode] = useState("");
   const [isScanning, setIsScanning] = useState(false);
   const [isCameraReady, setIsCameraReady] = useState(false);
@@ -94,32 +96,94 @@ export default function ShippingBarcodeScanner({
     }
   };
 
-  const handleBarcodeDetected = useCallback(
-    async (code) => {
-      if (code === lastScannedCodeRef.current) return;
+  const handleBarcodeDetected = useCallback(async (code) => {
+    if (isValidating) return;
+    if (code === lastScannedCodeRef.current) return;
 
+    detectionBufferRef.current = [];
+    stableCodeRef.current = null;
+    stableCodeStartTimeRef.current = null;
+    setIsScanning(false);
+
+    setIsValidating(true);
+    lastScannedCodeRef.current = code;
+    setScannedCode(code);
+
+    await releaseCamera();
+
+    const trackingNumber = String(code).trim();
+    try {
+      console.log("🔍 Barcode scanner calling scan-tracking API with:", trackingNumber);
+      const scanResult = await scanTracking(trackingNumber);
+      console.log("✅ Barcode scan result:", scanResult);
+
+      if (scanResult.success && scanResult.data) {
+        const scanData = scanResult.data;
+
+        // Check if already processed
+        if (scanData.alreadyProcessed) {
+          setIsValidating(false);
+          lastScannedCodeRef.current = "";
+
+          await Swal.fire({
+            icon: "warning",
+            title: "Already Processed",
+            html: `
+              <div class="text-left">
+                <p class="mb-4 text-gray-700">This tracking number has already been processed.</p>
+                <div class="bg-gray-50 rounded-lg p-4 mb-4">
+                  <p class="text-sm"><span class="font-medium">Tracking:</span> ${trackingNumber}</p>
+                  <p class="text-sm"><span class="font-medium">Status:</span> ${scanData.status || "Completed"}</p>
+                </div>
+              </div>
+            `,
+            confirmButtonColor: "#2563eb",
+            confirmButtonText: "OK",
+          });
+
+          if (onClose) {
+            onClose();
+          }
+          return;
+        }
+
+        setIsValidating(false);
+        
+        if (onScanSuccess) {
+          onScanSuccess(trackingNumber, scanData);
+        }
+      } else {
+        throw new Error("Tracking number not found");
+      }
+    } catch (error) {
+      console.error("Error validating tracking:", error);
+
+      setIsValidating(false);
+      lastScannedCodeRef.current = "";
+      
       detectionBufferRef.current = [];
       stableCodeRef.current = null;
       stableCodeStartTimeRef.current = null;
       setIsScanning(false);
+      setScannedCode("");
 
-      lastScannedCodeRef.current = code;
-      setScannedCode(code);
+      cooldownUntilRef.current = Date.now() + COOLDOWN_AFTER_ERROR_MS;
 
-      const trackingNumber = String(code).trim();
+      await Swal.fire({
+        icon: "error",
+        title: "Tracking Not Found",
+        text: error.message || "No fulfillment found with this tracking number. Please try again.",
+        confirmButtonColor: "#2563eb",
+        confirmButtonText: "OK",
+      });
 
-      // Release the camera used for scanning so the next screen
-      // (ShippingCameraScreen) can open its own camera immediately.
-      await releaseCamera();
-
-      console.log("✅ Barcode read, emitting tracking number:", trackingNumber);
-
-      if (onScanSuccess) {
-        onScanSuccess(trackingNumber);
+      try {
+        await startCamera();
+      } catch (err) {
+        console.error("Error restarting scanner:", err);
       }
-    },
-    [onScanSuccess]
-  );
+    }
+  }, [isValidating, onScanSuccess, onClose]);
 
   const processBarcodeDetection = useCallback(
     (code) => {
@@ -127,6 +191,7 @@ export default function ShippingBarcodeScanner({
         return;
       }
 
+      if (isValidating) return;
       if (!code) {
         setIsScanning(false);
         return;
@@ -175,7 +240,7 @@ export default function ShippingBarcodeScanner({
         stableCodeStartTimeRef.current = null;
       }
     },
-    [handleBarcodeDetected]
+    [isValidating, handleBarcodeDetected]
   );
 
   const startCamera = async () => {
@@ -598,7 +663,7 @@ export default function ShippingBarcodeScanner({
           </div>
         )}
 
-        {isScanning && scannedCode && isCameraReady && (
+        {isScanning && !isValidating && scannedCode && isCameraReady && (
           <div className="absolute top-24 left-1/2 transform -translate-x-1/2 z-[200] flex flex-col items-center gap-2">
             <div className="bg-blue-500/70 backdrop-blur-sm rounded-lg p-3 flex items-center justify-center">
               <svg
@@ -625,16 +690,29 @@ export default function ShippingBarcodeScanner({
         )}
       </div>
 
-      <div className="absolute bottom-0 left-0 right-0 z-[9999] bg-black/70 backdrop-blur-sm p-4 flex items-center justify-center">
-        <button
-          onClick={onManualSearch}
-          className="flex items-center justify-center gap-2 px-6 py-3 bg-white/20 hover:bg-white/30 text-white rounded-full font-medium transition-colors"
-        >
-          <Keyboard className="w-5 h-5" />
-          <span>Manual Input</span>
-        </button>
-      </div>
+      {isValidating && (
+        <div className="absolute inset-0 z-[10000] bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center">
+          <div className="bg-white/10 p-4 rounded-full mb-4">
+            <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+          </div>
+          <h3 className="text-white text-xl font-semibold mb-2">Validating...</h3>
+          <p className="text-gray-300 text-center max-w-xs">
+            Checking tracking: <span className="font-mono text-white">{lastScannedCodeRef.current}</span>
+          </p>
+        </div>
+      )}
+
+      {!isValidating && (
+        <div className="absolute bottom-0 left-0 right-0 z-[9999] bg-black/70 backdrop-blur-sm p-4 flex items-center justify-center">
+          <button
+            onClick={onManualSearch}
+            className="flex items-center justify-center gap-2 px-6 py-3 bg-white/20 hover:bg-white/30 text-white rounded-full font-medium transition-colors"
+          >
+            <Keyboard className="w-5 h-5" />
+            <span>Manual Input</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
-

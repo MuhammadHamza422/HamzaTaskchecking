@@ -30,14 +30,19 @@ export default function ShippingLandingPage() {
     setShowScanner(false);
 
     try {
+      // Mock API call for now - replace with actual searchPackingOrder
+      // const searchResult = await searchPackingOrder(packingId.trim());
+      
+      // Simulate API delay
       await new Promise(resolve => setTimeout(resolve, 800));
       
       const searchResult = {
         success: true,
         data: {
           packingId: packingId.trim(),
-          status: "READY_FOR_SHIPPING",
+          status: "READY_FOR_SHIPPING", // or similar
           orderId: "ORD-123",
+          // ... other data
         }
       };
 
@@ -69,6 +74,19 @@ export default function ShippingLandingPage() {
   };
 
   const handleScannerSuccess = async (barcode, searchData) => {
+    // In real implementation, the scanner might return the string, and we call the API
+    // Or the scanner component handles the API call if reused exactly.
+    // Assuming QuaggaBarcodeScanner calls onScanSuccess with the barcode string
+    
+    // If QuaggaBarcodeScanner calls searchOrder internally, we might need to adapt it 
+    // or pass a custom search function. 
+    // For now, let's assume we receive the barcode and do the search here.
+    
+    // Note: The current QuaggaBarcodeScanner has searchOrder hardcoded. 
+    // We should probably refactor QuaggaBarcodeScanner to accept a search function prop
+    // OR create a ShippingBarcodeScanner. 
+    // For this design phase, I'll assume handlePackingFound handles it.
+    
     handlePackingFound(barcode);
   };
 
@@ -88,6 +106,9 @@ export default function ShippingLandingPage() {
         onScanSuccess={handleScannerSuccess}
         onManualSearch={handleManualSearchClick}
         onClose={handleCloseScanner}
+        // TODO: We need to pass a prop to QuaggaBarcodeScanner to tell it to search for Packing IDs
+        // or just use it in "scan only" mode and handle search in parent.
+        // For now, we reuse it as is, but in real impl we'll likely need to tweak it.
       />
     );
   }
@@ -237,4 +258,3 @@ export default function ShippingLandingPage() {
     </div>
   );
 }
-
