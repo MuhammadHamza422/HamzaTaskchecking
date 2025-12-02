@@ -1,322 +1,369 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { Card, Descriptions, Tag, Space, Button, Divider, Table, Spin } from "antd";
-import { ArrowLeft, Package, Calendar, User, MapPin, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
+import {
+  Card,
+  Tag,
+  Button,
+  Spin,
+  Image,
+  Timeline,
+  Empty,
+  Steps,
+  Avatar,
+  Divider,
+} from "antd";
+import {
+  ArrowLeft,
+  Package,
+  Truck,
+  ShoppingCart,
+  CheckCircle,
+  Clock,
+  User,
+  MapPin,
+  Phone,
+  Mail,
+  CreditCard,
+  AlertCircle,
+  ChevronRight,
+} from "lucide-react";
 import { format } from "date-fns";
+import { getSSOTOrderDetails } from "../../api/ssot";
+import Swal from "sweetalert2";
+
+const { Step } = Steps;
 
 const SsotDetailsPage = () => {
-  const { orderNo } = useParams();
+  const { platform, orderId } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [orderData, setOrderData] = useState(null);
 
   useEffect(() => {
-    loadOrderDetails();
-  }, [orderNo]);
+    if (platform && orderId) {
+      loadOrderDetails();
+    }
+  }, [platform, orderId]);
 
   const loadOrderDetails = async () => {
     setLoading(true);
-    // Simulate API call - replace with actual API call
-    setTimeout(() => {
-      // Mock data - replace with actual API response
-      const mockData = {
-        key: "1",
-        platform: "Shopify",
-        orderNo: orderNo || "1001",
-        processedVia: "Hector",
-        packingStatus: "Partially Packed",
-        itemsPacked: 3,
-        totalItems: 5,
-        packedBy: "Hector",
-        whShippingStatus: "Validated",
-        dsStatus: "Pending",
-        dsItems: 2,
-        fulfillmentStatus: "Partially Fulfilled",
-        fulfilledFrom: "Osaka",
-        orderTs: "2023-10-26T10:00:00",
-        processedAt: "2023-10-26T10:05:00",
-        packedAt: "2023-10-26T10:30:00",
-        shippedAt: null,
-        deoFe: 85,
-        whFe: 90,
-        overallFe: 88,
-        customerName: "John Doe",
-        customerEmail: "john.doe@example.com",
-        shippingAddress: "123 Main St, Osaka, Japan 12345",
-        orderValue: 299.99,
-        currency: "USD",
-        items: [
-          { sku: "SKU-001", name: "Product A", quantity: 2, status: "Packed" },
-          { sku: "SKU-002", name: "Product B", quantity: 1, status: "Packed" },
-          { sku: "SKU-003", name: "Product C", quantity: 2, status: "Pending" },
-        ],
-      };
-      setOrderData(mockData);
+    try {
+      const response = await getSSOTOrderDetails({
+        platform: decodeURIComponent(platform),
+        orderId: decodeURIComponent(orderId),
+        orderNumber: location.state?.orderNumber,
+      });
+
+      if (response.success && response.data) {
+        setOrderData(response.data);
+      }
+    } catch (error) {
+      console.error("Error loading SSOT order details:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Failed to Load Details",
+        text: error.message || "Unable to load order details.",
+        confirmButtonColor: "#2563eb",
+      }).then(() => navigate("/fulfillment/ssot"));
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
   const getStatusColor = (status) => {
-    const statusMap = {
-      Complete: "success",
-      "Partially Packed": "warning",
-      Pending: "default",
-      Validated: "success",
-      Invalid: "error",
-      "Partially Fulfilled": "warning",
-    };
-    return statusMap[status] || "default";
+    const s = status?.toLowerCase() || "";
+    if (s.includes("completely") || s.includes("shipped") || s === "fulfilled") return "success";
+    if (s.includes("partially") || s === "pending") return "warning";
+    if (s.includes("unfulfilled") || s.includes("error")) return "error";
+    return "default";
   };
 
-  const itemColumns = [
-    {
-      title: "SKU",
-      dataIndex: "sku",
-      key: "sku",
-    },
-    {
-      title: "Product Name",
-      dataIndex: "name",
-      key: "name",
-    },
-    {
-      title: "Quantity",
-      dataIndex: "quantity",
-      key: "quantity",
-    },
-    {
-      title: "Status",
-      dataIndex: "status",
-      key: "status",
-      render: (status) => (
-        <Tag color={status === "Packed" ? "success" : "warning"}>{status}</Tag>
-      ),
-    },
-  ];
+  const formatStatus = (status) => {
+    if (!status) return "N/A";
+    return status.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+  };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Spin size="large" />
-      </div>
-    );
-  }
+  const getStepStatus = (summary) => {
+    let current = 0;
+    if (summary.packing?.status !== "Not Packed") current = 1;
+    if (summary.dropship?.items > 0) current = 2; // If dropship exists, show focus there too
+    if (summary.warehouseShipping?.status === "Shipped") current = 3;
+    if (summary.fulfillmentStatus === "completely-fulfilled") current = 4;
+    return current;
+  };
 
-  if (!orderData) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Card>
-          <p className="text-red-600 mb-4">Order not found</p>
-          <Button onClick={() => navigate("/fulfillment/ssot")}>Back to SSOT</Button>
-        </Card>
-      </div>
-    );
-  }
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Spin size="large" /></div>;
+  if (!orderData) return null;
+
+  const { summary, orderDetails, packing, dropship, shipping, activities } = orderData;
+  const currentStep = getStepStatus(summary);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
-          <Button
-            icon={<ArrowLeft />}
-            onClick={() => navigate("/fulfillment/ssot")}
-            className="mb-4"
-          >
-            Back to SSOT
-          </Button>
-        </div>
-
-        {/* Order Header Card */}
-        <Card className="mb-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
+    <div className="min-h-screen bg-slate-50/50 font-sans pb-10">
+      
+      {/* Top Navigation Bar */}
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10 px-6 py-4 shadow-sm">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button icon={<ArrowLeft size={16} />} onClick={() => navigate("/fulfillment/ssot")} type="text" className="hover:bg-slate-100" />
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                Order #{orderData.orderNo}
-              </h1>
-              <Tag color="blue" className="text-lg">
-                {orderData.platform}
-              </Tag>
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl font-bold text-slate-800 m-0">Order #{orderDetails?.orderNumber || summary.orderNumber}</h1>
+                <Tag color={getStatusColor(summary.fulfillmentStatus)} className="rounded-full px-3 border-0 font-medium">
+                  {formatStatus(summary.fulfillmentStatus)}
+                </Tag>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
+                <img 
+                  src={summary.platform === 'shopify' ? '/shopify-icon.png' : summary.platform === 'woocommerce' ? '/woocommerce icon.png' : '/Walmart_App_icon.png'} 
+                  alt={summary.platform} 
+                  className="w-4 h-4 object-contain" 
+                />
+                <span className="capitalize">{summary.platform}</span>
+                <span>•</span>
+                <span>Placed {format(new Date(summary.timestamps?.orderTS), "MMM dd, yyyy HH:mm")}</span>
+              </div>
             </div>
-            <Tag color={getStatusColor(orderData.fulfillmentStatus)} className="text-lg px-4 py-2">
-              {orderData.fulfillmentStatus}
-            </Tag>
           </div>
-        </Card>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left Column */}
-          <div className="space-y-6">
-            {/* Order Information */}
-            <Card title="Order Information" className="shadow-sm">
-              <Descriptions column={1} bordered>
-                <Descriptions.Item label="Order Number">{orderData.orderNo}</Descriptions.Item>
-                <Descriptions.Item label="Platform">
-                  <Tag color="blue">{orderData.platform}</Tag>
-                </Descriptions.Item>
-                <Descriptions.Item label="Processed Via">{orderData.processedVia}</Descriptions.Item>
-                <Descriptions.Item label="Order Timestamp">
-                  {orderData.orderTs
-                    ? format(new Date(orderData.orderTs), "MMM dd, yyyy HH:mm")
-                    : "N/A"}
-                </Descriptions.Item>
-                <Descriptions.Item label="Order Value">
-                  {orderData.currency} {orderData.orderValue?.toFixed(2)}
-                </Descriptions.Item>
-              </Descriptions>
-            </Card>
-
-            {/* Packing Information */}
-            <Card title="Packing Information" className="shadow-sm">
-              <Descriptions column={1} bordered>
-                <Descriptions.Item label="Packing Status">
-                  <Tag color={getStatusColor(orderData.packingStatus)}>
-                    {orderData.packingStatus}
-                  </Tag>
-                </Descriptions.Item>
-                <Descriptions.Item label="Items Packed">
-                  {orderData.itemsPacked} / {orderData.totalItems}
-                </Descriptions.Item>
-                <Descriptions.Item label="Packed By">{orderData.packedBy}</Descriptions.Item>
-                <Descriptions.Item label="Packed At">
-                  {orderData.packedAt
-                    ? format(new Date(orderData.packedAt), "MMM dd, yyyy HH:mm")
-                    : "N/A"}
-                </Descriptions.Item>
-                <Descriptions.Item label="Processed At">
-                  {orderData.processedAt
-                    ? format(new Date(orderData.processedAt), "MMM dd, yyyy HH:mm")
-                    : "N/A"}
-                </Descriptions.Item>
-              </Descriptions>
-            </Card>
-
-            {/* Shipping Information */}
-            <Card title="Shipping Information" className="shadow-sm">
-              <Descriptions column={1} bordered>
-                <Descriptions.Item label="WH Shipping Status">
-                  <Tag color={getStatusColor(orderData.whShippingStatus)}>
-                    {orderData.whShippingStatus}
-                  </Tag>
-                </Descriptions.Item>
-                <Descriptions.Item label="Shipped At">
-                  {orderData.shippedAt
-                    ? format(new Date(orderData.shippedAt), "MMM dd, yyyy HH:mm")
-                    : "Not Shipped"}
-                </Descriptions.Item>
-                <Descriptions.Item label="Fulfilled From">
-                  <Space>
-                    <MapPin className="w-4 h-4" />
-                    {orderData.fulfilledFrom}
-                  </Space>
-                </Descriptions.Item>
-              </Descriptions>
-            </Card>
+          <div className="flex gap-2">
+            <Button type="primary" className="bg-blue-600 hover:bg-blue-700">Actions</Button>
           </div>
+        </div>
+      </div>
 
-          {/* Right Column */}
-          <div className="space-y-6">
-            {/* Customer Information */}
-            <Card title="Customer Information" className="shadow-sm">
-              <Descriptions column={1} bordered>
-                <Descriptions.Item label="Customer Name">
-                  <Space>
-                    <User className="w-4 h-4" />
-                    {orderData.customerName}
-                  </Space>
-                </Descriptions.Item>
-                <Descriptions.Item label="Email">{orderData.customerEmail}</Descriptions.Item>
-                <Descriptions.Item label="Shipping Address">
-                  <Space>
-                    <MapPin className="w-4 h-4" />
-                    {orderData.shippingAddress}
-                  </Space>
-                </Descriptions.Item>
-              </Descriptions>
-            </Card>
-
-            {/* Dropship Information */}
-            <Card title="Dropship Information" className="shadow-sm">
-              <Descriptions column={1} bordered>
-                <Descriptions.Item label="DS Status">
-                  <Tag color={getStatusColor(orderData.dsStatus)}>{orderData.dsStatus}</Tag>
-                </Descriptions.Item>
-                <Descriptions.Item label="DS Items">{orderData.dsItems}</Descriptions.Item>
-              </Descriptions>
-            </Card>
-
-            {/* Fulfillment Efficiency */}
-            <Card title="Fulfillment Efficiency" className="shadow-sm">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 bg-red-50 rounded-lg border border-red-200">
-                  <div>
-                    <p className="text-sm text-gray-600">DEO FE %</p>
-                    <p
-                      className={`text-2xl font-bold ${
-                        orderData.deoFe < 90 ? "text-red-600" : "text-green-600"
-                      }`}
-                    >
-                      {orderData.deoFe}%
-                    </p>
-                  </div>
-                  {orderData.deoFe < 90 ? (
-                    <XCircle className="w-8 h-8 text-red-600" />
-                  ) : (
-                    <CheckCircle className="w-8 h-8 text-green-600" />
-                  )}
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        
+        {/* Efficiency Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          {[
+            { label: "DEO Efficiency", value: summary.efficiency?.deoFE, icon: <Clock size={18} /> },
+            { label: "Warehouse Efficiency", value: summary.efficiency?.whFE, icon: <Package size={18} /> },
+            { label: "Overall Efficiency", value: summary.efficiency?.overallFE, icon: <CheckCircle size={18} /> },
+          ].map((stat, i) => (
+            <Card key={i} bordered={false} className="shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="text-slate-500 text-xs font-medium uppercase tracking-wider">{stat.label}</span>
+                  <span className={`text-2xl font-bold mt-1 ${stat.value >= 100 ? "text-emerald-600" : "text-rose-600"}`}>
+                    {stat.value ?? "-"}%
+                  </span>
                 </div>
-                <div className="flex items-center justify-between p-4 bg-red-50 rounded-lg border border-red-200">
-                  <div>
-                    <p className="text-sm text-gray-600">WH FE %</p>
-                    <p
-                      className={`text-2xl font-bold ${
-                        orderData.whFe < 90 ? "text-red-600" : "text-green-600"
-                      }`}
-                    >
-                      {orderData.whFe}%
-                    </p>
-                  </div>
-                  {orderData.whFe < 90 ? (
-                    <XCircle className="w-8 h-8 text-red-600" />
-                  ) : (
-                    <CheckCircle className="w-8 h-8 text-green-600" />
-                  )}
-                </div>
-                <div className="flex items-center justify-between p-4 bg-red-50 rounded-lg border border-red-200">
-                  <div>
-                    <p className="text-sm text-gray-600">Overall FE %</p>
-                    <p
-                      className={`text-2xl font-bold ${
-                        orderData.overallFe < 90 ? "text-red-600" : "text-green-600"
-                      }`}
-                    >
-                      {orderData.overallFe}%
-                    </p>
-                  </div>
-                  {orderData.overallFe < 90 ? (
-                    <XCircle className="w-8 h-8 text-red-600" />
-                  ) : (
-                    <CheckCircle className="w-8 h-8 text-green-600" />
-                  )}
+                <div className={`p-3 rounded-full ${stat.value >= 100 ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"}`}>
+                  {stat.icon}
                 </div>
               </div>
             </Card>
-          </div>
+          ))}
         </div>
 
-        {/* Order Items Table */}
-        <Card title="Order Items" className="mt-6 shadow-sm">
-          <Table
-            columns={itemColumns}
-            dataSource={orderData.items}
-            pagination={false}
-            rowKey="sku"
-          />
-        </Card>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          {/* LEFT COLUMN - Main Content */}
+          <div className="lg:col-span-2 space-y-8">
+            
+            {/* Order Journey Stepper */}
+            <Card bordered={false} className="shadow-sm">
+              <h3 className="text-base font-semibold text-slate-800 mb-6">Fulfillment Journey</h3>
+              <Steps current={currentStep} size="small" labelPlacement="vertical">
+                <Step title="Placed" description={format(new Date(summary.timestamps.orderTS), "MM/dd HH:mm")} />
+                <Step title="Packed" description={summary.timestamps.packedAt ? format(new Date(summary.timestamps.packedAt), "MM/dd") : "-"} />
+                <Step title="Dropship" status={summary.dropship?.status === "Unfulfilled" ? "error" : "process"} />
+                <Step title="Shipped" description={summary.timestamps.shippedAt ? format(new Date(summary.timestamps.shippedAt), "MM/dd") : "-"} />
+                <Step title="Delivered" />
+              </Steps>
+            </Card>
+
+            {/* Order Items */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+                <h3 className="text-base font-semibold text-slate-800 m-0">Order Items</h3>
+                <span className="text-xs text-slate-500">{orderDetails?.orderLines?.length || 0} Items</span>
+              </div>
+              <div className="divide-y divide-gray-50">
+                {orderDetails?.orderLines?.map((item) => (
+                  <div key={item.id} className="p-4 flex items-center gap-4 hover:bg-slate-50 transition-colors">
+                    <div className="w-16 h-16 bg-gray-100 rounded-lg flex-shrink-0 overflow-hidden border border-gray-200">
+                      {item.image ? (
+                        <Image src={item.image} className="w-full h-full object-cover" width={64} />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-300"><Package size={20} /></div>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="text-sm font-medium text-slate-800">{item.name}</h4>
+                      <p className="text-xs text-slate-500 mt-0.5">SKU: {item.sku}</p>
+                      {item.variant && <p className="text-xs text-slate-400">{item.variant}</p>}
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-semibold text-slate-700">x{item.quantity}</p>
+                      <p className="text-xs text-slate-500">{orderDetails?.currency} {item.price}</p>
+                    </div>
+                    <div className="ml-2">
+                        {item.missingProductsCount > 0 && (
+                            <Tag color="error" className="m-0 flex items-center gap-1"><AlertCircle size={12}/> Missing</Tag>
+                        )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Packing Section */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg"><Package size={18} /></div>
+                  <h3 className="text-base font-semibold text-slate-800 m-0">Packing Details</h3>
+                </div>
+                <Tag color={getStatusColor(summary.packing?.status)}>{summary.packing?.status}</Tag>
+              </div>
+              
+              {packing?.records?.length > 0 ? (
+                <div className="space-y-4">
+                  {packing.records.map((record, idx) => (
+                    <div key={idx} className="border border-gray-100 rounded-lg p-4 bg-slate-50/50">
+                      <div className="flex justify-between text-sm mb-3">
+                        <span className="text-slate-500">Packed by <span className="text-slate-800 font-medium">{record.packedBy?.name}</span></span>
+                        <span className="text-slate-400">{format(new Date(record.packedAt), "MMM dd HH:mm")}</span>
+                      </div>
+                      {record.photoUrls?.length > 0 && (
+                        <div className="flex gap-2 overflow-x-auto pb-2">
+                          {record.photoUrls.map((url, i) => (
+                            <Image key={i} src={url} width={80} height={80} className="rounded-md border border-gray-200 object-cover" />
+                          ))}
+                        </div>
+                      )}
+                      {record.notes && <p className="text-xs text-slate-500 mt-2 italic">"{record.notes}"</p>}
+                    </div>
+                  ))}
+                </div>
+              ) : <Empty description="No packing records" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
+            </div>
+
+            {/* Shipping Section */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg"><Truck size={18} /></div>
+                  <h3 className="text-base font-semibold text-slate-800 m-0">Shipping Details</h3>
+                </div>
+                <Tag color={getStatusColor(summary.warehouseShipping?.status)}>{summary.warehouseShipping?.status}</Tag>
+              </div>
+
+              {shipping?.records?.length > 0 ? (
+                <div className="space-y-4">
+                  {shipping.records.map((record, idx) => (
+                    <div key={idx} className="border border-gray-100 rounded-lg p-4 bg-slate-50/50">
+                      <div className="flex flex-col sm:flex-row justify-between gap-4 mb-3">
+                        <div>
+                          <p className="text-xs text-slate-500 uppercase tracking-wider">Tracking Number</p>
+                          <p className="text-sm font-mono font-semibold text-slate-800 flex items-center gap-2">
+                            {record.trackingNumber}
+                            <Button size="small" type="text" icon={<ChevronRight size={14} />} className="text-blue-500" />
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-slate-500 uppercase tracking-wider">Carrier</p>
+                          <p className="text-sm font-medium text-slate-800">{record.carrierName || record.carrierCode}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 mt-2">
+                         {record.photoUrls?.map((url, i) => (
+                            <Image key={i} src={url} width={60} height={60} className="rounded border border-gray-200 object-cover" />
+                          ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : <Empty description="No shipping records" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
+            </div>
+
+          </div>
+
+          {/* RIGHT COLUMN - Sidebar */}
+          <div className="space-y-6">
+            
+            {/* Customer Card */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Customer</h3>
+              <div className="flex items-center gap-3 mb-4">
+                <Avatar size={40} icon={<User />} className="bg-blue-100 text-blue-600" />
+                <div>
+                  <p className="text-sm font-bold text-slate-800">{orderDetails?.customerName || "Guest"}</p>
+                  <p className="text-xs text-slate-500">Customer</p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-start gap-3 text-sm text-slate-600">
+                  <Mail size={16} className="mt-0.5 text-slate-400" />
+                  <span className="break-all">{orderDetails?.customerEmail || "-"}</span>
+                </div>
+                <div className="flex items-start gap-3 text-sm text-slate-600">
+                  <Phone size={16} className="mt-0.5 text-slate-400" />
+                  <span>{orderDetails?.phone || "-"}</span>
+                </div>
+                <div className="flex items-start gap-3 text-sm text-slate-600">
+                  <MapPin size={16} className="mt-0.5 text-slate-400" />
+                  <span>
+                    {orderDetails?.shipTo?.address1}<br/>
+                    {orderDetails?.shipTo?.city}, {orderDetails?.shipTo?.state} {orderDetails?.shipTo?.zip}<br/>
+                    {orderDetails?.shipTo?.country}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Financials */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Payment Summary</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between text-slate-600">
+                  <span>Subtotal</span>
+                  <span>{orderDetails?.currency} {orderDetails?.subtotal?.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Shipping</span>
+                  <span>{orderDetails?.currency} {orderDetails?.shipping?.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Tax</span>
+                  <span>{orderDetails?.currency} {orderDetails?.tax?.toFixed(2)}</span>
+                </div>
+                <Divider className="my-2" />
+                <div className="flex justify-between font-bold text-slate-800 text-base">
+                  <span>Total</span>
+                  <span>{orderDetails?.currency} {orderDetails?.totalValue?.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Activity Timeline */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Activity Log</h3>
+              {activities?.timeline?.length > 0 ? (
+                <Timeline className="mt-2">
+                  {activities.timeline.map((act, i) => (
+                    <Timeline.Item 
+                      key={i} 
+                      color={act.type.includes('completed') ? 'green' : 'blue'}
+                      className="pb-4"
+                    >
+                      <p className="text-xs font-medium text-slate-800 mb-0.5">{act.message}</p>
+                      <p className="text-[10px] text-slate-400">
+                        {format(new Date(act.timestamp), "MMM dd HH:mm")} by {act.user?.name || "System"}
+                      </p>
+                    </Timeline.Item>
+                  ))}
+                </Timeline>
+              ) : <Empty description="No activities" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
+            </div>
+
+          </div>
+        </div>
       </div>
     </div>
   );
 };
 
 export default SsotDetailsPage;
-
