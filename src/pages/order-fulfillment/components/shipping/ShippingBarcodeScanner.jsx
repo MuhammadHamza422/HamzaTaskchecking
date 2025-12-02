@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { X, Search, Keyboard, Camera, Loader2 } from "lucide-react";
-import { searchOrder } from "../../../../api/fulfillment";
+import { scanTracking } from "../../../../api/shipping";
 import Swal from "sweetalert2";
 import { BrowserMultiFormatReader } from "@zxing/library";
 
-export default function QuaggaBarcodeScanner({
+export default function ShippingBarcodeScanner({
   onScanSuccess,
   onManualSearch,
   onClose,
@@ -17,60 +17,48 @@ export default function QuaggaBarcodeScanner({
   const scanningActiveRef = useRef(false);
   const barcodeDetectorRef = useRef(null);
   const zxingReaderRef = useRef(null);
-  const isScannerActiveRef = useRef(true); // Track if scanner is still active/mounted
+  const isScannerActiveRef = useRef(true);
   
   const [isValidating, setIsValidating] = useState(false);
   const [scannedCode, setScannedCode] = useState("");
-  const [isScanning, setIsScanning] = useState(false); // Visual feedback: detecting but not confirmed
+  const [isScanning, setIsScanning] = useState(false);
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState("");
-  const [scannerMethod, setScannerMethod] = useState(null); // 'native' or 'zxing'
+  const [scannerMethod, setScannerMethod] = useState(null);
   
   const lastScannedCodeRef = useRef("");
   const lastScanTimeRef = useRef(0);
   
-  // Stability check: Detection buffer
   const detectionBufferRef = useRef([]);
   const stableCodeRef = useRef(null);
   const stableCodeStartTimeRef = useRef(null);
-  const cooldownUntilRef = useRef(0); // Timestamp when cooldown ends
+  const cooldownUntilRef = useRef(0);
   
-  // Constants for stability and quality
-  const REQUIRED_CONSECUTIVE_DETECTIONS = 2; // Need 2 same codes in a row
-  const BUFFER_SIZE = 3; // Track last 3 detections
-  const MIN_DETECTION_DURATION_MS = 200; // Must detect for 200ms
-  const COOLDOWN_AFTER_ERROR_MS = 1000; // 1 second cooldown after failed API
-  const MIN_CODE_LENGTH = 3; // Minimum barcode length
-  const SCAN_INTERVAL_MS = 100; // Scan every 100ms
+  const REQUIRED_CONSECUTIVE_DETECTIONS = 2;
+  const BUFFER_SIZE = 3;
+  const MIN_DETECTION_DURATION_MS = 200;
+  const COOLDOWN_AFTER_ERROR_MS = 1000;
+  const MIN_CODE_LENGTH = 3;
+  const SCAN_INTERVAL_MS = 100;
 
-  // Validate code quality and length
   const isValidCode = (code) => {
     if (!code || typeof code !== 'string') return false;
-    
     const trimmedCode = code.trim();
-    
-    // Check minimum length
     if (trimmedCode.length < MIN_CODE_LENGTH) return false;
-    
     return true;
   };
 
-  // Check if we have a stable code (same code detected multiple times)
   const checkStableCode = () => {
     const buffer = detectionBufferRef.current;
     if (buffer.length < REQUIRED_CONSECUTIVE_DETECTIONS) {
       return null;
     }
 
-    // Get last N detections
     const recent = buffer.slice(-REQUIRED_CONSECUTIVE_DETECTIONS);
-    
-    // Check if all recent detections are the same code
     const firstCode = recent[0].code;
     const allSame = recent.every(detection => detection.code === firstCode);
     
     if (allSame) {
-      // Check if we've been detecting this code for minimum duration
       const firstDetection = recent[0];
       const now = Date.now();
       const duration = now - firstDetection.timestamp;
@@ -86,14 +74,10 @@ export default function QuaggaBarcodeScanner({
     return null;
   };
 
-  // Properly release camera - stop all tracks
   const releaseCamera = async () => {
     try {
-      
-      // Stop scanning loop
       scanningActiveRef.current = false;
       
-      // Stop all media stream tracks
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => {
           track.stop();
@@ -101,25 +85,21 @@ export default function QuaggaBarcodeScanner({
         streamRef.current = null;
       }
       
-      // Clear video source
       if (videoRef.current) {
         videoRef.current.srcObject = null;
       }
       
       setIsCameraReady(false);
       setIsScanning(false);
-      
     } catch (error) {
       console.error("Error releasing camera:", error);
     }
   };
 
-  // Handle barcode detection - call API after stable code confirmed
   const handleBarcodeDetected = useCallback(async (code) => {
     if (isValidating) return;
     if (code === lastScannedCodeRef.current) return;
 
-    // Clear detection buffer and stable code tracking
     detectionBufferRef.current = [];
     stableCodeRef.current = null;
     stableCodeStartTimeRef.current = null;
@@ -129,31 +109,31 @@ export default function QuaggaBarcodeScanner({
     lastScannedCodeRef.current = code;
     setScannedCode(code);
 
-    // Release camera IMMEDIATELY before validation
     await releaseCamera();
 
-    // Call API immediately (camera is already released)
-    const barcodeValue = String(code).trim();
+    const trackingNumber = String(code).trim();
     try {
-      const searchResult = await searchOrder(barcodeValue);
+      console.log("🔍 Barcode scanner calling scan-tracking API with:", trackingNumber);
+      const scanResult = await scanTracking(trackingNumber);
+      console.log("✅ Barcode scan result:", scanResult);
 
-      if (searchResult.success && searchResult.data) {
-        const searchData = searchResult.data;
+      if (scanResult.success && scanResult.data) {
+        const scanData = scanResult.data;
 
-        // Check if already packed
-        if (searchData.isAlreadyPacked && searchData.packingInfo) {
+        // Check if already processed
+        if (scanData.alreadyProcessed) {
           setIsValidating(false);
           lastScannedCodeRef.current = "";
 
           await Swal.fire({
             icon: "warning",
-            title: "Order Already Packed",
+            title: "Already Processed",
             html: `
               <div class="text-left">
-                <p class="mb-4 text-gray-700">This order has already been packed.</p>
+                <p class="mb-4 text-gray-700">This tracking number has already been processed.</p>
                 <div class="bg-gray-50 rounded-lg p-4 mb-4">
-                  <p class="text-sm"><span class="font-medium">Packing ID:</span> ${searchData.packingInfo.packingId || "N/A"}</p>
-                  <p class="text-sm"><span class="font-medium">Status:</span> ${searchData.packingInfo.status || "N/A"}</p>
+                  <p class="text-sm"><span class="font-medium">Tracking:</span> ${trackingNumber}</p>
+                  <p class="text-sm"><span class="font-medium">Status:</span> ${scanData.status || "Completed"}</p>
                 </div>
               </div>
             `,
@@ -161,42 +141,38 @@ export default function QuaggaBarcodeScanner({
             confirmButtonText: "OK",
           });
 
-          // Camera already released, just close
           if (onClose) {
             onClose();
           }
           return;
         }
 
-        
         setIsValidating(false);
         
         if (onScanSuccess) {
-          onScanSuccess(barcodeValue, searchData);
+          onScanSuccess(trackingNumber, scanData);
         }
       } else {
-        throw new Error("Order not found");
+        throw new Error("Tracking number not found");
       }
     } catch (error) {
-      console.error("Error validating barcode:", error);
+      console.error("Error validating tracking:", error);
 
       setIsValidating(false);
       lastScannedCodeRef.current = "";
       
-      // Clear detection buffer on error
       detectionBufferRef.current = [];
       stableCodeRef.current = null;
       stableCodeStartTimeRef.current = null;
       setIsScanning(false);
       setScannedCode("");
 
-      // Set cooldown period
       cooldownUntilRef.current = Date.now() + COOLDOWN_AFTER_ERROR_MS;
 
       await Swal.fire({
         icon: "error",
-        title: "Order Not Found",
-        text: error.message || "No order found with this barcode. Please try again.",
+        title: "Tracking Not Found",
+        text: error.message || "No fulfillment found with this tracking number. Please try again.",
         confirmButtonColor: "#2563eb",
         confirmButtonText: "OK",
       });
@@ -209,10 +185,8 @@ export default function QuaggaBarcodeScanner({
     }
   }, [isValidating, onScanSuccess, onClose]);
 
-  // Process detected barcodes - with stability and quality checks
   const processBarcodeDetection = useCallback(
     (code) => {
-      // Skip if in cooldown period
       if (Date.now() < cooldownUntilRef.current) {
         return;
       }
@@ -223,43 +197,34 @@ export default function QuaggaBarcodeScanner({
         return;
       }
 
-      // Skip if already processed and validated
       if (code === lastScannedCodeRef.current) {
         return;
       }
 
-      // Validate code quality
       if (!isValidCode(code)) {
         setIsScanning(false);
         return;
       }
 
-      // Add to detection buffer
       const now = Date.now();
       detectionBufferRef.current.push({
         code: code.trim(),
         timestamp: now
       });
 
-      // Keep buffer size manageable
       if (detectionBufferRef.current.length > BUFFER_SIZE) {
         detectionBufferRef.current.shift();
       }
 
-      // Show "Scanning..." feedback
       setIsScanning(true);
       setScannedCode(code);
 
-      // Check for stable code
       const stable = checkStableCode();
       
       if (stable) {
-        // We have a stable code - check if it's the same as previous stable code
         if (stableCodeRef.current?.code === stable.code) {
-          // Same stable code - check duration
           const stableDuration = now - stableCodeStartTimeRef.current;
           if (stableDuration >= MIN_DETECTION_DURATION_MS) {
-            // Stable code detected for minimum duration - accept it
             stableCodeRef.current = null;
             stableCodeStartTimeRef.current = null;
             detectionBufferRef.current = [];
@@ -267,12 +232,10 @@ export default function QuaggaBarcodeScanner({
             handleBarcodeDetected(stable.code);
           }
         } else {
-          // New stable code - start tracking
           stableCodeRef.current = stable;
           stableCodeStartTimeRef.current = now;
         }
       } else {
-        // Not stable yet - reset stable code tracking
         stableCodeRef.current = null;
         stableCodeStartTimeRef.current = null;
       }
@@ -280,7 +243,6 @@ export default function QuaggaBarcodeScanner({
     [isValidating, handleBarcodeDetected]
   );
 
-  // Start camera with native getUserMedia
   const startCamera = async () => {
     try {
       setCameraError("");
@@ -288,7 +250,6 @@ export default function QuaggaBarcodeScanner({
 
       if (!videoRef.current) return;
 
-      // Request camera access with high quality settings
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: "environment" },
@@ -297,7 +258,6 @@ export default function QuaggaBarcodeScanner({
         },
       });
 
-      // Check if scanner is still active after async camera init
       if (!isScannerActiveRef.current) {
         stream.getTracks().forEach(track => track.stop());
         return;
@@ -307,7 +267,6 @@ export default function QuaggaBarcodeScanner({
       videoRef.current.srcObject = stream;
 
       videoRef.current.onloadedmetadata = () => {
-        // Check again if scanner is still active
         if (videoRef.current && isScannerActiveRef.current) {
           videoRef.current.play().then(() => {
             if (isScannerActiveRef.current) {
@@ -320,7 +279,6 @@ export default function QuaggaBarcodeScanner({
     } catch (error) {
       console.error("Error accessing camera:", error);
       
-      // Only show error and close if scanner is still active
       if (!isScannerActiveRef.current) {
         return;
       }
@@ -348,21 +306,17 @@ export default function QuaggaBarcodeScanner({
         confirmButtonColor: "#2563eb",
       });
 
-      // Only call onClose if scanner is still active
       if (isScannerActiveRef.current && onClose) {
         onClose();
       }
     }
   };
 
-  // Start barcode scanning with BarcodeDetector (mobile) or ZXing (desktop fallback)
   const startBarcodeScanning = async () => {
     try {
-      // Check if BarcodeDetector is supported (mainly mobile browsers)
       if ('BarcodeDetector' in window) {
         setScannerMethod('native');
         
-        // Initialize BarcodeDetector with supported formats
         barcodeDetectorRef.current = new window.BarcodeDetector({
           formats: [
             "code_128",
@@ -405,11 +359,10 @@ export default function QuaggaBarcodeScanner({
           try {
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-            // Detect barcodes using BarcodeDetector API
             const barcodes = await barcodeDetectorRef.current.detect(canvas);
 
             if (barcodes && barcodes.length > 0 && scanningActiveRef.current) {
-              const barcode = barcodes[0]; // Take first detected barcode
+              const barcode = barcodes[0];
               if (barcode.rawValue) {
                 processBarcodeDetection(barcode.rawValue);
               }
@@ -428,10 +381,8 @@ export default function QuaggaBarcodeScanner({
 
         requestAnimationFrame(animationFrame);
       } else {
-        // Fallback to ZXing for desktop browsers
         setScannerMethod('zxing');
         
-        // Initialize ZXing reader
         zxingReaderRef.current = new BrowserMultiFormatReader();
         
         scanningActiveRef.current = true;
@@ -465,7 +416,6 @@ export default function QuaggaBarcodeScanner({
           try {
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-            // Detect barcodes using ZXing
             try {
               const result = await zxingReaderRef.current.decodeFromCanvas(canvas);
               
@@ -473,7 +423,6 @@ export default function QuaggaBarcodeScanner({
                 processBarcodeDetection(result.getText());
               }
             } catch (decodeError) {
-              // No barcode detected in this frame, continue scanning
               if (decodeError.name !== 'NotFoundException') {
                 console.warn("ZXing decode error:", decodeError);
               }
@@ -498,19 +447,14 @@ export default function QuaggaBarcodeScanner({
     }
   };
 
-  // Initialize camera on mount
   useEffect(() => {
-    // Mark scanner as active on mount
     isScannerActiveRef.current = true;
     startCamera();
 
-    // Cleanup on unmount
     return () => {
-      // Mark scanner as inactive immediately on unmount
       isScannerActiveRef.current = false;
       scanningActiveRef.current = false;
       
-      // Clean up ZXing reader
       if (zxingReaderRef.current) {
         try {
           zxingReaderRef.current.reset();
@@ -533,8 +477,6 @@ export default function QuaggaBarcodeScanner({
     };
   }, []);
 
-
-  // Draw blue L-shaped corner frame overlay
   useEffect(() => {
     let animationFrameId;
     let blinkPhase = 0;
@@ -574,50 +516,42 @@ export default function QuaggaBarcodeScanner({
       const cornerLength = 40;
       const lineWidth = 4;
 
-      // Draw semi-transparent black overlay
       ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
       ctx.fillRect(0, 0, containerWidth, containerHeight);
 
-      // Cut out scanning area
       ctx.globalCompositeOperation = "destination-out";
       ctx.fillStyle = "rgba(0, 0, 0, 1)";
       ctx.fillRect(frameX, frameY, frameWidth, frameHeight);
       ctx.globalCompositeOperation = "source-over";
 
-      // Calculate blinking opacity
       blinkPhase += 0.05;
       if (blinkPhase > Math.PI * 2) blinkPhase = 0;
       const opacity = 0.5 + (Math.sin(blinkPhase) + 1) * 0.25;
 
-      // Draw blue L-shaped corners
       ctx.strokeStyle = `rgba(59, 130, 246, ${opacity})`;
       ctx.lineWidth = lineWidth;
       ctx.lineCap = "round";
       ctx.shadowColor = `rgba(59, 130, 246, ${opacity * 0.5})`;
       ctx.shadowBlur = 8;
 
-      // Top-left corner
       ctx.beginPath();
       ctx.moveTo(frameX, frameY + cornerLength);
       ctx.lineTo(frameX, frameY);
       ctx.lineTo(frameX + cornerLength, frameY);
       ctx.stroke();
 
-      // Top-right corner
       ctx.beginPath();
       ctx.moveTo(frameX + frameWidth - cornerLength, frameY);
       ctx.lineTo(frameX + frameWidth, frameY);
       ctx.lineTo(frameX + frameWidth, frameY + cornerLength);
       ctx.stroke();
 
-      // Bottom-left corner
       ctx.beginPath();
       ctx.moveTo(frameX, frameY + frameHeight - cornerLength);
       ctx.lineTo(frameX, frameY + frameHeight);
       ctx.lineTo(frameX + cornerLength, frameY + frameHeight);
       ctx.stroke();
 
-      // Bottom-right corner
       ctx.beginPath();
       ctx.moveTo(frameX + frameWidth - cornerLength, frameY + frameHeight);
       ctx.lineTo(frameX + frameWidth, frameY + frameHeight);
@@ -638,17 +572,14 @@ export default function QuaggaBarcodeScanner({
   }, []);
 
   const handleClose = async () => {
-    // Mark scanner as inactive immediately to prevent any pending operations
     isScannerActiveRef.current = false;
     
-    // Clear all buffers and state
     detectionBufferRef.current = [];
     stableCodeRef.current = null;
     stableCodeStartTimeRef.current = null;
     setIsScanning(false);
     setScannedCode("");
     
-    // Properly release camera before closing
     await releaseCamera();
     if (onClose) {
       onClose();
@@ -657,7 +588,6 @@ export default function QuaggaBarcodeScanner({
 
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col">
-      {/* Top Bar */}
       <div className="absolute top-0 left-0 right-0 z-[9999] bg-black/70 backdrop-blur-sm p-4 flex items-center justify-between">
         <button
           onClick={onManualSearch}
@@ -666,7 +596,7 @@ export default function QuaggaBarcodeScanner({
           <Search className="w-4 h-4" />
           <span className="hidden sm:inline">Manual Search</span>
         </button>
-        <h2 className="text-white text-lg font-semibold">Scan to Pack</h2>
+        <h2 className="text-white text-lg font-semibold">Scan Tracking Number</h2>
         <button
           onClick={handleClose}
           className="p-2 bg-white/20 hover:bg-white/30 text-white rounded-full transition-colors"
@@ -676,12 +606,10 @@ export default function QuaggaBarcodeScanner({
         </button>
       </div>
 
-      {/* Scanner Container */}
       <div
         ref={scannerRef}
         className="flex-1 flex items-center justify-center w-full h-full relative overflow-hidden bg-black"
       >
-        {/* Video element */}
         <video
           ref={videoRef}
           className="absolute inset-0 w-full h-full object-cover"
@@ -690,10 +618,8 @@ export default function QuaggaBarcodeScanner({
           style={{ zIndex: 1 }}
         />
 
-        {/* Hidden canvas for barcode detection */}
         <canvas ref={canvasRef} className="hidden" />
 
-        {/* Frame overlay canvas */}
         <canvas
           ref={frameCanvasRef}
           className="absolute inset-0 pointer-events-none"
@@ -706,7 +632,6 @@ export default function QuaggaBarcodeScanner({
           }}
         />
 
-        {/* Camera Error Display */}
         {cameraError && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-[100]">
             <div className="text-center p-4">
@@ -727,7 +652,6 @@ export default function QuaggaBarcodeScanner({
           </div>
         )}
 
-        {/* Camera Loading Display */}
         {!isCameraReady && !cameraError && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-[100]">
             <div className="text-center">
@@ -739,8 +663,6 @@ export default function QuaggaBarcodeScanner({
           </div>
         )}
 
-
-        {/* Scanning Status Display */}
         {isScanning && !isValidating && scannedCode && isCameraReady && (
           <div className="absolute top-24 left-1/2 transform -translate-x-1/2 z-[200] flex flex-col items-center gap-2">
             <div className="bg-blue-500/70 backdrop-blur-sm rounded-lg p-3 flex items-center justify-center">
@@ -768,7 +690,6 @@ export default function QuaggaBarcodeScanner({
         )}
       </div>
 
-      {/* Validation Overlay */}
       {isValidating && (
         <div className="absolute inset-0 z-[10000] bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center">
           <div className="bg-white/10 p-4 rounded-full mb-4">
@@ -776,12 +697,11 @@ export default function QuaggaBarcodeScanner({
           </div>
           <h3 className="text-white text-xl font-semibold mb-2">Validating...</h3>
           <p className="text-gray-300 text-center max-w-xs">
-            Checking barcode: <span className="font-mono text-white">{lastScannedCodeRef.current}</span>
+            Checking tracking: <span className="font-mono text-white">{lastScannedCodeRef.current}</span>
           </p>
         </div>
       )}
 
-      {/* Bottom Bar */}
       {!isValidating && (
         <div className="absolute bottom-0 left-0 right-0 z-[9999] bg-black/70 backdrop-blur-sm p-4 flex items-center justify-center">
           <button
@@ -796,3 +716,4 @@ export default function QuaggaBarcodeScanner({
     </div>
   );
 }
+
