@@ -31,11 +31,13 @@ export default function ShippingBarcodeScanner({
   const stableCodeStartTimeRef = useRef(null);
   const cooldownUntilRef = useRef(0);
   
-  const REQUIRED_CONSECUTIVE_DETECTIONS = 2;
-  const BUFFER_SIZE = 3;
-  const MIN_DETECTION_DURATION_MS = 200;
+  // Detection tuning: require more stable, longer-lived detections
+  const REQUIRED_CONSECUTIVE_DETECTIONS = 3; // frames with same code before accepting
+  const BUFFER_SIZE = 5; // history buffer for recent detections
+  const MIN_DETECTION_DURATION_MS = 400; // minimum time (ms) the same code must be visible
   const COOLDOWN_AFTER_ERROR_MS = 1000;
   const MIN_CODE_LENGTH = 3;
+  const MIN_PREFERRED_NUMERIC_LENGTH = 8; // numeric-only codes shorter than this are not auto-preferred
   const SCAN_INTERVAL_MS = 100;
 
   const isValidCode = (code) => {
@@ -43,6 +45,48 @@ export default function ShippingBarcodeScanner({
     const trimmedCode = code.trim();
     if (trimmedCode.length < MIN_CODE_LENGTH) return false;
     return true;
+  };
+
+  // Check if a code contains only numeric digits (for DHL waybill detection)
+  const isNumericOnly = (code) => {
+    if (!code || typeof code !== 'string') return false;
+    const trimmedCode = code.trim();
+    // Check if code contains only digits (0-9)
+    return /^\d+$/.test(trimmedCode);
+  };
+
+  // Select the best barcode from multiple candidates
+  // Prefers numeric-only barcodes (DHL waybill) when multiple are detected
+  // Falls back to first valid barcode for other couriers
+  const selectBestBarcode = (candidates) => {
+    if (!candidates || candidates.length === 0) return null;
+
+    // Filter to only valid codes
+    const validCandidates = candidates
+      .map(candidate => {
+        const value = typeof candidate === 'string' ? candidate : candidate.rawValue || candidate;
+        return value ? String(value).trim() : null;
+      })
+      .filter(value => value && isValidCode(value));
+
+    if (validCandidates.length === 0) return null;
+
+    // Separate numeric-only and mixed candidates
+    // Only treat numeric-only codes as preferred when they are reasonably long
+    const numericCandidates = validCandidates.filter(
+      (code) => isNumericOnly(code) && code.length >= MIN_PREFERRED_NUMERIC_LENGTH
+    );
+
+    // If we have numeric-only candidates, prefer them (DHL waybill case)
+    if (numericCandidates.length > 0) {
+      // If multiple numeric candidates, prefer the longest one (more likely to be the waybill)
+      return numericCandidates.reduce((best, current) => 
+        current.length > best.length ? current : best
+      );
+    }
+
+    // Fall back to first valid candidate (for other couriers with alphanumeric tracking)
+    return validCandidates[0];
   };
 
   const checkStableCode = () => {
@@ -296,9 +340,14 @@ export default function ShippingBarcodeScanner({
             const barcodes = await barcodeDetectorRef.current.detect(canvas);
 
             if (barcodes && barcodes.length > 0 && scanningActiveRef.current) {
-              const barcode = barcodes[0];
-              if (barcode.rawValue) {
-                processBarcodeDetection(barcode.rawValue);
+              // Collect all detected barcode values
+              const candidates = barcodes.map(b => b.rawValue).filter(Boolean);
+              
+              // Select the best barcode (prefers numeric-only for DHL waybill)
+              const selectedCode = selectBestBarcode(candidates);
+              
+              if (selectedCode) {
+                processBarcodeDetection(selectedCode);
               }
             }
           } catch (error) {

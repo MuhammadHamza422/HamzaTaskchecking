@@ -49,8 +49,8 @@ export default function ShippingOperationsTable() {
     status: null,
     trackingNumber: "",
     dateRange: null,
-    sortBy: "createdAt",
-    sortOrder: "desc",
+    sortBy: null,
+    sortOrder: null,
   });
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
 
@@ -65,8 +65,6 @@ export default function ShippingOperationsTable() {
       const params = {
         page: pageNum,
         limit: pageSize,
-        sortBy: filters.sortBy,
-        sortOrder: filters.sortOrder,
       };
 
       if (filters.status) {
@@ -78,6 +76,13 @@ export default function ShippingOperationsTable() {
       if (filters.dateRange && filters.dateRange.length === 2) {
         params.startDate = filters.dateRange[0].startOf("day").toISOString();
         params.endDate = filters.dateRange[1].endOf("day").toISOString();
+      }
+      // Only include sorting if explicitly set by user
+      if (filters.sortBy) {
+        params.sortBy = filters.sortBy;
+      }
+      if (filters.sortOrder) {
+        params.sortOrder = filters.sortOrder;
       }
 
       const result = await getAllShippingRecords(params);
@@ -416,6 +421,7 @@ export default function ShippingOperationsTable() {
                 />
                 <Select
                 placeholder="Sort Order"
+                allowClear
                 value={filters.sortOrder}
                 onChange={(value) => handleFilterChange("sortOrder", value)}
                 className="w-full md:w-auto h-11"
