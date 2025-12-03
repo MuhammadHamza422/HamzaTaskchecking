@@ -19,7 +19,7 @@ export default function ShippingOrderDetailsNew() {
   const location = useLocation();
   const { trackingNumber: trackingFromUrl } = useParams();
   
-  const [stage, setStage] = useState(STAGES.PHOTO_UPLOAD); // Start with photo upload
+  const [stage, setStage] = useState(STAGES.PHOTO_UPLOAD); 
   const [photos, setPhotos] = useState([]);
   const [orderDetails, setOrderDetails] = useState(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
@@ -40,106 +40,6 @@ export default function ShippingOrderDetailsNew() {
   const trackingNumber = location.state?.trackingNumber || trackingFromUrl;
   const autoOpenCamera = location.state?.autoOpenCamera || false;
 
-  // Get storage key
-  const getStorageKey = () => {
-    if (!trackingNumber) return null;
-    return `shipping_${trackingNumber}`;
-  };
-
-  // Convert File to base64 for storage
-  const fileToBase64 = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  };
-
-  // Convert base64 back to File
-  const base64ToFile = (base64, filename) => {
-    const arr = base64.split(',');
-    const mime = arr[0].match(/:(.*?);/)[1];
-    const bstr = atob(arr[1]);
-    let n = bstr.length;
-    const u8arr = new Uint8Array(n);
-    while (n--) {
-      u8arr[n] = bstr.charCodeAt(n);
-    }
-    return new File([u8arr], filename, { type: mime });
-  };
-
-  // Load persisted data from localStorage on mount
-  useEffect(() => {
-    const storageKey = getStorageKey();
-    if (!storageKey) return;
-
-    const loadPersistedData = async () => {
-      try {
-        const saved = localStorage.getItem(storageKey);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          
-          // Restore photos
-          if (parsed.photos && parsed.photos.length > 0) {
-            const restoredPhotos = await Promise.all(
-              parsed.photos.map(async (photoData) => {
-                const file = base64ToFile(photoData.base64, photoData.filename);
-                return {
-                  id: photoData.id,
-                  file: file,
-                  preview: photoData.base64,
-                };
-              })
-            );
-            setPhotos(restoredPhotos);
-          }
-          
-          // Restore stage
-          if (parsed.stage) {
-            setStage(parsed.stage);
-          }
-        }
-      } catch (error) {
-        console.error("Error loading persisted data:", error);
-      }
-    };
-
-    loadPersistedData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Persist data to localStorage whenever it changes
-  useEffect(() => {
-    const storageKey = getStorageKey();
-    if (!storageKey) return;
-
-    const persistData = async () => {
-      try {
-        const photosData = await Promise.all(
-          photos.map(async (photo) => ({
-            id: photo.id,
-            base64: photo.preview,
-            filename: photo.file.name,
-          }))
-        );
-
-        const dataToSave = {
-          photos: photosData,
-          stage: stage,
-          timestamp: new Date().toISOString(),
-        };
-
-        localStorage.setItem(storageKey, JSON.stringify(dataToSave));
-      } catch (error) {
-        console.error("Error persisting data:", error);
-      }
-    };
-
-    persistData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [photos, stage]);
-
   // Background scanTracking validation (runs when we have trackingNumber but no scanData)
   useEffect(() => {
     if (!trackingNumber) return;
@@ -151,7 +51,6 @@ export default function ShippingOrderDetailsNew() {
       setScanError(null);
 
       try {
-        console.log("🔍 Background validation: Calling scan-tracking API with:", trackingNumber);
         const scanResult = await scanTracking(trackingNumber.trim());
 
         if (scanResult.success && scanResult.data) {
@@ -190,12 +89,6 @@ export default function ShippingOrderDetailsNew() {
               cancelButtonColor: "#6b7280",
             });
 
-            // Clear persisted data
-            const storageKey = getStorageKey();
-            if (storageKey) {
-              localStorage.removeItem(storageKey);
-            }
-
             if (alertResult.isConfirmed && resultScanData.shippingRecordId) {
               navigate("/fulfillment/shipping/list", {
                 state: { shippingRecordId: resultScanData.shippingRecordId },
@@ -210,7 +103,14 @@ export default function ShippingOrderDetailsNew() {
           setScanData(resultScanData);
           setShippingRecordId(resultScanData.shippingRecordId);
           setScanStatus("success");
-          console.log("✅ Background validation successful:", resultScanData);
+          
+          // Immediately start loading order details (don't wait for effect)
+          if (resultScanData.shippingRecordId) {
+            // Use setTimeout to ensure state is updated before calling
+            setTimeout(() => {
+              loadOrderDetails(resultScanData.shippingRecordId);
+            }, 0);
+          }
         } else {
           throw new Error("Tracking number not found");
         }
@@ -228,12 +128,6 @@ export default function ShippingOrderDetailsNew() {
           confirmButtonText: "OK",
         });
 
-        // Clear persisted data
-        const storageKey = getStorageKey();
-        if (storageKey) {
-          localStorage.removeItem(storageKey);
-        }
-
         // Redirect back to landing
         navigate("/fulfillment/shipping");
       }
@@ -243,15 +137,13 @@ export default function ShippingOrderDetailsNew() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trackingNumber]);
 
-  // Load order details in background (after scanData is available)
   useEffect(() => {
     if (shippingRecordId && !orderDetails && !isLoadingDetails && scanStatus === "success") {
-      loadOrderDetails();
+      loadOrderDetails(shippingRecordId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shippingRecordId, scanStatus]);
+  }, [shippingRecordId, scanStatus, orderDetails, isLoadingDetails]);
 
-  // Auto-advance to details step when validation completes and user has photos
   useEffect(() => {
     if (
       scanStatus === "success" &&
@@ -259,23 +151,37 @@ export default function ShippingOrderDetailsNew() {
       photos.length > 0 &&
       stage === STAGES.PHOTO_UPLOAD
     ) {
-      // Small delay to ensure smooth transition
       const timer = setTimeout(() => {
-        setStage(STAGES.DETAILS);
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      }, 300);
+        if (stage === STAGES.PHOTO_UPLOAD) {
+          setStage(STAGES.DETAILS);
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+      }, isLoadingDetails ? 200 : 600); // Shorter delay if already loading, longer if not started yet
       
       return () => clearTimeout(timer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scanStatus, scanData, photos.length, stage]);
+  }, [scanStatus, scanData, photos.length, stage, isLoadingDetails]);
 
-  const loadOrderDetails = async () => {
+  const loadOrderDetails = async (recordId = null) => {
+    const idToUse = recordId || shippingRecordId;
+    if (!idToUse) {
+      console.warn("⚠️ Cannot load order details: no shippingRecordId available");
+      return;
+    }
+
+    // Prevent duplicate calls
+    if (isLoadingDetails) {
+      console.log("⏸️ Order details already loading, skipping duplicate call");
+      return;
+    }
+
     setIsLoadingDetails(true);
     setDetailsError(null);
     
     try {
-      const result = await getOrderDetails(shippingRecordId);
+      console.log("📋 Loading order details for shippingRecordId:", idToUse);
+      const result = await getOrderDetails(idToUse);
       
       if (result.success && result.data) {
         setOrderDetails(result.data);
@@ -285,7 +191,6 @@ export default function ShippingOrderDetailsNew() {
     } catch (error) {
       console.error("❌ Error loading order details:", error);
       setDetailsError(error.message || "Failed to load order details");
-      // Don't show error - details are optional
     } finally {
       setIsLoadingDetails(false);
     }
@@ -296,14 +201,10 @@ export default function ShippingOrderDetailsNew() {
   };
 
   const handleContinueToDetails = (force = false) => {
-    // Gate progression: need photos AND successful validation
     if ((photos.length > 0 || force) && scanStatus === "success" && scanData) {
       setStage(STAGES.DETAILS);
-      // Scroll to top
       window.scrollTo({ top: 0, behavior: "smooth" });
     } else if (scanStatus === "loading") {
-      // Show brief message if validation is still in progress
-      // Auto-advance will happen when validation completes
       Swal.fire({
         icon: "info",
         title: "Validating Tracking",
@@ -321,14 +222,13 @@ export default function ShippingOrderDetailsNew() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleShippingComplete = () => {
-    // Clear persisted data
-    const storageKey = getStorageKey();
-    if (storageKey) {
-      localStorage.removeItem(storageKey);
+  const handleRetryDetails = () => {
+    if (shippingRecordId) {
+      loadOrderDetails(shippingRecordId);
     }
-    
-    // Navigate back to landing page
+  };
+
+  const handleShippingComplete = () => {
     navigate("/fulfillment/shipping");
   };
 
@@ -336,7 +236,6 @@ export default function ShippingOrderDetailsNew() {
     navigate("/fulfillment/shipping");
   };
 
-  // Check if we have tracking number (required)
   if (!trackingNumber) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -353,8 +252,6 @@ export default function ShippingOrderDetailsNew() {
     );
   }
 
-  // Can proceed to details only if: have photos AND validation is successful
-  // Note: We allow photo upload even while validation is in progress (non-blocking)
   const canComplete = photos.length >= 1 && scanStatus === "success" && scanData;
 
   return (
@@ -383,9 +280,9 @@ export default function ShippingOrderDetailsNew() {
                   Shipping Process
                 </h1>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-sm text-gray-600">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-gray-700">Tracking:</span>
-                    <span className="font-mono font-semibold text-purple-600">{trackingNumber}</span>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <p className="font-medium text-gray-700">Tracking:</p>
+                    <p className="font-mono font-semibold text-purple-600">{trackingNumber}</p>
                     {scanStatus === "loading" && (
                       <Loader2 className="w-4 h-4 text-purple-600 animate-spin ml-2" />
                     )}
@@ -417,40 +314,46 @@ export default function ShippingOrderDetailsNew() {
           </div>
         </motion.div>
 
-        {/* Non-blocking Validation Status Banner */}
+        {/* Step Indicator */}
+        <ShippingStepIndicator stage={stage} />
+
+        {/* Validation Loading Overlay - Fixed position to cover entire viewport */}
         {scanStatus === "loading" && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-3"
-          >
-            <Loader2 className="w-5 h-5 text-blue-600 animate-spin flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-blue-900">Validating tracking number...</p>
-              <p className="text-xs text-blue-700 mt-0.5">You can start taking photos while we validate.</p>
-            </div>
-          </motion.div>
-        )}
-        
-        {scanStatus === "success" && scanData && stage === STAGES.PHOTO_UPLOAD && photos.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="mb-4 bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-3"
+            className="fixed inset-0 z-[9999] bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center"
           >
-            <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-green-900">Tracking validated successfully!</p>
-              <p className="text-xs text-green-700 mt-0.5">Moving to details step...</p>
+            <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-8 max-w-md mx-4 text-center">
+              <Loader2 className="w-16 h-16 text-purple-600 animate-spin mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Validating Tracking Number</h3>
+              <p className="text-gray-600 mb-4">
+                Tracking: <span className="font-mono font-semibold text-purple-600">{trackingNumber}</span>
+              </p>
+              <p className="text-sm text-gray-500">Please wait while we validate your tracking number...</p>
             </div>
           </motion.div>
         )}
 
-        {/* Step Indicator */}
-        <ShippingStepIndicator stage={stage} />
+        {/* Order Details Loading Overlay - Fixed position to cover entire viewport */}
+        {isLoadingDetails && stage === STAGES.DETAILS && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9999] bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center"
+          >
+            <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-8 max-w-md mx-4 text-center">
+              <Loader2 className="w-16 h-16 text-blue-600 animate-spin mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Loading Order Details</h3>
+              <p className="text-gray-600 mb-4">
+                Tracking: <span className="font-mono font-semibold text-blue-600">{trackingNumber}</span>
+              </p>
+              <p className="text-sm text-gray-500">Please wait while we fetch complete order information...</p>
+            </div>
+          </motion.div>
+        )}
 
         {/* Main Content */}
         <motion.div
@@ -479,6 +382,7 @@ export default function ShippingOrderDetailsNew() {
               photos={photos}
               onBack={handleBackToPhotos}
               onComplete={handleShippingComplete}
+              onRetryDetails={handleRetryDetails}
             />
           )}
         </motion.div>
