@@ -115,10 +115,14 @@ export default function ShippingScanScreen({ onScanSuccess }) {
     }
   };
 
-  const handleBarcodeScanSuccess = (trackingNumber, scanData) => {
+  const handleBarcodeScanSuccess = (trackingNumber) => {
+    // Scanner now only provides tracking number (detection-only)
+    // For backward compatibility with ShippingProcessFlow, we still call onScanSuccess
+    // but ShippingProcessFlow will need to handle validation itself
     setShowBarcodeScanner(false);
     if (onScanSuccess) {
-      onScanSuccess(trackingNumber, scanData);
+      // Pass trackingNumber only - parent component should handle validation
+      onScanSuccess(trackingNumber, null);
     }
   };
 

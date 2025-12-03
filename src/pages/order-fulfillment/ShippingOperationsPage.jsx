@@ -3,7 +3,6 @@ import ShippingLandingPageNew from "./components/shipping/ShippingLandingPageNew
 import ShippingOrderDetailsNew from "./components/shipping/ShippingOrderDetailsNew";
 import ShippingOperationsTable from "./components/shipping/ShippingOperationsTable";
 import ShippingRecordDetailsPage from "./components/shipping/ShippingRecordDetailsPage";
-import ShippingOperationsMain from "./components/shipping/ShippingOperationsMain";
 
 export default function ShippingOperationsPage() {
   return (
@@ -26,8 +25,6 @@ export default function ShippingOperationsPage() {
       {/* Shipping record details page */}
       <Route path="details/:shippingRecordId" element={<ShippingRecordDetailsPage />} />
       
-      {/* Alternative: Full operations view with list and process toggle */}
-      <Route path="operations" element={<ShippingOperationsMain />} />
     </Routes>
   );
 }

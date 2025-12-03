@@ -38,7 +38,6 @@ export default function ShippingDetailsConfirmStep({
     setIsCompleting(true);
 
     try {
-      console.log("✅ Completing shipping with photos:", photos.length);
       
       // Extract File objects from photos array
       const photoFiles = photos.map(p => p.file);
