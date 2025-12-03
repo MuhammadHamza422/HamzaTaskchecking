@@ -14,6 +14,7 @@ export default function ShippingDetailsConfirmStep({
   photos,
   onBack,
   onComplete,
+  onRetryDetails,
 }) {
   const [isCompleting, setIsCompleting] = useState(false);
   const [notes, setNotes] = useState("");
@@ -89,22 +90,15 @@ export default function ShippingDetailsConfirmStep({
       {/* Header Summary */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <div className="flex items-center gap-3">
-            <h2 className="text-2xl font-bold text-gray-900 font-mono tracking-tight">{trackingNumber}</h2>
-            <StatusBadge status={fulfillment?.status || "pending"} />
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <h2 className="text-sm sm:text-2xl font-bold text-gray-900 font-mono text-wrap tracking-tight">{trackingNumber}</h2>
+            <StatusBadge className="w-[100px]" status={fulfillment?.status || "pending"} />
           </div>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500 mt-2">
-            <span className="flex items-center gap-1.5">
-              <Truck className="w-4 h-4 text-gray-400" />
-              {fulfillment?.carrierName || "Unknown Carrier"}
-              {fulfillment?.serviceCode && <span className="text-gray-400 px-1">•</span>}
-              {fulfillment?.serviceCode}
-            </span>
-            {fulfillment?.orderNumber && (
-              <span className="flex items-center gap-1.5 px-3 py-0.5 bg-gray-100 rounded-full font-medium text-gray-700">
-                Order #{fulfillment.orderNumber}
-              </span>
-            )}
+          {/* show the labels with them */}
+          <div className="flex flex-col sm:flex-row flex-wrap sm:items-center gap-x-4 gap-y-1 text-sm text-gray-500 mt-2">
+            <span className="flex items-center gap-1.5"> <span className="font-medium text-gray-700"> Carrier: </span> {fulfillment?.carrierName || "Unknown Carrier"}</span>
+            <span className="flex items-center gap-1.5"> <span className="font-medium text-gray-700"> Service: </span> {fulfillment?.serviceCode}</span>
+            <span className="flex items-center gap-1.5"> <span className="font-medium text-gray-700"> Order: </span> {fulfillment?.orderNumber && `Order #${fulfillment.orderNumber}`}</span>
           </div>
         </div>
         <div className="text-left md:text-right">
@@ -112,7 +106,7 @@ export default function ShippingDetailsConfirmStep({
             {fulfillment?.shipDate ? `Shipped: ${formatDate(fulfillment.shipDate)}` : "Not Shipped Yet"}
           </div>
           <div className="text-xs text-gray-400 mt-1">
-             Record ID: {scanData.shippingRecordId.slice(-8).toUpperCase()}
+             Record ID: {scanData.shippingRecordId}
           </div>
         </div>
       </div>
@@ -159,16 +153,19 @@ export default function ShippingDetailsConfirmStep({
                   <h3 className="font-semibold text-gray-900 text-sm">Bill To</h3>
                 </div>
                 <div className="p-4 space-y-1 text-sm">
-                  <p className="font-bold text-gray-900">{shipstationOrder.billTo.name}</p>
-                  {shipstationOrder.billTo.company && (
-                    <p className="text-gray-600">{shipstationOrder.billTo.company}</p>
-                  )}
-                  <p className="text-gray-700">{shipstationOrder.billTo.street1}</p>
-                  {shipstationOrder.billTo.street2 && <p className="text-gray-700">{shipstationOrder.billTo.street2}</p>}
+                  <p className="font-bold text-gray-900">{shipstationOrder?.billTo?.name || "N/A"}</p>
+                    <p className="text-gray-600"> Company: {shipstationOrder?.billTo?.company || "N/A"}</p>
+                  <p className="text-gray-700"> Street: {shipstationOrder?.billTo?.street1 || "N/A"}</p>
+                  <p className="text-gray-700"> Street 2: {shipstationOrder?.billTo?.street2 || "N/A"}</p>
                   <p className="text-gray-700">
-                    {[shipstationOrder.billTo.city, shipstationOrder.billTo.state, shipstationOrder.billTo.postalCode].filter(Boolean).join(", ")}
+                    Address: {[shipstationOrder?.billTo?.city, shipstationOrder?.billTo?.state, shipstationOrder?.billTo?.postalCode].filter(Boolean).join(", ")}
                   </p>
-                  <p className="text-gray-500 text-xs mt-2 uppercase tracking-wide">{shipstationOrder.billTo.country}</p>
+                  <p className="text-gray-500 text-xs mt-2 uppercase tracking-wide"> Country: {shipstationOrder?.billTo?.country || "N/A"}</p>
+                  {(shipstationOrder?.billTo?.phone) && (
+                    <div className="mt-3 pt-3 border-t border-gray-100 space-y-1">
+                      {shipstationOrder?.billTo?.phone && <p className="text-gray-500 text-xs">{shipstationOrder?.billTo?.phone}</p>}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -241,6 +238,320 @@ export default function ShippingDetailsConfirmStep({
                 />
               </div>
           </div>
+
+          {/* Package & Shipping Details */}
+          {(fulfillment?.weight || fulfillment?.dimensions || shipstationOrder?.packageCode || shipstationOrder?.confirmation) && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
+                <Package className="w-4 h-4 text-indigo-600" />
+                <h3 className="font-semibold text-gray-900 text-sm">Package & Shipping Details</h3>
+              </div>
+              <div className="p-4 space-y-3 text-sm">
+                {fulfillment?.weight && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Weight</span>
+                    <span className="text-gray-900 font-medium">
+                      {fulfillment.weight.value} {fulfillment.weight.units || "ounces"}
+                    </span>
+                  </div>
+                )}
+                {fulfillment?.dimensions && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Dimensions</span>
+                    <span className="text-gray-900 font-medium">
+                      {fulfillment.dimensions.length}" × {fulfillment.dimensions.width}" × {fulfillment.dimensions.height}" ({fulfillment.dimensions.units || "inches"})
+                    </span>
+                  </div>
+                )}
+                {shipstationOrder?.packageCode && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Package Type</span>
+                    <span className="text-gray-900 font-medium capitalize">{shipstationOrder.packageCode}</span>
+                  </div>
+                )}
+                {shipstationOrder?.confirmation && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Confirmation</span>
+                    <span className="text-gray-900 font-medium capitalize">{shipstationOrder.confirmation}</span>
+                  </div>
+                )}
+                {shipstationOrder?.requestedShippingService && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Requested Service</span>
+                    <span className="text-gray-900 font-medium">{shipstationOrder.requestedShippingService}</span>
+                  </div>
+                )}
+                {shipstationOrder?.holdUntilDate && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Hold Until</span>
+                    <span className="text-gray-900">{formatDate(shipstationOrder.holdUntilDate)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* International Options */}
+          {shipstationOrder?.internationalOptions && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-blue-600" />
+                <h3 className="font-semibold text-gray-900 text-sm">International Options</h3>
+              </div>
+              <div className="p-4 space-y-4 text-sm">
+                {shipstationOrder.internationalOptions.contents && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Contents</span>
+                    <span className="text-gray-900 font-medium capitalize">{shipstationOrder.internationalOptions.contents}</span>
+                  </div>
+                )}
+                {shipstationOrder.internationalOptions.nonDelivery && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Non-Delivery</span>
+                    <span className="text-gray-900 font-medium capitalize">{shipstationOrder.internationalOptions.nonDelivery.replace(/_/g, ' ')}</span>
+                  </div>
+                )}
+                {shipstationOrder.internationalOptions.customsItems && shipstationOrder.internationalOptions.customsItems.length > 0 && (
+                  <div className="pt-3 border-t border-gray-100">
+                    <h4 className="text-xs font-semibold text-gray-700 mb-3 uppercase tracking-wide">Customs Items</h4>
+                    <div className="space-y-3">
+                      {shipstationOrder.internationalOptions.customsItems.map((item, index) => (
+                        <div key={item.customsItemId || index} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-start">
+                              <span className="text-gray-500 text-xs">Description</span>
+                              <span className="text-gray-900 font-medium text-xs text-right max-w-[60%]">{item.description}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-gray-500 text-xs">Quantity</span>
+                              <span className="text-gray-900 font-medium text-xs">{item.quantity}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-gray-500 text-xs">Value</span>
+                              <span className="text-gray-900 font-medium text-xs">${item.value?.toFixed(2) || "0.00"}</span>
+                            </div>
+                            {item.harmonizedTariffCode && (
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-500 text-xs">HS Code</span>
+                                <span className="text-gray-900 font-medium text-xs font-mono">{item.harmonizedTariffCode}</span>
+                              </div>
+                            )}
+                            {item.countryOfOrigin && (
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-500 text-xs">Origin Country</span>
+                                <span className="text-gray-900 font-medium text-xs uppercase">{item.countryOfOrigin}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Advanced Options */}
+          {shipstationOrder?.advancedOptions && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
+                <FileText className="w-4 h-4 text-purple-600" />
+                <h3 className="font-semibold text-gray-900 text-sm">Advanced Options</h3>
+              </div>
+              <div className="p-4 space-y-3 text-sm">
+                {shipstationOrder.advancedOptions.warehouseId && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Warehouse ID</span>
+                    <span className="text-gray-900 font-medium">{shipstationOrder.advancedOptions.warehouseId}</span>
+                  </div>
+                )}
+                {shipstationOrder.advancedOptions.storeId && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Store ID</span>
+                    <span className="text-gray-900 font-medium">{shipstationOrder.advancedOptions.storeId}</span>
+                  </div>
+                )}
+                {(shipstationOrder.advancedOptions.nonMachinable !== undefined || 
+                  shipstationOrder.advancedOptions.saturdayDelivery !== undefined || 
+                  shipstationOrder.advancedOptions.containsAlcohol !== undefined) && (
+                  <div className="pt-2 border-t border-gray-100 space-y-2">
+                    {shipstationOrder.advancedOptions.nonMachinable !== undefined && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-500">Non-Machinable</span>
+                        <span className={`font-medium ${shipstationOrder.advancedOptions.nonMachinable ? 'text-orange-600' : 'text-gray-400'}`}>
+                          {shipstationOrder.advancedOptions.nonMachinable ? 'Yes' : 'No'}
+                        </span>
+                      </div>
+                    )}
+                    {shipstationOrder.advancedOptions.saturdayDelivery !== undefined && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-500">Saturday Delivery</span>
+                        <span className={`font-medium ${shipstationOrder.advancedOptions.saturdayDelivery ? 'text-green-600' : 'text-gray-400'}`}>
+                          {shipstationOrder.advancedOptions.saturdayDelivery ? 'Yes' : 'No'}
+                        </span>
+                      </div>
+                    )}
+                    {shipstationOrder.advancedOptions.containsAlcohol !== undefined && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-500">Contains Alcohol</span>
+                        <span className={`font-medium ${shipstationOrder.advancedOptions.containsAlcohol ? 'text-red-600' : 'text-gray-400'}`}>
+                          {shipstationOrder.advancedOptions.containsAlcohol ? 'Yes' : 'No'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {(shipstationOrder.advancedOptions.customField1 || 
+                  shipstationOrder.advancedOptions.customField2 || 
+                  shipstationOrder.advancedOptions.customField3) && (
+                  <div className="pt-2 border-t border-gray-100 space-y-2">
+                    <h4 className="text-xs font-semibold text-gray-700 mb-2 uppercase tracking-wide">Custom Fields</h4>
+                    {shipstationOrder.advancedOptions.customField1 && (
+                      <div className="flex justify-between items-start">
+                        <span className="text-gray-500 text-xs">Custom Field 1</span>
+                        <span className="text-gray-900 text-xs text-right max-w-[60%]">{shipstationOrder.advancedOptions.customField1}</span>
+                      </div>
+                    )}
+                    {shipstationOrder.advancedOptions.customField2 && (
+                      <div className="flex justify-between items-start">
+                        <span className="text-gray-500 text-xs">Custom Field 2</span>
+                        <span className="text-gray-900 text-xs text-right max-w-[60%]">{shipstationOrder.advancedOptions.customField2}</span>
+                      </div>
+                    )}
+                    {shipstationOrder.advancedOptions.customField3 && (
+                      <div className="flex justify-between items-start">
+                        <span className="text-gray-500 text-xs">Custom Field 3</span>
+                        <span className="text-gray-900 text-xs text-right max-w-[60%]">{shipstationOrder.advancedOptions.customField3}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {shipstationOrder.advancedOptions.billToParty && (
+                  <div className="pt-2 border-t border-gray-100">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500">Bill To Party</span>
+                      <span className="text-gray-900 font-medium capitalize">{shipstationOrder.advancedOptions.billToParty.replace(/_/g, ' ')}</span>
+                    </div>
+                    {shipstationOrder.advancedOptions.billToMyOtherAccount && (
+                      <div className="flex justify-between items-center mt-2">
+                        <span className="text-gray-500">Bill To Account</span>
+                        <span className="text-gray-900 font-medium">{shipstationOrder.advancedOptions.billToMyOtherAccount}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {shipstationOrder.advancedOptions.mergedOrSplit && (
+                  <div className="pt-2 border-t border-gray-100">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500">Merged/Split</span>
+                      <span className={`font-medium ${shipstationOrder.advancedOptions.mergedOrSplit ? 'text-blue-600' : 'text-gray-400'}`}>
+                        {shipstationOrder.advancedOptions.mergedOrSplit ? 'Yes' : 'No'}
+                      </span>
+                    </div>
+                    {shipstationOrder.advancedOptions.mergedIds && shipstationOrder.advancedOptions.mergedIds.length > 0 && (
+                      <div className="mt-2">
+                        <span className="text-gray-500 text-xs">Merged IDs: </span>
+                        <span className="text-gray-900 text-xs font-mono">{shipstationOrder.advancedOptions.mergedIds.join(', ')}</span>
+                      </div>
+                    )}
+                    {shipstationOrder.advancedOptions.parentId && (
+                      <div className="mt-2">
+                        <span className="text-gray-500 text-xs">Parent ID: </span>
+                        <span className="text-gray-900 text-xs font-mono">{shipstationOrder.advancedOptions.parentId}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Insurance Options */}
+          {shipstationOrder?.insuranceOptions && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
+                <DollarSign className="w-4 h-4 text-green-600" />
+                <h3 className="font-semibold text-gray-900 text-sm">Insurance Options</h3>
+              </div>
+              <div className="p-4 space-y-3 text-sm">
+                {shipstationOrder.insuranceOptions.insureShipment !== undefined && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Insured</span>
+                    <span className={`font-medium ${shipstationOrder.insuranceOptions.insureShipment ? 'text-green-600' : 'text-gray-400'}`}>
+                      {shipstationOrder.insuranceOptions.insureShipment ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+                )}
+                {shipstationOrder.insuranceOptions.insureShipment && shipstationOrder.insuranceOptions.insuredValue > 0 && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Insured Value</span>
+                    <span className="text-gray-900 font-medium">${shipstationOrder.insuranceOptions.insuredValue.toFixed(2)}</span>
+                  </div>
+                )}
+                {shipstationOrder.insuranceOptions.provider && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Provider</span>
+                    <span className="text-gray-900 font-medium capitalize">{shipstationOrder.insuranceOptions.provider}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Gift Information */}
+          {shipstationOrder?.gift && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
+                <Package className="w-4 h-4 text-pink-600" />
+                <h3 className="font-semibold text-gray-900 text-sm">Gift Information</h3>
+              </div>
+              <div className="p-4 space-y-2 text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500">Is Gift</span>
+                  <span className="text-pink-600 font-medium">Yes</span>
+                </div>
+                {shipstationOrder.giftMessage && (
+                  <div className="pt-2 border-t border-gray-100">
+                    <span className="text-gray-500 text-xs block mb-1">Gift Message</span>
+                    <p className="text-gray-900 bg-gray-50 p-2 rounded border border-gray-100 text-xs">{shipstationOrder.giftMessage}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Payment & Fulfillment Info */}
+          {(shipstationOrder?.paymentMethod || shipstationOrder?.externallyFulfilled) && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
+                <DollarSign className="w-4 h-4 text-gray-600" />
+                <h3 className="font-semibold text-gray-900 text-sm">Payment & Fulfillment</h3>
+              </div>
+              <div className="p-4 space-y-3 text-sm">
+                {shipstationOrder.paymentMethod && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Payment Method</span>
+                    <span className="text-gray-900 font-medium capitalize">{shipstationOrder.paymentMethod}</span>
+                  </div>
+                )}
+                {shipstationOrder.externallyFulfilled !== undefined && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Externally Fulfilled</span>
+                    <span className={`font-medium ${shipstationOrder.externallyFulfilled ? 'text-orange-600' : 'text-gray-400'}`}>
+                      {shipstationOrder.externallyFulfilled ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+                )}
+                {shipstationOrder.externallyFulfilled && shipstationOrder.externallyFulfilledBy && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Fulfilled By</span>
+                    <span className="text-gray-900 font-medium">{shipstationOrder.externallyFulfilledBy}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right Column: Details & Financials */}
@@ -338,20 +649,21 @@ export default function ShippingDetailsConfirmStep({
              </div>
           )}
           
-          {/* Loading/Error State for Order Details */}
-          {isLoadingDetails && (
-            <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 flex items-center gap-3">
-              <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
-              <span className="text-blue-700 text-xs font-medium">Loading details...</span>
-            </div>
-          )}
-          
+          {/* Error State for Order Details */}
           {detailsError && !isLoadingDetails && (
             <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 flex items-start gap-2">
               <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-              <div>
+              <div className="flex-1">
                 <p className="text-amber-800 text-xs font-medium">Partial Details Loaded</p>
                 <p className="text-amber-700 text-[10px] mt-0.5">Some order information might be missing, but you can proceed.</p>
+                {onRetryDetails && (
+                  <button
+                    onClick={onRetryDetails}
+                    className="mt-2 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium rounded-lg transition-colors"
+                  >
+                    Retry Loading Details
+                  </button>
+                )}
               </div>
             </div>
           )}
