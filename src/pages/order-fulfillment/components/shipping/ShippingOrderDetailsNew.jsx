@@ -6,7 +6,8 @@ import FulfillmentBreadcrumb from "../common/FulfillmentBreadcrumb";
 import ShippingStepIndicator from "./ShippingStepIndicator";
 import ShippingPhotoUploadStep from "./ShippingPhotoUploadStep";
 import ShippingDetailsConfirmStep from "./ShippingDetailsConfirmStep";
-import { getOrderDetails } from "../../../../api/shipping";
+import { getOrderDetails, scanTracking } from "../../../../api/shipping";
+import Swal from "sweetalert2";
 
 const STAGES = {
   PHOTO_UPLOAD: "photo_upload",
@@ -25,10 +26,18 @@ export default function ShippingOrderDetailsNew() {
   const [detailsError, setDetailsError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // Scan validation state (for background validation)
+  const [scanData, setScanData] = useState(location.state?.scanData || null);
+  const [shippingRecordId, setShippingRecordId] = useState(
+    location.state?.shippingRecordId || location.state?.scanData?.shippingRecordId || null
+  );
+  const [scanStatus, setScanStatus] = useState(
+    location.state?.scanData ? "success" : "idle" // idle | loading | success | error
+  );
+  const [scanError, setScanError] = useState(null);
+
   // Get data from location state
-  const scanData = location.state?.scanData;
   const trackingNumber = location.state?.trackingNumber || trackingFromUrl;
-  const shippingRecordId = location.state?.shippingRecordId || scanData?.shippingRecordId;
   const autoOpenCamera = location.state?.autoOpenCamera || false;
 
   // Get storage key
@@ -131,22 +140,142 @@ export default function ShippingOrderDetailsNew() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [photos, stage]);
 
-  // Load order details in background
+  // Background scanTracking validation (runs when we have trackingNumber but no scanData)
   useEffect(() => {
-    if (shippingRecordId && !orderDetails && !isLoadingDetails) {
+    if (!trackingNumber) return;
+    if (scanData) return; // Already have scanData, skip validation
+    if (scanStatus === "loading" || scanStatus === "success") return; // Already processing or done
+
+    const validateTracking = async () => {
+      setScanStatus("loading");
+      setScanError(null);
+
+      try {
+        console.log("🔍 Background validation: Calling scan-tracking API with:", trackingNumber);
+        const scanResult = await scanTracking(trackingNumber.trim());
+
+        if (scanResult.success && scanResult.data) {
+          const resultScanData = scanResult.data;
+
+          // Check if already processed
+          if (resultScanData.alreadyProcessed) {
+            setScanStatus("error");
+            setScanError("ALREADY_PROCESSED");
+
+            // Show alert and redirect
+            const alertResult = await Swal.fire({
+              icon: "warning",
+              title: "Already Processed",
+              html: `
+                <div class="text-left">
+                  <p class="mb-4 text-gray-700">This tracking number has already been processed.</p>
+                  <div class="bg-gray-50 rounded-lg p-4 mb-4">
+                    <div class="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <p class="text-gray-500 font-medium mb-1">Tracking Number:</p>
+                        <p class="text-gray-900 font-semibold">${resultScanData.trackingNumber || trackingNumber}</p>
+                      </div>
+                      <div>
+                        <p class="text-gray-500 font-medium mb-1">Status:</p>
+                        <p class="text-gray-900 font-semibold">${resultScanData.status || "Completed"}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              `,
+              showCancelButton: true,
+              confirmButtonText: "View Details",
+              cancelButtonText: "OK",
+              confirmButtonColor: "#2563eb",
+              cancelButtonColor: "#6b7280",
+            });
+
+            // Clear persisted data
+            const storageKey = getStorageKey();
+            if (storageKey) {
+              localStorage.removeItem(storageKey);
+            }
+
+            if (alertResult.isConfirmed && resultScanData.shippingRecordId) {
+              navigate("/fulfillment/shipping/list", {
+                state: { shippingRecordId: resultScanData.shippingRecordId },
+              });
+            } else {
+              navigate("/fulfillment/shipping");
+            }
+            return;
+          }
+
+          // Success - store scanData and shippingRecordId
+          setScanData(resultScanData);
+          setShippingRecordId(resultScanData.shippingRecordId);
+          setScanStatus("success");
+          console.log("✅ Background validation successful:", resultScanData);
+        } else {
+          throw new Error("Tracking number not found");
+        }
+      } catch (error) {
+        console.error("❌ Background validation error:", error);
+        setScanStatus("error");
+        setScanError(error.message || "Failed to validate tracking number");
+
+        // Show error alert and redirect
+        await Swal.fire({
+          icon: "error",
+          title: "Tracking Not Found",
+          text: error.message || "No fulfillment found with this tracking number. Please try again.",
+          confirmButtonColor: "#2563eb",
+          confirmButtonText: "OK",
+        });
+
+        // Clear persisted data
+        const storageKey = getStorageKey();
+        if (storageKey) {
+          localStorage.removeItem(storageKey);
+        }
+
+        // Redirect back to landing
+        navigate("/fulfillment/shipping");
+      }
+    };
+
+    validateTracking();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackingNumber]);
+
+  // Load order details in background (after scanData is available)
+  useEffect(() => {
+    if (shippingRecordId && !orderDetails && !isLoadingDetails && scanStatus === "success") {
       loadOrderDetails();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shippingRecordId]);
+  }, [shippingRecordId, scanStatus]);
+
+  // Auto-advance to details step when validation completes and user has photos
+  useEffect(() => {
+    if (
+      scanStatus === "success" &&
+      scanData &&
+      photos.length > 0 &&
+      stage === STAGES.PHOTO_UPLOAD
+    ) {
+      // Small delay to ensure smooth transition
+      const timer = setTimeout(() => {
+        setStage(STAGES.DETAILS);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }, 300);
+      
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scanStatus, scanData, photos.length, stage]);
 
   const loadOrderDetails = async () => {
     setIsLoadingDetails(true);
     setDetailsError(null);
     
     try {
-      console.log("📋 Loading order details in background for:", shippingRecordId);
       const result = await getOrderDetails(shippingRecordId);
-      console.log("✅ Order details loaded:", result);
       
       if (result.success && result.data) {
         setOrderDetails(result.data);
@@ -167,10 +296,23 @@ export default function ShippingOrderDetailsNew() {
   };
 
   const handleContinueToDetails = (force = false) => {
-    if (photos.length > 0 || force) {
+    // Gate progression: need photos AND successful validation
+    if ((photos.length > 0 || force) && scanStatus === "success" && scanData) {
       setStage(STAGES.DETAILS);
       // Scroll to top
       window.scrollTo({ top: 0, behavior: "smooth" });
+    } else if (scanStatus === "loading") {
+      // Show brief message if validation is still in progress
+      // Auto-advance will happen when validation completes
+      Swal.fire({
+        icon: "info",
+        title: "Validating Tracking",
+        text: "Please wait while we validate the tracking number. We'll automatically proceed once validation completes.",
+        confirmButtonColor: "#2563eb",
+        confirmButtonText: "OK",
+        timer: 2000,
+        timerProgressBar: true,
+      });
     }
   };
 
@@ -194,12 +336,12 @@ export default function ShippingOrderDetailsNew() {
     navigate("/fulfillment/shipping");
   };
 
-  // Check if we have required data
-  if (!scanData || !trackingNumber) {
+  // Check if we have tracking number (required)
+  if (!trackingNumber) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="text-center">
-          <p className="text-red-600 mb-4">Missing shipping data. Please scan a tracking number first.</p>
+          <p className="text-red-600 mb-4">Missing tracking number. Please scan a tracking number first.</p>
           <button
             onClick={handleBackToLanding}
             className="px-6 py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors"
@@ -211,7 +353,9 @@ export default function ShippingOrderDetailsNew() {
     );
   }
 
-  const canComplete = photos.length >= 1;
+  // Can proceed to details only if: have photos AND validation is successful
+  // Note: We allow photo upload even while validation is in progress (non-blocking)
+  const canComplete = photos.length >= 1 && scanStatus === "success" && scanData;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
@@ -242,6 +386,12 @@ export default function ShippingOrderDetailsNew() {
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-gray-700">Tracking:</span>
                     <span className="font-mono font-semibold text-purple-600">{trackingNumber}</span>
+                    {scanStatus === "loading" && (
+                      <Loader2 className="w-4 h-4 text-purple-600 animate-spin ml-2" />
+                    )}
+                    {scanStatus === "success" && (
+                      <span className="text-green-600 text-xs ml-2">✓ Validated</span>
+                    )}
                   </div>
                   {scanData?.fulfillment?.carrierName && (
                     <>
@@ -266,6 +416,38 @@ export default function ShippingOrderDetailsNew() {
             </div>
           </div>
         </motion.div>
+
+        {/* Non-blocking Validation Status Banner */}
+        {scanStatus === "loading" && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-3"
+          >
+            <Loader2 className="w-5 h-5 text-blue-600 animate-spin flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-blue-900">Validating tracking number...</p>
+              <p className="text-xs text-blue-700 mt-0.5">You can start taking photos while we validate.</p>
+            </div>
+          </motion.div>
+        )}
+        
+        {scanStatus === "success" && scanData && stage === STAGES.PHOTO_UPLOAD && photos.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="mb-4 bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-3"
+          >
+            <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-green-900">Tracking validated successfully!</p>
+              <p className="text-xs text-green-700 mt-0.5">Moving to details step...</p>
+            </div>
+          </motion.div>
+        )}
 
         {/* Step Indicator */}
         <ShippingStepIndicator stage={stage} />

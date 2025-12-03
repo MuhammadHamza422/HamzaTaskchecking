@@ -32,9 +32,7 @@ export default function ShippingLandingPageNew() {
 
     try {
       // Call scan-tracking API
-      console.log("🔍 Calling scan-tracking API with:", trackingNumber.trim());
       const scanResult = await scanTracking(trackingNumber.trim());
-      console.log("✅ Scan result:", scanResult);
 
       if (scanResult.success && scanResult.data) {
         const scanData = scanResult.data;
@@ -123,15 +121,15 @@ export default function ShippingLandingPageNew() {
     }
   };
 
-  const handleScannerSuccess = async (trackingNumber, scanData) => {
-    // Scanner provides scan result
-    // Navigate immediately with scan data
-    navigate(`/fulfillment/shipping/${encodeURIComponent(scanData.trackingNumber)}`, {
+  const handleScannerSuccess = (trackingNumber) => {
+    // Scanner now only provides tracking number (detection-only)
+    // Navigate immediately - validation will happen in background in ShippingOrderDetailsNew
+    console.log("✅ Barcode detected, navigating to:", trackingNumber);
+    navigate(`/fulfillment/shipping/${encodeURIComponent(trackingNumber)}`, {
       state: {
-        trackingNumber: scanData.trackingNumber,
-        shippingRecordId: scanData.shippingRecordId,
-        scanData: scanData,
-        autoOpenCamera: true, // Flag to auto-open camera
+        trackingNumber: trackingNumber,
+        // No scanData or shippingRecordId yet - will be fetched in background
+        autoOpenCamera: true, // Flag to auto-open camera immediately
       },
     });
   };
