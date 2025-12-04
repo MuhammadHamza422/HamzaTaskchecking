@@ -15,26 +15,47 @@ export default function FulfillmentBreadcrumb() {
   const location = useLocation();
   const paths = location.pathname.split("/").filter(Boolean);
 
-  const breadcrumbItems = [
+  const items = [
     { label: "Home", path: "/", icon: Home },
-    ...paths.map((path, index) => {
-      const fullPath = "/" + paths.slice(0, index + 1).join("/");
-      const label = pathMap[path] || path.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-      const isLast = index === paths.length - 1;
-      return { label, path: fullPath, isLast };
-    }),
   ];
 
-  // On mobile, show only: Home > ... > Last item
+  paths.forEach((path, index) => {
+    const fullPath = "/" + paths.slice(0, index + 1).join("/");
+    let label = pathMap[path] || path.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    const isLast = index === paths.length - 1;
+    
+    const shippingIndex = paths.indexOf("shipping");
+    if (shippingIndex !== -1 && index === shippingIndex + 1) {
+      if (path === "details") {
+        items.push({ 
+          label: "Records", 
+          path: "/fulfillment/shipping/list", 
+          isLast: false 
+        });
+        return; 
+      }
+      if (path !== "list" && path.length > 10 && !pathMap[path]) {
+        items.push({ 
+          label: "Records", 
+          path: "/fulfillment/shipping/list", 
+          isLast: false 
+        });
+      }
+    }
+    
+    items.push({ label, path: fullPath, isLast });
+  });
+
+  const breadcrumbItems = items;
+
   const getDisplayItems = () => {
     if (breadcrumbItems.length <= 3) {
       return breadcrumbItems;
     }
-    // On mobile, show Home, ellipsis, and last item
     return [
-      breadcrumbItems[0], // Home
+      breadcrumbItems[0], 
       { label: "...", isEllipsis: true },
-      breadcrumbItems[breadcrumbItems.length - 1], // Last item
+      breadcrumbItems[breadcrumbItems.length - 1], 
     ];
   };
 

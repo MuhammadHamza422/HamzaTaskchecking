@@ -22,6 +22,7 @@ const cards = [
     description: "Scan, pack orders, and manage packing operations",
     icon: Package,
     path: "/fulfillment/packing",
+    listPath: "/fulfillment/packing/list",
     gradient: "from-green-500 to-green-600",
     hoverGradient: "from-green-600 to-green-700",
     iconBg: "bg-green-100",
@@ -46,6 +47,7 @@ const cards = [
     description: "Track and manage shipping operations",
     icon: Truck,
     path: "/fulfillment/shipping",
+    listPath: "/fulfillment/shipping/list",
     gradient: "from-orange-500 to-orange-600",
     hoverGradient: "from-orange-600 to-orange-700",
     iconBg: "bg-orange-100",
@@ -125,19 +127,33 @@ export default function FulfillmentLandingPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 text-sm font-semibold text-gray-500 group-hover:text-white transition-colors duration-300">
-                    <span>Get Started</span>
-                    <motion.svg
-                      className="w-5 h-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      initial={{ x: 0 }}
-                      whileHover={{ x: 5 }}
-                      transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </motion.svg>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-gray-500 group-hover:text-white transition-colors duration-300">
+                      <span>Get Started</span>
+                      <motion.svg
+                        className="w-5 h-5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        initial={{ x: 0 }}
+                        whileHover={{ x: 5 }}
+                        transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </motion.svg>
+                    </div>
+                    
+                    {card.listPath && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(card.listPath);
+                        }}
+                        className="px-3 py-1.5 text-xs md:text-sm font-medium rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 group-hover:bg-white/20 group-hover:text-white transition-all duration-300"
+                      >
+                        See All Records
+                      </button>
+                    )}
                   </div>
                 </div>
 
