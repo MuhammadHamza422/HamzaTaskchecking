@@ -31,14 +31,14 @@ export default function ShippingBarcodeScanner({
   const stableCodeStartTimeRef = useRef(null);
   const cooldownUntilRef = useRef(0);
   
-  // Detection tuning: require more stable, longer-lived detections
-  const REQUIRED_CONSECUTIVE_DETECTIONS = 3; // frames with same code before accepting
-  const BUFFER_SIZE = 5; // history buffer for recent detections
-  const MIN_DETECTION_DURATION_MS = 400; // minimum time (ms) the same code must be visible
+  
+  const REQUIRED_CONSECUTIVE_DETECTIONS = 2;
+  const BUFFER_SIZE = 3;
+  const MIN_DETECTION_DURATION_MS = 200;
   const COOLDOWN_AFTER_ERROR_MS = 1000;
   const MIN_CODE_LENGTH = 3;
-  const MIN_PREFERRED_NUMERIC_LENGTH = 8; // numeric-only codes shorter than this are not auto-preferred
   const SCAN_INTERVAL_MS = 100;
+  const MIN_PREFERRED_NUMERIC_LENGTH = 8;
 
   const isValidCode = (code) => {
     if (!code || typeof code !== 'string') return false;
@@ -55,9 +55,6 @@ export default function ShippingBarcodeScanner({
     return /^\d+$/.test(trimmedCode);
   };
 
-  // Select the best barcode from multiple candidates
-  // Prefers numeric-only barcodes (DHL waybill) when multiple are detected
-  // Falls back to first valid barcode for other couriers
   const selectBestBarcode = (candidates) => {
     if (!candidates || candidates.length === 0) return null;
 
@@ -140,25 +137,19 @@ export default function ShippingBarcodeScanner({
   const handleBarcodeDetected = useCallback(async (code) => {
     if (code === lastScannedCodeRef.current) return;
 
-    // Reset detection state
     detectionBufferRef.current = [];
     stableCodeRef.current = null;
     stableCodeStartTimeRef.current = null;
     setIsScanning(false);
 
-    // Mark this code as processed
     lastScannedCodeRef.current = code;
     setScannedCode(code);
 
-    // Release camera immediately
     await releaseCamera();
 
-    // Extract tracking number and return immediately (no API validation)
     const trackingNumber = String(code).trim();
     console.log("✅ Barcode detected:", trackingNumber);
     
-    // Call success callback with tracking number only
-    // Validation will happen in background in ShippingOrderDetailsNew
     if (onScanSuccess) {
       onScanSuccess(trackingNumber);
     }
@@ -200,22 +191,10 @@ export default function ShippingBarcodeScanner({
       const stable = checkStableCode();
       
       if (stable) {
-        if (stableCodeRef.current?.code === stable.code) {
-          const stableDuration = now - stableCodeStartTimeRef.current;
-          if (stableDuration >= MIN_DETECTION_DURATION_MS) {
-            stableCodeRef.current = null;
-            stableCodeStartTimeRef.current = null;
-            detectionBufferRef.current = [];
-            setIsScanning(false);
-            handleBarcodeDetected(stable.code);
-          }
-        } else {
-          stableCodeRef.current = stable;
-          stableCodeStartTimeRef.current = now;
-        }
-      } else {
-        stableCodeRef.current = null;
-        stableCodeStartTimeRef.current = null;
+        detectionBufferRef.current = [];
+        setIsScanning(false);
+        handleBarcodeDetected(stable.code);
+        return; 
       }
     },
     [handleBarcodeDetected]
