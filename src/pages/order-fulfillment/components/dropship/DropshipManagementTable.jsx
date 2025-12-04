@@ -358,6 +358,7 @@ export default function DropshipManagementTable() {
                 options={[
                   { label: "Unfulfilled", value: "Unfulfilled" },
                   { label: "Fulfilled", value: "Fulfilled" },
+                  { label: "Partially Fulfilled", value: "Partially Fulfilled" },
                   { label: "Cancelled", value: "Cancelled" },
                 ]}
               />
@@ -466,8 +467,9 @@ export default function DropshipManagementTable() {
           platformsLoading={platformsLoading}
           statusOptions={[
             { label: "Unfulfilled", value: "Unfulfilled" },
-            { label: "Fulfilled", value: "Fulfilled" },
-            { label: "Cancelled", value: "Cancelled" },
+            // { label: "Fulfilled", value: "Fulfilled" },
+            { label: "Partially Fulfilled", value: "Partially Fulfilled" },
+            // { label: "Cancelled", value: "Cancelled" },
           ]}
           searchPlaceholder="Search by order number, dropship ID"
           onApply={() => {
